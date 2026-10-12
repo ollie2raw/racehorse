@@ -3,16 +3,22 @@ import { ScreenLoader } from '../ui/ScreenLoader';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { tournamentErrorCopy } from '../tournament/tournamentErrorCopy';
 import { isTournamentsEnabled } from '../config/tournamentsFeature';
+import { deriveResultView } from '../tournament/tournamentResultView';
 import type {
   AppRoutesShellProps,
   AppRoutesNavigationProps,
   AppRoutesAuthProps,
   AppRoutesTournamentProps,
 } from '../appRouteTypes';
+import { publicPlayerName } from '../identity/publicPlayerName';
 
 const TournamentHubScreen = React.lazy(() => import('../tournament/TournamentHubScreen'));
 const TournamentBracketScreen = React.lazy(() => import('../tournament/TournamentBracketScreen'));
 const TournamentResultScreen = React.lazy(() => import('../tournament/TournamentResultScreen'));
+const TournamentHistoryRoute = React.lazy(() => import('../tournament/TournamentHistoryRoute'));
+
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+const IDLE_FRITZ_LAUNCH = { phase: 'idle' as const, tournamentId: null, startedAtMono: 0, error: null };
 
 export function TournamentRoute({
   shell,
@@ -48,35 +54,43 @@ export function TournamentRoute({
   } = tournamentProps;
 
   // Switched off: every tournament route and deep link lands on the hub with
-  // nothing scheduled ("No upcoming tournaments"). No fetch, no socket.
+  // nothing scheduled ("Tournaments are unavailable right now"). No fetch, no socket.
   if (!isTournamentsEnabled()) {
     const noop = () => undefined;
+    const noopAsync = async () => undefined;
     return withAuthModals(
       <Suspense fallback={<ScreenLoader label="Loading Tournament Hub…" />}>
         <TournamentHubScreen
           identity={null}
+          features={{ tournaments: false, fritzCup: false }}
           upcoming={[]}
-          registrations={[]}
-          recoveryMatch={null}
-          error={null}
+          myTournaments={[]}
+          activeAssignedMatch={null}
+          cancelledTournamentIds={EMPTY_IDS}
+          fritzLaunch={IDLE_FRITZ_LAUNCH}
+          upcomingError={null}
+          myError={null}
           isLoading={false}
           hasLoaded
           onNavigate={setAppMode}
           onOpenAuth={handleOpenAuthModal}
           onSignOut={handleSignOut}
           onBackHome={() => setAppMode('home')}
-          onOpenBracket={noop}
-          onRegister={noop}
-          onWithdraw={noop}
+          onPlayFritzCup={noop}
+          onJoinMatch={noop}
+          onViewBracket={noop}
+          onViewResult={noop}
+          onRegister={noopAsync}
+          onWithdraw={noopAsync}
           onRetry={noop}
-          onAttachAssignedMatch={noop}
+          onBoundary={noop}
         />
       </Suspense>,
     );
   }
 
   const tIdentity = authUser?.id
-    ? { userId: authUser.id, username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player' }
+    ? { userId: authUser.id, username: publicPlayerName(authProfile?.username) }
     : null;
 
   if (tournamentSubView === 'bracket' && activeTournamentId) {
@@ -96,11 +110,12 @@ export function TournamentRoute({
           }
           countdownAt={tournament.countdown?.at ?? null}
           countdownKind={tournament.countdown?.kind ?? null}
-          onLoadBracket={(id) => { void tournament.openBracket(id); }}
+          onLoadBracket={tournament.openBracket}
           onBack={() => exitToTournamentHub('bracket_back')}
           onExitToHub={() => exitToTournamentHub('bracket_back')}
           onWithdraw={(id) => {
-            void tournament.withdraw(id).then(() => exitToTournamentHub('withdraw'));
+            // A refusal (withdraw_closed) keeps the player on the bracket; the hub shows the copy.
+            void tournament.withdraw(id).then(() => exitToTournamentHub('withdraw')).catch(() => undefined);
           }}
           onViewResult={() => {
             if (!activeTournamentId) return;
@@ -119,6 +134,22 @@ export function TournamentRoute({
     );
   }
 
+  if (tournamentSubView === 'history') {
+    return withAuthModals(
+      <Suspense fallback={<ScreenLoader label="Loading Tournament History…" />}>
+        <ErrorBoundary context="tournament">
+          <TournamentHistoryRoute
+            fritzCupEnabled={Boolean(tournament.features?.fritzCup)}
+            onBack={() => setTournamentSubView('hub')}
+            onNavigate={setAppMode}
+            onOpenAuth={handleOpenAuthModal}
+            onSignOut={handleSignOut}
+          />
+        </ErrorBoundary>
+      </Suspense>,
+    );
+  }
+
   if (tournamentSubView === 'result' && activeTournamentId) {
     const myUserId = authUser?.id ?? null;
     const yourPlacement =
@@ -126,19 +157,13 @@ export function TournamentRoute({
         ? tournamentResult?.placements.find((placement) => placement.userId === myUserId)?.placementLabel
         : null) ?? null;
 
-    const nextSlot = tournament.upcoming[0];
-    const nextCountdown = nextSlot
-      ? (() => {
-          // eslint-disable-next-line react-hooks/purity -- countdown ms derived from wall-clock each render; the row re-renders on a tick
-          const ms = Math.max(0, Date.parse(nextSlot.scheduled_start) - Date.now());
-          const total = Math.floor(ms / 1000);
-          const h = Math.floor(total / 3600);
-          const m = Math.floor((total % 3600) / 60);
-          const s = total % 60;
-          const pad = (n: number) => String(n).padStart(2, '0');
-          return `${pad(h)}:${pad(m)}:${pad(s)}`;
-        })()
-      : '—';
+    const resultView = deriveResultView({
+      tournamentId: activeTournamentId,
+      result: tournamentResult,
+      myTournaments: tournament.myTournaments,
+      upcoming: tournament.upcoming,
+      activeAssignedMatch: tournament.activeAssignedMatch,
+    });
 
     return withAuthModals(
       <Suspense fallback={<ScreenLoader label="Loading Tournament Result…" />}>
@@ -146,9 +171,13 @@ export function TournamentRoute({
         <TournamentResultScreen
           isLoading={tournamentResultLoading}
           error={tournamentResultError}
-          championName={tournamentResult?.championName ?? null}
+          champion={resultView.champion}
           yourPlacement={yourPlacement}
-          nextTournamentCountdown={nextCountdown}
+          myOutcome={resultView.myOutcome}
+          nextEventStart={resultView.nextEventStart}
+          nextMatch={resultView.nextMatch}
+          joining={tournamentAttachPhase === 'pending'}
+          onJoinNextMatch={attachAssignedTournamentMatch}
           onRetry={() => {
             if (activeTournamentId) {
               setTournamentResultLoading(true);
@@ -180,24 +209,35 @@ export function TournamentRoute({
       <ErrorBoundary context="tournament">
       <TournamentHubScreen
         identity={tIdentity}
+        features={tournament.features}
         upcoming={tournament.upcoming}
-        registrations={tournament.registrations}
-        recoveryMatch={tournament.recoveryMatch}
-        tournamentPhase={tournament.tournamentPhase}
-        error={tournament.error}
+        myTournaments={tournament.myTournaments}
+        activeAssignedMatch={tournament.activeAssignedMatch}
+        cancelledTournamentIds={tournament.cancelledTournamentIds}
+        fritzLaunch={tournament.fritzLaunch}
+        upcomingError={tournament.upcomingError}
+        myError={tournament.myError}
         isLoading={tournament.isLoading}
         hasLoaded={tournament.hasLoaded}
-        activeBracketStatus={tournament.activeBracket?.tournament.status ?? null}
-        activeTournamentId={tournament.activeTournamentId}
+        attachJoinPhase={tournamentAttachPhase}
+        attachJoinError={tournamentAttachError}
         onNavigate={setAppMode}
         onOpenAuth={handleOpenAuthModal}
         onSignOut={handleSignOut}
         onBackHome={() => setAppMode('home')}
-        onOpenBracket={(id) => enterTournamentLobby(id)}
-        onRegister={async (id) => {
-          await tournament.register(id);
+        onOpenHistory={() => setTournamentSubView('history')}
+        onPlayFritzCup={() => { void tournament.startFritzCup(); }}
+        onJoinMatch={attachAssignedTournamentMatch}
+        onViewBracket={(id) => {
+          tournament.endFritzLaunch();
           enterTournamentLobby(id);
         }}
+        onViewResult={(id) => {
+          setActiveTournamentId(id);
+          setTournamentSubView('result');
+        }}
+        // Registration keeps the player on the hub: the event may be hours away.
+        onRegister={(id) => tournament.register(id)}
         onWithdraw={async (id) => {
           await tournament.withdraw(id);
           if (activeTournamentId === id) exitToTournamentHub('withdraw');
@@ -205,9 +245,7 @@ export function TournamentRoute({
         onRetry={() => {
           void tournament.refresh();
         }}
-        onAttachAssignedMatch={attachAssignedTournamentMatch}
-        attachJoinPhase={tournamentAttachPhase}
-        attachJoinError={tournamentAttachError}
+        onBoundary={() => tournament.scheduleRefresh(0)}
       />
       </ErrorBoundary>
     </Suspense>,

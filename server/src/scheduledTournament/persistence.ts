@@ -28,12 +28,17 @@ export function isValidUuid(value: string | null | undefined): value is string {
 
 // ── Tournaments ──────────────────────────────────────────────────────────
 
+/**
+ * The communal feed: Live Events only, filtered in the query (`kind=eq.live`;
+ * this server requires M1), so a Fritz Cup can never take a slot in the limit.
+ */
 export async function fetchUpcomingTournaments(limit = 5): Promise<ScheduledTournamentRow[]> {
   const nowIso = new Date().toISOString();
   const [preStart, bracketLobby] = await Promise.all([
     supabaseFetch<ScheduledTournamentRow[]>(
       `/rest/v1/${TABLES.tournaments}` +
         `?select=*` +
+        `&kind=eq.live` +
         `&scheduled_start=gte.${encodeURIComponent(nowIso)}` +
         `&status=in.(upcoming,registration_open)` +
         `&order=scheduled_start.asc` +
@@ -42,6 +47,7 @@ export async function fetchUpcomingTournaments(limit = 5): Promise<ScheduledTour
     supabaseFetch<ScheduledTournamentRow[]>(
       `/rest/v1/${TABLES.tournaments}` +
         `?select=*` +
+        `&kind=eq.live` +
         `&scheduled_start=gte.${encodeURIComponent(nowIso)}` +
         `&status=eq.in_progress` +
         `&order=scheduled_start.asc` +
@@ -103,6 +109,85 @@ export async function fetchDueLifecycleTournaments(now: Date): Promise<DueLifecy
       `&order=scheduled_start.asc` +
       `&limit=50`,
   );
+}
+
+/**
+ * Cancel a tournament that has not started, atomically: one conditional
+ * UPDATE (PostgREST PATCH filtered on `status=in.(upcoming,registration_open)`).
+ * Postgres re-checks the condition after waiting on any concurrent writer of
+ * the row (generate_tournament_bracket holds it FOR UPDATE until it commits
+ * `in_progress`), so a tournament another process has just started is never
+ * cancelled. True when this call cancelled it; false when it had already left
+ * registration (started, completed, or already cancelled) — not an error.
+ */
+export async function cancelTournamentBeforeStart(id: string, reason: string): Promise<boolean> {
+  const rows = await supabaseFetch<Array<{ id: string }> | undefined>(
+    `/rest/v1/${TABLES.tournaments}?id=eq.${encodeURIComponent(id)}&status=in.(upcoming,registration_open)&select=id`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ status: 'cancelled', cancel_reason: reason }),
+    },
+  );
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+/**
+ * upcoming → registration_open, only if the tournament is still upcoming and
+ * its registration_open_at has passed (as of `now`). True when opened.
+ */
+export async function openRegistrationIfDue(id: string, now: Date): Promise<boolean> {
+  const rows = await supabaseFetch<Array<{ id: string }> | undefined>(
+    `/rest/v1/${TABLES.tournaments}?id=eq.${encodeURIComponent(id)}&status=eq.upcoming` +
+      `&registration_open_at=lte.${encodeURIComponent(now.toISOString())}&select=id`,
+    { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ status: 'registration_open' }) },
+  );
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+/**
+ * Cancel a Live Event for lack of entrants, atomically under the tournament
+ * row lock registration also takes: only while still before its start, after
+ * registration has closed by the database clock, with nobody registered.
+ * True when cancelled (cancel_tournament_if_no_entrants).
+ */
+export async function cancelTournamentIfNoEntrants(id: string, reason: string): Promise<boolean> {
+  const result = await callTournamentRpc<{ cancelled: boolean }>('cancel_tournament_if_no_entrants', {
+    p_tournament_id: id,
+    p_reason: reason,
+  });
+  return Boolean(result?.cancelled);
+}
+
+/** One match as the event backstop saw it (cancel_tournament_if_bracket_unchanged). */
+export type BracketSnapshotEntry = Pick<MatchRow,
+  'id' | 'status' | 'winner_id' | 'player1_id' | 'player2_id' | 'room_code' | 'status_reason'
+  | 'started_at' | 'completed_at' | 'ready_deadline_at' | 'player1_joined_at' | 'player2_joined_at'>;
+
+export function bracketSnapshot(matches: MatchRow[]): BracketSnapshotEntry[] {
+  return matches.map((m) => ({
+    id: m.id, status: m.status, winner_id: m.winner_id, player1_id: m.player1_id, player2_id: m.player2_id,
+    room_code: m.room_code, status_reason: m.status_reason, started_at: m.started_at, completed_at: m.completed_at,
+    ready_deadline_at: m.ready_deadline_at, player1_joined_at: m.player1_joined_at, player2_joined_at: m.player2_joined_at,
+  }));
+}
+
+/**
+ * Cancel an in-progress tournament only if every match is still exactly as in
+ * `expected` (row-locked and compared in one transaction). True when
+ * cancelled; false when the bracket moved on or it is no longer in progress.
+ */
+export async function cancelTournamentIfBracketUnchanged(
+  id: string,
+  expected: BracketSnapshotEntry[],
+  reason: string,
+): Promise<boolean> {
+  const result = await callTournamentRpc<{ cancelled: boolean }>('cancel_tournament_if_bracket_unchanged', {
+    p_tournament_id: id,
+    p_expected: expected,
+    p_reason: reason,
+  });
+  return Boolean(result?.cancelled);
 }
 
 export async function updateTournamentStatus(
@@ -192,6 +277,7 @@ export const REGISTRATION_RPC_ERRORS = new Set([
   'tournament_full',
   'withdraw_closed',
   'invalid_user',
+  'overlapping_tournament',
 ]);
 
 export type RegisterForTournamentResult = {
@@ -370,6 +456,36 @@ export async function updateMatch(matchId: string, patch: MatchPatch): Promise<v
   );
 }
 
+/** The match fields a compare-and-set update can condition on. */
+export type MatchExpectation = Partial<Pick<MatchRow,
+  'status' | 'room_code' | 'ready_at' | 'ready_deadline_at' | 'status_reason' | 'started_at'>>;
+
+/** PostgREST filters requiring each expected field to hold exactly its value (null: IS NULL). */
+function expectationFilters(expected: Record<string, string | null | undefined>): string {
+  return Object.entries(expected)
+    .filter(([, value]) => value !== undefined)
+    .map(([field, value]) => (value === null ? `&${field}=is.null` : `&${field}=eq.${encodeURIComponent(value as string)}`))
+    .join('');
+}
+
+/**
+ * Compare-and-set: apply `patch` only if the match still holds exactly the
+ * `expected` values — one conditional UPDATE, so a write decided from an
+ * older read never lands on a match another process has since changed. True
+ * when it was applied; false (nothing written) when the match had moved on.
+ */
+export async function updateMatchIf(
+  matchId: string,
+  expected: MatchExpectation,
+  patch: MatchPatch,
+): Promise<boolean> {
+  const rows = await supabaseFetch<Array<{ id: string }> | undefined>(
+    `/rest/v1/${TABLES.matches}?id=eq.${encodeURIComponent(matchId)}${expectationFilters(expected)}&select=id`,
+    { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) },
+  );
+  return Array.isArray(rows) && rows.length > 0;
+}
+
 // ── Match state-machine RPCs ─────────────────────────────────────────────
 // Completion + validation + bracket advancement + elimination + (round 3)
 // tournament completion all run in ONE Postgres transaction, guarded by
@@ -388,6 +504,17 @@ export type CompleteTournamentMatchParams = {
   forfeitUserId?: string | null;
   byeWalkover?: boolean;
   actor?: string | null;
+  /**
+   * A decision made from an earlier read of a not-yet-played match: the match
+   * must still have this status when the result commits, else the call fails
+   * with `match_state_changed` (complete_tournament_match_if_unchanged).
+   */
+  expectStatus?: MatchRow['status'] | null;
+  /**
+   * A no-show decided from attendance read earlier: these users must still be
+   * un-joined when the result commits, else `attendance_changed`.
+   */
+  requireUnjoined?: string[] | null;
 };
 
 export type CompleteTournamentMatchResult = {
@@ -433,13 +560,106 @@ async function callTournamentRpc<T>(fn: string, body: Record<string, unknown>): 
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     const m = raw.match(/"message":\s*"([^"]+)"/);
-    throw new Error(m ? m[1] : raw);
+    throw new TournamentRpcError(m ? m[1] : raw, rpcErrorDetails(raw));
   }
+}
+
+/**
+ * An RPC failure: `message` is the stable code; `details` is the JSON object an
+ * RPC put in the exception DETAIL (overlapping_tournament's conflict,
+ * fritz_cup_cooldown's retry_after_ms), when there is one.
+ */
+export class TournamentRpcError extends Error {
+  constructor(code: string, readonly details: Record<string, unknown> | null = null) {
+    super(code);
+    this.name = 'TournamentRpcError';
+  }
+}
+
+/** The PostgREST error body's `details`, parsed when it is a JSON object. */
+function rpcErrorDetails(raw: string): Record<string, unknown> | null {
+  const start = raw.indexOf('{');
+  if (start < 0) return null;
+  try {
+    const body = JSON.parse(raw.slice(start)) as { details?: unknown };
+    if (typeof body.details !== 'string') return null;
+    const details = JSON.parse(body.details) as unknown;
+    return details && typeof details === 'object' && !Array.isArray(details) ? details as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The tournament an overlapping_tournament refusal names (from the RPC's
+ * exception detail), for the client to explain the refusal.
+ */
+export function overlapConflictPayload(err: unknown): { tournamentId: string | null; kind: string | null; scheduledStart: string | null } {
+  const details = err instanceof TournamentRpcError ? err.details : null;
+  const scheduledStart = typeof details?.scheduled_start === 'string' ? Date.parse(details.scheduled_start) : Number.NaN;
+  return {
+    tournamentId: typeof details?.tournament_id === 'string' ? details.tournament_id : null,
+    kind: typeof details?.kind === 'string' ? details.kind : null,
+    scheduledStart: Number.isFinite(scheduledStart) ? new Date(scheduledStart).toISOString() : null,
+  };
+}
+
+/** The orchestrator lease RPCs (2026-10-08_tournament_orchestrator_lease.sql). */
+export type LeaseAcquireResult = { acquired: boolean; owner: string | null; lease_token?: string | null; leased_until: string | null };
+
+export async function acquireOrchestratorLease(key: string, owner: string, ttlSeconds: number): Promise<LeaseAcquireResult> {
+  return callTournamentRpc<LeaseAcquireResult>('acquire_tournament_orchestrator_lease', {
+    p_key: key, p_owner: owner, p_ttl_seconds: ttlSeconds,
+  });
+}
+
+export async function renewOrchestratorLease(
+  key: string, owner: string, token: string, ttlSeconds: number,
+): Promise<{ renewed: boolean; leased_until: string | null }> {
+  return callTournamentRpc('renew_tournament_orchestrator_lease', {
+    p_key: key, p_owner: owner, p_token: token, p_ttl_seconds: ttlSeconds,
+  });
+}
+
+export async function releaseOrchestratorLease(key: string, owner: string, token: string): Promise<{ released: boolean }> {
+  return callTournamentRpc('release_tournament_orchestrator_lease', { p_key: key, p_owner: owner, p_token: token });
+}
+
+export type StartFritzCupResult = {
+  existing: boolean;
+  tournament: ScheduledTournamentRow;
+};
+
+/**
+ * The database half of an on-demand Fritz Cup (start_fritz_cup): the user's
+ * active cup, or a new one with its owner registration, in one transaction
+ * under the per-user tournament lock. Throws TournamentRpcError
+ * overlapping_tournament / fritz_cup_cooldown / invalid_user.
+ */
+export async function startFritzCup(userId: string): Promise<StartFritzCupResult> {
+  if (!isValidUuid(userId)) {
+    throw new Error('invalid_user');
+  }
+  return callTournamentRpc<StartFritzCupResult>('start_fritz_cup', { p_user_id: userId });
 }
 
 export async function completeTournamentMatch(
   params: CompleteTournamentMatchParams,
 ): Promise<CompleteTournamentMatchResult> {
+  if (params.expectStatus || (params.requireUnjoined && params.requireUnjoined.length > 0)) {
+    return callTournamentRpc<CompleteTournamentMatchResult>('complete_tournament_match_if_unchanged', {
+      p_match_id: params.matchId,
+      p_winner_id: params.winnerId,
+      p_winner_source: params.winnerSource,
+      p_status_reason: params.statusReason ?? null,
+      p_reported_p1_score: params.reportedPlayer1Score ?? null,
+      p_reported_p2_score: params.reportedPlayer2Score ?? null,
+      p_no_show_user_id: params.noShowUserId ?? null,
+      p_expected_status: params.expectStatus ?? null,
+      p_unjoined_user_ids: params.requireUnjoined ?? [],
+      p_actor: params.actor ?? null,
+    });
+  }
   return callTournamentRpc<CompleteTournamentMatchResult>('complete_tournament_match', {
     p_match_id: params.matchId,
     p_winner_id: params.winnerId,

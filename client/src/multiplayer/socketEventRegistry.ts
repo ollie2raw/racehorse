@@ -359,6 +359,15 @@ export const SOCKET_EVENT_REGISTRY: readonly SocketEventRegistryEntry[] = [
     description: 'Forced-draw animation presentation (timers, flying tiles)',
   },
   {
+    socketEvent: 'tournament:clock',
+    owner: 'connection.presence',
+    registrar: 'multiplayer/useRoomSocketSync.ts',
+    boundedContext: 'connection',
+    registrationKind: 'raw',
+    enforced: true,
+    description: 'Tournament turn clock re-armed without a state broadcast (display only)',
+  },
+  {
     socketEvent: 'player:disconnected',
     owner: 'connection.presence',
     registrar: 'multiplayer/useRoomSocketSync.ts',
@@ -476,6 +485,24 @@ export const SOCKET_EVENT_REGISTRY: readonly SocketEventRegistryEntry[] = [
     description: 'Tournament completed — hub + live session result navigation delegates',
   },
   {
+    socketEvent: 'tournament:round_completed',
+    owner: 'tournament.hub',
+    registrar: 'tournament/registerTournamentSocketHandlers.ts',
+    boundedContext: 'tournament',
+    registrationKind: 'raw',
+    enforced: true,
+    description: 'A tournament round finished (participants only) — coalesced hub refetch',
+  },
+  {
+    socketEvent: 'tournament:cancelled',
+    owner: 'tournament.hub',
+    registrar: 'tournament/registerTournamentSocketHandlers.ts',
+    boundedContext: 'tournament',
+    registrationKind: 'raw',
+    enforced: true,
+    description: 'Tournament cancelled (Live: public; Fritz Cup: owner only) — cancelled state + coalesced hub refetch',
+  },
+  {
     socketEvent: 'friend:invite:declined',
     owner: 'social.challenge',
     registrar: 'multiplayer/useSocialInviteState.ts',
@@ -591,6 +618,7 @@ export const SOCKET_EVENTS = {
   PLAYER_DISCONNECT_STALL: 'player:disconnect_stall',
   MATCH_RESULT_PERSIST_FAILED: 'match:result_persist_failed',
   ROOM_MATCH_ABANDONED: 'room:match_abandoned',
+  TOURNAMENT_CLOCK: 'tournament:clock',
 } as const;
 
 /** Tournament wire-protocol constants — enforced via TOURNAMENT_SOCKET_EVENT_REGISTRY entries. */
@@ -611,6 +639,8 @@ export const TOURNAMENT_SOCKET_EVENTS = {
   MATCH_READY: 'tournament:match_ready',
   MATCH_COMPLETED: 'tournament:match_completed',
   COMPLETED: 'tournament:completed',
+  ROUND_COMPLETED: 'tournament:round_completed',
+  CANCELLED: 'tournament:cancelled',
 } as const;
 
 export const TOURNAMENT_SOCKET_EVENT_VALUES = Object.values(TOURNAMENT_SOCKET_EVENTS);

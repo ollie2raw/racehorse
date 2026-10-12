@@ -13,7 +13,14 @@ import {
   updateMatch,
   updateRegistrationPlacement,
   updateTournamentStatus,
+  cancelTournamentBeforeStart,
+  updateMatchIf,
+  openRegistrationIfDue,
+  cancelTournamentIfBracketUnchanged,
+  cancelTournamentIfNoEntrants,
   type MatchPatch,
+  type MatchExpectation,
+  type BracketSnapshotEntry,
   type CompleteTournamentMatchParams,
   type CompleteTournamentMatchResult,
   type PromoteTournamentMatchResult,
@@ -22,6 +29,7 @@ import {
   type BracketSeed,
 } from './persistence';
 import { createReservedRoom, getRoom } from '../rooms';
+import { restoreOrCreateTournamentRoom } from './tournamentRoomRestore';
 import type { Config } from '../game/types';
 import type { Room } from '../rooms';
 import type { MatchRow, RegistrationRow, ScheduledTournamentRow } from './types';
@@ -84,8 +92,33 @@ export interface EnginePersistence {
     status: ScheduledTournamentRow['status'],
     extra?: Partial<Pick<ScheduledTournamentRow, 'winner_id' | 'cancel_reason'>>,
   ): Promise<void>;
+  /**
+   * Cancel only if the tournament is still before its start
+   * (upcoming / registration_open), atomically; true when it was cancelled.
+   * Production always provides it; a test double without it gets a
+   * read-then-write fallback (see engine.cancelTournamentBeforeStart).
+   */
+  cancelTournamentBeforeStart?(id: string, reason: string): Promise<boolean>;
+  /**
+   * Compare-and-set match update (true when applied). Production always
+   * provides it; a test double without it gets a read-compare-write fallback
+   * (engine.updateMatchIfUnchanged).
+   */
+  updateMatchIf?(matchId: string, expected: MatchExpectation, patch: MatchPatch): Promise<boolean>;
+  /** upcoming → registration_open if still upcoming and due (true when opened). */
+  openRegistrationIfDue?(id: string, now: Date): Promise<boolean>;
+  /** Cancel for lack of entrants, only if still nobody is registered and registration has closed (true when cancelled). */
+  cancelTournamentIfNoEntrants?(id: string, reason: string): Promise<boolean>;
+  /** Cancel an in-progress tournament only if its bracket is exactly `expected` (true when cancelled). */
+  cancelTournamentIfBracketUnchanged?(id: string, expected: BracketSnapshotEntry[], reason: string): Promise<boolean>;
   createReservedRoom(code: string, config: Partial<Config>): Room;
   getRoom(code: string): Room;
+  /**
+   * The match's room when it is not in memory: restored from its live session
+   * if a game is stored, otherwise created. Without it, dispatch creates an
+   * empty reserved room (in-memory test persistences).
+   */
+  restoreOrCreateRoom?(code: string, matchId: string, config: Partial<Config>): Promise<Room>;
 }
 
 /** Real Supabase + in-memory rooms implementation used in production. */
@@ -103,8 +136,14 @@ export const defaultEnginePersistence: EnginePersistence = {
   promoteTournamentMatch,
   updateRegistrationPlacement,
   updateTournamentStatus,
+  cancelTournamentBeforeStart,
+  updateMatchIf,
+  openRegistrationIfDue,
+  cancelTournamentIfBracketUnchanged,
+  cancelTournamentIfNoEntrants,
   createReservedRoom,
   getRoom,
+  restoreOrCreateRoom: restoreOrCreateTournamentRoom,
 };
 
 /** Convenience: io is also a dependency, but it's stable and easy to mock per-test. */

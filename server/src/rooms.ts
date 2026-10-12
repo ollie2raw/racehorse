@@ -105,6 +105,8 @@ export type Room = {
   scheduledTournamentId?: string;
   /** Fritz strength tier for synthetic scheduled-tournament bot seats. */
   scheduledTournamentBotTier?: 'standard' | 'elite' | 'master';
+  /** Tournament id (user id or Fritz id) of the player who starts hand 1 (tournamentStarter.ts). */
+  scheduledTournamentStarterUserId?: string;
   /** Terminal intentional leave marker; abandoned rooms are not recoverable. */
   abandonedAt?: string;
   abandonedByUserId?: string | null;
@@ -700,8 +702,10 @@ function resolveForcedDrawAtomically(
     drawerHandCount: Math.max(0, handBeforePlay - 1) + (index + 1),
   }));
 
-  const playable = getLegalMoves(stateAfterMove, playerId).some((move) => move.type === 'play');
   const stillTheirTurn = stateAfterMove.playerIds[stateAfterMove.currentPlayerIndex] === playerId;
+  // The chain can end in a locked-boneyard pass that hands the turn on; legal
+  // moves only exist (and getLegalMoves only answers) for the player to move.
+  const playable = stillTheirTurn && getLegalMoves(stateAfterMove, playerId).some((move) => move.type === 'play');
   const stoppedReason: ResolveForcedDrawResult['stoppedReason'] = playable
     ? 'playable'
     : stillTheirTurn
@@ -728,7 +732,8 @@ export function createPreGameDrawShellMatch(players: string[], config?: Partial<
 export async function initiatePregameDrawOrStartUnlocked(
   code: string,
   io: Server,
-  options: { allowRestart?: boolean } = {},
+  /** `startingPlayerId` applies only when the room skips the pre-game draw. */
+  options: { allowRestart?: boolean; startingPlayerId?: string } = {},
 ): Promise<Room> {
   const room = getRoom(code);
   assertRoomDurabilityOperationAllowed(room, 'match_start');
@@ -1113,6 +1118,52 @@ export async function act(
   return withRoomGameplayLock(code, () =>
     actUnlocked(code, playerSeatId, action, io, onStateReady),
   );
+}
+
+/** The room's game position, read inside the gameplay lock right after an action. */
+export type ActStateAfter = {
+  sequence: number;
+  handNumber: number;
+  currentSeatId: string | null;
+  consecutivePasses: number;
+  handOver: boolean;
+  gameOver: boolean;
+};
+
+/**
+ * act(), but the action is decided inside the room's gameplay lock: `decide`
+ * sees the room exactly as the action will, and returning null skips the action
+ * (the decision it was made for is no longer current). Returns null when
+ * skipped, otherwise the act() result plus the position right after it, read
+ * before the lock is released. With a `decide` that always returns its action
+ * it behaves exactly like act().
+ */
+export async function actIfCurrent(
+  code: string,
+  playerSeatId: string,
+  io: Server,
+  onStateReady: (roomCode: string) => void,
+  decide: (room: Room) => ActionPayload | null,
+): Promise<{ result: ActResult; action: ActionPayload; after: ActStateAfter } | null> {
+  return withRoomGameplayLock(code, async () => {
+    // A missing room throws exactly as act() does.
+    const action = decide(getRoom(code));
+    if (!action) return null;
+    const result = await actUnlocked(code, playerSeatId, action, io, onStateReady);
+    const state = result.room.state;
+    return {
+      result,
+      action,
+      after: {
+        sequence: state?.sequence ?? -1,
+        handNumber: state?.handNumber ?? -1,
+        currentSeatId: state ? state.playerIds[state.currentPlayerIndex] ?? null : null,
+        consecutivePasses: state?.consecutivePasses ?? 0,
+        handOver: Boolean(state?.handOver),
+        gameOver: Boolean(state?.gameOver),
+      },
+    };
+  });
 }
 
 async function actUnlocked(

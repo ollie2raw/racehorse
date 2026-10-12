@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi, afterAll } from 'vitest';
 import { resetRoomRuntimeForTests } from '../rooms';
 import { initRoomSession, resetRoomSessionStoresForTests } from './roomSession';
 import { registerTournamentAttachHandlers } from './registerTournamentAttachHandlers';
+import { ackTakingServerNow } from '../scheduledTournament/serverNow.testkit';
 
 // These tests cover live tournaments; the feature is off by default (TOURNAMENTS_ENABLED).
 beforeEach(() => { vi.stubEnv('TOURNAMENTS_ENABLED', 'true'); });
@@ -57,7 +58,7 @@ describe('registerTournamentAttachHandlers', () => {
     });
 
     const cb = vi.fn();
-    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'match-1' }, cb);
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'match-1' }, ackTakingServerNow(cb));
     expect(cb).toHaveBeenCalledWith({ ok: false, error: 'not_authenticated' });
     expect(attachSocketToTrackedRoom).not.toHaveBeenCalled();
   });

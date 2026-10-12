@@ -7,12 +7,16 @@ import { clearLastRoomCode } from '../../recovery/matchRecovery';
 import type { TournamentAttachRuntime } from '../../../multiplayer/runtime/tournamentRuntime';
 import type { TournamentSessionState } from './useTournamentSessionState';
 import type { TournamentAttachFlow } from './useTournamentAttachFlow';
+import type { TournamentAttachRefs } from './useTournamentAttachRefs';
 import type { TournamentHookApi } from './tournamentMatchSessionTypes';
 import type { Socket } from 'socket.io-client';
 import { logger } from '../../../utils/logger';
+import { decideTournamentAutoAttach, matchEndsFritzLaunchIntent } from '../../../tournament/tournamentJoinPolicy';
+import { monotonicNow } from '../../../tournament/tournamentClock';
 
 type UseTournamentSessionLifecycleParams = {
   socket: Socket | null;
+  isConnected: boolean;
   appMode: AppMode;
   joinedRoom: string | null;
   liveGameOver: boolean | undefined;
@@ -20,10 +24,12 @@ type UseTournamentSessionLifecycleParams = {
   tournament: TournamentHookApi;
   sessionState: TournamentSessionState;
   attachFlow: TournamentAttachFlow;
+  attachRefs: TournamentAttachRefs;
 };
 
 export function useTournamentSessionLifecycle({
   socket,
+  isConnected,
   appMode,
   joinedRoom,
   liveGameOver,
@@ -31,6 +37,7 @@ export function useTournamentSessionLifecycle({
   tournament,
   sessionState,
   attachFlow,
+  attachRefs,
 }: UseTournamentSessionLifecycleParams) {
   const { preventAutoRejoinRef, reconnectShouldJoinRef, reconnectRoomCodeRef } =
     attachRuntime.reconnectRuntime;
@@ -68,48 +75,100 @@ export function useTournamentSessionLifecycle({
     tournamentMatch,
   ]);
 
+  // The socket under a joined match was replaced: entering the match screen
+  // remounts the connection host (a new socket), and a server restart or a
+  // network drop reconnects with a new one. The server sends a seat's updates
+  // only to the socket it attached, so attach again — the server re-seats this
+  // socket, and restores the room from its live session if it lost it. Phase 4A
+  // dev finding: without this, a match that Fritz started never reached the
+  // player's screen ("Fritz is thinking" on their own turn) until missed turns
+  // forfeited it.
   useEffect(() => {
-    const matchId = tournament.recoveryMatch?.matchId;
-    if (!matchId) return;
-    if (isTerminalTournamentMatch(matchId)) {
+    const { attachedTournamentMatchIdRef, attachedSocketIdRef } = attachRefs;
+    const matchId = attachedTournamentMatchIdRef.current;
+    const socketId = socket?.connected ? socket.id ?? null : null;
+    if (!isConnected || !socketId || appMode !== 'multiplayer' || !matchId || liveGameOver) return;
+    if (!attachedSocketIdRef.current || attachedSocketIdRef.current === socketId) return;
+    if (isTerminalTournamentMatch(matchId)) return;
+    logger.operational('tournament:attach-client', 'reattach/socket-replaced', { matchId, socketId });
+    attachedSocketIdRef.current = socketId; // one attempt per socket
+    attachedTournamentMatchIdRef.current = null; // the match is no longer attached on this socket
+    void attemptTournamentAttach(matchId, {
+      manual: true,
+      tournamentId: tournamentMatch?.tournamentId ?? activeTournamentId ?? undefined,
+      matchStatus: 'in_progress',
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the connection or screen changes, not when the match metadata does
+  }, [socket, isConnected, appMode, liveGameOver, attemptTournamentAttach]);
+
+  // Join policy (tournament/tournamentJoinPolicy.ts): a `ready` match is never
+  // joined without a tap; an `in_progress` match this player already joined is
+  // restored; Play Fritz Cup may join its own cup's first match.
+  const inOtherGame = (roomCode: string | null | undefined) =>
+    appMode === 'multiplayer' && Boolean(joinedRoom) && joinedRoom !== (roomCode ?? null);
+
+  // The playable match from /my (or the Fritz Cup create response).
+  useEffect(() => {
+    const match = tournament.activeAssignedMatch;
+    if (!match?.matchId) return;
+    if (isTerminalTournamentMatch(match.matchId)) {
       logger.operational('tournament:recovery', 'ignored completed match', {
-        matchId,
-        roomCode: tournament.recoveryMatch?.roomCode ?? null,
+        matchId: match.matchId,
+        roomCode: match.roomCode ?? null,
       });
       tournament.clearRecoveryMatch();
       return;
     }
-    if (tournament.tournamentPhase === 'completed' || tournament.tournamentPhase === 'eliminated') {
-      tournament.clearRecoveryMatch();
+    const decision = decideTournamentAutoAttach({
+      source: 'my',
+      match,
+      launchIntent: tournament.fritzLaunchIntent,
+      nowMono: monotonicNow(),
+      inOtherGame: inOtherGame(match.roomCode),
+    });
+    if (!decision.attach) {
+      logger.operational('tournament:join-policy', 'not joined automatically', { matchId: match.matchId, reason: decision.reason });
       return;
     }
-    if (tournament.tournamentPhase === 'bracket_lobby') return;
-    void attemptTournamentAttach(matchId, {
-      tournamentId: tournament.recoveryMatch?.tournamentId,
-      matchStatus: tournament.recoveryMatch?.matchStatus,
+    setActiveTournamentId(match.tournamentId);
+    void attemptTournamentAttach(match.matchId, {
+      tournamentId: match.tournamentId,
+      matchStatus: match.matchStatus,
+    }).then((started) => {
+      if (started && decision.reason === 'fritz_launch') tournament.endFritzLaunch();
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keys on the specific tournament fields; the object changes every poll
   }, [
     appMode,
+    joinedRoom,
     attemptTournamentAttach,
     socket,
-    tournament.recoveryMatch?.matchId,
-    tournament.recoveryMatch?.matchStatus,
-    tournament.recoveryMatch?.tournamentId,
-    tournament.tournamentPhase,
+    tournament.activeAssignedMatch?.matchId,
+    tournament.activeAssignedMatch?.matchStatus,
+    tournament.activeAssignedMatch?.tournamentId,
+    tournament.fritzLaunchIntent,
     tournament.clearRecoveryMatch,
   ]);
 
+  // A `tournament:match_ready` push: only an explicit Fritz Cup launch may join from it.
   useEffect(() => {
     const pending = tournament.pendingMatch;
     if (!pending?.matchId) return;
-    if (tournament.tournamentPhase === 'bracket_lobby') return;
-    logger.operational('tournament', 'match_ready received', {
-      matchId: pending.matchId,
-      tournamentId: pending.tournamentId,
-      roomCode: pending.roomCode,
-      source: 'pending_drain',
+    if (matchEndsFritzLaunchIntent(tournament.fritzLaunchIntent, pending.tournamentId)) {
+      tournament.endFritzLaunch();
+      return;
+    }
+    const decision = decideTournamentAutoAttach({
+      source: 'match_ready',
+      match: pending,
+      launchIntent: tournament.fritzLaunchIntent,
+      nowMono: monotonicNow(),
+      inOtherGame: inOtherGame(pending.roomCode),
     });
+    if (!decision.attach) {
+      logger.operational('tournament:join-policy', 'match_ready not joined automatically', { matchId: pending.matchId, reason: decision.reason });
+      return;
+    }
     setActiveTournamentId(pending.tournamentId);
     void attemptTournamentAttach(pending.matchId, {
       tournamentId: pending.tournamentId,
@@ -117,10 +176,13 @@ export function useTournamentSessionLifecycle({
     }).then((started) => {
       if (started) {
         tournament.clearPendingMatch();
+        tournament.endFritzLaunch();
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keys on the specific tournament fields; the object changes every poll
   }, [
+    appMode,
+    joinedRoom,
     attemptTournamentAttach,
     setActiveTournamentId,
     socket,
@@ -128,8 +190,14 @@ export function useTournamentSessionLifecycle({
     tournament.pendingMatch?.matchId,
     tournament.pendingMatch?.matchStatus,
     tournament.pendingMatch?.tournamentId,
-    tournament.tournamentPhase,
+    tournament.fritzLaunchIntent,
   ]);
+
+  // Leaving the tournament screens ends a Fritz Cup launch (joining it switches to the match).
+  useEffect(() => {
+    if (appMode !== 'tournament' && appMode !== 'multiplayer') tournament.endFritzLaunch();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only on navigation
+  }, [appMode]);
 
   useEffect(() => {
     if (tournamentSubView === 'result' && activeTournamentId && !tournament.activeBracket) {

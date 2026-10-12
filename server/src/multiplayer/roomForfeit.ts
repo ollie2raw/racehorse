@@ -83,7 +83,7 @@ export async function applyActiveMatchForfeit(
   socket: Socket,
   roomCode: string,
   abandoningPlayer: ForfeitLeavingPlayer,
-  forfeitReason: 'manual' | 'disconnect_timeout' = 'manual',
+  forfeitReason: 'manual' | 'disconnect_timeout' | 'missed_turns' = 'manual',
 ): Promise<{ winnerUserId: string | null } | null> {
   const handlerDeps = requireRoomSessionHandlerDeps();
   const room = getRoom(roomCode);
@@ -171,7 +171,10 @@ export async function applyActiveMatchForfeit(
       typeof room.config.winningScore === 'number' && Number.isFinite(room.config.winningScore)
         ? room.config.winningScore
         : 30;
-    const statusReason = abandonerIsPlayer1 ? 'player1_forfeit' : 'player2_forfeit';
+    const statusReason =
+      forfeitReason === 'missed_turns'
+        ? 'missed_turns'
+        : abandonerIsPlayer1 ? 'player1_forfeit' : 'player2_forfeit';
 
     let lastError: unknown = null;
     let applied = false;

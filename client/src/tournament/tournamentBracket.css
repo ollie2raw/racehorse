@@ -1543,3 +1543,287 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Phase 3D: Your Path, phone round tabs, Fritz / outcome chips ─────────── */
+
+.tb-path {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(245, 185, 55, 0.55);
+  background: rgba(11, 14, 22, 0.97);
+}
+
+.tb-path--eliminated {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.tb-path__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 16em;
+}
+
+.tb-path__kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tb-accent);
+}
+
+.tb-path__state {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
+.tb-path--eliminated .tb-path__kicker {
+  color: var(--text-dim);
+}
+
+.tb-path__headline {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.tb-path__sub {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.82);
+  overflow-wrap: anywhere;
+}
+
+.tb-path__cta {
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 12px;
+  border: 0;
+  background: var(--tb-accent);
+  color: #120c02;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.tb-path__cta:disabled { opacity: 0.7; cursor: default; }
+
+.tb-path__error {
+  flex: 1 0 100%;
+  font-size: 13px;
+  color: #fca5a5;
+}
+
+.tb-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tb-slot__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tb-fritz-chip,
+.tb-won-chip,
+.tb-yours-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  font-style: normal;
+}
+
+.tb-fritz-chip {
+  border: 1px solid rgba(231, 182, 74, 0.6);
+  color: rgba(247, 226, 181, 0.96);
+}
+
+.tb-won-chip {
+  border: 1px solid rgba(134, 239, 172, 0.55);
+  color: #bbf7d0;
+}
+
+.tb-yours-chip {
+  margin-left: 8px;
+  border: 1px solid rgba(245, 185, 55, 0.6);
+  color: var(--tb-accent);
+  letter-spacing: 0.08em;
+}
+
+.tb-match__note {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.tb-champion-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Desktop / tablet keep the full tree; tabs appear on phones only. */
+.tb-round-tabs {
+  display: none;
+}
+
+@media (--phone) {
+  .tb-round-tabs {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 4px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .tb-round-tab {
+    min-height: 44px;
+    padding: 0 6px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .tb-round-tab.is-active {
+    color: var(--text-primary);
+    background: rgba(245, 185, 55, 0.14);
+    border-color: rgba(245, 185, 55, 0.55);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .tb-round-tab__you {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--tb-accent);
+  }
+
+  /* One round at a time (the Final tab also shows the champion). */
+  .tb-bracket[data-round] > .tb-col {
+    display: none;
+  }
+  .tb-bracket[data-round='1'] > .tb-col[data-round='1'],
+  .tb-bracket[data-round='2'] > .tb-col[data-round='2'],
+  .tb-bracket[data-round='3'] > .tb-col[data-round='3'] {
+    display: flex;
+  }
+
+  .tb-bracket {
+    gap: 14px;
+  }
+
+  .tb-col-matches {
+    justify-content: flex-start;
+  }
+
+  /* Legibility: nothing under 12px; names may wrap instead of truncating. */
+  .tb-col-label,
+  .tb-col-sub,
+  .tb-match__round {
+    font-size: 12px;
+  }
+
+  .tb-slot__name {
+    font-size: 15px;
+    flex-wrap: wrap;
+  }
+
+  .tb-name-text {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .tb-slot__score {
+    font-size: 16px;
+  }
+
+  .tb-fritz-chip,
+  .tb-won-chip,
+  .tb-yours-chip {
+    font-size: 11px;
+  }
+
+  .tb-path {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .tb-path__headline {
+    font-size: 16px;
+  }
+
+  .tb-path__sub {
+    font-size: 13px;
+  }
+
+  .tb-path__cta {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  /* Room for the round itself: a compact title row on phones. */
+  .tb-shell:not(.tb-shell--waiting) {
+    gap: 10px;
+  }
+  .tb-shell:not(.tb-shell--waiting) .tb-kicker {
+    display: none;
+  }
+  .tb-shell:not(.tb-shell--waiting) .tb-title {
+    font-size: 22px;
+    margin: 0;
+  }
+}
+
+/* Phase 3E accessibility: bracket navigation and withdraw are 44px targets. */
+.tb-back,
+.tb-waiting__withdraw {
+  min-height: 44px;
+}
+.tb-back {
+  padding: 0 16px;
+  font-size: 13px;
+}

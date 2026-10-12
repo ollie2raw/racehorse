@@ -39,6 +39,7 @@ import type { MatchFoundPayload } from '../matchmaking/types';
 import type { MultiplayerShellDelegates } from './multiplayerGameShellTypes';
 import type { TournamentMatchContext } from '../match/session/tournament/tournamentMatchSessionTypes';
 import type { MultiplayerRuntime } from './runtime/runtimeTypes';
+import { publicPlayerName } from '../identity/publicPlayerName';
 
 type HandEndedPayload = {
   handNumber: number;
@@ -388,12 +389,12 @@ export function useMultiplayerRoomCallbacks(
       if (!canAttemptMatchmakingRoomJoin({ socket: activeSocket, roomCode: payload.roomCode, currentJoinedRoom: selectJoinedRoomCode(sessionRef.current), normalizeRoomCode })) { return; }
       setOverlayPayload(payload);
       setAppMode('multiplayer');
-      const username = authProfile?.username ?? authUser?.email?.split('@')[0] ?? 'Guest';
+      const username = authUser ? publicPlayerName(authProfile?.username) : 'Guest';
       void emitMatchmakingRoomJoin({ socket: activeSocket!, roomCode: payload.roomCode, identity: { username, userId: multiplayerIdentityUserId, authToken: multiplayerAuthToken } }).then((resp) => {
         handleMatchmakingRoomJoinAck(resp, { applyJoinedRoomResponse, showToast });
       });
     },
-    [authProfile?.username, authUser?.email, multiplayerIdentityUserId, multiplayerAuthToken, applyJoinedRoomResponse, showToast, setAppMode, setOverlayPayload, socketRef, sessionRef, normalizeRoomCode],
+    [authProfile?.username, authUser, multiplayerIdentityUserId, multiplayerAuthToken, applyJoinedRoomResponse, showToast, setAppMode, setOverlayPayload, socketRef, sessionRef, normalizeRoomCode],
   );
 
   return {

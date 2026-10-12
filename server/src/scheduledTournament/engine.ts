@@ -4,9 +4,26 @@ import type { Server } from 'socket.io';
 import { supabaseFetch } from '../supabaseUtils';
 import { writeTournamentActivity } from '../social/activityWriter';
 import { pairSeededEntrants, sortBySeedRating } from './bracket';
+import {
+  alertTournamentAnomaly,
+  alertTournamentMatchStepFailed,
+  alertTournamentStepFailed,
+  clearTournamentMatchStepAlert,
+  clearTournamentStepAlert,
+  shouldSendAlert,
+} from './tournamentAlerts';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
+import { updateMatchIfUnchanged } from './casWrites';
+import { archiveBelongsToMatch } from './archiveIdentity';
+import { tournamentMatchCapMs } from './tournamentTimeouts';
+import type { Room } from '../rooms';
+import type { GameState } from '../game/types';
+import { getRoomRoster } from '../multiplayer/roomSession';
+import { disarmTournamentTurnClock } from '../multiplayer/tournamentTurnClock';
+import { markGameOverPersistSucceeded } from '../multiplayer/gameOverPersistPolicy';
 import type { ScheduledTournamentRow } from './types';
-import type { BracketQfPair, BracketSeed } from './persistence';
+import { emitToUserIds, emitTournamentEvent } from './tournamentEvents';
+import { bracketSnapshot, type BracketQfPair, type BracketSeed } from './persistence';
 import {
   TOURNAMENT_MATCH_READY_WINDOW_MS,
   allHumanPlayersJoined,
@@ -29,6 +46,20 @@ export const TOURNAMENT_INVARIANT_RPC_ERRORS = new Set([
   'winner_not_participant',
   'no_advance_target',
 ]);
+
+/**
+ * complete_tournament_match refusals for a match whose tournament is no longer
+ * in progress (2026-10-09_tournament_completion_guard.sql). Terminal: the
+ * database wrote nothing and a retry can never succeed, so applyMatchResult
+ * reports them once and returns instead of throwing (no retry loop, no
+ * alert per attempt). The result is not reinterpreted and the tournament is
+ * not revived.
+ *  - tournament_cancelled: a result that lost the race to a cancellation.
+ *  - tournament_not_in_progress: an unresolved match under a completed or
+ *    not-yet-started tournament — corrupt state, alerted as an invariant.
+ */
+export const TOURNAMENT_CANCELLED = 'tournament_cancelled';
+export const TOURNAMENT_NOT_IN_PROGRESS = 'tournament_not_in_progress';
 
 function alertTournamentInvariantViolation(
   kind: string,
@@ -140,16 +171,6 @@ export function placementLabelForRank(placement: number | null): string | null {
   else if (mod10 === 2 && mod100 !== 12) suffix = 'nd';
   else if (mod10 === 3 && mod100 !== 13) suffix = 'rd';
   return `${placement}${suffix} Place`;
-}
-
-function emitToUserIds(io: Server, userIds: Array<string | null | undefined>, event: string, payload: unknown): void {
-  const targets = new Set(userIds.filter((userId): userId is string => Boolean(userId) && !isBotUserId(userId)));
-  if (targets.size === 0) return;
-  for (const sock of io.sockets.sockets.values()) {
-    const userId: string | undefined = (sock.data as { userId?: string }).userId;
-    if (!userId || !targets.has(userId)) continue;
-    sock.emit(event, payload);
-  }
 }
 
 async function selectHigherSeedWinner(
@@ -280,13 +301,19 @@ async function resolveBotOnlyMatch(
 async function writeTournamentCompletionActivity(
   tournamentId: string,
   placements: Array<{ userId: string; placement: number }>,
+  kind: ScheduledTournamentRow['kind'] = 'live',
 ): Promise<void> {
+  // Live Event: every human's placement (unchanged). Fritz Cup: only a Cup win
+  // is public — no elimination, runner-up or bot results in the feed.
+  const isCup = kind === 'fritz_cup';
+  const posted = isCup ? placements.filter((p) => p.placement === 1) : placements;
   await Promise.all(
-    placements.map(({ userId, placement }) =>
+    posted.map(({ userId, placement }) =>
       writeTournamentActivity({
         userId,
         placement: placementLabelForRank(placement) ?? 'Tournament result',
         tournamentId,
+        tournamentName: isCup ? 'Fritz Cup' : 'Live Event',
       }),
     ),
   );
@@ -346,8 +373,8 @@ export async function generateBracket(
         log.warn({ tournamentId, created: result.created }, 'repaired a partial bracket');
       }
       if (result.created || result.repaired) {
-        // Broadcast — rooms dispatch at scheduled_start (humans) or immediately for bot-only pairs.
-        io.emit('tournament:bracket_generated', { tournamentId });
+        // Live Event: public; Fritz Cup: its owner only (tournamentEvents.ts).
+        await emitTournamentEvent(io, tournament, 'tournament:bracket_generated', { tournamentId });
       }
       return result.matches;
     } catch (err) {
@@ -412,22 +439,31 @@ export async function dispatchScheduledStartMatches(
   const matches = await persistence.fetchMatches(tournamentId);
   let dispatched = 0;
   for (const match of matches) {
-    if (!match.player1_id || !match.player2_id) continue;
-    if (match.status === 'completed' || match.status === 'bye') continue;
-    if (!matchHasHuman(match)) continue;
-    if (match.status === 'ready' || match.status === 'in_progress') continue;
-    if (match.status !== 'waiting') continue;
-    await dispatchTournamentMatch(io, match.id, { reason: 'bracket_generated', now }, persistence);
-    if (isBotUserId(match.player1_id) || isBotUserId(match.player2_id)) {
-      log.info({
-        tournamentId,
-        matchId: match.id,
-      }, 'human-vs-bot playable match ready');
-    }
-    dispatched += 1;
-    const updated = await persistence.fetchMatchById(match.id);
-    if (updated) {
-      await resolveBotOnlyMatch(io, updated, persistence, now);
+    let matchFailed = false;
+    try {
+      if (!match.player1_id || !match.player2_id) continue;
+      if (match.status === 'completed' || match.status === 'bye') continue;
+      if (!matchHasHuman(match)) continue;
+      if (match.status === 'ready' || match.status === 'in_progress') continue;
+      if (match.status !== 'waiting') continue;
+      await dispatchTournamentMatch(io, match.id, { reason: 'bracket_generated', now }, persistence);
+      if (isBotUserId(match.player1_id) || isBotUserId(match.player2_id)) {
+        log.info({
+          tournamentId,
+          matchId: match.id,
+        }, 'human-vs-bot playable match ready');
+      }
+      dispatched += 1;
+      const updated = await persistence.fetchMatchById(match.id);
+      if (updated) {
+        await resolveBotOnlyMatch(io, updated, persistence, now);
+      }
+    } catch (err) {
+      // One match must not stop this tournament's other dispatches; the next tick retries it.
+      matchFailed = true;
+      alertTournamentMatchStepFailed('start_dispatch', match, err);
+    } finally {
+      if (!matchFailed) clearTournamentMatchStepAlert('start_dispatch', match.id);
     }
   }
   const botResolved = await resolveWaitingBotOnlyQuarterfinals(io, tournamentId, persistence, now);
@@ -464,6 +500,23 @@ export async function applyMatchResult(
     statusReason?: string | null;
     noShowUserId?: string | null;
     forfeitUserId?: string | null;
+    /**
+     * A decision made from an earlier read of a not-yet-played match: it must
+     * still have this status when the result commits (else MATCH_STATE_CHANGED).
+     */
+    expectStatus?: MatchRow['status'];
+    /**
+     * Users who must still be un-joined when the result commits (a no-show
+     * decided from attendance read earlier); otherwise ATTENDANCE_CHANGED is
+     * thrown and nothing is written.
+     */
+    requireUnjoined?: string[];
+    /**
+     * Default true: a next-round match this result makes ready is dispatched
+     * (room + match_ready) and bot-only pairs resolved. The event backstop
+     * passes false: it resolves the rest of the bracket itself.
+     */
+    dispatchAdvanced?: boolean;
   },
   persistence: EnginePersistence = defaultEnginePersistence,
 ): Promise<void> {
@@ -483,9 +536,43 @@ export async function applyMatchResult(
       forfeitUserId: params.forfeitUserId ?? null,
       byeWalkover: params.byeWalkover ?? false,
       actor: params.winnerSource ?? (params.byeWalkover ? 'bye_walkover' : 'game_over'),
+      expectStatus: params.expectStatus ?? null,
+      requireUnjoined: params.requireUnjoined && params.requireUnjoined.length > 0 ? params.requireUnjoined : null,
     });
   } catch (err) {
     const code = err instanceof Error ? err.message : String(err);
+    if (code === TOURNAMENT_CANCELLED) {
+      log.warn({
+        event: 'tournament_result_after_cancellation',
+        matchId: match.id,
+        tournamentId: match.tournament_id,
+        attemptedWinnerId: params.winnerId,
+        attemptedSource: params.winnerSource ?? 'game_over',
+      }, 'result refused: the tournament was cancelled first; nothing recorded');
+      if (shouldSendAlert(`result_after_cancellation:${match.id}`)) {
+        Sentry.captureMessage('[tournament] result arrived after the tournament was cancelled', {
+          level: 'warning',
+          fingerprint: ['tournament-result-after-cancellation', match.id],
+          tags: { tournament_alert: 'result_after_cancellation', tournament_id: match.tournament_id, match_id: match.id },
+          extra: { attemptedWinnerId: params.winnerId, attemptedSource: params.winnerSource ?? 'game_over' },
+        });
+      }
+      return;
+    }
+    if (code === TOURNAMENT_NOT_IN_PROGRESS) {
+      log.error({
+        event: 'tournament_invariant_violation',
+        kind: code,
+        matchId: match.id,
+        tournamentId: match.tournament_id,
+        attemptedWinnerId: params.winnerId,
+      }, `tournament invariant violation: ${code}`);
+      alertTournamentInvariantViolation(code, match, {
+        attemptedWinnerId: params.winnerId,
+        attemptedSource: params.winnerSource ?? 'game_over',
+      });
+      return;
+    }
     if (TOURNAMENT_INVARIANT_RPC_ERRORS.has(code)) {
       log.error({
         event: 'tournament_invariant_violation',
@@ -573,6 +660,7 @@ export async function applyMatchResult(
       match.tournament_id,
       result.winner_id ?? params.winnerId,
       result.placements ?? [],
+      persistence,
     );
     return;
   }
@@ -617,11 +705,13 @@ export async function applyMatchResult(
       slot: result.advanced_to_slot,
       winnerId: result.winner_id,
     }, 'winner advanced');
-    io.emit('tournament:match_updated', {
-      tournamentId: match.tournament_id,
-      matchId: result.advanced_to_match_id,
-    });
-    if (result.advanced_to_status === 'ready') {
+    await emitTournamentEvent(
+      io,
+      { id: match.tournament_id, read: (id) => persistence.fetchTournamentById(id) },
+      'tournament:match_updated',
+      { matchId: result.advanced_to_match_id },
+    );
+    if (result.advanced_to_status === 'ready' && params.dispatchAdvanced !== false) {
       await dispatchTournamentMatch(
         io,
         result.advanced_to_match_id,
@@ -648,15 +738,28 @@ async function finalizeCompletedTournament(
   tournamentId: string,
   winnerUserId: string,
   placements: Array<{ user_id: string; placement: number }>,
+  persistence: EnginePersistence,
 ): Promise<void> {
+  const tournament = await persistence.fetchTournamentById(tournamentId).catch(() => null);
   await writeTournamentCompletionActivity(
     tournamentId,
     placements
       .filter((p) => !isBotUserId(p.user_id))
       .map((p) => ({ userId: p.user_id, placement: p.placement })),
+    tournament?.kind ?? 'live',
   );
   log.info({ tournamentId, winnerId: winnerUserId }, 'champion');
-  io.emit('tournament:completed', { tournamentId, winnerId: winnerUserId });
+  await emitTournamentEvent(
+    io,
+    { id: tournamentId, read: (id) => persistence.fetchTournamentById(id) },
+    'tournament:completed',
+    { winnerId: winnerUserId },
+  );
+}
+
+/** `tournament:cancelled` to the tournament's audience (Live Event: public; Fritz Cup: its owner). */
+async function emitTournamentCancelled(io: Server, tournamentId: string, persistence: EnginePersistence): Promise<void> {
+  await emitTournamentEvent(io, { id: tournamentId, read: (id) => persistence.fetchTournamentById(id) }, 'tournament:cancelled', { status: 'cancelled' });
 }
 
 export async function cancelTournament(
@@ -667,18 +770,94 @@ export async function cancelTournament(
   reason: string | null = null,
 ): Promise<void> {
   await persistence.updateTournamentStatus(tournamentId, 'cancelled', { cancel_reason: reason });
-  io.emit('tournament:cancelled', { tournamentId });
+  await emitTournamentCancelled(io, tournamentId, persistence);
 }
 
-/** Helper for the scheduler: open registration on a tournament. */
+/**
+ * Cancel a tournament that has not started yet (not enough players, or a
+ * start that kept failing), only if it is still upcoming / registration_open
+ * — one atomic conditional update, so a tournament another process has just
+ * started is never overwritten. False when it had already left registration:
+ * not an error; the caller continues from its current state.
+ */
+export async function cancelTournamentBeforeStart(
+  io: Server,
+  tournamentId: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
+  reason: string,
+): Promise<boolean> {
+  let cancelled: boolean;
+  if (persistence.cancelTournamentBeforeStart) {
+    cancelled = await persistence.cancelTournamentBeforeStart(tournamentId, reason);
+  } else {
+    // Test doubles without the conditional write only.
+    const current = await persistence.fetchTournamentById(tournamentId);
+    cancelled = Boolean(current && (current.status === 'upcoming' || current.status === 'registration_open'));
+    if (cancelled) await persistence.updateTournamentStatus(tournamentId, 'cancelled', { cancel_reason: reason });
+  }
+  if (cancelled) await emitTournamentCancelled(io, tournamentId, persistence);
+  return cancelled;
+}
+
+/**
+ * Cancel an in-progress tournament judged unrecoverable — only if every match
+ * is still exactly as in `seen` (the bracket the judgement was made from),
+ * atomically at the database (cancel_tournament_if_bracket_unchanged). False
+ * when the bracket moved on, or the tournament is no longer in progress:
+ * nothing is written. True when cancelled (and `tournament:cancelled` sent).
+ */
+export async function cancelTournamentIfBracketUnchanged(
+  io: Server,
+  tournamentId: string,
+  seen: MatchRow[],
+  reason: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
+): Promise<boolean> {
+  const expected = bracketSnapshot(seen);
+  let cancelled: boolean;
+  if (persistence.cancelTournamentIfBracketUnchanged) {
+    cancelled = await persistence.cancelTournamentIfBracketUnchanged(tournamentId, expected, reason);
+  } else {
+    // Test doubles without the transactional RPC only.
+    const [tournament, matches] = await Promise.all([
+      persistence.fetchTournamentById(tournamentId),
+      persistence.fetchMatches(tournamentId),
+    ]);
+    const key = (rows: ReturnType<typeof bracketSnapshot>) =>
+      JSON.stringify([...rows].sort((a, b) => a.id.localeCompare(b.id)));
+    cancelled = tournament?.status === 'in_progress' && key(bracketSnapshot(matches)) === key(expected);
+    if (cancelled) await persistence.updateTournamentStatus(tournamentId, 'cancelled', { cancel_reason: reason });
+  }
+  if (cancelled) await emitTournamentCancelled(io, tournamentId, persistence);
+  return cancelled;
+}
+
+/**
+ * Helper for the scheduler: open registration on a tournament — only if it is
+ * still `upcoming` and its registration_open_at has passed, in one
+ * conditional update, so a stale tick never sends a tournament that has moved
+ * on (started, cancelled, completed, or re-timed) back to registration. True
+ * when this call opened it.
+ */
 export async function openRegistration(
   io: Server,
   tournamentId: string,
   persistence: EnginePersistence = defaultEnginePersistence,
-): Promise<void> {
-  await persistence.updateTournamentStatus(tournamentId, 'registration_open');
-  io.emit('tournament:registration_open', { tournamentId });
+  now: Date = new Date(),
+): Promise<boolean> {
+  let opened: boolean;
+  if (persistence.openRegistrationIfDue) {
+    opened = await persistence.openRegistrationIfDue(tournamentId, now);
+  } else {
+    // Test doubles without the conditional write only.
+    const current = await persistence.fetchTournamentById(tournamentId);
+    opened = Boolean(current && current.status === 'upcoming' && Date.parse(current.registration_open_at) <= now.getTime());
+    if (opened) await persistence.updateTournamentStatus(tournamentId, 'registration_open');
+  }
+  if (opened) await emitTournamentEvent(io, { id: tournamentId, read: (id) => persistence.fetchTournamentById(id) }, 'tournament:registration_open', {});
+  return opened;
 }
+
 
 /**
  * Helper for the scheduler: close registration and either start the bracket
@@ -692,8 +871,26 @@ export async function closeRegistrationAndStart(
   const regs = await persistence.fetchRegistrations(tournamentId);
   const active = regs.filter((r) => r.status === 'registered');
   if (active.length < MIN_HUMANS_TO_START) {
-    await cancelTournament(io, tournamentId, persistence, 'not_enough_players');
-    return { started: false, reason: 'not_enough_players' };
+    // Registrations leave 'registered' when the bracket is generated (one
+    // transaction also moves the tournament to in_progress). Another starter
+    // (the Fritz Cup route, or a second tick) may have just done that, so the
+    // cancellation is conditional on the tournament still being in
+    // registration, atomically at the database.
+    // Only while nobody is registered (re-checked under the tournament row
+    // lock registration takes, after the database clock closed registration).
+    const cancelled = persistence.cancelTournamentIfNoEntrants
+      ? await persistence.cancelTournamentIfNoEntrants(tournamentId, 'not_enough_players')
+      : await cancelTournamentBeforeStart(io, tournamentId, persistence, 'not_enough_players');
+    if (cancelled) {
+      if (persistence.cancelTournamentIfNoEntrants) await emitTournamentCancelled(io, tournamentId, persistence);
+      return { started: false, reason: 'not_enough_players' };
+    }
+    const current = await persistence.fetchTournamentById(tournamentId);
+    if (current && (current.status === 'upcoming' || current.status === 'registration_open')) {
+      // Still in registration: someone registered after the count was read.
+      return { started: false, reason: 'entrants_arrived' };
+    }
+    return { started: current?.status === 'in_progress', reason: 'already_left_registration' };
   }
   const tournament = await persistence.fetchTournamentById(tournamentId);
   if (!tournament) throw new Error('Tournament not found');
@@ -706,6 +903,481 @@ export async function closeRegistrationAndStart(
 
 /** status_reason marking the single A6 deadline extension (see below). */
 export const BOTH_JOINED_START_RETRY_REASON = 'all_joined_start_retry';
+
+/** status_reason labels for an in-progress match decided without a finished game. */
+export type InProgressResolutionLabels = {
+  /** Decided by the live score. */
+  higherScore: string;
+  /** Live score tied: the higher seed advances. */
+  higherSeed: string;
+  /** No live game could be found or restored: the higher seed advances. */
+  missingSessionHigherSeed: string;
+  /** The game never got past the pre-game draw: the higher seed advances. */
+  pregameHigherSeed: string;
+  /** The room's game finished but its result is internally inconsistent: the higher seed advances. */
+  unrecoverableResultHigherSeed: string;
+};
+
+export const MATCH_CAP_LABELS: InProgressResolutionLabels = {
+  higherScore: 'match_cap_higher_score',
+  higherSeed: 'match_cap_higher_seed',
+  missingSessionHigherSeed: 'match_cap_missing_session_higher_seed',
+  pregameHigherSeed: 'match_cap_pregame_higher_seed',
+  unrecoverableResultHigherSeed: 'match_cap_unrecoverable_result_higher_seed',
+};
+
+/**
+ * Errors that mean a finished room game cannot be this match's result (the
+ * room is not this match's game, or its outcome is inconsistent): retrying
+ * cannot help.
+ */
+const TERMINAL_RESULT_CORRUPT_ERRORS = new Set([
+  'tournament_seat_mismatch',
+  'tournament_room_match_mismatch',
+  'tournament_game_over_without_winner',
+  'tournament_terminal_state_inconsistent',
+  'winner_not_participant',
+  'score_inconsistent',
+]);
+
+/**
+ * A finished game: from the live room, or (no room in memory: after a restart,
+ * or after room cleanup) from its stored terminal live session or its
+ * room_match_logs archive.
+ */
+type FinishedGame = {
+  roomCode: string;
+  source: 'room' | 'live_session' | 'archive';
+  /** Set when the stored copy says the game ended but is not a readable finished game. */
+  corrupt?: string;
+  /** The tournament match the room says it belongs to, if it says. */
+  roomMatchId: string | null;
+  state: GameState;
+  /** Seat id → tournament user id (null for Fritz seats: their seat id is their id). */
+  rosterUserIdOf: (seatId: string) => string | null | undefined;
+  /** The live room, if any (its game-over persist status is honoured and updated). */
+  room: Room | null;
+};
+
+/**
+ * Record a finished game whose tournament result never reached the database
+ * (the game-over persist gave up, or the process restarted before it ran),
+ * through the same finalizer the game-over path uses
+ * (applyTournamentGameOverFromRoom: seat orientation, identity check, locked
+ * idempotent RPC, bracket advancement, placements). The winner is the engine's
+ * `state.winnerId`, mapped to its tournament id exactly as the game-over path
+ * maps it. Returns false (nothing done) while the room's own game-over persist
+ * is still in flight. Transient failures throw (the next tick retries); a
+ * result that is internally corrupt is alerted and the higher seed advances
+ * under `unrecoverableResultHigherSeed`, so it is never retried forever.
+ */
+async function recordFinishedGame(
+  io: Server,
+  match: MatchRow,
+  game: FinishedGame,
+  persistence: EnginePersistence,
+  labels: InProgressResolutionLabels,
+  options: { dispatchAdvanced?: boolean },
+): Promise<boolean> {
+  if (game.room?.gameOverPersistStatus === 'pending') return false;
+  const { state } = game;
+  try {
+    if (game.corrupt) throw new Error(game.corrupt);
+    if (game.roomMatchId && game.roomMatchId !== match.id) throw new Error('tournament_room_match_mismatch');
+    if (!state.winnerId) throw new Error('tournament_game_over_without_winner');
+    if (state.playerIds.length !== 2 || !state.playerIds.includes(state.winnerId) || state.playerIds.some((id) => !state.players[id])) {
+      throw new Error('tournament_terminal_state_inconsistent');
+    }
+    const tournamentIdOf = (seatId: string): string | null =>
+      game.rosterUserIdOf(seatId) ?? (isBotUserId(seatId) ? seatId : null);
+    const winnerUserId = tournamentIdOf(state.winnerId);
+    if (!winnerUserId) throw new Error('tournament_seat_mismatch');
+    log.info({ matchId: match.id, roomCode: game.roomCode, winnerUserId, source: game.source }, 'recording a finished game whose tournament result was never recorded');
+    await applyTournamentGameOverFromRoom(io, { code: game.roomCode, scheduledTournamentMatchId: match.id, scheduledTournamentId: match.tournament_id }, {
+      winnerUserId,
+      player1Score: 0,
+      player2Score: 0,
+      seatScores: state.playerIds.map((seatId) => ({ playerId: tournamentIdOf(seatId), score: state.players[seatId]?.score ?? 0 })),
+      dispatchAdvanced: options.dispatchAdvanced,
+    }, persistence);
+  } catch (err) {
+    const code = err instanceof Error ? err.message : String(err);
+    if (!TERMINAL_RESULT_CORRUPT_ERRORS.has(code) || !match.player1_id || !match.player2_id) throw err;
+    alertTournamentAnomaly(
+      'terminal_result_unrecoverable',
+      { tournamentId: match.tournament_id, matchId: match.id, roomCode: game.roomCode },
+      { error: code, source: game.source, resolution: labels.unrecoverableResultHigherSeed },
+    );
+    await applyMatchResult(io, {
+      matchId: match.id,
+      winnerId: await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence),
+      player1Score: 0,
+      player2Score: 0,
+      winnerSource: 'game_over',
+      statusReason: labels.unrecoverableResultHigherSeed,
+      dispatchAdvanced: options.dispatchAdvanced,
+    }, persistence);
+  }
+  if (game.room) markGameOverPersistSucceeded(game.room);
+  return true;
+}
+
+function finishedGameFromRoom(room: Room): FinishedGame {
+  const roster = getRoomRoster(room.code);
+  return {
+    roomCode: room.code,
+    source: 'room',
+    roomMatchId: room.scheduledTournamentMatchId ?? null,
+    state: room.state!,
+    rosterUserIdOf: (seatId) => roster.find((p) => p.id === seatId)?.userId,
+    room,
+  };
+}
+
+const TERMINAL_SESSION_ERRORS = new Set(['snapshot_terminal', 'snapshot_terminal_state']);
+
+/** What the persisted copies of a match's room hold. */
+type PersistedGame = {
+  /** This match's finished game, if a trustworthy persisted copy has one. */
+  finished: FinishedGame | null;
+  /** The live session under the room code belongs to another tournament match. */
+  foreignLiveSession: boolean;
+};
+
+/** How many archives under one room code are considered (newest first). */
+const ARCHIVE_CANDIDATES = 5;
+
+/**
+ * The finished game of a match whose room is not in memory, from what was
+ * persisted. A finished game is never restored into a room (restore refuses
+ * terminal sessions); its final state and roster are read instead. Most
+ * trusted first:
+ *
+ *  1. the live session (room_live_sessions) when it names this match
+ *     (`scheduled_tournament_match_id`), written `game_over` by the game-over
+ *     commit. One that names another match is foreign (a room-code collision):
+ *     alerted, never used, and the archive is consulted instead;
+ *  2. an archive (room_match_logs, written by room cleanup before it deletes
+ *     the live session; completed archives are never deleted) whose
+ *     `summary.scheduledTournamentMatchId` is this match. An archive that names
+ *     another match is never used, whatever its players;
+ *  3. only for archives written before that field existed: same room code,
+ *     completed, exactly this match's two players, archived after the match
+ *     started.
+ *
+ * `finished` is null when no trustworthy copy holds a finished game for this
+ * match (a game in progress, nothing stored, or only foreign copies). Throws
+ * when persistence cannot be read (retried later).
+ */
+async function persistedGameFor(match: MatchRow): Promise<PersistedGame> {
+  const roomCode = match.room_code!.trim().toUpperCase();
+  const { loadLiveRoomSession } = await import('../multiplayer/roomLivePersistence');
+  const loaded = await loadLiveRoomSession(roomCode);
+  if (loaded.kind === 'persistence_unavailable') throw new Error('room_persistence_unavailable');
+  let foreignLiveSession = false;
+  if (loaded.kind === 'found') {
+    const { row } = loaded;
+    if (row.scheduled_tournament_match_id && row.scheduled_tournament_match_id !== match.id) {
+      foreignLiveSession = true;
+      alertTournamentAnomaly(
+        'tournament_foreign_live_session',
+        { tournamentId: match.tournament_id, matchId: match.id, roomCode },
+        { foreignMatchId: row.scheduled_tournament_match_id, foreignStatus: row.status },
+      );
+    } else {
+      const ended = row.status === 'game_over' || Boolean(row.game_state?.gameOver);
+      if (!ended) return { finished: null, foreignLiveSession };
+      const consistent = row.status === 'game_over' && row.game_state?.gameOver === true;
+      return {
+        foreignLiveSession,
+        finished: {
+          roomCode: row.room_code,
+          source: 'live_session',
+          corrupt: consistent ? undefined : 'tournament_terminal_state_inconsistent',
+          roomMatchId: row.scheduled_tournament_match_id,
+          state: row.game_state ?? ({ playerIds: [], players: {}, winnerId: null } as unknown as GameState),
+          rosterUserIdOf: (seatId) => row.roster.find((p) => p.seatId === seatId)?.userId,
+          room: null,
+        },
+      };
+    }
+  }
+  // No live session of this match (cleanup deleted it after archiving), an
+  // unreadable one, or a foreign one.
+  const { queryRecentPersistedRoomMatchLogsByRoomCode } = await import('../multiplayer/roomMatchLogPersistence');
+  const archives = await queryRecentPersistedRoomMatchLogsByRoomCode(roomCode, ARCHIVE_CANDIDATES);
+  for (const archived of archives) {
+    const state = archived.state_snapshot as GameState | null | undefined;
+    if (archived.status !== 'completed' || !state?.gameOver) continue;
+    // Exact match id when the archive records one; legacy identity otherwise.
+    if (!archiveBelongsToMatch(archived, match)) continue;
+    const archivedMatchId = archived.summary?.scheduledTournamentMatchId;
+    return {
+      foreignLiveSession,
+      finished: {
+        roomCode,
+        source: 'archive',
+        roomMatchId: typeof archivedMatchId === 'string' ? archivedMatchId : null,
+        state,
+        rosterUserIdOf: (seatId) => archived.participants.find((p) => p.id === seatId)?.userId,
+        room: null,
+      },
+    };
+  }
+  return { finished: null, foreignLiveSession };
+}
+
+/**
+ * An in-progress match whose game has finished: record it now (each reconcile
+ * tick, and boot recovery) rather than waiting for the cap. The live room if
+ * the process holds it; otherwise the persisted finished game, never a
+ * restored room. True when this call recorded the result.
+ */
+export async function recordFinishedGameIfAny(
+  io: Server,
+  match: MatchRow,
+  persistence: EnginePersistence,
+  labels: InProgressResolutionLabels = MATCH_CAP_LABELS,
+  options: { dispatchAdvanced?: boolean } = {},
+): Promise<boolean> {
+  if (match.status !== 'in_progress' || !match.room_code || !match.player1_id || !match.player2_id) return false;
+  const room = peekMatchRoom(persistence, match);
+  if (room) {
+    if (!room.state?.gameOver) return false;
+    return recordFinishedGame(io, match, finishedGameFromRoom(room), persistence, labels, options);
+  }
+  const { finished } = await persistedGameFor(match);
+  if (!finished) return false;
+  return recordFinishedGame(io, match, finished, persistence, labels, options);
+}
+
+/**
+ * Decide an in-progress match that has no finished game, from its live room:
+ * higher score wins, a tie goes to the higher seed. A room lost to a restart is
+ * restored first (dispatch with reason `repair` restores before it creates), so
+ * the live score counts. If there is still no live game after that, the live
+ * session is gone: that is reported as an anomaly and recorded under its own
+ * status_reason (`missingSessionHigherSeed`), never passed off as a tied score.
+ * A room still in the pre-game draw gets `pregameHigherSeed` likewise.
+ *
+ * Recorded through applyMatchResult like any result (locked, idempotent,
+ * advances the bracket, the final writes placements); the room is then closed
+ * to further play. A game that already ended is recorded from its own result
+ * (recordFinishedGame), also after a restart from its stored session; false only while its game-over persist is still in
+ * flight. Throws tournament_seat_mismatch if a live room's seats are not the
+ * match's players.
+ */
+export async function resolveInProgressMatchFromRoom(
+  io: Server,
+  match: MatchRow,
+  persistence: EnginePersistence,
+  now: Date,
+  labels: InProgressResolutionLabels,
+  options: { dispatchAdvanced?: boolean } = {},
+): Promise<boolean> {
+  if (!match.player1_id || !match.player2_id || !match.room_code) return false;
+
+  let room = peekMatchRoom(persistence, match);
+  if (!room) {
+    // A game that finished before a restart (or before room cleanup) is
+    // recorded from what was persisted, not restored and never re-decided.
+    const persisted = await persistedGameFor(match);
+    if (persisted.finished) return recordFinishedGame(io, match, persisted.finished, persistence, labels, options);
+    // A foreign live session under this room code is not this match's game:
+    // it is never restored or overwritten here; with no exact copy of this
+    // match's game, the session is lost (the missing-session path below).
+    if (!persisted.foreignLiveSession) {
+      try {
+        await dispatchTournamentMatch(io, match.id, { reason: 'repair', now }, persistence);
+      } catch (err) {
+        const code = err instanceof Error ? err.message : String(err);
+        if (!TERMINAL_SESSION_ERRORS.has(code) && code !== 'tournament_room_session_mismatch') throw err;
+        // The stored session became terminal, or foreign, meanwhile.
+        const stored = await persistedGameFor(match);
+        if (stored.finished) return recordFinishedGame(io, match, stored.finished, persistence, labels, options);
+        // Refused as another match's session or room: this match's is lost.
+        if (!stored.foreignLiveSession && code !== 'tournament_room_session_mismatch') throw err;
+      }
+    }
+    room = peekMatchRoom(persistence, match);
+  }
+  // A game that already ended is recorded from its own result (the game-over
+  // finalizer), never decided again by score or seed.
+  if (room?.state?.gameOver) return recordFinishedGame(io, match, finishedGameFromRoom(room), persistence, labels, options);
+
+  let player1Score = 0;
+  let player2Score = 0;
+  let statusReason: string;
+  let winnerId: string;
+  if (!room?.state) {
+    // In progress in the database, but no live game here even after a restore
+    // attempt: the session was lost. Do not hide it.
+    alertTournamentAnomaly(
+      'missing_live_session',
+      { tournamentId: match.tournament_id, matchId: match.id, roomCode: match.room_code },
+      { roomFound: Boolean(room), resolution: labels.missingSessionHigherSeed },
+    );
+    statusReason = labels.missingSessionHigherSeed;
+    winnerId = await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence);
+  } else if (room.preGameDraw) {
+    alertTournamentAnomaly(
+      'pregame_never_completed',
+      { tournamentId: match.tournament_id, matchId: match.id, roomCode: match.room_code },
+      { resolution: labels.pregameHigherSeed },
+    );
+    statusReason = labels.pregameHigherSeed;
+    winnerId = await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence);
+  } else {
+    const state = room.state;
+    const roster = getRoomRoster(room.code);
+    const oriented = orientSeatScoresToMatch(
+      match,
+      state.playerIds.map((seatId) => ({
+        playerId: roster.find((p) => p.id === seatId)?.userId ?? (isBotUserId(seatId) ? seatId : null),
+        score: state.players[seatId]?.score ?? 0,
+      })),
+    );
+    if (!oriented) {
+      log.warn({ matchId: match.id, roomCode: room.code, seats: state.playerIds }, 'in-progress resolution: room seats do not match the tournament match players');
+      throw new Error('tournament_seat_mismatch');
+    }
+    ({ player1Score, player2Score } = oriented);
+    const byScore = player1Score !== player2Score;
+    winnerId = byScore
+      ? (player1Score > player2Score ? match.player1_id : match.player2_id)
+      : await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence);
+    statusReason = byScore ? labels.higherScore : labels.higherSeed;
+  }
+  log.info({ matchId: match.id, winnerId, player1Score, player2Score, statusReason }, 'deciding an in-progress match without a finished game');
+
+  await applyMatchResult(io, {
+    matchId: match.id,
+    winnerId,
+    player1Score,
+    player2Score,
+    winnerSource: 'game_over',
+    statusReason,
+    dispatchAdvanced: options.dispatchAdvanced,
+  }, persistence);
+
+  if (room) closeTournamentRoom(room, now);
+  return true;
+}
+
+/** No further play in a decided match's room (the same latch a forfeit uses). */
+export function closeTournamentRoom(room: Room, now: Date): void {
+  if (!room.abandonedAt) {
+    room.abandonedAt = now.toISOString();
+    room.abandonedReason = 'abandon';
+  }
+  disarmTournamentTurnClock(room.code);
+}
+
+/**
+ * Per-match hard cap. A match in progress for longer than
+ * TOURNAMENT_MATCH_CAP_MS since its persisted `started_at` is decided from the
+ * live room (resolveInProgressMatchFromRoom, MATCH_CAP_LABELS). `started_at`
+ * is in the database, so a restart cannot reset the cap.
+ * True when this call recorded the result.
+ */
+async function enforceTournamentMatchCap(
+  io: Server,
+  match: MatchRow,
+  persistence: EnginePersistence,
+  now: Date,
+): Promise<boolean> {
+  const startedMs = Date.parse(match.started_at ?? '');
+  if (!Number.isFinite(startedMs) || now.getTime() - startedMs < tournamentMatchCapMs()) return false;
+  return resolveInProgressMatchFromRoom(io, match, persistence, now, MATCH_CAP_LABELS);
+}
+
+/**
+ * The in-memory room of this match: the room under its code, unless that room
+ * belongs to another match (a legacy room-code collision), which is never
+ * read, recorded or closed as this match's room. Alerted.
+ */
+export function peekMatchRoom(
+  persistence: EnginePersistence,
+  match: Pick<MatchRow, 'id' | 'tournament_id' | 'room_code'>,
+): Room | null {
+  if (!match.room_code) return null;
+  const room = peekTournamentRoom(persistence, match.room_code);
+  if (room?.scheduledTournamentMatchId && room.scheduledTournamentMatchId !== match.id) {
+    alertTournamentAnomaly(
+      'tournament_foreign_live_session',
+      { tournamentId: match.tournament_id, matchId: match.id, roomCode: match.room_code },
+      { foreignMatchId: room.scheduledTournamentMatchId, stage: 'in_memory_room' },
+    );
+    return null;
+  }
+  return room;
+}
+
+export function peekTournamentRoom(persistence: EnginePersistence, roomCode: string): Room | null {
+  try {
+    return persistence.getRoom(roomCode);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Who advances from a match whose game never started, by attendance: the one
+ * player who joined beats the one who did not; an absent human never beats
+ * Fritz (Fritz advances, the human is the no-show); otherwise (both humans
+ * absent, or both present but the game never started) the higher seed advances
+ * administratively with no no-show recorded.
+ */
+export async function decideUnstartedMatchByAttendance(
+  match: MatchRow,
+  persistence: EnginePersistence,
+): Promise<{ winnerId: string; noShowUserId: string | null }> {
+  if (!match.player1_id || !match.player2_id) throw new Error('match_players_missing');
+  if (match.player1_joined_at && !match.player2_joined_at) {
+    return { winnerId: match.player1_id, noShowUserId: match.player2_id };
+  }
+  if (match.player2_joined_at && !match.player1_joined_at) {
+    return { winnerId: match.player2_id, noShowUserId: match.player1_id };
+  }
+  if (isBotUserId(match.player1_id) && !isBotUserId(match.player2_id)) {
+    return { winnerId: match.player1_id, noShowUserId: match.player2_id };
+  }
+  if (isBotUserId(match.player2_id) && !isBotUserId(match.player1_id)) {
+    return { winnerId: match.player2_id, noShowUserId: match.player1_id };
+  }
+  return {
+    winnerId: await selectHigherSeedWinner(match.tournament_id, match.player1_id, match.player2_id, persistence),
+    noShowUserId: null,
+  };
+}
+
+export { updateMatchIfUnchanged };
+
+/** A no-show result refused because a player it named as absent has since joined. */
+export const ATTENDANCE_CHANGED = 'attendance_changed';
+/** A result for a not-yet-played match refused because the match has since moved on. */
+export const MATCH_STATE_CHANGED = 'match_state_changed';
+
+/** The result refusals that mean another process changed the match first: re-decide, not an error. */
+export function isConcurrentMatchChange(err: unknown): boolean {
+  const code = err instanceof Error ? err.message : '';
+  return code === ATTENDANCE_CHANGED || code === MATCH_STATE_CHANGED;
+}
+
+/** The human players of a match who have not joined it (as read). */
+export function unjoinedHumans(match: MatchRow): string[] {
+  return [
+    !isBotUserId(match.player1_id) && match.player1_id && !match.player1_joined_at ? match.player1_id : null,
+    !isBotUserId(match.player2_id) && match.player2_id && !match.player2_joined_at ? match.player2_id : null,
+  ].filter((id): id is string => Boolean(id));
+}
+
+/** The status_reason a no-show records (player1_no_show / player2_no_show). */
+export function noShowStatusReason(match: MatchRow, noShowUserId: string): string {
+  return playerNoShowReason(match, noShowUserId);
+}
+
+export { selectHigherSeedWinner };
 
 /**
  * Single-instance first-release reconciliation for expired ready matches.
@@ -725,122 +1397,171 @@ export async function reconcileExpiredReadyMatches(
    * players or no players. Omit it and the standalone read still happens.
    */
   inProgressTournaments?: ScheduledTournamentRow[],
+  /** Checked before each tournament and match: false stops here (orchestrator lease lost). */
+  opts: { shouldContinue?: () => boolean } = {},
 ): Promise<number> {
+  const shouldContinue = opts.shouldContinue ?? (() => true);
   const tournaments = inProgressTournaments
     ?? (persistence.fetchTournamentsByStatus
       ? await persistence.fetchTournamentsByStatus(['in_progress'])
       : []);
   let resolvedCount = 0;
   for (const tournament of tournaments) {
-    const matches = await persistence.fetchMatches(tournament.id);
-    for (const match of matches) {
-      if (match.status !== 'ready' || !match.ready_deadline_at) continue;
-      if (Date.parse(tournament.scheduled_start) > now.getTime()) continue;
-      if (await resolveBotOnlyMatch(io, match, persistence, now)) {
-        resolvedCount += 1;
-        continue;
-      }
-      if (Date.parse(match.ready_deadline_at) >= now.getTime()) continue;
-      if (!match.player1_id || !match.player2_id) continue;
-      const everyoneJoined = allHumanPlayersJoined(match);
-      if (everyoneJoined && match.room_code) {
-        let roomExists = false;
-        let roomStarted = false;
+    if (!shouldContinue()) break;
+    let tournamentFailed = false;
+    try {
+      const matches = await persistence.fetchMatches(tournament.id);
+      for (const match of matches) {
+        if (!shouldContinue()) break;
+        let matchFailed = false;
         try {
-          const room = persistence.getRoom(match.room_code);
-          roomExists = true;
-          roomStarted = Boolean(room.state);
-        } catch {
-          /* room missing — fall through to the rehydrate branch below */
-        }
-        if (roomStarted) {
-          await persistence.updateMatch(match.id, {
-            status: 'in_progress',
-            started_at: match.started_at ?? now.toISOString(),
-            status_reason: null,
-          });
-          continue;
-        }
-        // A6: every player is here but the game never started (a slow or
-        // failed start). That is not a no-show. Extend the deadline once and
-        // re-send match_ready: the clients re-attach, and the attach handler's
-        // normal start path runs again. Only a second expiry resolves.
-        if (roomExists && match.status_reason !== BOTH_JOINED_START_RETRY_REASON) {
-          await persistence.updateMatch(match.id, {
-            ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
-            status_reason: BOTH_JOINED_START_RETRY_REASON,
-          });
-          await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
-          log.warn({ matchId: match.id, roomCode: match.room_code }, 'all players joined but game not started; deadline extended once, match_ready re-sent');
-          continue;
-        }
-      }
+          if (match.status === 'in_progress') {
+            if (await recordFinishedGameIfAny(io, match, persistence)) {
+              resolvedCount += 1;
+              continue;
+            }
+            if (await enforceTournamentMatchCap(io, match, persistence, now)) resolvedCount += 1;
+            continue;
+          }
+          if (match.status !== 'ready' || !match.ready_deadline_at) continue;
+          if (Date.parse(tournament.scheduled_start) > now.getTime()) continue;
+          if (await resolveBotOnlyMatch(io, match, persistence, now)) {
+            resolvedCount += 1;
+            continue;
+          }
+          if (Date.parse(match.ready_deadline_at) >= now.getTime()) continue;
+          if (!match.player1_id || !match.player2_id) continue;
+          const everyoneJoined = allHumanPlayersJoined(match);
+          if (everyoneJoined && match.room_code) {
+            let roomExists = false;
+            let roomStarted = false;
+            try {
+              const room = persistence.getRoom(match.room_code);
+              roomExists = true;
+              roomStarted = Boolean(room.state);
+            } catch {
+              /* room missing — fall through to the rehydrate branch below */
+            }
+            if (roomStarted) {
+              // The write is the ready → in_progress transition itself: it
+              // lands only on a match still 'ready' (never on one another
+              // process has started, decided or completed meanwhile).
+              await updateMatchIfUnchanged(persistence, match.id, { status: 'ready' }, {
+                status: 'in_progress',
+                started_at: match.started_at ?? now.toISOString(),
+                status_reason: null,
+              });
+              continue;
+            }
+            // A6: every player is here but the game never started (a slow or
+            // failed start). That is not a no-show. Extend the deadline once and
+            // re-send match_ready: the clients re-attach, and the attach handler's
+            // normal start path runs again. Only a second expiry resolves.
+            if (roomExists && match.status_reason !== BOTH_JOINED_START_RETRY_REASON) {
+              // Conditional on the deadline and reason this decision was made
+              // from: another process's newer extension or reason survives.
+              const extended = await updateMatchIfUnchanged(persistence, match.id, {
+                status: 'ready',
+                ready_deadline_at: match.ready_deadline_at,
+                status_reason: match.status_reason,
+              }, {
+                ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
+                status_reason: BOTH_JOINED_START_RETRY_REASON,
+              });
+              if (!extended) {
+                log.info({ matchId: match.id }, 'start-retry extension skipped: the match changed since it was read');
+                continue;
+              }
+              await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
+              log.warn({ matchId: match.id, roomCode: match.room_code }, 'all players joined but game not started; deadline extended once, match_ready re-sent');
+              continue;
+            }
+          }
 
-      const hasHumanPlayer = !isBotOnlyMatch(match);
-      if (hasHumanPlayer && match.room_code) {
-        try {
-          persistence.getRoom(match.room_code);
-        } catch {
-          await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
-          await persistence.updateMatch(match.id, {
-            ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
-            status_reason: 'room_rehydrated_deadline_extended',
-          });
+          const hasHumanPlayer = !isBotOnlyMatch(match);
+          if (hasHumanPlayer && match.room_code) {
+            try {
+              persistence.getRoom(match.room_code);
+            } catch {
+              await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
+              // Re-read after the repair dispatch, and extend only from the
+              // deadline this decision was made from: a newer extension,
+              // reason or start by another process survives.
+              const fresh = await persistence.fetchMatchById(match.id);
+              const extended = Boolean(fresh && fresh.status === 'ready' && fresh.ready_deadline_at === match.ready_deadline_at) &&
+                await updateMatchIfUnchanged(persistence, match.id, {
+                  status: 'ready',
+                  ready_deadline_at: fresh!.ready_deadline_at,
+                  status_reason: fresh!.status_reason,
+                }, {
+                  ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
+                  status_reason: 'room_rehydrated_deadline_extended',
+                });
+              if (!extended) {
+                log.info({ matchId: match.id }, 'rehydration extension skipped: the match changed since it was read');
+                continue;
+              }
+              log.info({
+                matchId: match.id,
+                roomCode: match.room_code,
+              }, 'ready room missing; rehydrated before no-show');
+              continue;
+            }
+          }
+
+          const decided = await decideUnstartedMatchByAttendance(match, persistence);
           log.info({
             matchId: match.id,
-            roomCode: match.room_code,
-          }, 'ready room missing; rehydrated before no-show');
-          continue;
+            userId: decided.noShowUserId,
+            reason: playerNoShowReason(match, decided.noShowUserId),
+          }, 'marking loss');
+
+          try {
+            await applyMatchResult(
+              io,
+              {
+                matchId: match.id,
+                winnerId: decided.winnerId,
+                player1Score: match.player1_id === decided.winnerId ? tournament.win_target : 0,
+                player2Score: match.player2_id === decided.winnerId ? tournament.win_target : 0,
+                winnerSource: 'no_show',
+                statusReason: decided.noShowUserId
+                  ? playerNoShowReason(match, decided.noShowUserId)
+                  : everyoneJoined
+                    // Present players whose game would not start even after the one
+                    // extension: resolved, but never recorded as a no-show.
+                    ? 'start_failed_after_retry_higher_seed_advanced'
+                    : 'double_no_show_higher_seed_advanced',
+                noShowUserId: decided.noShowUserId,
+                // Decided from this read: the match must still be 'ready', and the
+                // absentees still absent, when it commits.
+                expectStatus: 'ready',
+                requireUnjoined: everyoneJoined ? [] : unjoinedHumans(match),
+              },
+              persistence,
+            );
+          } catch (err) {
+            if (isConcurrentMatchChange(err)) {
+              log.info({ matchId: match.id, change: (err as Error).message }, 'no-show not recorded: the match changed after it was decided');
+              continue;
+            }
+            throw err;
+          }
+          resolvedCount += 1;
+        } catch (err) {
+          // One match must not stop the rest of the tick; the next tick retries it.
+          matchFailed = true;
+          alertTournamentMatchStepFailed('reconcile', match, err);
+        } finally {
+          if (!matchFailed) clearTournamentMatchStepAlert('reconcile', match.id);
         }
       }
-
-      let winnerId: string;
-      let noShowUserId: string | null = null;
-      if (match.player1_joined_at && !match.player2_joined_at) {
-        winnerId = match.player1_id;
-        noShowUserId = match.player2_id;
-      } else if (match.player2_joined_at && !match.player1_joined_at) {
-        winnerId = match.player2_id;
-        noShowUserId = match.player1_id;
-      } else if (isBotUserId(match.player1_id) && !isBotUserId(match.player2_id)) {
-        winnerId = match.player2_id;
-      } else if (isBotUserId(match.player2_id) && !isBotUserId(match.player1_id)) {
-        winnerId = match.player1_id;
-      } else {
-        winnerId = await selectHigherSeedWinner(
-          match.tournament_id,
-          match.player1_id,
-          match.player2_id,
-          persistence,
-        );
-      }
-
-      log.info({
-        matchId: match.id,
-        userId: noShowUserId,
-        reason: playerNoShowReason(match, noShowUserId),
-      }, 'marking loss');
-
-      await applyMatchResult(
-        io,
-        {
-          matchId: match.id,
-          winnerId,
-          player1Score: match.player1_id === winnerId ? tournament.win_target : 0,
-          player2Score: match.player2_id === winnerId ? tournament.win_target : 0,
-          winnerSource: 'no_show',
-          statusReason: noShowUserId
-            ? playerNoShowReason(match, noShowUserId)
-            : everyoneJoined
-              // Present players whose game would not start even after the one
-              // extension: resolved, but never recorded as a no-show.
-              ? 'start_failed_after_retry_higher_seed_advanced'
-              : 'double_no_show_higher_seed_advanced',
-          noShowUserId,
-        },
-        persistence,
-      );
-      resolvedCount += 1;
+    } catch (err) {
+      // One tournament (e.g. its matches could not be read) must not stop the others.
+      tournamentFailed = true;
+      alertTournamentStepFailed('reconcile', tournament.id, err);
+    } finally {
+      if (!tournamentFailed) clearTournamentStepAlert('reconcile', tournament.id);
     }
   }
   return resolvedCount;
@@ -849,21 +1570,11 @@ export async function reconcileExpiredReadyMatches(
 export const TOURNAMENT_CONFIG = {
   MIN_HUMANS_TO_START,
   DEFAULT_RATING,
-  REGISTRATION_OPEN_LEAD_MIN: 30,
-  REGISTRATION_CLOSE_LEAD_MIN: 2,
 } as const;
 
-/** Registration window timestamps aligned with seed SQL and TOURNAMENT_CONFIG. */
-export function computeTournamentRegistrationTimestamps(scheduledStartMs: number): {
-  registration_open_at: string;
-  registration_close_at: string;
-} {
-  const { REGISTRATION_OPEN_LEAD_MIN, REGISTRATION_CLOSE_LEAD_MIN } = TOURNAMENT_CONFIG;
-  return {
-    registration_open_at: new Date(scheduledStartMs - REGISTRATION_OPEN_LEAD_MIN * 60_000).toISOString(),
-    registration_close_at: new Date(scheduledStartMs - REGISTRATION_CLOSE_LEAD_MIN * 60_000).toISOString(),
-  };
-}
+// Registration timing is not a server constant: each row's registration_open_at
+// / registration_close_at are written by the seed SQL (M2: 12 h / 2 min before
+// start) and the server acts on the stored timestamps.
 
 export function isTournamentRegistrationWindowOpen(input: {
   status: string;
@@ -883,9 +1594,31 @@ export function isTournamentBracketLobbyPhase(input: {
   return input.nowMs >= closeMs && input.nowMs < startMs;
 }
 
+/** A room seat's tournament identity (user id, or the bot's seat id) and its final score. */
+export type TournamentSeatScore = { playerId: string | null; score: number };
+
+/**
+ * Put seat scores into the match row's player1/player2 order. Room seats are
+ * in join order (Fritz is seated at dispatch, before the human attaches), which
+ * need not match the row. Null unless the two seats are exactly the row's two
+ * players.
+ */
+function orientSeatScoresToMatch(
+  match: Pick<MatchRow, 'player1_id' | 'player2_id'>,
+  seats: ReadonlyArray<TournamentSeatScore>,
+): { player1Score: number; player2Score: number } | null {
+  if (seats.length !== 2 || !match.player1_id || !match.player2_id) return null;
+  const p1 = seats.find((seat) => seat.playerId === match.player1_id);
+  const p2 = seats.find((seat) => seat.playerId === match.player2_id);
+  if (!p1 || !p2 || p1 === p2) return null;
+  return { player1Score: p1.score, player2Score: p2.score };
+}
+
 /**
  * Apply tournament match result after multiplayer game-over.
  * Uses in-memory match id when present; otherwise resolves by room code in DB.
+ * With `seatScores`, the scores are oriented to the match row's player order;
+ * without it, player1Score/player2Score are taken as already in row order.
  */
 export async function applyTournamentGameOverFromRoom(
   io: Server,
@@ -894,6 +1627,9 @@ export async function applyTournamentGameOverFromRoom(
     winnerUserId: string;
     player1Score: number;
     player2Score: number;
+    seatScores?: ReadonlyArray<TournamentSeatScore>;
+    /** Passed to applyMatchResult (the event backstop passes false). */
+    dispatchAdvanced?: boolean;
   },
   persistence: EnginePersistence = defaultEnginePersistence,
   lookupMatchByRoom: (code: string) => Promise<MatchRow | null> = findTournamentMatchByRoom,
@@ -917,20 +1653,38 @@ export async function applyTournamentGameOverFromRoom(
     }, 'no tournament match for room');
     return false;
   }
+  let { player1Score, player2Score } = params;
+  if (params.seatScores) {
+    const match = await persistence.fetchMatchById(matchId);
+    if (!match) throw new Error('Match not found');
+    const oriented = orientSeatScoresToMatch(match, params.seatScores);
+    if (!oriented) {
+      log.warn({
+        roomCode: room.code,
+        matchId,
+        seatPlayerIds: params.seatScores.map((seat) => seat.playerId),
+        player1Id: match.player1_id,
+        player2Id: match.player2_id,
+      }, 'room seats do not match the tournament match players');
+      throw new Error('tournament_seat_mismatch');
+    }
+    ({ player1Score, player2Score } = oriented);
+  }
   log.info({
     roomCode: room.code,
     matchId,
     tournamentId: room.scheduledTournamentId ?? null,
     winnerId: params.winnerUserId,
-    scores: { player1: params.player1Score, player2: params.player2Score },
+    scores: { player1: player1Score, player2: player2Score },
   }, 'applying result');
   await applyMatchResult(
     io,
     {
       matchId,
       winnerId: params.winnerUserId,
-      player1Score: params.player1Score,
-      player2Score: params.player2Score,
+      player1Score,
+      player2Score,
+      dispatchAdvanced: params.dispatchAdvanced,
     },
     persistence,
   );

@@ -80,11 +80,14 @@ export function useTournamentSessionSockets({
     onMatchCompleted: (payload) => {
       if (!payload?.tournamentId || !payload?.matchId) return;
       if (isTerminalTournamentMatch(payload.matchId)) return;
+      const currentUserId = authUserId ?? multiplayerIdentityUserId;
       if (
         shouldDeferTournamentMatchFinalize({
           appMode: appModeRef.current,
           attachedMatchId: attachedTournamentMatchIdRef.current,
           payloadMatchId: payload.matchId,
+          winnerSource: payload.winnerSource ?? null,
+          lostByMe: Boolean(payload.winnerId && currentUserId && payload.winnerId !== currentUserId),
         })
       ) {
         logger.operational('tournament:complete', 'deferring finalize until postgame overlay', {
@@ -128,8 +131,10 @@ export function useTournamentSessionSockets({
         void tournament.refresh();
         onTournamentMatchAbandoned({
           context: 'tournament',
-          title: 'Opponent left the tournament match',
-          detail: `${payload.abandonedUsername ?? 'Your opponent'} left the game. You advance by forfeit.`,
+          // The server sends this once the forfeit is applied — after leaving
+          // or after too many missed turns — so name neither cause.
+          title: 'Your opponent forfeited',
+          detail: 'The match is over and you advance.',
           tournamentId: payload.tournamentId,
         });
         return;

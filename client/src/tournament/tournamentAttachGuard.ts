@@ -1,3 +1,4 @@
+import { monotonicNow } from './tournamentClock';
 export type TournamentAttachSkipReason =
   | 'no-match'
   | 'socket-disconnected'
@@ -37,7 +38,8 @@ export function evaluateTournamentAttachGuard(input: {
   }
   if (!input.manual) {
     const failedAt = input.failedAtByMatchId[matchId];
-    const now = input.nowMs ?? Date.now();
+    // Monotonic, like the failure stamps: a device clock change never shortens or extends the backoff.
+    const now = input.nowMs ?? monotonicNow();
     if (typeof failedAt === 'number' && now - failedAt < TOURNAMENT_ATTACH_FAILURE_BACKOFF_MS) {
       return { proceed: false, reason: 'backoff' };
     }

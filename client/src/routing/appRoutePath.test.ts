@@ -31,6 +31,8 @@ describe('app route paths', () => {
       tournamentId: 'tour-1',
       tournamentView: 'result',
     });
+    // Phase 3E: History is its own path, not a tournament id.
+    expect(resolveAppRoute('/tournament/history')).toEqual({ mode: 'tournament', tournamentView: 'history' });
   });
 
   it('builds parameterized and subview paths from app state', () => {
@@ -42,6 +44,7 @@ describe('app route paths', () => {
       tournamentView: 'hub' as const,
     };
     expect(buildAppPath({ ...base, mode: 'profile', profileUsername: '@Maya' })).toBe('/players/Maya');
+    expect(buildAppPath({ ...base, mode: 'tournament', tournamentView: 'history' })).toBe('/tournament/history');
     expect(buildAppPath({ ...base, mode: 'multiplayer', multiplayerView: 'private' })).toBe('/multiplayer/private');
     expect(buildAppPath({ ...base, mode: 'learn', learnHowToPlay: true })).toBe('/learn/how-to-play');
     expect(buildAppPath({

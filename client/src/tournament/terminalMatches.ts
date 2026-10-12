@@ -1,3 +1,4 @@
+import { estimatedServerNowMs } from './tournamentClock';
 const STORAGE_KEY = 'racehorse_terminal_tournament_matches_v1';
 const TOURNAMENT_TERMINAL_KEY = 'racehorse_terminal_tournaments_v1';
 const MAX_ENTRIES = 32;
@@ -58,7 +59,8 @@ export function markTerminalTournamentMatch(record: {
 }): void {
   const matchId = record.matchId.trim();
   if (!matchId) return;
-  const completedAt = Date.now();
+  // Server-clock time, the same domain as the bracket's completed_at (Phase 3E).
+  const completedAt = estimatedServerNowMs();
   const existing = readAll().filter((entry) => entry.matchId !== matchId);
   existing.unshift({
     matchId,
@@ -115,7 +117,7 @@ export function markTournamentTerminal(record: {
 }): void {
   const tournamentId = record.tournamentId.trim();
   if (!tournamentId) return;
-  const completedAt = record.completedAt ?? Date.now();
+  const completedAt = record.completedAt ?? estimatedServerNowMs();
   const existing = readTournamentTerminals().filter((entry) => entry.tournamentId !== tournamentId);
   existing.unshift({ tournamentId, completedAt });
   writeTournamentTerminals(existing);

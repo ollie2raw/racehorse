@@ -99,7 +99,7 @@ export function useHomeCommandCenter(tournament: TournamentHookState): HomeComma
   const identity = useMemo<HomeIdentity>(() => ({
     kind: user ? 'authenticated' : 'guest',
     userId: user?.id ?? null,
-    displayName: profile?.username ?? user?.email?.split('@')[0] ?? null,
+    displayName: profile?.username ?? null,
   }), [profile?.username, user]);
   const [model, setModel] = useState(() => createInitialModel(identity, tournament));
 

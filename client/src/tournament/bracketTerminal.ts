@@ -8,9 +8,11 @@ import type {
   ScheduledTournament,
   TournamentAssignedMatch,
   TournamentMatch,
+  TournamentOutcomeKind,
   TournamentUserPhase,
 } from './types';
 import { resolveTournamentPlayerName } from './displayNames';
+import { estimatedServerNowMs } from './tournamentClock';
 import { logger } from '../utils/logger';
 
 /** Mirrors server scheduledTournament/activeWindow.ts */
@@ -39,7 +41,7 @@ export type BracketTerminalState = {
 
 export function isClientTournamentPastActiveWindow(
   tournament: Pick<ScheduledTournament, 'status' | 'scheduled_start' | 'winner_id'>,
-  nowMs = Date.now(),
+  nowMs = estimatedServerNowMs(),
 ): boolean {
   if (tournament.status !== 'in_progress') return false;
   if (tournament.winner_id) return false;
@@ -103,7 +105,8 @@ export function deriveBracketTerminalState(input: {
   assignedMatch: TournamentAssignedMatch | null;
   nowMs?: number;
 }): BracketTerminalState {
-  const nowMs = input.nowMs ?? Date.now();
+  // Server clock: a device clock change never moves a closed bracket's timing.
+  const nowMs = input.nowMs ?? estimatedServerNowMs();
   const liveDefault: BracketTerminalState = {
     kind: 'live',
     suppressJoin: false,
@@ -214,7 +217,7 @@ export function deriveBracketTerminalState(input: {
           : 'Runner-up'
         : 'Final complete',
       detail: championName
-        ? `${championName} defeated ${runnerUpName ?? 'the field'} in the final.`
+        ? finalOutcomeDetail(championName, runnerUpName, fin.outcomeKind ?? null)
         : 'The championship match is complete.',
       championName,
       runnerUpName,
@@ -277,12 +280,32 @@ export function deriveBracketTerminalState(input: {
   return liveDefault;
 }
 
+/**
+ * How the Final was decided, in words (Phase 3E): only a played Final says
+ * "defeated"; a forfeit, missed turns, no-show or a rule never claims a game.
+ */
+export function finalOutcomeDetail(
+  championName: string,
+  runnerUpName: string | null,
+  kind: TournamentOutcomeKind | null,
+): string {
+  switch (kind) {
+    case 'forfeit': return `${championName} won the Final by forfeit.`;
+    case 'missed_turns': return `${championName} advanced after missed turns.`;
+    case 'no_show': return `${championName} advanced after a no-show.`;
+    case 'administrative': return `${championName} advanced by rule.`;
+    case 'bye': return `${championName} won the Final on a bye.`;
+    case 'bot_simulated': return `${championName} won the Final.`;
+    default: return `${championName} defeated ${runnerUpName ?? 'the field'} in the Final.`;
+  }
+}
+
 function shouldKickToHub(completedAtMs: number | null, nowMs: number): boolean {
   if (!completedAtMs || !Number.isFinite(completedAtMs)) return false;
   return nowMs >= completedAtMs + TOURNAMENT_BRACKET_AUTO_KICK_MS;
 }
 
-export function msUntilBracketAutoKick(completedAtMs: number | null, nowMs = Date.now()): number | null {
+export function msUntilBracketAutoKick(completedAtMs: number | null, nowMs = estimatedServerNowMs()): number | null {
   if (!completedAtMs || !Number.isFinite(completedAtMs)) return null;
   const remaining = completedAtMs + TOURNAMENT_BRACKET_AUTO_KICK_MS - nowMs;
   return remaining > 0 ? remaining : 0;

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, afterAll } from 'vitest';
 import { registerTournamentRoutes } from './routes';
+import { takeServerNow } from './serverNow.testkit';
 
 // These tests cover live tournaments; the feature is off by default (TOURNAMENTS_ENABLED).
 beforeEach(() => { vi.stubEnv('TOURNAMENTS_ENABLED', 'true'); });
@@ -88,7 +89,7 @@ function makeHarness() {
           return res;
         }),
         json: vi.fn((body: unknown) => {
-          responseBody = body;
+          responseBody = takeServerNow(body);
           return res;
         }),
       };
@@ -226,7 +227,13 @@ describe('scheduled tournament routes auth/user guards', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, registrations });
+    expect(response.body).toEqual({
+      ok: true,
+      registrations,
+      tournaments: [],
+      activeAssignedMatch: null,
+      features: { tournaments: true, fritzCup: false },
+    });
     expect(mocks.fetchRegistrationsForUser).toHaveBeenCalledWith(validUserId);
     expect(mocks.fetchRegistrationsForUser).not.toHaveBeenCalledWith(otherUserId);
   });
@@ -242,7 +249,13 @@ describe('scheduled tournament routes auth/user guards', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, registrations });
+    expect(response.body).toEqual({
+      ok: true,
+      registrations,
+      tournaments: [],
+      activeAssignedMatch: null,
+      features: { tournaments: true, fritzCup: false },
+    });
     expect(mocks.fetchRegistrationsForUser).toHaveBeenCalledWith(validUserId);
   });
 
@@ -592,7 +605,7 @@ describe('scheduled tournament routes auth/user guards', () => {
     expect(response).toEqual({ status: 200, body: { ok: true, alreadyRegistered: true } });
   });
 
-  it('an unexpected failure is a 500, not a stable code', async () => {
+  it('an unexpected failure is a 500 internal — never the raw error text', async () => {
     mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
     mocks.registerForTournament.mockRejectedValue(new Error('connection reset'));
     const { request } = makeHarness();
@@ -601,6 +614,6 @@ describe('scheduled tournament routes auth/user guards', () => {
       headers: { authorization: 'Bearer valid-token' },
       body: {},
     });
-    expect(response).toEqual({ status: 500, body: { ok: false, error: 'connection reset' } });
+    expect(response).toEqual({ status: 500, body: { ok: false, error: 'internal' } });
   });
 });

@@ -1,13 +1,16 @@
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { GlobalNav } from '../components';
-import { useSyncNow } from '../ui/useSyncNow';
 import type { AppMode } from '../types';
 import {
+  bracketSlotDisplay,
   registrationNameFor,
   resolveTournamentOpponentLabel,
-  resolveTournamentPlayerName,
   tournamentStageShortLabel,
+  type TournamentPlayerDisplay,
 } from './displayNames';
+import { useTournamentNow } from './useTournamentNow';
+import { bracketOutcomeNote, outcomeHasPlayedScore } from './tournamentOutcomeCopy';
+import { deriveYourPath, initialRoundTab, type YourPath } from './bracketYourPath';
 import { isTerminalTournamentMatch } from './terminalMatches';
 import {
   deriveBracketTerminalState,
@@ -18,7 +21,7 @@ import {
   type BracketDisplayContext,
   isBracketMatchCompletedForDisplay,
 } from './tournamentBracketDisplay';
-import { isTournamentBotId } from './displayNames';
+import { formatEventTime } from './tournamentTime';
 import { tournamentErrorCopy } from './tournamentErrorCopy';
 import type {
   BracketView,
@@ -64,18 +67,11 @@ function padCountdown(ms: number): string {
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
-function buildCountdownLabel(targetMs: number | null): string {
+function buildCountdownLabel(targetMs: number | null, nowServerMs: number): string {
   if (targetMs == null || !Number.isFinite(targetMs)) return '--:--';
-  return padCountdown(targetMs - Date.now());
+  return padCountdown(targetMs - nowServerMs);
 }
 
-function formatTimePst(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 function activeEntrants(regs: Registration[]): Registration[] {
   return regs.filter((reg) => reg.status === 'registered' || reg.status === 'active');
@@ -85,13 +81,14 @@ function roundLabel(round: 1 | 2 | 3): string {
   return tournamentStageShortLabel(round);
 }
 
-function slotName(
-  userId: string | null,
-  registrationUsernameByUserId: ReadonlyMap<string, string | null | undefined>,
-  match: TournamentMatch,
-): string {
-  if (!userId) return 'TBD';
-  return registrationNameFor(userId, registrationUsernameByUserId.get(userId) ?? null, match);
+/** A player's name with its Fritz chip (identity in words, not colour alone). */
+function PlayerLabel({ display }: { display: TournamentPlayerDisplay }) {
+  return (
+    <>
+      <span className="tb-name-text">{display.label}</span>
+      {display.badgeLabel ? <span className="tb-fritz-chip">{display.badgeLabel}</span> : null}
+    </>
+  );
 }
 
 const CountdownText = memo(function CountdownText({
@@ -102,9 +99,9 @@ const CountdownText = memo(function CountdownText({
   fallback?: string;
 }) {
   const validTarget = targetMs != null && Number.isFinite(targetMs);
-  const now = useSyncNow(1000, validTarget);
-  void now;
-  const label = validTarget ? buildCountdownLabel(targetMs) : fallback;
+  // The shared server clock (Phase 3D): a wrong device clock never skews it.
+  const now = useTournamentNow(1000, validTarget);
+  const label = validTarget ? buildCountdownLabel(targetMs, now) : fallback;
 
   return <>{label}</>;
 });
@@ -132,17 +129,43 @@ const MatchCard = memo(function MatchCard({
   const isCompleted = isBracketMatchCompletedForDisplay(match, bracketDisplay);
   const isCurrent = assignedMatchId === match.id || (isYours && isLive);
   const isBye = match.status === 'bye';
-  const p1Name = slotName(
-    match.player1_id,
-    registrationUsernameByUserId,
-    match,
-  );
-  const p2Name = slotName(
-    match.player2_id,
-    registrationUsernameByUserId,
-    match,
-  );
-  const showScores = isCompleted && !isBye;
+  // How it was decided (server outcomeKind) — never the internal reason.
+  const note = isCompleted ? bracketOutcomeNote(match.outcomeKind) : null;
+  const showScores = isCompleted && !isBye && outcomeHasPlayedScore(match.outcomeKind);
+
+  const slot = (playerId: string | null, score: number | null) => {
+    const isYou = Boolean(playerId) && playerId === youUserId;
+    const won = isCompleted && Boolean(match.winner_id) && match.winner_id === playerId;
+    return (
+      <div className="tb-slot">
+        <span
+          className={[
+            'tb-slot__name',
+            isYou ? 'tb-slot__name--you' : '',
+            !playerId ? 'tb-slot__name--tbd' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          {!playerId ? 'TBD' : isYou ? <span className="tb-name-text">You</span> : (
+            <PlayerLabel display={bracketSlotDisplay(playerId, registrationUsernameByUserId.get(playerId) ?? null, match)} />
+          )}
+          {won ? <span className="tb-won-chip">Won</span> : null}
+        </span>
+        <span
+          className={[
+            'tb-slot__score',
+            won ? 'tb-slot__score--win' : '',
+            !showScores ? 'tb-slot__score--pending' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          {showScores ? (score ?? '—') : '—'}
+        </span>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -157,56 +180,15 @@ const MatchCard = memo(function MatchCard({
       ]
         .filter(Boolean)
         .join(' ')}
+      aria-label={isYours ? `${roundLabel(match.round)}, your match` : undefined}
     >
-      <div className="tb-match__round">{roundLabel(match.round)}</div>
-      <div className="tb-slot">
-        <span
-          className={[
-            'tb-slot__name',
-            match.player1_id === youUserId ? 'tb-slot__name--you' : '',
-            !match.player1_id ? 'tb-slot__name--tbd' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {match.player1_id ? (match.player1_id === youUserId ? 'You' : p1Name) : 'TBD'}
-        </span>
-        <span
-          className={[
-            'tb-slot__score',
-            match.winner_id === match.player1_id && match.winner_id ? 'tb-slot__score--win' : '',
-            !showScores ? 'tb-slot__score--pending' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {showScores ? (match.player1_score ?? '—') : '—'}
-        </span>
+      <div className="tb-match__round">
+        {roundLabel(match.round)}
+        {isYours ? <span className="tb-yours-chip">Your match</span> : null}
       </div>
-      <div className="tb-slot">
-        <span
-          className={[
-            'tb-slot__name',
-            match.player2_id === youUserId ? 'tb-slot__name--you' : '',
-            !match.player2_id ? 'tb-slot__name--tbd' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {match.player2_id ? (match.player2_id === youUserId ? 'You' : p2Name) : 'TBD'}
-        </span>
-        <span
-          className={[
-            'tb-slot__score',
-            match.winner_id === match.player2_id && match.winner_id ? 'tb-slot__score--win' : '',
-            !showScores ? 'tb-slot__score--pending' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {showScores ? (match.player2_score ?? '—') : '—'}
-        </span>
-      </div>
+      {slot(match.player1_id, match.player1_score)}
+      {slot(match.player2_id, match.player2_score)}
+      {note ? <div className="tb-match__note">{note}</div> : null}
     </div>
   );
 });
@@ -436,7 +418,8 @@ const WaitingRoomPanel = memo(function WaitingRoomPanel({
     [bracket.tournament.registration_close_at, countdownAt, countdownKind],
   );
   const closeMs = useMemo(() => Date.parse(closeIso), [closeIso]);
-  const startLabel = formatTimePst(bracket.tournament.scheduled_start);
+  // The player's local time (the server's Pacific scheduling is not shown).
+  const startLabel = formatEventTime(bracket.tournament.scheduled_start);
   const fillPct = Math.max(0, Math.min(100, (entrants.length / maxPlayers) * 100));
   const fieldLocked = openSeats === 0;
   const fillSubtext = fieldLocked
@@ -480,7 +463,7 @@ const WaitingRoomPanel = memo(function WaitingRoomPanel({
           <span className="tb-waiting__countdown-time">
             <CountdownText targetMs={Number.isFinite(closeMs) ? closeMs : null} />
           </span>
-          <span className="tb-waiting__countdown-meta">Starts {startLabel} PT</span>
+          <span className="tb-waiting__countdown-meta">Starts {startLabel}</span>
         </div>
 
         <div className="tb-waiting__hero-panel-fill">
@@ -532,7 +515,6 @@ const WaitingRoomPanel = memo(function WaitingRoomPanel({
               }
               const { reg, seat } = row;
               const isYou = reg.user_id === youUserId;
-              const isBot = isTournamentBotId(reg.user_id);
               const displayName = isYou
                 ? 'You'
                 : registrationNameFor(
@@ -543,14 +525,12 @@ const WaitingRoomPanel = memo(function WaitingRoomPanel({
               return (
                 <li
                   key={reg.id}
-                  className={`tb-waiting__seat${isYou ? ' tb-waiting__seat--you' : ''}${isBot ? ' tb-waiting__seat--bot' : ''}`}
+                  className={`tb-waiting__seat${isYou ? ' tb-waiting__seat--you' : ''}`}
                 >
                   <span className="tb-waiting__seat-index">{seat}</span>
                   <span className="tb-waiting__seat-name">{displayName}</span>
                   {isYou ? (
                     <span className="tb-waiting__seat-badge tb-waiting__seat-badge--you">Your seat</span>
-                  ) : isBot ? (
-                    <span className="tb-waiting__seat-badge tb-waiting__seat-badge--bot">Bot</span>
                   ) : (
                     <span className="tb-waiting__seat-badge tb-waiting__seat-badge--in">In</span>
                   )}
@@ -586,6 +566,64 @@ const WaitingRoomPanel = memo(function WaitingRoomPanel({
         </section>
       </div>
     </div>
+  );
+});
+
+const ROUND_TAB_LABELS: Record<1 | 2 | 3, string> = { 1: 'Quarterfinals', 2: 'Semifinals', 3: 'Final' };
+
+const PATH_STATE_LABEL: Record<YourPath['state'], string> = {
+  ready: 'Ready',
+  in_progress: 'In progress',
+  waiting: 'Up next',
+  advanced: 'Advanced',
+  eliminated: 'Eliminated',
+  champion: 'Champion',
+};
+
+/**
+ * The player's quick context inside the bracket (Phase 3D): round, opponent
+ * (Fritz named and chipped), state in words, and Join / Resume when /my says
+ * the match is playable. Not a second Hub.
+ */
+const YourPathCard = memo(function YourPathCard({
+  path,
+  canJoin,
+  attachJoinPhase,
+  attachJoinError,
+  onJoin,
+}: {
+  path: YourPath;
+  canJoin: boolean;
+  attachJoinPhase?: 'idle' | 'pending' | 'failed';
+  attachJoinError?: string | null;
+  onJoin: () => void;
+}) {
+  const playable = path.state === 'ready' || path.state === 'in_progress';
+  const joining = attachJoinPhase === 'pending';
+  const detail = path.outcome?.detail ?? null;
+  return (
+    <section className={`tb-path tb-path--${path.state}`} aria-label="Your path">
+      <div className="tb-path__meta">
+        <span className="tb-path__kicker">
+          Your path · {roundLabel(path.round)}
+          <span className="tb-path__state">{PATH_STATE_LABEL[path.state]}</span>
+        </span>
+        <span className="tb-path__headline">{path.headline}</span>
+        {path.opponent && (playable || path.state === 'waiting') ? (
+          <span className="tb-path__sub">vs <PlayerLabel display={path.opponent} /></span>
+        ) : detail ? (
+          <span className="tb-path__sub">{detail}</span>
+        ) : null}
+      </div>
+      {playable && canJoin ? (
+        <button className="tb-path__cta" type="button" disabled={joining} aria-busy={joining} onClick={onJoin}>
+          {joining ? 'Joining match…' : attachJoinPhase === 'failed' ? 'Retry' : path.state === 'in_progress' ? 'Resume' : 'Join Match'}
+        </button>
+      ) : null}
+      {playable && attachJoinPhase === 'failed' && attachJoinError ? (
+        <span className="tb-path__error" role="alert">{attachJoinError}</span>
+      ) : null}
+    </section>
   );
 });
 
@@ -694,17 +732,29 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
     finalMatch && isBracketMatchCompletedForDisplay(finalMatch, bracketDisplay)
       ? finalMatch.winner_id
       : null;
-  const championName = useMemo(
+  const championDisplay = useMemo(
     () =>
-      champion && bracket
-        ? resolveTournamentPlayerName(champion, {
-            username: registrationUsernameByUserId.get(champion) ?? null,
-            botTier: fnl[0]?.bot_tier,
-            round: 3,
+      champion && finalMatch
+        ? bracketSlotDisplay(champion, registrationUsernameByUserId.get(champion) ?? null, finalMatch)
+        : null,
+    [champion, finalMatch, registrationUsernameByUserId],
+  );
+
+  const yourPath = useMemo(
+    () =>
+      bracket
+        ? deriveYourPath({
+            matches: bracket.matches,
+            userId,
+            usernames: registrationUsernameByUserId,
+            playable: assigned ? { matchId: assigned.matchId, matchStatus: assigned.matchStatus } : null,
           })
         : null,
-    [bracket, champion, fnl, registrationUsernameByUserId],
+    [bracket, userId, registrationUsernameByUserId, assigned],
   );
+  // Phones show one round at a time; it opens on the player's own round.
+  const [roundTab, setRoundTab] = useState<1 | 2 | 3 | null>(null);
+  const activeRound = roundTab ?? initialRoundTab(yourPath);
 
   const terminal = useMemo(
     () =>
@@ -723,7 +773,6 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
       props.tournamentPhase === 'in_match' ||
       Boolean(assigned?.roomCode));
   const attachMatchId = yourReadyMatch?.id ?? (canAttach ? assigned?.matchId ?? null : null);
-  const showAttachBanner = Boolean(attachMatchId) && canAttach && !terminal.suppressJoin;
   const isTerminalBracket = isTournamentBracketTerminal(terminal);
 
   return (
@@ -794,9 +843,39 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
           />
         ) : null}
 
+        {bracket && !isWaitingRoom && yourPath && !isTerminalBracket ? (
+          <YourPathCard
+            path={yourPath}
+            canJoin={!terminal.suppressJoin && Boolean(attachMatchId) && attachMatchId === yourPath.matchId}
+            attachJoinPhase={props.attachJoinPhase}
+            attachJoinError={props.attachJoinError}
+            onJoin={() => props.onAttachAssignedMatch(yourPath.matchId)}
+          />
+        ) : null}
+
         {bracket && !isWaitingRoom ? (
-          <div className="tb-bracket">
-            <section className="tb-col">
+          <div className="tb-round-tabs" role="tablist" aria-label="Bracket rounds">
+            {([1, 2, 3] as const).map((round) => (
+              <button
+                key={round}
+                type="button"
+                role="tab"
+                id={`tb-tab-${round}`}
+                aria-selected={activeRound === round}
+                aria-controls="tb-bracket-rounds"
+                className={`tb-round-tab${activeRound === round ? ' is-active' : ''}`}
+                onClick={() => setRoundTab(round)}
+              >
+                {ROUND_TAB_LABELS[round]}
+                {yourPath && yourPath.round === round && yourPath.state !== 'eliminated' ? <span className="tb-round-tab__you">You</span> : null}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {bracket && !isWaitingRoom ? (
+          <div className="tb-bracket" id="tb-bracket-rounds" data-round={activeRound} aria-labelledby={`tb-tab-${activeRound}`}>
+            <section className="tb-col" data-round="1">
               <header className="tb-col-head">
                 <span className="tb-col-label">Quarterfinals</span>
                 <span className="tb-col-sub">Round 1</span>
@@ -815,7 +894,7 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
                 ))}
               </div>
             </section>
-            <section className="tb-col">
+            <section className="tb-col" data-round="2">
               <header className="tb-col-head">
                 <span className="tb-col-label">Semifinals</span>
                 <span className="tb-col-sub">Round 2</span>
@@ -834,7 +913,7 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
                 ))}
               </div>
             </section>
-            <section className="tb-col">
+            <section className="tb-col" data-round="3">
               <header className="tb-col-head">
                 <span className="tb-col-label">Final</span>
                 <span className="tb-col-sub">Round 3</span>
@@ -853,14 +932,16 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
                 ))}
               </div>
             </section>
-            <section className="tb-col tb-col--champion">
+            <section className="tb-col tb-col--champion" data-round="3">
               <header className="tb-col-head">
                 <span className="tb-col-label">Champion</span>
                 <span className="tb-col-sub">Winner</span>
               </header>
               <div className="tb-champion-card">
                 <span className="tb-champion-label">Tournament Champion</span>
-                <span className="tb-champion-name">{championName ?? 'TBD'}</span>
+                <span className="tb-champion-name">
+                  {championDisplay ? <PlayerLabel display={championDisplay} /> : 'TBD'}
+                </span>
               </div>
             </section>
           </div>
@@ -885,45 +966,6 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
           />
         ) : null}
 
-        {showAttachBanner && attachMatchId ? (
-          <div className="tb-your-banner">
-            <div className="tb-your-banner__meta">
-              <span className="tb-your-banner__kicker">
-                {props.attachJoinPhase === 'pending' ? 'Match starting…' : 'Your match is ready'}
-              </span>
-              <span className="tb-your-banner__heading">
-                {assigned ? roundLabel(assigned.round) : 'Assigned match'}
-              </span>
-              <span className="tb-your-banner__sub">
-                vs {opponentDisplayName} · First to {bracket?.tournament.win_target ?? 30}
-              </span>
-            </div>
-            <button
-              className="tb-your-cta"
-              type="button"
-              disabled={props.attachJoinPhase === 'pending'}
-              onClick={() => props.onAttachAssignedMatch(attachMatchId)}
-            >
-              {props.attachJoinPhase === 'pending'
-                ? 'Joining match…'
-                : props.attachJoinPhase === 'failed'
-                  ? 'Retry Join Match'
-                  : 'Join Match ›'}
-            </button>
-            {props.attachJoinPhase === 'failed' && props.attachJoinError ? (
-              <span className="tb-your-banner__error">{props.attachJoinError}</span>
-            ) : null}
-          </div>
-        ) : null}
-
-        {props.tournamentPhase === 'eliminated' ? (
-          <div className="tb-your-banner tb-your-banner--muted">
-            <div className="tb-your-banner__meta">
-              <span className="tb-your-banner__kicker">Eliminated</span>
-              <span className="tb-your-banner__heading">You have been eliminated from this bracket.</span>
-            </div>
-          </div>
-        ) : null}
       </div>
     </div>
   );

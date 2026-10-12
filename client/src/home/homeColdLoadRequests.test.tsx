@@ -52,7 +52,7 @@ const EXPECTED_ENDPOINTS = [
   '/api/social/feed',
   '/api/social/friends/with-presence',
   '/api/social/rivals',
-  '/api/tournaments/me',
+  '/api/tournaments/my',
   '/api/tournaments/upcoming',
 ] as const;
 
@@ -76,12 +76,8 @@ const TOURNAMENT = {
 
 function bodyFor(path: string): unknown {
   if (path.includes('/api/tournaments/upcoming')) return { ok: true, tournaments: [TOURNAMENT] };
-  if (path.includes('/api/tournaments/me')) {
-    return {
-      ok: true, registrations: [], activeAssignedMatch: null, assignedMatch: null,
-      currentTournamentPhase: null, activeTournamentId: null,
-      countdown: { kind: 'registration_close', at: CLOSE_AT },
-    };
+  if (path.includes('/api/tournaments/my')) {
+    return { ok: true, registrations: [], tournaments: [], activeAssignedMatch: null, features: { tournaments: true, fritzCup: true } };
   }
   if (path.includes('/api/home/daily-summary')) {
     return { ok: true, today: RUN_DATE, week: [], weeklyCompletedCount: 0, currentStreakCount: 0, todayComplete: false };

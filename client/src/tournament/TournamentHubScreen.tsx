@@ -1,311 +1,425 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
-import { useSyncNow } from '../ui/useSyncNow';
-import type { Registration, ScheduledTournament } from './types';
-import { deriveTournamentHubViewModel, type TournamentRecoveryMatch } from './hubState';
-import { isTerminalTournamentMatch } from './terminalMatches';
+import { tournamentStageShortLabel } from './displayNames';
+import { trackTournamentHubViewed } from './tournamentAnalytics';
+import {
+  deriveFritzCupCardState,
+  deriveLiveEventCardState,
+  selectHubLiveEvents,
+  type FritzCupCardState,
+  type LiveEventCardState,
+} from './hubCardState';
+import { fritzCupErrorCopy, registrationErrorCopy } from './tournamentErrorCopy';
+import { formatCountdown, formatEventWhen } from './tournamentTime';
+import { useTournamentNow } from './useTournamentNow';
+import type { FritzLaunchState } from './useTournament';
+import type {
+  MyTournament,
+  ScheduledTournament,
+  TournamentAssignedPlayable,
+  TournamentFeatures,
+} from './types';
 import './tournamentHub.css';
 
 type Identity = { userId: string; username: string } | null;
 
 export interface TournamentHubScreenProps {
   identity: Identity;
+  /** Null until the first response (or the build flag is off: pass tournaments false). */
+  features: TournamentFeatures | null;
   upcoming: ScheduledTournament[];
-  registrations: Registration[];
-  recoveryMatch: TournamentRecoveryMatch;
-  tournamentPhase?: import('./types').TournamentUserPhase | null;
-  activeTournamentId?: string | null;
-  error: string | null;
+  myTournaments: MyTournament[];
+  activeAssignedMatch: TournamentAssignedPlayable | null;
+  cancelledTournamentIds: ReadonlySet<string>;
+  fritzLaunch: FritzLaunchState;
+  upcomingError: string | null;
+  myError: string | null;
   isLoading: boolean;
   hasLoaded: boolean;
-  activeBracketStatus?: ScheduledTournament['status'] | null;
+  attachJoinPhase?: 'idle' | 'pending' | 'failed';
+  attachJoinError?: string | null;
+  /** Local zone override — tests only. */
+  timeZone?: string;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
   onSignOut?: () => void;
   onBackHome: () => void;
-  onOpenBracket: (tournamentId: string) => void;
-  onRegister: (tournamentId: string) => void | Promise<void>;
-  onWithdraw: (tournamentId: string) => void | Promise<void>;
-  onRetry: () => void | Promise<void>;
-  onAttachAssignedMatch: (matchId: string) => void | Promise<void>;
+  /** Opens the History sub-view (signed in only). */
+  onOpenHistory?: () => void;
+  onPlayFritzCup: () => void;
+  onJoinMatch: (matchId: string) => void;
+  onViewBracket: (tournamentId: string) => void;
+  onViewResult: (tournamentId: string) => void;
+  onRegister: (tournamentId: string) => Promise<unknown>;
+  onWithdraw: (tournamentId: string) => Promise<unknown>;
+  onRetry: () => void;
+  /** A countdown reached its boundary: re-read server state (deduplicated, backed off). */
+  onBoundary: () => void;
+}
+
+/** Retry delays after a boundary while the server state has not moved on yet. */
+export const BOUNDARY_REFRESH_BACKOFF_MS = [0, 2_000, 5_000, 15_000, 30_000, 60_000] as const;
+
+/**
+ * One refresh when a displayed countdown reaches zero, then a few backed-off
+ * retries while that same boundary is still displayed (the server has not
+ * advanced yet). Keys are `${tournamentId}:${boundary}`.
+ */
+function useBoundaryRefresh(boundaries: Array<{ key: string; atMs: number }>, nowMs: number, onBoundary: () => void) {
+  const attemptsRef = useRef(new Map<string, { attempts: number; nextAtMs: number }>());
+  useEffect(() => {
+    const seen = new Set<string>();
+    for (const { key, atMs } of boundaries) {
+      seen.add(key);
+      if (!Number.isFinite(atMs) || nowMs < atMs) continue;
+      const entry = attemptsRef.current.get(key) ?? { attempts: 0, nextAtMs: atMs };
+      if (entry.attempts >= BOUNDARY_REFRESH_BACKOFF_MS.length || nowMs < entry.nextAtMs) {
+        attemptsRef.current.set(key, entry);
+        continue;
+      }
+      const attempts = entry.attempts + 1;
+      attemptsRef.current.set(key, { attempts, nextAtMs: nowMs + (BOUNDARY_REFRESH_BACKOFF_MS[attempts] ?? Infinity) });
+      onBoundary();
+    }
+    for (const key of [...attemptsRef.current.keys()]) if (!seen.has(key)) attemptsRef.current.delete(key);
+  }, [boundaries, nowMs, onBoundary]);
+}
+
+function countdownTo(iso: string, nowMs: number): number {
+  const at = Date.parse(iso);
+  return Number.isFinite(at) ? Math.max(0, at - nowMs) : 0;
+}
+
+function boundaryOf(state: LiveEventCardState): string | null {
+  switch (state.kind) {
+    case 'not_open': return state.opensAt;
+    case 'open': return state.closesAt;
+    case 'registered':
+    case 'full':
+    case 'bracket_set': return state.startsAt;
+    case 'closed': return state.underway ? null : state.startsAt;
+    default: return null;
+  }
+}
+
+const NEAR_START_MS = 60 * 60_000;
+
+function StatusChip({ tone, children }: { tone: 'ok' | 'muted' | 'warn'; children: React.ReactNode }) {
+  return <span className={`th-chip th-chip--${tone}`}>{children}</span>;
+}
+
+function LiveEventCard(props: {
+  event: ScheduledTournament;
+  state: LiveEventCardState;
+  compact: boolean;
+  nowMs: number;
+  signedIn: boolean;
+  timeZone?: string;
   attachJoinPhase?: 'idle' | 'pending' | 'failed';
   attachJoinError?: string | null;
-}
-
-function pad(n: number): string {
-  return String(n).padStart(2, '0');
-}
-
-function formatCountdown(ms: number): string {
-  const safe = Math.max(0, ms);
-  const totalS = Math.floor(safe / 1000);
-  const h = Math.floor(totalS / 3600);
-  const m = Math.floor((totalS % 3600) / 60);
-  const s = totalS % 60;
-  return `${pad(h)}:${pad(m)}:${pad(s)}`;
-}
-
-function buildTournamentCountdownLabel(targetMs: number | null, nowMs: number = Date.now()): string {
-  if (targetMs == null || !Number.isFinite(targetMs)) return '--:--:--';
-  return formatCountdown(targetMs - nowMs);
-}
-
-function formatTimePst(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-function statusFor(t: ScheduledTournament): { label: string; cls: string } {
-  if (t.status === 'registration_open') return { label: 'Open', cls: 'th-card__status--open' };
-  const startMs = Date.parse(t.scheduled_start);
-  if (startMs - Date.now() < 30 * 60 * 1000) return { label: 'Starting Soon', cls: 'th-card__status--soon' };
-  return { label: 'Upcoming', cls: 'th-card__status--upcoming' };
-}
-
-function useScheduledBoundaryTick(boundaryTimes: readonly number[]): number {
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  const boundaryKey = useMemo(() => boundaryTimes.join(','), [boundaryTimes]);
-
-  useEffect(() => {
-    if (boundaryTimes.length === 0) return;
-    const currentNow = Date.now();
-    const nextBoundary = boundaryTimes.find((ts) => ts > currentNow) ?? null;
-    if (nextBoundary == null) return;
-    const timer = window.setTimeout(
-      () => setNowMs(Date.now()),
-      Math.max(0, nextBoundary - currentNow + 50),
-    );
-    return () => window.clearTimeout(timer);
-  }, [boundaryKey, boundaryTimes]);
-
-  return nowMs;
-}
-
-const TournamentCountdownText = memo(function TournamentCountdownText({
-  targetMs,
-  fallback = '--:--:--',
-}: {
-  targetMs: number | null;
-  fallback?: string;
+  onOpenAuth?: () => void;
+  onJoinMatch: (matchId: string) => void;
+  onViewBracket: (tournamentId: string) => void;
+  onViewResult: (tournamentId: string) => void;
+  onRegister: (tournamentId: string) => Promise<unknown>;
+  onWithdraw: (tournamentId: string) => Promise<unknown>;
 }) {
-  const validTarget = targetMs != null && Number.isFinite(targetMs);
-  // `now` must be an input to the label: read Date.now() here instead and the
-  // React Compiler memoizes the label on targetMs alone, freezing the clock.
-  const now = useSyncNow(1000, validTarget);
-  const label = validTarget ? buildTournamentCountdownLabel(targetMs, now) : fallback;
+  const { event, state, nowMs } = props;
+  const [pending, setPending] = useState<'register' | 'withdraw' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const when = formatEventWhen(event.scheduled_start, nowMs, { timeZone: props.timeZone });
+  const showCount = ['not_open', 'open', 'full', 'registered', 'closed'].includes(state.kind) && !(state.kind === 'closed' && state.underway);
+  const count = typeof event.registered_count === 'number' ? event.registered_count : null;
 
-  return <>{label}</>;
-});
+  const act = async (kind: 'register' | 'withdraw') => {
+    if (pending) return;
+    setPending(kind);
+    setError(null);
+    try {
+      await (kind === 'register' ? props.onRegister(event.id) : props.onWithdraw(event.id));
+    } catch (err) {
+      setError(registrationErrorCopy(err, { timeZone: props.timeZone }));
+    } finally {
+      setPending(null);
+    }
+  };
 
-const TournamentCardStatus = memo(function TournamentCardStatus({
-  tournament,
-}: {
-  tournament: ScheduledTournament;
-}) {
-  const startSoonAtMs = useMemo(
-    () => Date.parse(tournament.scheduled_start) - 30 * 60 * 1000,
-    [tournament.scheduled_start],
-  );
-  const tickWhileRegistrationOpen = tournament.status === 'registration_open';
-  const tickWhileStartSoon = Number.isFinite(startSoonAtMs);
-  const now = useSyncNow(1000, tickWhileRegistrationOpen || tickWhileStartSoon);
-  const needsStatusTick =
-    tickWhileRegistrationOpen ||
-    (tickWhileStartSoon && now < startSoonAtMs);
-  void needsStatusTick;
-  // now is not read here: statusFor() calls Date.now() internally, so this
-  // dep is what advances the card to "Starting Soon". Dropping it pins status.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const status = useMemo(() => statusFor(tournament), [tournament, now]);
+  let status: React.ReactNode = null;
+  let action: React.ReactNode = null;
+  const startsIn = (iso: string) => `Starts in ${formatCountdown(countdownTo(iso, nowMs))}`;
+  const joining = props.attachJoinPhase === 'pending';
 
-  return <span className={`th-card__status ${status.cls}`}>{status.label}</span>;
-});
+  switch (state.kind) {
+    case 'not_open': {
+      const ms = countdownTo(state.opensAt, nowMs);
+      status = ms > 0 ? `Registration opens in ${formatCountdown(ms)}` : 'Registration opens shortly';
+      break;
+    }
+    case 'open':
+      status = startsIn(state.startsAt);
+      action = props.signedIn ? (
+        <button type="button" className="th-cta" disabled={pending !== null} aria-busy={pending === 'register'} onClick={() => void act('register')}>
+          {pending === 'register' ? 'Registering…' : 'Register'}
+        </button>
+      ) : (
+        <button type="button" className="th-cta" onClick={props.onOpenAuth}>Sign in to register</button>
+      );
+      break;
+    case 'full':
+      status = <><StatusChip tone="muted">Full</StatusChip> {startsIn(state.startsAt)}</>;
+      break;
+    case 'registered':
+      status = <><StatusChip tone="ok"><span aria-hidden>✓</span> Registered</StatusChip> {startsIn(state.startsAt)}</>;
+      action = state.canWithdraw ? (
+        <button type="button" className="th-cta th-cta--ghost" disabled={pending !== null} aria-busy={pending === 'withdraw'} onClick={() => void act('withdraw')}>
+          {pending === 'withdraw' ? 'Withdrawing…' : 'Withdraw'}
+        </button>
+      ) : null;
+      break;
+    case 'closed': {
+      if (state.underway) {
+        status = 'In progress';
+        break;
+      }
+      const ms = countdownTo(state.startsAt, nowMs);
+      status = ms > 0 && ms <= NEAR_START_MS ? <>Registration closed · {startsIn(state.startsAt)}</> : 'Registration closed';
+      break;
+    }
+    case 'bracket_set':
+      status = `Bracket set · starts in ${formatCountdown(countdownTo(state.startsAt, nowMs))}`;
+      action = <button type="button" className="th-cta th-cta--ghost" onClick={() => props.onViewBracket(event.id)}>View bracket</button>;
+      break;
+    case 'starting':
+      status = <span className="th-inline-busy" role="status"><span className="th-spinner th-spinner--sm" aria-hidden /> Setting up your match…</span>;
+      break;
+    case 'match_ready':
+      status = `Your ${tournamentStageShortLabel(state.round)} is ready`;
+      action = (
+        <button type="button" className="th-cta" disabled={joining} aria-busy={joining} onClick={() => props.onJoinMatch(state.matchId)}>
+          {joining ? 'Joining…' : 'Join Match'}
+        </button>
+      );
+      break;
+    case 'in_match':
+      status = `Your ${tournamentStageShortLabel(state.round)} is in progress`;
+      action = (
+        <button type="button" className="th-cta" disabled={joining} aria-busy={joining} onClick={() => props.onJoinMatch(state.matchId)}>
+          {joining ? 'Joining…' : 'Resume Match'}
+        </button>
+      );
+      break;
+    case 'advanced':
+      status = 'You advanced · next match is being set up';
+      action = <button type="button" className="th-cta th-cta--ghost" onClick={() => props.onViewBracket(event.id)}>View bracket</button>;
+      break;
+    case 'eliminated':
+      status = state.placementLabel ?? (state.exitRound ? `${tournamentStageShortLabel(state.exitRound)} finish` : 'Eliminated');
+      action = <button type="button" className="th-cta th-cta--ghost" onClick={() => props.onViewBracket(event.id)}>View bracket</button>;
+      break;
+    case 'champion':
+      status = <StatusChip tone="ok"><span aria-hidden>🏆</span> Champion</StatusChip>;
+      action = <button type="button" className="th-cta" onClick={() => props.onViewResult(event.id)}>View result</button>;
+      break;
+    case 'cancelled':
+      status = 'This event was cancelled';
+      break;
+    case 'finished':
+      status = 'Finished';
+      action = <button type="button" className="th-cta th-cta--ghost" onClick={() => props.onViewResult(event.id)}>View result</button>;
+      break;
+  }
 
-const TournamentCard = memo(function TournamentCard({
-  tournament,
-  registered,
-  userId,
-  onRegister,
-  onWithdraw,
-}: {
-  tournament: ScheduledTournament;
-  registered: boolean;
-  userId: string | null;
-  onRegister: (tournamentId: string) => void | Promise<void>;
-  onWithdraw: (tournamentId: string) => void | Promise<void>;
-}) {
-  const open = tournament.status === 'registration_open';
-  const count = tournament.registered_count ?? 0;
-  const isFull = count >= tournament.max_players;
-  const fillPct = Math.max(0, Math.min(100, (count / tournament.max_players) * 100));
-  const showFirstRegisterCopy = count === 0 && tournament.status === 'upcoming';
+  const joinFailed = (state.kind === 'match_ready' || state.kind === 'in_match') && props.attachJoinPhase === 'failed';
 
   return (
-    <div className="th-card">
-      <div className="th-card__time">{formatTimePst(tournament.scheduled_start)}</div>
-      <div className="th-card__middle">
-        <div className="th-card__count">
-          {showFirstRegisterCopy
-            ? 'Be the first to register'
-            : `${count} / ${tournament.max_players} Registered`}
-        </div>
-        <div className="th-card__bar">
-          <span className="th-card__bar-fill" style={{ width: `${fillPct}%` }} />
-        </div>
-        {!showFirstRegisterCopy ? (
-          <div className="th-card__count-sub">
-            {isFull ? 'All seats claimed' : `${tournament.max_players - count} seats remaining`}
-          </div>
-        ) : (
-          <div className="th-card__count-sub">Registration opens 30 minutes before start.</div>
-        )}
-        <TournamentCardStatus tournament={tournament} />
+    <article
+      className={`th-event${props.compact ? ' th-event--compact' : ''}${state.kind === 'cancelled' ? ' th-event--cancelled' : ''}`}
+      aria-label={`Live Event, ${when}`}
+      data-state={state.kind}
+    >
+      <div className="th-event__head">
+        <span className="th-event__kicker">Live Event</span>
+        <span className="th-event__when">{when}</span>
       </div>
-      <div className="th-card__actions">
-        {registered ? (
-          <>
-            <span className="th-card__registered">Registered ✓</span>
-            {open ? (
-              <button
-                className="th-card__withdraw"
-                onClick={() => void onWithdraw(tournament.id)}
-              >
-                Withdraw
-              </button>
-            ) : null}
-          </>
-        ) : isFull ? (
-          <span className="th-card__full">Full</span>
-        ) : !open ? (
-          <span className="th-card__soon">Opens soon</span>
-        ) : (
-          <button
-            className="th-cta"
-            disabled={!userId}
-            onClick={() => void onRegister(tournament.id)}
-          >
-            Register
-          </button>
-        )}
+      {showCount && !props.compact ? (
+        <p className="th-event__meta">
+          {liveMetaLine(state.kind === 'full', count)}
+        </p>
+      ) : null}
+      <div className="th-event__row">
+        <p className="th-event__status" aria-live="polite">{status}</p>
+        {action ? <div className="th-event__action">{action}</div> : null}
       </div>
-    </div>
-  );
-});
-
-function tournamentBoundaryTimes(tournament: ScheduledTournament | null): number[] {
-  if (!tournament) return [];
-  return [
-    Date.parse(tournament.registration_close_at),
-    Date.parse(tournament.scheduled_start),
-  ].filter((ts) => Number.isFinite(ts));
-}
-
-function Trophy() {
-  return (
-    <svg className="th-trophy-svg" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <defs>
-        <linearGradient id="th-gold" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f6c45a" />
-          <stop offset="50%" stopColor="#f59e0b" />
-          <stop offset="100%" stopColor="#b8782b" />
-        </linearGradient>
-      </defs>
-      <path d="M50 30h100v50a50 50 0 0 1-100 0V30z" fill="url(#th-gold)" />
-      <path d="M50 50 H20 a20 20 0 0 0 30 35" fill="none" stroke="url(#th-gold)" strokeWidth="6" />
-      <path d="M150 50 H180 a20 20 0 0 1 -30 35" fill="none" stroke="url(#th-gold)" strokeWidth="6" />
-      <rect x="80" y="130" width="40" height="40" fill="url(#th-gold)" opacity="0.85" />
-      <rect x="60" y="170" width="80" height="14" rx="3" fill="url(#th-gold)" />
-      <rect x="50" y="184" width="100" height="20" rx="4" fill="url(#th-gold)" />
-    </svg>
+      {error ? <p className="th-event__error" role="alert">{error}</p> : null}
+      {joinFailed ? <p className="th-event__error" role="alert">{props.attachJoinError ?? "Couldn't join your match. Try again."}</p> : null}
+    </article>
   );
 }
 
-function CheckBadgeArt() {
+function FritzCupCard(props: {
+  state: FritzCupCardState;
+  timeZone?: string;
+  attachJoinPhase?: 'idle' | 'pending' | 'failed';
+  attachJoinError?: string | null;
+  onPlay: () => void;
+  onOpenAuth?: () => void;
+  onJoinMatch: (matchId: string) => void;
+  onViewBracket: (tournamentId: string) => void;
+  onRetry: () => void;
+}) {
+  const { state } = props;
+  if (state.kind === 'hidden') return null;
+  const joining = props.attachJoinPhase === 'pending';
+  let status: React.ReactNode = 'Beat Fritz, Elite Fritz, and Master Fritz to win the Cup.';
+  let action: React.ReactNode = null;
+  let error: string | null = null;
+
+  switch (state.kind) {
+    case 'sign_in':
+      action = <button type="button" className="th-cta" onClick={props.onOpenAuth}>Sign in to play</button>;
+      break;
+    case 'play':
+      action = <button type="button" className="th-cta" onClick={props.onPlay}>Play Fritz Cup</button>;
+      break;
+    case 'starting':
+      action = <button type="button" className="th-cta" disabled aria-busy>Starting Fritz Cup…</button>;
+      break;
+    case 'building':
+      status = <span className="th-inline-busy" role="status"><span className="th-spinner th-spinner--sm" aria-hidden /> Building your bracket…</span>;
+      break;
+    case 'slow':
+      status = 'Taking longer than usual.';
+      action = (
+        <>
+          {state.tournamentId ? <button type="button" className="th-cta th-cta--ghost" onClick={() => props.onViewBracket(state.tournamentId!)}>View bracket</button> : null}
+          <button type="button" className="th-cta th-cta--ghost" onClick={props.onRetry}>Refresh</button>
+        </>
+      );
+      break;
+    case 'failed':
+      error = fritzCupErrorCopy(state.launch.error, { timeZone: props.timeZone });
+      action = <button type="button" className="th-cta" onClick={props.onPlay}>Play Fritz Cup</button>;
+      break;
+    case 'join':
+      status = `Your ${tournamentStageShortLabel(state.round)} vs Fritz is ready`;
+      action = (
+        <button type="button" className="th-cta" disabled={joining} aria-busy={joining} onClick={() => props.onJoinMatch(state.matchId)}>
+          {joining ? 'Joining…' : 'Join Match'}
+        </button>
+      );
+      break;
+    case 'resume':
+      status = `Your ${tournamentStageShortLabel(state.round)} is in progress`;
+      action = (
+        <button type="button" className="th-cta" disabled={joining} aria-busy={joining} onClick={() => props.onJoinMatch(state.matchId)}>
+          {joining ? 'Joining…' : 'Resume Fritz Cup'}
+        </button>
+      );
+      break;
+    case 'waiting':
+      status = state.round ? `${tournamentStageShortLabel(state.round)} · your next match is being set up` : 'Your next match is being set up';
+      action = <button type="button" className="th-cta th-cta--ghost" onClick={() => props.onViewBracket(state.tournamentId)}>Resume Fritz Cup</button>;
+      break;
+  }
+  const inCup = state.kind === 'join' || state.kind === 'resume' || state.kind === 'waiting';
+  const joinFailed = (state.kind === 'join' || state.kind === 'resume') && props.attachJoinPhase === 'failed';
+
   return (
-    <div className="th-confirmation-mark" aria-hidden>
-      <span>✓</span>
-    </div>
+    <article className="th-event th-event--fritz" aria-label="Fritz Cup" data-state={state.kind}>
+      <div className="th-event__head">
+        <span className="th-event__kicker">{inCup ? 'Your Fritz Cup' : 'Solo'}</span>
+        <h2 className="th-event__title">Fritz Cup</h2>
+      </div>
+      {!inCup ? <p className="th-event__meta">Play now · 3 rounds vs Fritz</p> : null}
+      <div className="th-event__row">
+        <p className="th-event__status" aria-live="polite">{status}</p>
+        {action ? <div className="th-event__action">{action}</div> : null}
+      </div>
+      {error ? <p className="th-event__error" role="alert">{error}</p> : null}
+      {joinFailed ? <p className="th-event__error" role="alert">{props.attachJoinError ?? "Couldn't join your match. Try again."}</p> : null}
+    </article>
   );
+}
+
+/**
+ * "3 registered · Fritz fills open seats"; a full field (8 people) has no
+ * open seat for Fritz, so it reads "8 registered · Full" (Phase 3E).
+ */
+export function liveMetaLine(full: boolean, count: number | null): string {
+  const registered = count !== null && count > 0 ? `${count} registered` : null;
+  if (full) return registered ? `${registered} · Full` : 'Full';
+  return registered ? `${registered} · Fritz fills open seats` : 'Fritz fills open seats';
+}
+
+function SkeletonCard() {
+  return <div className="th-event th-event--skeleton" aria-hidden />;
 }
 
 export default function TournamentHubScreen(props: TournamentHubScreenProps) {
-  const userId = props.identity?.userId ?? null;
-  const nextTournament = props.upcoming[0] ?? null;
-  const registeredTournamentIds = useMemo(
-    () =>
-      new Set(
-        props.registrations
-          .filter((r) => r.status === 'registered' || r.status === 'active')
-          .map((r) => r.tournament_id),
-      ),
-    [props.registrations],
-  );
-  const hubBoundaryTimes = useMemo(
-    () => tournamentBoundaryTimes(nextTournament),
-    [nextTournament],
-  );
-  const hubNowMs = useScheduledBoundaryTick(hubBoundaryTimes);
+  const signedIn = Boolean(props.identity?.userId);
+  const nowMs = useTournamentNow(1000, props.hasLoaded);
+  const disabled = props.features?.tournaments === false;
 
-  const hubState = useMemo(
-    () =>
-      deriveTournamentHubViewModel({
-        upcoming: props.upcoming,
-        registrations: props.registrations,
-        recoveryMatch: props.recoveryMatch,
-        tournamentPhase: props.tournamentPhase ?? null,
-        activeTournamentId: props.activeTournamentId ?? null,
-        activeBracketStatus: props.activeBracketStatus ?? null,
-        isLoading: props.isLoading,
-        hasLoaded: props.hasLoaded,
-        error: props.error,
-        nowMs: hubNowMs,
+  const liveRows = useMemo(
+    () => selectHubLiveEvents({ upcoming: props.upcoming, myTournaments: props.myTournaments, nowMs }),
+    [props.upcoming, props.myTournaments, nowMs],
+  );
+  const liveCards = useMemo(
+    () => liveRows.map((row) => ({
+      ...row,
+      state: deriveLiveEventCardState({
+        event: row.event,
+        mine: row.mine,
+        playable: props.activeAssignedMatch,
+        cancelled: props.cancelledTournamentIds.has(row.event.id),
+        nowMs,
       }),
-    [
-      props.upcoming,
-      props.registrations,
-      props.recoveryMatch,
-      props.tournamentPhase,
-      props.activeTournamentId,
-      props.activeBracketStatus,
-      props.isLoading,
-      props.hasLoaded,
-      props.error,
-      hubNowMs,
-    ],
+    })),
+    [liveRows, props.activeAssignedMatch, props.cancelledTournamentIds, nowMs],
+  );
+  const fritzState = useMemo(
+    () => deriveFritzCupCardState({
+      features: props.features,
+      signedIn,
+      myTournaments: props.myTournaments,
+      playable: props.activeAssignedMatch,
+      launch: props.fritzLaunch,
+    }),
+    [props.features, signedIn, props.myTournaments, props.activeAssignedMatch, props.fritzLaunch],
   );
 
-  const nextTournamentRegistered = nextTournament
-    ? registeredTournamentIds.has(nextTournament.id)
-    : false;
-
-  const lobbyBracketTournamentId = useMemo(() => {
-    if (props.activeTournamentId) return props.activeTournamentId;
-    return props.upcoming.find((t) => registeredTournamentIds.has(t.id))?.id ?? null;
-  }, [props.activeTournamentId, props.upcoming, registeredTournamentIds]);
-
-  const showLobbyBracketBanner =
-    Boolean(lobbyBracketTournamentId) &&
-    (props.tournamentPhase === 'registered' || props.tournamentPhase === 'bracket_lobby');
-  const countdownTargetMs = useMemo(
-    () =>
-      nextTournament
-        ? nextTournament.status === 'registration_open'
-          ? Date.parse(nextTournament.registration_close_at)
-          : Date.parse(nextTournament.scheduled_start)
-        : null,
-    [nextTournament],
+  const boundaries = useMemo(
+    () => liveCards.flatMap(({ event, state }) => {
+      const at = boundaryOf(state);
+      return at ? [{ key: `${event.id}:${state.kind}:${at}`, atMs: Date.parse(at) }] : [];
+    }),
+    [liveCards],
   );
-  const countdownLabel = nextTournament?.status === 'registration_open'
-    ? 'Registration Closes In'
-    : 'Next Tournament In';
-  const countdownDetail = nextTournament?.status === 'registration_open'
-    ? 'Claim your seat before registration closes.'
-    : hubState.detail;
-  const visibleUpcoming = useMemo(() => props.upcoming.slice(0, 3), [props.upcoming]);
+  useBoundaryRefresh(boundaries, nowMs, props.onBoundary);
+
+  // Once per visit (a ref survives StrictMode's effect replay).
+  const viewedRef = useRef(false);
+  useEffect(() => {
+    if (viewedRef.current) return;
+    viewedRef.current = true;
+    trackTournamentHubViewed();
+  }, []);
+
+  const loading = props.isLoading && !props.hasLoaded;
+  const cardProps = {
+    nowMs,
+    signedIn,
+    timeZone: props.timeZone,
+    attachJoinPhase: props.attachJoinPhase,
+    attachJoinError: props.attachJoinError,
+    onOpenAuth: props.onOpenAuth,
+    onJoinMatch: props.onJoinMatch,
+    onViewBracket: props.onViewBracket,
+    onViewResult: props.onViewResult,
+    onRegister: props.onRegister,
+    onWithdraw: props.onWithdraw,
+  };
 
   return (
     <div className="th-page">
@@ -321,184 +435,96 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
           <button type="button" className="th-back" onClick={props.onBackHome}>
             <span aria-hidden>←</span> Back to Home
           </button>
+          {signedIn && !disabled && props.onOpenHistory ? (
+            <button type="button" className="th-back th-history-link" onClick={props.onOpenHistory}>
+              History
+            </button>
+          ) : null}
         </div>
 
         <div className="th-layout">
           <div className="th-left">
             <div>
-              <p className="th-kicker">Tournament</p>
+              <p className="th-kicker">Tournaments</p>
               <h1 className="th-title">Compete</h1>
-              <p className="th-desc">8-player bracket. First to 30 wins. One champion every 30 minutes.</p>
+              <p className="th-desc">
+                {props.features?.fritzCup
+                  ? 'Play a Fritz Cup any time, or join a Live Event with other players.'
+                  : 'Join a Live Event with other players.'}
+              </p>
             </div>
-            <div
-              className={`th-trophy-stage${nextTournamentRegistered && nextTournament?.status !== 'completed' ? ' th-trophy-stage--confirmed' : ''}`}
-              aria-hidden
-            >
-              {nextTournamentRegistered && nextTournament?.status !== 'completed' ? (
-                <div className="th-confirmation-stage">
-                  <CheckBadgeArt />
-                  <div className="th-confirmation-copy">
-                    <span className="th-confirmation-eyebrow">Seat Confirmed</span>
-                    <strong>You&apos;re registered</strong>
-                    <span>Your entry is locked in for the next bracket.</span>
-                  </div>
-                </div>
-              ) : (
-                <Trophy />
-              )}
-            </div>
-            <div className="th-features">
-              <div className="th-feature">
-                <div className="th-feature__header">8 Players</div>
-                <div className="th-feature__desc">Single-elimination bracket.</div>
-              </div>
-              <div className="th-feature">
-                <div className="th-feature__header">QF → SF → Final</div>
-                <div className="th-feature__desc">Win three to take the crown.</div>
-              </div>
-              <div className="th-feature">
-                <div className="th-feature__header">First to 30</div>
-                <div className="th-feature__desc">Quick, decisive matches.</div>
-              </div>
-            </div>
+            <ul className="th-format" aria-label="Format">
+              <li>8 players</li>
+              <li>3 rounds</li>
+              <li>First to 30</li>
+            </ul>
           </div>
 
           <div className="th-panel">
-            <div className="th-countdown">
-              <span className="th-countdown__label">{nextTournament ? countdownLabel : hubState.title}</span>
-              <span className="th-countdown__time" aria-live="polite">
-                <TournamentCountdownText targetMs={countdownTargetMs} />
-              </span>
-              <span className="th-countdown__sub">
-                {nextTournament ? countdownDetail : hubState.detail}
-              </span>
-            </div>
-
-            {showLobbyBracketBanner && lobbyBracketTournamentId ? (
-              <div className="th-recovery-banner">
-                <div className="th-recovery-banner__copy">
-                  <span className="th-recovery-banner__eyebrow">
-                    {props.tournamentPhase === 'bracket_lobby' ? 'Bracket locked' : 'Registered'}
-                  </span>
-                  <span className="th-recovery-banner__title">
-                    {props.tournamentPhase === 'bracket_lobby'
-                      ? 'View your bracket and opponent'
-                      : 'Return to the tournament lobby and bracket'}
-                  </span>
-                </div>
-                <button
-                  className="th-cta"
-                  type="button"
-                  onClick={() => props.onOpenBracket(lobbyBracketTournamentId)}
-                >
-                  View Bracket ›
-                </button>
-              </div>
-            ) : null}
-
-            {props.recoveryMatch &&
-            props.tournamentPhase !== 'bracket_lobby' &&
-            props.tournamentPhase !== 'completed' &&
-            props.activeBracketStatus !== 'completed' &&
-            props.activeBracketStatus !== 'cancelled' &&
-            !isTerminalTournamentMatch(props.recoveryMatch.matchId) ? (
-              <div className="th-recovery-banner">
-                <div className="th-recovery-banner__copy">
-                  <span className="th-recovery-banner__eyebrow">
-                    {props.recoveryMatch.matchStatus === 'ready' ? 'Match Ready' : 'Match In Progress'}
-                  </span>
-                  <span className="th-recovery-banner__title">
-                    {props.attachJoinPhase === 'pending'
-                      ? 'Joining your assigned match…'
-                      : props.attachJoinPhase === 'failed'
-                        ? props.attachJoinError ?? 'Could not join match'
-                        : props.recoveryMatch.matchStatus === 'ready'
-                          ? 'Your match is ready — Start Match'
-                          : 'Your match is in progress — Rejoin Match'}
-                  </span>
-                </div>
-                <button
-                  className="th-cta"
-                  type="button"
-                  disabled={props.attachJoinPhase === 'pending'}
-                  onClick={() => void props.onAttachAssignedMatch(props.recoveryMatch!.matchId)}
-                >
-                  {props.attachJoinPhase === 'pending'
-                    ? 'Joining match…'
-                    : props.attachJoinPhase === 'failed'
-                      ? 'Retry Join Match'
-                      : props.recoveryMatch.matchStatus === 'ready'
-                        ? 'Start Match'
-                        : 'Rejoin Match'}
-                </button>
-              </div>
-            ) : null}
-
-            <div className="th-panel-body">
-              {hubState.state === 'loading' ? (
-                <div className="th-state-card" role="status" aria-live="polite">
-                  <div className="th-spinner" aria-hidden />
+            <div className="th-panel-body" aria-busy={loading}>
+              {disabled ? (
+                <div className="th-state-card" role="status">
                   <div className="th-state-card__text">
-                    <strong>{hubState.title}</strong>
-                    <span>{hubState.detail}</span>
+                    <strong>Tournaments are unavailable right now</strong>
+                    <span>Tournaments are coming back soon.</span>
                   </div>
                 </div>
-              ) : null}
-              {hubState.state === 'api_error' ? (
-                <div className="th-state-card th-state-card--error">
-                  <div className="th-state-card__text">
-                    <strong>{hubState.title}</strong>
-                    <span>{hubState.detail}</span>
-                  </div>
-                  <button className="th-cta th-cta--ghost" onClick={() => void props.onRetry()}>
-                    Retry
-                  </button>
-                </div>
-              ) : null}
-              {hubState.state === 'cancelled' ? (
-                <div className="th-state-card th-state-card--cancelled">
-                  <div className="th-state-card__text">
-                    <strong>{hubState.title}</strong>
-                    <span>{hubState.detail}</span>
-                  </div>
-                </div>
-              ) : null}
-              {hubState.state === 'eliminated' ? (
-                <div className="th-state-card th-state-card--cancelled">
-                  <div className="th-state-card__text">
-                    <strong>{hubState.title}</strong>
-                    <span>{hubState.detail}</span>
-                  </div>
-                </div>
-              ) : null}
-              {visibleUpcoming.map((t) => (
-                <TournamentCard
-                  key={t.id}
-                  tournament={t}
-                  registered={registeredTournamentIds.has(t.id)}
-                  userId={userId}
-                  onRegister={props.onRegister}
-                  onWithdraw={props.onWithdraw}
-                />
-              ))}
-              {props.hasLoaded && !props.error && props.upcoming.length === 0 ? (
-                <p className="th-empty">No upcoming tournaments. Check back soon.</p>
-              ) : null}
-            </div>
+              ) : loading ? (
+                <>
+                  <span className="th-sr-only" role="status">Loading tournaments…</span>
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </>
+              ) : (
+                <>
+                  <FritzCupCard
+                    state={fritzState}
+                    timeZone={props.timeZone}
+                    attachJoinPhase={props.attachJoinPhase}
+                    attachJoinError={props.attachJoinError}
+                    onPlay={props.onPlayFritzCup}
+                    onOpenAuth={props.onOpenAuth}
+                    onJoinMatch={props.onJoinMatch}
+                    onViewBracket={props.onViewBracket}
+                    onRetry={props.onRetry}
+                  />
 
-            <div className="th-summary-strip">
-              <div className="th-summary-item">
-                <span className="th-summary-key">Format</span>
-                <span className="th-summary-value">7-Tile</span>
-              </div>
-              <div className="th-summary-item">
-                <span className="th-summary-key">Win Target</span>
-                <span className="th-summary-value">First to 30</span>
-              </div>
-              <div className="th-summary-item">
-                <span className="th-summary-key">Cadence</span>
-                <span className="th-summary-value">Every 30 minutes</span>
-              </div>
+                  {liveCards.map((card, index) => (
+                    <LiveEventCard key={card.event.id} event={card.event} state={card.state} compact={index > 0} {...cardProps} />
+                  ))}
+
+                  {liveCards.length === 0 && !props.upcomingError ? (
+                    fritzState.kind === 'hidden' ? (
+                      <div className="th-state-card" role="status">
+                        <div className="th-state-card__text">
+                          <strong>No tournaments right now</strong>
+                          <span>No Live Event is scheduled right now.</span>
+                        </div>
+                        <button type="button" className="th-cta th-cta--ghost" onClick={props.onRetry}>Retry</button>
+                      </div>
+                    ) : (
+                      <p className="th-empty">No Live Event is scheduled right now.</p>
+                    )
+                  ) : null}
+
+                  {props.upcomingError && liveCards.length === 0 ? (
+                    <div className="th-state-card th-state-card--error" role="alert">
+                      <div className="th-state-card__text">
+                        <strong>Couldn&apos;t load Live Events</strong>
+                        <span>Check your connection and try again.</span>
+                      </div>
+                      <button type="button" className="th-cta th-cta--ghost" onClick={props.onRetry}>Retry</button>
+                    </div>
+                  ) : null}
+
+                  {signedIn && props.myError ? (
+                    <p className="th-event__error" role="alert">
+                      Your entries couldn&apos;t be loaded.{' '}
+                      <button type="button" className="th-link" onClick={props.onRetry}>Retry</button>
+                    </p>
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
         </div>

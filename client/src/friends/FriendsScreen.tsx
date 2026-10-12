@@ -21,6 +21,7 @@ import {
 } from '../social/socialApi';
 import { friendsSocketScopeRef } from './friendsSocketScope';
 import './friendsScreen.css';
+import { publicPlayerName } from '../identity/publicPlayerName';
 
 interface FriendsScreenProps {
   open: boolean;
@@ -514,7 +515,7 @@ export default function FriendsScreen({
                               if (!roomInfo?.ok || !roomInfo.roomCode || !roomInfo.inviteUrl) { showToast('Create a room first.', 2000); return; }
                               socket.emit('friend:invite', {
                                 toUserId: friend.userId,
-                                fromUsername: currentUsername || user?.email?.split('@')[0] || 'player',
+                                fromUsername: publicPlayerName(currentUsername),
                                 roomCode: roomInfo.roomCode,
                                 inviteUrl: roomInfo.inviteUrl,
                               });
@@ -722,7 +723,7 @@ export default function FriendsScreen({
                       if (!roomInfo?.ok || !roomInfo.roomCode || !roomInfo.inviteUrl) { showToast('Create a room first.', 2000); return; }
                       socket.emit('friend:invite', {
                         toUserId: f.userId,
-                        fromUsername: currentUsername || user?.email?.split('@')[0] || 'player',
+                        fromUsername: publicPlayerName(currentUsername),
                         roomCode: roomInfo.roomCode,
                         inviteUrl: roomInfo.inviteUrl,
                       });

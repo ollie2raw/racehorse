@@ -27,7 +27,20 @@ export type AnalyticsEvent =
   /** A run of any mode finished. */
   | 'game_completed'
   /** The share action was tapped. Report §6.1's headline metric. */
-  | 'share_initiated';
+  | 'share_initiated'
+  // Tournaments (Phase 3E). Properties: kind, round, fritz_tier, error_code,
+  // placement, outcome_kind — never names, user/tournament/bot ids or room state.
+  | 'tournament_hub_viewed'
+  | 'fritz_cup_tapped'
+  | 'fritz_cup_created'
+  | 'fritz_cup_create_failed'
+  | 'live_event_register_tapped'
+  | 'live_event_registered'
+  | 'live_event_registration_failed'
+  | 'tournament_match_ready'
+  | 'tournament_match_joined'
+  | 'tournament_eliminated'
+  | 'tournament_champion';
 
 export type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;
 
@@ -45,8 +58,26 @@ let transportPromise: Promise<AnalyticsTransport | null> | null = null;
 /** Set by tests. Also the reason init is idempotent under StrictMode and HMR. */
 let injected: AnalyticsTransport | null = null;
 
+/**
+ * Dev-only capture for end-to-end specs (VITE_E2E_ANALYTICS_CAPTURE=1, set only
+ * by the Playwright tournament E2E dev server): events are kept on
+ * `window.__rhAnalyticsEvents` so a journey can count them. Never in builds.
+ */
+function e2eCaptureTransport(): AnalyticsTransport | null {
+  if (!import.meta.env.DEV || import.meta.env.VITE_E2E_ANALYTICS_CAPTURE !== '1' || typeof window === 'undefined') return null;
+  const target = window as unknown as { __rhAnalyticsEvents?: Array<{ event: string; props?: AnalyticsProps }> };
+  target.__rhAnalyticsEvents ??= [];
+  return {
+    capture: (event, props) => { target.__rhAnalyticsEvents!.push({ event, props }); },
+    identify: () => undefined,
+    reset: () => undefined,
+  };
+}
+
 async function loadTransport(): Promise<AnalyticsTransport | null> {
   if (injected) return injected;
+  const e2e = e2eCaptureTransport();
+  if (e2e) return e2e;
   if (!KEY) return null;
   try {
     const { default: posthog } = await import('posthog-js');
@@ -78,7 +109,14 @@ function transport(): Promise<AnalyticsTransport | null> {
 
 /** Records an event. Fire-and-forget: never awaited by product code. */
 export function track(event: AnalyticsEvent, props?: AnalyticsProps): void {
-  void transport().then((client) => client?.capture(event, props));
+  // Best-effort: a failing client never throws into, or rejects under, the caller.
+  try {
+    void transport()
+      .then((client) => client?.capture(event, props))
+      .catch(() => undefined);
+  } catch {
+    // ignore
+  }
 }
 
 /**

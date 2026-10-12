@@ -1,4 +1,6 @@
 import { childLogger } from '../logger';
+import { getTournamentClockState } from './tournamentTurnClock';
+import { ackWithServerNow } from '../scheduledTournament/serverNow';
 import type { Server, Socket } from 'socket.io';
 import {
   getRoom,
@@ -29,6 +31,9 @@ import { isTournamentsEnabled, TOURNAMENTS_DISABLED } from '../scheduledTourname
 
 const log = childLogger('multiplayer:tournament-attach');
 
+/** The longest an attach waits for the socket's identify still in flight. */
+const IDENTIFY_WAIT_MS = 5_000;
+
 export type RegisterTournamentAttachHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
   attachSocketToTrackedRoom: AttachSocketToTrackedRoomFn;
@@ -41,7 +46,8 @@ export function registerTournamentAttachHandlers(
 ): void {
   const { handlerDeps, attachSocketToTrackedRoom } = params;
 
-  socket.on('tournament:attach_assigned_match', async (payload: unknown, cb?: AckFn) => {
+  socket.on('tournament:attach_assigned_match', async (payload: unknown, rawCb?: AckFn) => {
+    const cb = ackWithServerNow(rawCb);
     if (!isTournamentsEnabled()) {
       cb?.(TOURNAMENTS_DISABLED);
       return;
@@ -71,6 +77,18 @@ export function registerTournamentAttachHandlers(
     }, 'request');
 
     try {
+      // A reconnected socket's identify may still be in flight (Phase 4A dev
+      // finding: the re-attach after a server restart was refused as
+      // not_authenticated a few milliseconds before the identify completed).
+      const identifyPending = socket.data?.identifyPending as Promise<void> | undefined;
+      if (!handlerDeps.normalizeUserId(socket.data?.userId) && identifyPending) {
+        let waitTimer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          identifyPending,
+          new Promise<void>((resolve) => { waitTimer = setTimeout(resolve, IDENTIFY_WAIT_MS); }),
+        ]);
+        if (waitTimer) clearTimeout(waitTimer);
+      }
       const authenticatedUserId = handlerDeps.normalizeUserId(socket.data?.userId);
       const matchId = matchIdFromPayload;
       if (!matchId) {
@@ -110,7 +128,7 @@ export function registerTournamentAttachHandlers(
         ackOnce({ ok: false, error: 'room_unavailable' });
         return;
       }
-      if (peekRoom(match.room_code)) {
+      if (peekRoom(match.room_code)?.scheduledTournamentMatchId === match.id) {
         log.info({
           matchId: match.id,
           roomCode: match.room_code,
@@ -151,6 +169,7 @@ export function registerTournamentAttachHandlers(
         userId: participantUserId,
         via: 'tournament:attach_assigned_match',
         hydrateMatchmakingRoom: false,
+        tournamentMatchId: match.id,
       });
       const nowIso = new Date().toISOString();
       if (!humanJoinedAt(match, participantUserId)) {
@@ -179,27 +198,22 @@ export function registerTournamentAttachHandlers(
           );
           handlerDeps.notifyRoomPlayersInGame(room.code);
           await handlerDeps.onAfterMatchStarted(room);
-          const recipientId = attached.joinedPlayerSeatId;
-          stateWithCounts = room.state
-            ? (() => {
-                const m = maskStateForRecipient(room.state!, recipientId);
-                return { ...m, handCounts: getHandCounts(room.state!) };
-              })()
-            : null;
-          rejoinLegalMoves = [];
-          rejoinCanDraw = false;
         }
-      } else if (room.state && attached.joinedPlayerSeatId) {
-        const recipientId = attached.joinedPlayerSeatId;
-        stateWithCounts = (() => {
-          const m = maskStateForRecipient(room.state!, recipientId);
-          return { ...m, handCounts: getHandCounts(room.state!) };
-        })();
-        rejoinLegalMoves = getRoomLegalMoves(room.code, attached.joinedPlayerSeatId);
-        rejoinCanDraw = getRoomCanDraw(room.code, attached.joinedPlayerSeatId);
       }
 
       const refreshed = await fetchMatchById(match.id);
+      // The position as it is now, not before the awaits above: when Fritz starts,
+      // its first move (0.8-1.5 s after the deal) can land while the match row is
+      // written and read back, and an older position in the ack would be applied
+      // after that move's update (Phase 4A dev finding: "Fritz is thinking" on the
+      // player's own turn until missed turns forfeited the match).
+      if (room.state && attached.joinedPlayerSeatId) {
+        const recipientId = attached.joinedPlayerSeatId;
+        const m = maskStateForRecipient(room.state, recipientId);
+        stateWithCounts = { ...m, handCounts: getHandCounts(room.state) };
+        rejoinLegalMoves = getRoomLegalMoves(room.code, recipientId);
+        rejoinCanDraw = getRoomCanDraw(room.code, recipientId);
+      }
       const humanAttached = Boolean(humanJoinedAt(refreshed ?? match, participantUserId));
       const matchStatus =
         refreshed?.status === 'in_progress' && humanAttached
@@ -244,6 +258,8 @@ export function registerTournamentAttachHandlers(
         eventMeta: getRoomMatchEventMeta(room.code),
         tournamentMatch: attached.tournamentMatchMeta,
         matchStarted: Boolean(room.state),
+        // The clock already running for this state (attach after it armed); serverNow is on every ack.
+        tournamentClock: getTournamentClockState(room.code),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'attach_failed';

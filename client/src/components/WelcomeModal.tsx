@@ -2,6 +2,7 @@ import { Button, Modal } from './primitives';
 import type { AppMode } from '../types';
 import './WelcomeModal.css';
 import { isTournamentsEnabled } from '../config/tournamentsFeature';
+import type { TournamentFeatures } from '../tournament/types';
 
 interface WelcomeModalProps {
   open: boolean;
@@ -9,6 +10,20 @@ interface WelcomeModalProps {
   onDismiss: () => void;
   /** Pick Daily Fritz — the caller dismisses and navigates. */
   onNavigate: (mode: AppMode) => void;
+  /**
+   * What the server offers (the tournament state App already holds; null until
+   * it has loaded). The Tournament line appears only once it is known, and
+   * mentions Fritz Cups only when they are on — never advertised early.
+   */
+  tournamentFeatures?: TournamentFeatures | null;
+}
+
+/** The Tournament line for the server's current offer (Phase 3E). */
+export function welcomeTournamentCopy(features: TournamentFeatures | null | undefined): string | null {
+  if (!features?.tournaments) return null;
+  return features.fritzCup
+    ? 'Play a 3-round Cup against Fritz anytime, or join one of two Live Events each day. Fritz fills open seats. Live Event registration opens 12 hours before start.'
+    : 'Join one of two Live Events each day. Fritz fills open seats. Registration opens 12 hours before start.';
 }
 
 /**
@@ -26,7 +41,8 @@ interface WelcomeModalProps {
  *
  * Currently gated off via `WELCOME_MODAL_VISIBLE` (parked for redesign).
  */
-export function WelcomeModal({ open, onDismiss, onNavigate }: WelcomeModalProps) {
+export function WelcomeModal({ open, onDismiss, onNavigate, tournamentFeatures = null }: WelcomeModalProps) {
+  const tournamentCopy = isTournamentsEnabled() ? welcomeTournamentCopy(tournamentFeatures) : null;
   return (
     <Modal open={open} onClose={onDismiss} title="Welcome to Racehorse Dominoes" maxWidth={520}>
       <div className="rh-welcome-start">
@@ -50,12 +66,10 @@ export function WelcomeModal({ open, onDismiss, onNavigate }: WelcomeModalProps)
           <span className="rh-welcome-mode-name">Multiplayer</span>
           <span className="rh-welcome-mode-desc">Invite a friend with a room code, 1v1 live.</span>
         </li>
-        {isTournamentsEnabled() ? (
+        {tournamentCopy ? (
           <li>
             <span className="rh-welcome-mode-name">Tournament</span>
-            <span className="rh-welcome-mode-desc">
-              8-player bracket, first to 30 wins, a new champion every 30 minutes.
-            </span>
+            <span className="rh-welcome-mode-desc">{tournamentCopy}</span>
           </li>
         ) : null}
         <li>

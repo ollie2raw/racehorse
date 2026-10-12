@@ -2,28 +2,28 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchBracket: vi.fn(), fetchMe: vi.fn(), fetchUpcoming: vi.fn(), fetchMyRegistrations: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchBracket: vi.fn(), fetchMy: vi.fn(), fetchUpcoming: vi.fn() }));
 
-vi.mock('./tournamentApi', () => ({
+vi.mock('./tournamentApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./tournamentApi')>()),
   fetchBracket: (...a: unknown[]) => mocks.fetchBracket(...a),
-  fetchMe: (...a: unknown[]) => mocks.fetchMe(...a),
+  fetchMy: (...a: unknown[]) => mocks.fetchMy(...a),
   fetchUpcoming: (...a: unknown[]) => mocks.fetchUpcoming(...a),
-  fetchMyRegistrations: (...a: unknown[]) => mocks.fetchMyRegistrations(...a),
 }));
 vi.mock('./recoverySignals', () => ({ bindTournamentRecoverySignals: () => () => undefined }));
 
 import { useTournament } from './useTournament';
+import { TournamentApiError } from './tournamentApi';
 
 afterEach(() => vi.clearAllMocks());
 
 describe('useTournament bracket error handling (P1-2)', () => {
   it('openBracket resolves — never rejects — and records the error tagged to the id', async () => {
-    mocks.fetchMe.mockResolvedValue({ registrations: [], activeAssignedMatch: null, currentTournamentPhase: null, activeTournamentId: null, assignedMatch: null, countdown: null });
-    mocks.fetchUpcoming.mockResolvedValue([]);
-    mocks.fetchMyRegistrations.mockResolvedValue([]);
-    mocks.fetchBracket.mockRejectedValue(new Error('invalid_tournament_id'));
+    mocks.fetchMy.mockResolvedValue({ registrations: [], tournaments: [], activeAssignedMatch: null, features: { tournaments: true, fritzCup: false } });
+    mocks.fetchUpcoming.mockResolvedValue({ tournaments: [], features: { tournaments: true, fritzCup: false } });
+    mocks.fetchBracket.mockRejectedValue(new TournamentApiError({ code: 'invalid_tournament_id' }));
 
-    const { result } = renderHook(() => useTournament({ userId: 'u1' }));
+    const { result } = renderHook(() => useTournament({ userId: 'u1', enabled: true }));
 
     await act(async () => {
       await expect(result.current.openBracket('bad-id')).resolves.toBeUndefined();

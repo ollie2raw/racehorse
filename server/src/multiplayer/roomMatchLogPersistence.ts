@@ -86,8 +86,15 @@ function buildPersistedRoomSummary(
   room: Room,
   status: PersistedRoomMatchLogStatus,
 ): Record<string, unknown> | null {
+  // The exact tournament match this room played (absent for other rooms):
+  // terminal-result recovery matches an archive to its match by this, not by
+  // room code and players alone.
+  const tournamentMatch = room.scheduledTournamentMatchId
+    ? { scheduledTournamentMatchId: room.scheduledTournamentMatchId }
+    : {};
   if (!room.state) {
     return {
+      ...tournamentMatch,
       status,
       gameStarted: false,
       playerCount: room.players.length,
@@ -100,6 +107,7 @@ function buildPersistedRoomSummary(
   }
 
   return {
+    ...tournamentMatch,
     status,
     gameStarted: true,
     gameOver: room.state.gameOver,
@@ -224,6 +232,32 @@ export async function queryLatestPersistedRoomMatchLogByRoomCode(
     if (isMissingRoomMatchLogsTable(error)) {
       persistentRoomMatchLogsAvailable = false;
       return null;
+    }
+    throw error;
+  }
+}
+
+/** The most recent archives for a room code, newest first (at most `limit`). */
+export async function queryRecentPersistedRoomMatchLogsByRoomCode(
+  roomCode: string,
+  limit = 5,
+): Promise<PersistedRoomMatchLogRow[]> {
+  if (persistentRoomMatchLogsAvailable === false) return [];
+
+  const code = roomCode.trim().toUpperCase();
+  if (!code) return [];
+
+  try {
+    const rows = await supabaseFetch<PersistedRoomMatchLogRow[]>(
+      `/rest/v1/room_match_logs?select=match_id,room_code,status,event_log_version,last_event_sequence,event_count,started_at,archived_at,participant_user_ids,participants,summary,state_snapshot,events&room_code=eq.${encodeURIComponent(code)}&order=archived_at.desc&limit=${Math.max(1, Math.floor(limit))}`,
+      { method: 'GET' },
+    );
+    persistentRoomMatchLogsAvailable = true;
+    return rows ?? [];
+  } catch (error) {
+    if (isMissingRoomMatchLogsTable(error)) {
+      persistentRoomMatchLogsAvailable = false;
+      return [];
     }
     throw error;
   }

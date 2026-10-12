@@ -16,6 +16,7 @@ import {
   applyTournamentGameOverFromRoom,
   findTournamentMatchByRoom,
 } from '../scheduledTournament';
+import { isTournamentRoomCode } from '../scheduledTournament/tournamentRoomCode';
 import {
   formatFritzActivityOpponentLabel,
   getPendingFritzMatchContext,
@@ -180,11 +181,25 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
   // `roomKind`) on purpose: they are the *routing* to bracket advancement, and
   // only the scheduled-tournament system routes here (legacy league is excluded
   // upstream in roomSession's game-over branch and runs its own finalizer).
-  if (winnerUserId) {
+  //
+  // A Fritz seat has no user id; in a tournament room its seat id is its id on
+  // the match row (bot:fritz:...), so a Fritz win is a normal result. Seat
+  // scores go with their ids so the engine can put them in the row's
+  // player1/player2 order: room seats are in join order, not row order.
+  const tournamentRoom = Boolean(room.scheduledTournamentMatchId) || isTournamentRoomCode(room.code);
+  const tournamentPlayerId = (seat: typeof a): string | null =>
+    seat.userId ?? (tournamentRoom && seat.id.startsWith('bot:fritz:') ? seat.id : null);
+  const tournamentWinnerId =
+    winnerSeatId === a.id ? tournamentPlayerId(a) : winnerSeatId === b.id ? tournamentPlayerId(b) : null;
+  if (tournamentWinnerId) {
     const applied = await applyTournamentGameOverFromRoom(io, room, {
-      winnerUserId,
+      winnerUserId: tournamentWinnerId,
       player1Score: scoreA,
       player2Score: scoreB,
+      seatScores: [
+        { playerId: tournamentPlayerId(a), score: scoreA },
+        { playerId: tournamentPlayerId(b), score: scoreB },
+      ],
     });
     if (applied) return;
   }

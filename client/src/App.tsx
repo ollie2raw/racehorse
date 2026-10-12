@@ -74,6 +74,11 @@ import { resolveAppRoute } from './routing/appRoutePath';
 import { useFullscreen } from './utils/useFullscreen';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { OfflineBanner } from './components/OfflineBanner';
+import { TournamentReadyBannerHost } from './tournament/TournamentReadyBannerHost';
+import { TournamentPostgameContext } from './tournament/TournamentPostgameContext';
+import { useNextRoundJoin } from './tournament/useNextRoundJoin';
+import { useTournamentLiveConnection } from './tournament/useTournamentLiveConnection';
+import { isTournamentsEnabled } from './config/tournamentsFeature';
 import { deleteAccount } from './auth/deleteAccount';
 
 function normalizeRoomCode(value: unknown): string {
@@ -406,6 +411,7 @@ export default function App() {
 
   const tournamentSession = useTournamentMatchSession({
     socket,
+    isConnected,
     attachRuntime: tournamentAttachRuntime,
     appMode,
     authUserId: authUser?.id ?? null,
@@ -706,11 +712,7 @@ export default function App() {
     you,
     authProfile,
   });
-  const myHandle = authProfile?.username
-    ? `@${authProfile.username}`
-    : authUser?.email
-      ? `@${authUser.email.split('@')[0]}`
-      : '@player';
+  const myHandle = authProfile?.username ? `@${authProfile.username}` : '@player';
   const homeRatingLabel = (authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : 800).toLocaleString();
   useRenderProfiler('AppNonGame');
   const isRoomHost = players[0]?.id === you;
@@ -810,6 +812,7 @@ export default function App() {
     {WELCOME_MODAL_VISIBLE ? (
       <WelcomeModal
         open={welcomeOpen}
+        tournamentFeatures={tournament.features}
         onDismiss={dismissWelcome}
         onNavigate={(mode) => {
           dismissWelcome();
@@ -887,6 +890,34 @@ export default function App() {
     autoJoinAttemptedRef,
     roomOperationEpochRef,
   });
+
+  useTournamentLiveConnection({
+    enabled: isTournamentsEnabled(),
+    signedIn: Boolean(authUser),
+    myTournaments: tournament.myTournaments,
+    activeAssignedMatch: tournament.activeAssignedMatch,
+    appMode,
+    socket,
+    isConnected,
+    connectRef,
+  });
+  const leaveFinishedTournamentMatch = useCallback(() => navigateAfterTournamentMatch('bracket'), [navigateAfterTournamentMatch]);
+  const joinNextRound = useNextRoundJoin({
+    appMode,
+    joinedRoom,
+    currentMatchId: tournamentMatch?.matchId ?? null,
+    leaveFinishedMatch: leaveFinishedTournamentMatch,
+    attach: attachAssignedTournamentMatch,
+  });
+  const tournamentPostgame = useMemo(
+    () => ({
+      myTournaments: tournament.myTournaments,
+      activeAssignedMatch: tournament.activeAssignedMatch,
+      joining: tournamentAttachPhase === 'pending',
+      onJoin: joinNextRound,
+    }),
+    [tournament.myTournaments, tournament.activeAssignedMatch, tournamentAttachPhase, joinNextRound],
+  );
 
   const appRoutesHostSource = {
     host: {
@@ -1012,8 +1043,24 @@ export default function App() {
   return (
     // eslint-disable-next-line react-hooks/refs -- ref object shared into a hook/provider — its .current is read only inside that consumer's effects/callbacks; the rule cannot see across the call boundary (D-2)
     <MultiplayerRuntimeProvider runtime={multiplayerRuntime}>
-    <>
+    <TournamentPostgameContext.Provider value={tournamentPostgame}>
       <OfflineBanner online={isOnline} />
+      <TournamentReadyBannerHost
+        enabled={isTournamentsEnabled() && Boolean(authUser)}
+        activeAssignedMatch={tournament.activeAssignedMatch}
+        pendingMatch={tournament.pendingMatch}
+        pendingMatchAtMono={tournament.pendingMatchAtMono}
+        myRequestedAtMono={tournament.myRequestedAtMono}
+        cancelledTournamentIds={tournament.cancelledTournamentIds}
+        appMode={appMode}
+        tournamentSubView={tournamentSubView}
+        activeTournamentId={activeTournamentId}
+        joinedRoom={joinedRoom}
+        currentTournamentMatch={tournamentMatch}
+        liveGameOver={Boolean(liveGameOver)}
+        joining={tournamentAttachPhase === 'pending'}
+        onJoin={attachAssignedTournamentMatch}
+      />
       {joinedRoom ? (
         <ErrorBoundary
           context="multiplayer-shell"
@@ -1065,7 +1112,7 @@ export default function App() {
         </ErrorBoundary>
       ) : null}
       <AppRoutesGamePropsHost source={appRoutesHostSource} />
-    </>
+    </TournamentPostgameContext.Provider>
     </MultiplayerRuntimeProvider>
   );
 }

@@ -65,13 +65,13 @@ export function useTournamentBracketTerminal({
       phase === 'in_match'
     ) {
       setActiveTournamentId(tid);
-      if (tournamentSubView === 'hub') {
-        if (phase === 'bracket_lobby' || phase === 'registered') {
-          logger.operational('tournament:hub', 'tournament lobby detected, routing', { tournamentId: tid, phase });
-        }
-        setTournamentSubView('bracket');
-      }
-      if (!tournament.activeBracket || tournament.activeBracket.tournament.id !== tid) {
+      // The Hub shows every one of these states on its own card (Phase 3C), so a
+      // registered player is never pulled off the Hub into the bracket; the bracket
+      // only loads when the player is already looking at it.
+      if (
+        tournamentSubView === 'bracket' &&
+        (!tournament.activeBracket || tournament.activeBracket.tournament.id !== tid)
+      ) {
         void tournament.openBracket(tid);
       }
     }

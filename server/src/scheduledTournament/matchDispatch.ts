@@ -6,6 +6,10 @@ import type { MatchRow } from './types';
 import { isTournamentRoomCode, makeTournamentRoomCode } from './tournamentRoomCode';
 import type { Room } from '../rooms';
 import { seatSyntheticBotInRoom } from '../multiplayer/botSeating';
+import { tournamentStarterUserId } from './tournamentStarter';
+import { updateMatchIfUnchanged } from './casWrites';
+import { withServerNow } from './serverNow';
+import { alertTournamentAnomaly } from './tournamentAlerts';
 
 const log = childLogger('tournament:dispatch');
 
@@ -24,6 +28,8 @@ export type DispatchTournamentMatchResult = {
   recipients: string[];
   reusedExistingRoom: boolean;
   emittedReady: boolean;
+  /** Another process changed the match before this dispatch's write: nothing was written. */
+  superseded?: boolean;
 };
 
 export type DispatchTournamentMatchOptions = {
@@ -69,15 +75,22 @@ export async function promoteScheduledMatchToInProgress(
   const match = await persistence.fetchMatchById(matchId);
   if (!match || match.status === 'completed' || match.status === 'bye') return;
   if (match.status === 'in_progress') return;
-  await persistence.updateMatch(matchId, {
+  // The write is the waiting/ready → in_progress transition itself: only from
+  // the status read, never onto a match decided or completed meanwhile.
+  const promoted = await updateMatchIfUnchanged(persistence, matchId, { status: match.status }, {
     status: 'in_progress',
     started_at: match.started_at ?? startedAt,
     status_reason: null,
   });
+  if (!promoted) {
+    log.info({ matchId, roomCode: match.room_code }, 'promote skipped: the match changed since it was read');
+    return;
+  }
   log.info({ matchId, roomCode: match.room_code, humanUserId: humanUserId ?? null }, 'promoted in_progress after human attach');
 }
 
-function botLabel(tier: MatchRow['bot_tier']): string {
+/** A Fritz seat's public name for its match tier (never its internal id). */
+export function botLabel(tier: MatchRow['bot_tier']): string {
   if (tier === 'master') return 'Master Fritz';
   if (tier === 'elite') return 'Elite Fritz';
   return 'Fritz';
@@ -119,8 +132,8 @@ export async function dispatchTournamentMatch(
   if (match.status === 'completed' || match.status === 'bye') throw new Error('match_invalid_state');
 
   const now = opts.now ?? new Date();
-  const readyAt = match.ready_at ?? now.toISOString();
-  const readyDeadlineAt = match.ready_deadline_at ?? new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString();
+  let readyAt = match.ready_at ?? now.toISOString();
+  let readyDeadlineAt = match.ready_deadline_at ?? new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString();
   const roomCode = match.room_code && match.room_code.trim()
     ? match.room_code.trim().toUpperCase()
     : makeTournamentRoomCode(match);
@@ -134,13 +147,32 @@ export async function dispatchTournamentMatch(
   let reusedExistingRoom = Boolean(match.room_code);
   try {
     room = persistence.getRoom(roomCode);
-  } catch {
+    // A room in memory under this code that belongs to another match (a legacy
+    // room-code collision) is never taken over.
+    if (room.scheduledTournamentMatchId && room.scheduledTournamentMatchId !== match.id) {
+      alertTournamentAnomaly(
+        'tournament_foreign_live_session',
+        { tournamentId: match.tournament_id, matchId: match.id, roomCode },
+        { foreignMatchId: room.scheduledTournamentMatchId, stage: 'dispatch' },
+      );
+      throw new Error('tournament_room_session_mismatch');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'tournament_room_session_mismatch') throw err;
     reusedExistingRoom = false;
-    room = persistence.createReservedRoom(roomCode, { winningScore: tournament.win_target });
+    // Not in memory (first dispatch, or after a restart): a stored game in
+    // progress must be restored, never covered by an empty room.
+    room = persistence.restoreOrCreateRoom
+      ? await persistence.restoreOrCreateRoom(roomCode, match.id, { winningScore: tournament.win_target, skipPregameDraw: true })
+      : persistence.createReservedRoom(roomCode, { winningScore: tournament.win_target, skipPregameDraw: true });
   }
   room.scheduledTournamentMatchId = match.id;
   room.scheduledTournamentId = tournament.id;
   room.scheduledTournamentBotTier = match.bot_tier ?? undefined;
+  // No interactive pre-game draw in tournaments: the server picks the starter
+  // (same answer on every dispatch). A started game is never touched.
+  room.scheduledTournamentStarterUserId = tournamentStarterUserId(match) ?? undefined;
+  if (!room.state) room.config = { ...room.config, skipPregameDraw: true };
 
   if (isBotUserId(match.player1_id)) {
     seatSyntheticBotInRoom(roomCode, match.player1_id, botLabel(match.bot_tier));
@@ -149,21 +181,57 @@ export async function dispatchTournamentMatch(
     seatSyntheticBotInRoom(roomCode, match.player2_id, botLabel(match.bot_tier));
   }
 
+  let dispatchedNow = false;
+  let effectiveStatus: MatchRow['status'] = match.status;
   if (!alreadyReady) {
-    await persistence.updateMatch(match.id, {
+    // Compare-and-set on every field this write fills or clears, as read: a
+    // dispatch decided from an older read never replaces a newer room,
+    // deadline or reason, nor moves a match that has since started, been
+    // decided or completed.
+    dispatchedNow = await updateMatchIfUnchanged(persistence, match.id, {
+      status: match.status,
+      room_code: match.room_code ?? null,
+      ready_at: match.ready_at,
+      ready_deadline_at: match.ready_deadline_at,
+      status_reason: match.status_reason,
+    }, {
       room_code: roomCode,
       status: match.status === 'in_progress' ? 'in_progress' : 'ready',
       ready_at: readyAt,
       ready_deadline_at: readyDeadlineAt,
       status_reason: null,
     });
-    const humanUserIds = [match.player1_id, match.player2_id].filter(
-      (id): id is string => Boolean(id && !isBotUserId(id)),
-    );
-    log.info({ matchId: match.id, roomCode, humanUserIds }, 'match ready');
+    if (dispatchedNow) {
+      const humanUserIds = [match.player1_id, match.player2_id].filter(
+        (id): id is string => Boolean(id && !isBotUserId(id)),
+      );
+      log.info({ matchId: match.id, roomCode, humanUserIds }, 'match ready');
+    } else {
+      // Another process changed the match first: report its current state.
+      const current = await persistence.fetchMatchById(match.id);
+      log.info({ matchId: match.id, roomCode, currentStatus: current?.status ?? null }, 'dispatch write skipped: the match changed since it was read');
+      if (!current || (current.status !== 'ready' && current.status !== 'in_progress')) {
+        return {
+          ok: true,
+          matchId: match.id,
+          tournamentId: match.tournament_id,
+          roomCode: current?.room_code || roomCode,
+          status: current?.status === 'in_progress' ? 'in_progress' : 'ready',
+          readyAt: current?.ready_at ?? readyAt,
+          readyDeadlineAt: current?.ready_deadline_at ?? readyDeadlineAt,
+          recipients: [],
+          reusedExistingRoom,
+          emittedReady: false,
+          superseded: true,
+        };
+      }
+      effectiveStatus = current.status;
+      readyAt = current.ready_at ?? readyAt;
+      readyDeadlineAt = current.ready_deadline_at ?? readyDeadlineAt;
+    }
   }
 
-  const shouldEmit = !alreadyReady || opts.emitIfAlreadyReady === true || opts.reason === 'recovery';
+  const shouldEmit = dispatchedNow || opts.emitIfAlreadyReady === true || opts.reason === 'recovery';
   const recipients: string[] = [];
   const recipientSockets = shouldEmit
     ? Array.from(io.sockets.sockets.values()).filter((sock) => {
@@ -191,7 +259,7 @@ export async function dispatchTournamentMatch(
         round: match.round,
         matchNumber: match.match_number,
         roomCode,
-        matchStatus: match.status === 'in_progress' ? 'in_progress' as const : 'ready' as const,
+        matchStatus: effectiveStatus === 'in_progress' ? 'in_progress' as const : 'ready' as const,
         readyAt,
         readyDeadlineAt,
         opponentId,
@@ -201,7 +269,7 @@ export async function dispatchTournamentMatch(
             : usernames.get(opponentId) ?? null
           : null,
       };
-      sock.emit('tournament:match_ready', payload);
+      sock.emit('tournament:match_ready', withServerNow(payload));
     }
     if (recipientSockets.length === 0) {
       log.debug({ matchId: match.id, roomCode }, 'match_ready skipped — no connected sockets');
@@ -213,7 +281,7 @@ export async function dispatchTournamentMatch(
     matchId: match.id,
     tournamentId: match.tournament_id,
     roomCode,
-    status: match.status === 'in_progress' ? 'in_progress' : 'ready',
+    status: effectiveStatus === 'in_progress' ? 'in_progress' : 'ready',
     readyAt,
     readyDeadlineAt,
     recipients,

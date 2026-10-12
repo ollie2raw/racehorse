@@ -6,6 +6,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { useTournamentClockRecovery } from '../tournament/tournamentMatchClock';
+import { clearTournamentGameContext } from '../tournament/tournamentAnalytics';
 import {
   isMultiplayerPostGameReviewLocallyEligible,
   isPositionalCoachingProseEnabled,
@@ -629,6 +631,15 @@ function MultiplayerGameShellComponent({
     }
     prevOppCountRef.current = opponentTileCount;
   }, [opponentTileCount]);
+
+  // Leaving the room ends its tournament analytics context.
+  useEffect(() => () => clearTournamentGameContext(joinedRoom), [joinedRoom]);
+
+  useTournamentClockRecovery({
+    roomCode: joinedRoom,
+    active: Boolean(tournamentMatch),
+    requestState: (reason) => { void fetchGameState(reason); },
+  });
 
   const opponent = players.find((pl) => pl.id !== you) ?? null;
   const opponentName = tournamentMatch

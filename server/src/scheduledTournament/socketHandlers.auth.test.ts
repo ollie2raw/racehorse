@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import type { Socket } from 'socket.io';
 import { registerTournamentSocketHandlers } from './socketHandlers';
+import { ackTakingServerNow } from './serverNow.testkit';
 
 // These tests cover live tournaments; the feature is off by default (TOURNAMENTS_ENABLED).
 beforeEach(() => { vi.stubEnv('TOURNAMENTS_ENABLED', 'true'); });
@@ -18,6 +19,8 @@ vi.mock('./persistence', async () => {
     registerForTournament: (...args: unknown[]) => mocks.registerForTournament(...args),
     withdrawFromTournament: (...args: unknown[]) => mocks.withdrawFromTournament(...args),
     fetchBracketView: vi.fn(),
+    // The registration_updated broadcast reads the tournament for its audience.
+    fetchTournamentById: vi.fn(async (id: string) => ({ id, kind: 'live', owner_user_id: null })),
   };
 });
 
@@ -35,7 +38,7 @@ function makeSocket(userId?: string): Socket {
     _emit: (event: string, payload: unknown, ack?: (resp: unknown) => void) => {
       const handler = handlers.get(event);
       if (!handler) throw new Error(`no handler for ${event}`);
-      return handler(payload, ack);
+      return handler(payload, ack ? ackTakingServerNow(ack) : ack);
     },
   };
   return socket as unknown as Socket & { _emit: typeof socket._emit };

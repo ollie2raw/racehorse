@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ownedLease } from './orchestratorLease.testkit';
 
 const mocks = vi.hoisted(() => ({
   fetchTournamentsByStatus: vi.fn(),
@@ -8,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   dispatchScheduledStartMatches: vi.fn(),
   reconcileExpiredReadyMatches: vi.fn(),
   cancelTournament: vi.fn(),
+  cancelTournamentBeforeStart: vi.fn(),
   supabaseFetch: vi.fn(),
   captureMessage: vi.fn(),
 }));
@@ -32,6 +34,7 @@ vi.mock('./engine', () => ({
   reconcileExpiredReadyMatches: (...args: unknown[]) => mocks.reconcileExpiredReadyMatches(...args),
   dispatchScheduledStartMatches: (...args: unknown[]) => mocks.dispatchScheduledStartMatches(...args),
   cancelTournament: (...args: unknown[]) => mocks.cancelTournament(...args),
+  cancelTournamentBeforeStart: (...args: unknown[]) => mocks.cancelTournamentBeforeStart(...args),
 }));
 
 vi.mock('../supabaseUtils', () => ({
@@ -65,17 +68,19 @@ describe('startTournamentScheduler stale cleanup', () => {
     mocks.supabaseFetch.mockResolvedValue(undefined);
   });
 
-  it('cancels stale in-progress tournaments instead of dispatching them', async () => {
+  it('finishes stale in-progress tournaments through the backstop instead of cancelling or dispatching them', async () => {
+    const resolveExpiredTournament = vi.fn().mockResolvedValue({ kind: 'completed', resolved: 0 });
+    vi.doMock('./eventBackstop', () => ({ resolveExpiredTournament }));
     const { startTournamentScheduler, stopTournamentScheduler } = await import('./scheduler');
     const io = { emit: vi.fn() } as any;
 
-    startTournamentScheduler(io);
-    await Promise.resolve();
-    await Promise.resolve();
+    startTournamentScheduler(io, { lease: ownedLease() });
+    await vi.waitFor(() => expect(resolveExpiredTournament).toHaveBeenCalledWith(io, 'tour-stale', undefined, expect.any(Date), expect.objectContaining({ id: 'tour-stale' })));
 
-    expect(mocks.cancelTournament).toHaveBeenCalledWith(io, 'tour-stale', undefined, 'active_window_expired');
+    expect(mocks.cancelTournament).not.toHaveBeenCalled();
     expect(mocks.dispatchScheduledStartMatches).not.toHaveBeenCalled();
     stopTournamentScheduler();
+    vi.doUnmock('./eventBackstop');
   });
 
   it('does not tick when TOURNAMENT_SCHEDULER_ENABLED=false (D-7 singleton gate)', async () => {
@@ -84,7 +89,7 @@ describe('startTournamentScheduler stale cleanup', () => {
       const { startTournamentScheduler, stopTournamentScheduler } = await import('./scheduler');
       const io = { emit: vi.fn() } as any;
 
-      startTournamentScheduler(io);
+      startTournamentScheduler(io, { lease: ownedLease() });
       await Promise.resolve();
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(60_000);
@@ -106,6 +111,7 @@ describe('closeRegistrationWithEscalation', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    mocks.cancelTournamentBeforeStart.mockResolvedValue(true);
   });
 
   it('retries quietly below the threshold, then alerts once and cancels with a reason', async () => {
@@ -119,7 +125,7 @@ describe('closeRegistrationWithEscalation', () => {
       expect(result).toEqual({ started: false, reason: 'close_start_failed' });
     }
     expect(mocks.captureMessage).not.toHaveBeenCalled();
-    expect(mocks.cancelTournament).not.toHaveBeenCalled();
+    expect(mocks.cancelTournamentBeforeStart).not.toHaveBeenCalled();
 
     const final = await closeRegistrationWithEscalation(io, 'tour-stuck', failures);
     expect(final).toEqual({ started: false, reason: 'cancelled_after_failures', cancelled: true });
@@ -129,10 +135,28 @@ describe('closeRegistrationWithEscalation', () => {
       fingerprint: ['tournament-close-start-failed', 'tour-stuck'],
       tags: { tournament_alert: 'close_start_failed', error_code: 'Tournament caps at 8 players' },
     });
-    expect(mocks.cancelTournament).toHaveBeenCalledWith(
+    expect(mocks.cancelTournamentBeforeStart).toHaveBeenCalledWith(
       io, 'tour-stuck', undefined, 'bracket_generation_failed:Tournament caps at 8 players',
     );
     expect(failures.has('tour-stuck')).toBe(false);
+  });
+
+  it('a tournament another starter already moved out of registration is not cancelled, and no alert is sent', async () => {
+    const { closeRegistrationWithEscalation, CLOSE_START_MAX_CONSECUTIVE_FAILURES } = await import('./scheduler');
+    const io = { emit: vi.fn() } as any;
+    const failures = new Map<string, number>();
+    mocks.closeRegistrationAndStart.mockRejectedValue(new Error('fetch failed'));
+    mocks.cancelTournamentBeforeStart.mockResolvedValue(false);
+
+    let final: unknown;
+    for (let i = 0; i < CLOSE_START_MAX_CONSECUTIVE_FAILURES; i += 1) {
+      final = await closeRegistrationWithEscalation(io, 'tour-started-elsewhere', failures);
+    }
+
+    expect(final).toEqual({ started: false, reason: 'already_left_registration' });
+    expect(mocks.cancelTournamentBeforeStart).toHaveBeenCalledTimes(1);
+    expect(mocks.captureMessage).not.toHaveBeenCalled();
+    expect(failures.has('tour-started-elsewhere')).toBe(false);
   });
 
   it('a success resets the count, so only consecutive failures escalate', async () => {
@@ -149,7 +173,7 @@ describe('closeRegistrationWithEscalation', () => {
 
     mocks.closeRegistrationAndStart.mockRejectedValueOnce(new Error('transient'));
     await closeRegistrationWithEscalation(io, 'tour-flaky', failures);
-    expect(mocks.cancelTournament).not.toHaveBeenCalled();
+    expect(mocks.cancelTournamentBeforeStart).not.toHaveBeenCalled();
     expect(mocks.captureMessage).not.toHaveBeenCalled();
   });
 
@@ -176,7 +200,7 @@ describe('closeRegistrationWithEscalation', () => {
     });
     mocks.supabaseFetch.mockResolvedValue(undefined);
     const { startTournamentScheduler, stopTournamentScheduler } = await import('./scheduler');
-    startTournamentScheduler({ emit: vi.fn() } as any);
+    startTournamentScheduler({ emit: vi.fn() } as any, { lease: ownedLease() });
     await vi.advanceTimersByTimeAsync(0);
     expect(mocks.closeRegistrationAndStart).toHaveBeenCalledWith(expect.anything(), 'tour-b');
     stopTournamentScheduler();

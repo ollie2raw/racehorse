@@ -107,6 +107,17 @@ export function makeInMemoryMatchRpc(
       const match = store.getMatch(params.matchId);
       if (!match) throw new Error('match_not_found');
 
+      // complete_tournament_match_if_unchanged (2026-10-08_tournament_orchestrator_cas.sql):
+      // a result decided from an earlier read is refused if the match has moved
+      // on, or a user it names as absent has since joined.
+      if (match.status !== 'completed') {
+        if (params.expectStatus && match.status !== params.expectStatus) throw new Error('match_state_changed');
+        if (params.requireUnjoined?.some((u) =>
+          (u === match.player1_id && match.player1_joined_at) || (u === match.player2_id && match.player2_joined_at))) {
+          throw new Error('attendance_changed');
+        }
+      }
+
       // 2 ── already completed → idempotent / conflict-explicit
       if (match.status === 'completed') {
         return {
@@ -125,6 +136,11 @@ export function makeInMemoryMatchRpc(
           placements: null,
         };
       }
+
+      // 2b ── the parent must be in_progress (2026-10-09_tournament_completion_guard.sql)
+      const tournamentStatus = store.getTournamentStatus(match.tournament_id);
+      if (tournamentStatus === 'cancelled') throw new Error('tournament_cancelled');
+      if (tournamentStatus !== 'in_progress') throw new Error('tournament_not_in_progress');
 
       // 3 ── playable state
       if (match.status === 'waiting') throw new Error('match_not_playable');

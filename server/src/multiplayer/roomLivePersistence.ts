@@ -14,8 +14,10 @@ import type { GhostMoveLogEntry } from '../ghost/service';
 import type { Room, LeadTracker } from '../rooms';
 import { deleteRoom, peekRoom } from '../rooms';
 import type { RoomMatchEvent } from '../roomEvents';
+import * as Sentry from '@sentry/node';
 import { supabaseFetch } from '../supabaseUtils';
 import { childLogger } from '../logger';
+import { clearAlert, shouldSendAlert } from '../scheduledTournament/tournamentAlerts';
 import { applyLiveSessionRow } from './applyLiveSessionRoom';
 import { roomKind } from './roomKind';
 
@@ -121,7 +123,23 @@ export type ActiveRoomHydrationResult =
   | { kind: 'snapshot_freshness_unknown'; error: string }
   | { kind: 'snapshot_stale'; error: string }
   | { kind: 'snapshot_invalid'; error: string }
-  | { kind: 'persistence_unavailable'; error: string };
+  | { kind: 'persistence_unavailable'; error: string }
+  /**
+   * The stored session belongs to another scheduled-tournament match than the
+   * one being restored (only with `expectedTournamentMatchId`). Nothing is
+   * published or written.
+   */
+  | { kind: 'foreign_tournament_session'; error: 'tournament_room_session_mismatch'; storedMatchId: string };
+
+export type EnsureRoomHydratedOptions = {
+  /**
+   * Restore for this scheduled-tournament match only: a stored session that
+   * names a different `scheduled_tournament_match_id` is refused before any
+   * room is created, so it is never visible in the room map. A session that
+   * names no match is validated as before (the caller checks the room).
+   */
+  expectedTournamentMatchId?: string;
+};
 
 const flushTimersByRoomCode = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingPersistByRoomCode = new Map<
@@ -129,6 +147,61 @@ const pendingPersistByRoomCode = new Map<
   { room: Room; roster: LiveRosterEntry[] }
 >();
 const inFlightHydrationByRoomCode = new Map<string, Promise<ActiveRoomHydrationResult>>();
+
+/**
+ * The last live-session row this process knows is stored for each room code:
+ * read by hydration, or written by this process. Cleared by an explicit delete.
+ * Backs the overwrite guard below.
+ */
+const knownPersistedSessionByRoomCode = new Map<string, { matchId: string; status: RoomLiveSessionStatus }>();
+
+function rememberPersistedSession(row: Pick<RoomLiveSessionRow, 'room_code' | 'match_id' | 'status'>): void {
+  knownPersistedSessionByRoomCode.set(row.room_code.trim().toUpperCase(), {
+    matchId: row.match_id,
+    status: row.status,
+  });
+}
+
+const overwriteRefusalAlertKey = (roomCode: string) => `live-session-overwrite-refused:${roomCode}`;
+
+/** A save for this room code went through: a later refusal alerts immediately again. */
+function rememberWrittenSession(row: Pick<RoomLiveSessionRow, 'room_code' | 'match_id' | 'status'>): void {
+  rememberPersistedSession(row);
+  clearAlert(overwriteRefusalAlertKey(row.room_code.trim().toUpperCase()));
+}
+
+/**
+ * Overwrite guard (tournament rooms): a room must not replace, or finalize and
+ * delete, a stored session holding a game in progress ('playing' / 'hand_over')
+ * for a different match. That is what an empty room created over an unrestored
+ * game does after a restart. An explicit `deleteLiveRoomSession` lifts it.
+ */
+function refusesLiveSessionOverwrite(room: Room): boolean {
+  if (inferLiveSessionSourceType(room) !== 'tournament') return false;
+  const code = room.code.trim().toUpperCase();
+  const known = knownPersistedSessionByRoomCode.get(code);
+  if (!known || known.matchId === room.matchId) return false;
+  if (known.status !== 'playing' && known.status !== 'hand_over') return false;
+  log.error(
+    { roomCode: code, storedMatchId: known.matchId, storedStatus: known.status, roomMatchId: room.matchId },
+    'refused to overwrite a stored in-progress tournament session with a different match',
+  );
+  // Logged every time; Sentry gets the first and then at most one per 10 min per room code.
+  if (shouldSendAlert(overwriteRefusalAlertKey(code))) {
+    Sentry.captureMessage('[tournament] refused to overwrite a stored in-progress live session', {
+      level: 'error',
+      fingerprint: ['tournament-live-session-overwrite-refused', code],
+      tags: {
+        tournament_alert: 'live_session_overwrite_refused',
+        room_code: code,
+        tournament_id: room.scheduledTournamentId ?? undefined,
+        match_id: room.scheduledTournamentMatchId ?? undefined,
+      },
+      extra: { roomCode: code, storedMatchId: known.matchId, storedStatus: known.status, roomMatchId: room.matchId },
+    });
+  }
+  return true;
+}
 
 let liveSessionsTableAvailable: boolean | null = null;
 
@@ -637,6 +710,7 @@ async function persistLiveSessionRowNow(
       },
     );
     liveSessionsTableAvailable = true;
+    rememberWrittenSession(row);
     return { ok: true };
   } catch (error) {
     if (isMissingRoomLiveSessionsTable(error)) {
@@ -769,6 +843,9 @@ async function persistLiveSessionForRoom(
   commitFence: RoomDurabilityFence,
 ): Promise<PersistLiveSessionAttemptResult> {
   const roomCode = room.code.trim().toUpperCase();
+  if (refusesLiveSessionOverwrite(room)) {
+    return { ok: false, status: 'failed', error: 'live_session_overwrite_refused' };
+  }
   if (!isLiveSessionLogEntriesEnabled() || Date.now() < logEntriesUnavailableUntilMs || liveSessionsTableAvailable === false) {
     persistedLogLengthsByRoomCode.delete(roomCode);
     return persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
@@ -793,7 +870,10 @@ async function persistLiveSessionForRoom(
     persistedLogLengthsByRoomCode.delete(roomCode);
     return persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
   }
-  if (result.ok) persistedLogLengthsByRoomCode.set(roomCode, confirmed);
+  if (result.ok) {
+    persistedLogLengthsByRoomCode.set(roomCode, confirmed);
+    rememberWrittenSession(row);
+  }
   return result;
 }
 
@@ -943,6 +1023,7 @@ export async function finalizeAndDeleteLiveRoomSession(
   if (liveSessionsTableAvailable === false) return;
 
   cancelScheduledLiveRoomPersistence(room.code);
+  if (refusesLiveSessionOverwrite(room)) return;
 
   const terminalStatus: RoomLiveSessionStatus =
     archiveStatus === 'completed' ? 'game_over' : 'abandoned';
@@ -1100,6 +1181,7 @@ export async function loadLiveRoomSession(roomCode: string): Promise<LoadLiveRoo
     if (!parsed) {
       return { kind: 'snapshot_invalid', error: 'snapshot_parse_failed' };
     }
+    rememberPersistedSession(parsed);
     if (parsed.room_shell.logStorage === 'entries') {
       const attached = await attachLogEntries(parsed);
       if (!attached.ok) return { kind: 'snapshot_invalid', error: attached.error };
@@ -1128,6 +1210,8 @@ export async function deleteLiveRoomSession(roomCode: string): Promise<void> {
   const code = roomCode.trim().toUpperCase();
   // Entries go with the row (on delete cascade).
   persistedLogLengthsByRoomCode.delete(code);
+  knownPersistedSessionByRoomCode.delete(code);
+  clearAlert(overwriteRefusalAlertKey(code));
   try {
     await supabaseFetch(
       `/rest/v1/room_live_sessions?room_code=eq.${encodeURIComponent(code)}`,
@@ -1151,8 +1235,14 @@ export async function deleteLiveRoomSession(roomCode: string): Promise<void> {
  * Returns explicit outcomes so callers can distinguish durable gameplay restore,
  * shell-only state, absence, stale/invalid snapshot, and persistence outage.
  */
-export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHydrationResult> {
+export async function ensureRoomHydrated(
+  roomCode: string,
+  options: EnsureRoomHydratedOptions = {},
+): Promise<ActiveRoomHydrationResult> {
   const code = roomCode.trim().toUpperCase();
+  const expectedMatchId = options.expectedTournamentMatchId;
+  // Concurrent hydrations share one attempt only when they expect the same thing.
+  const inFlightKey = expectedMatchId ? `${code}|${expectedMatchId}` : code;
   const existing = peekRoom(code);
   if (existing) {
     return {
@@ -1163,24 +1253,24 @@ export async function ensureRoomHydrated(roomCode: string): Promise<ActiveRoomHy
     };
   }
 
-  const inFlight = inFlightHydrationByRoomCode.get(code);
+  const inFlight = inFlightHydrationByRoomCode.get(inFlightKey);
   if (inFlight) return inFlight;
 
   const hydrationPromise = (async (): Promise<ActiveRoomHydrationResult> => {
-    const result = await runLiveRoomHydration(code);
+    const result = await runLiveRoomHydration(code, expectedMatchId);
     emitMpAuthorityHydrationResult(code, result);
     return result;
   })().finally(() => {
-    if (inFlightHydrationByRoomCode.get(code) === hydrationPromise) {
-      inFlightHydrationByRoomCode.delete(code);
+    if (inFlightHydrationByRoomCode.get(inFlightKey) === hydrationPromise) {
+      inFlightHydrationByRoomCode.delete(inFlightKey);
     }
   });
 
-  inFlightHydrationByRoomCode.set(code, hydrationPromise);
+  inFlightHydrationByRoomCode.set(inFlightKey, hydrationPromise);
   return hydrationPromise;
 }
 
-async function runLiveRoomHydration(code: string): Promise<ActiveRoomHydrationResult> {
+async function runLiveRoomHydration(code: string, expectedMatchId?: string): Promise<ActiveRoomHydrationResult> {
     const loaded = await loadLiveRoomSession(code);
     if (loaded.kind === 'not_found') {
       return { kind: 'not_found' };
@@ -1196,6 +1286,13 @@ async function runLiveRoomHydration(code: string): Promise<ActiveRoomHydrationRe
         kind: 'snapshot_invalid',
         error: loaded.error,
       };
+    }
+
+    // Identity before publication: another tournament match's session is
+    // refused here, before applyLiveSessionRow creates (publishes) a room.
+    const storedMatchId = loaded.row.scheduled_tournament_match_id;
+    if (expectedMatchId && storedMatchId && storedMatchId !== expectedMatchId) {
+      return { kind: 'foreign_tournament_session', error: 'tournament_room_session_mismatch', storedMatchId };
     }
 
     const validation = validateLiveRoomHydrationRow(code, loaded.row);
@@ -1266,5 +1363,6 @@ export function resetLiveRoomPersistenceForTests(): void {
   liveSessionsTableAvailable = null;
   rosterResolver = null;
   persistedLogLengthsByRoomCode.clear();
+  knownPersistedSessionByRoomCode.clear();
   logEntriesUnavailableUntilMs = 0;
 }

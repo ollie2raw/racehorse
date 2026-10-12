@@ -26,6 +26,9 @@ export type StateUpdatePayload = {
   forcedDrawActorId?: string;
   /** Server auto-passed players (socket ids) this frame — show a brief notice. */
   recentAutoPasses?: string[];
+  /** Scheduled-tournament rooms only: the server's turn clock (display only) and server time. */
+  tournamentClock?: unknown;
+  serverNow?: string;
 };
 
 export type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';

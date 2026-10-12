@@ -36,6 +36,8 @@ import {
 import { projectStateSpectate } from './projection/projectStateSpectate';
 import { projectStateUpdate } from './projection/projectStateUpdate';
 import { SOCKET_EVENTS } from './socketEventRegistry';
+import { recordTournamentClock, recordTournamentClockFromStateUpdate } from '../tournament/tournamentMatchClock';
+import { opponentDisconnectCopy } from './opponentDisconnectCopy';
 import {
   dispatchSessionEvents,
   sessionEventsFromProjectionRefs,
@@ -195,6 +197,9 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         }
         return;
       }
+
+      // Scheduled-tournament rooms carry the server's turn clock on every state.
+      recordTournamentClockFromStateUpdate(selectJoinedRoomCode(scope.session.sessionRef.current), payload);
 
       dispatchSessionEvents(
         scope.session.dispatchSession,
@@ -482,12 +487,20 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
 
     const onPlayerDisconnected = wrapSocketHandler(
       'player:disconnected',
-      (payload: { playerId?: string; graceMs?: number }) => {
+      (payload: { playerId?: string; graceMs?: number | null; policy?: string }) => {
         if (!payload?.playerId || payload.playerId === scope.dom.youRef.current) return;
         scope.ui.setOpponentDisconnected(true);
-        const seconds = Math.max(1, Math.round((payload.graceMs ?? 30_000) / 1000));
-        scope.ui.setOpponentDisconnectMessage(`Opponent disconnected. Waiting up to ${seconds}s…`);
+        scope.ui.setOpponentDisconnectMessage(opponentDisconnectCopy(payload));
         scope.ui.showToast('Opponent disconnected.', 2500);
+      },
+    );
+
+    const onTournamentClock = wrapSocketHandler(
+      'tournament:clock',
+      (payload: { roomCode?: string; tournamentClock?: unknown; serverNow?: string }) => {
+        const joined = selectJoinedRoomCode(scope.session.sessionRef.current);
+        if (!payload?.roomCode || !joined || payload.roomCode.trim().toUpperCase() !== joined.trim().toUpperCase()) return;
+        recordTournamentClock(joined, payload.tournamentClock ?? null, payload.serverNow);
       },
     );
 
@@ -546,6 +559,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       registerRawSocketEventHandler(SOCKET_EVENTS.GAME_DRAW_ANIMATION, asRawHandler(onDrawAnimation)),
       registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_DISCONNECTED, asRawHandler(onPlayerDisconnected)),
       registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_RECONNECTED, asRawHandler(onPlayerReconnected)),
+      registerRawSocketEventHandler(SOCKET_EVENTS.TOURNAMENT_CLOCK, asRawHandler(onTournamentClock)),
       registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_RECONNECT_TIMEOUT, asRawHandler(onPlayerReconnectTimeout)),
       registerRawSocketEventHandler(SOCKET_EVENTS.PLAYER_DISCONNECT_STALL, asRawHandler(onPlayerDisconnectStall)),
       registerRawSocketEventHandler(

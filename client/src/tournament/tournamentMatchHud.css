@@ -83,3 +83,188 @@
     letter-spacing: 0.12em;
   }
 }
+
+/* Phase 3D: server turn clock. The bar sits inside the turn pill; the
+   missed-turn warning hangs below the HUD row so it never shifts the board. */
+.tmh-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.screen.game-screen .tmh .tmh-turn {
+  position: relative;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+
+/* The countdown bar rides the pill's bottom edge: it adds no width or height. */
+.tmh-clock-bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 4px;
+  display: block;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tmh-clock-bar__fill {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  transform-origin: left center;
+  transition: transform 250ms linear;
+}
+
+/* Fixed under the HUD row, centred on the screen: never clipped by where the
+   HUD's centre slot sits, and clear of the hand at the bottom. */
+.tmh-warning {
+  position: fixed;
+  top: calc(var(--rh-safe-top, 0px) + 86px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1150;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+  padding: 5px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary, #f5efe2);
+  background: rgba(9, 15, 27, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+}
+
+.tmh-warning--severe {
+  border-color: rgba(245, 158, 11, 0.75);
+  color: #fde7b0;
+}
+
+.tmh-warning__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 900;
+  color: #0b0f19;
+  background: var(--accent-amber, #f59e0b);
+}
+
+@media (max-width: 480px) {
+  .tmh-warning {
+    white-space: normal;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tmh-clock-bar__fill { transition: none; }
+}
+
+/* Fritz identity chip on the opponent's name plate (text, not colour alone). */
+.tmh-fritz-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(231, 182, 74, 0.55);
+  color: rgba(247, 226, 181, 0.96);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+/* Phase 3E, real-app landscape phones (native compact HUD and mobile web). */
+.tmh-turn__stage {
+  display: none;
+}
+
+@media (--short-landscape) {
+  /* The round folds into the turn pill instead of a separate pill that ran
+     over the opponent's tile rack. Without a turn label the pill shows. */
+  .screen.game-screen .tmh[data-has-label='true'] .daily-fritz-progress-pill {
+    display: none !important;
+  }
+
+  .tmh-turn__stage {
+    display: inline;
+    margin-right: 0.45em;
+    opacity: 0.8;
+  }
+}
+
+/* A long opponent name never pushes the HUD row off screen. */
+.screen.game-screen .wl-top-rail:has(.tmh) .bot-hud-left-cluster .rh-hud-label,
+.screen.game-screen .wl-top-rail:has(.tmh) .bot-hud-right-cluster .rh-hud-label {
+  display: inline-block;
+  max-width: clamp(72px, 16vw, 220px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* The warning is portalled to <body>; keep it above the board and the hand. */
+body > .tmh-warning {
+  z-index: 1150;
+}
+
+@media (--short-landscape) {
+  /* Compact turn pill (web and native compact HUD): the timer must fit the
+     centre column between the two player clusters. */
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .tmh .tmh-turn.rh-hud-turn {
+    display: inline-flex !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    height: 30px !important;
+    padding: 0 12px !important;
+    font-size: 11px !important;
+    letter-spacing: 0.06em !important;
+    white-space: nowrap !important;
+  }
+
+  /* Size the side columns to their clusters so the centred timer never runs
+     over the opponent's tile rack. */
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail:has(.tmh) {
+    grid-template-columns: max-content minmax(0, 1fr) max-content !important;
+  }
+
+  /* Player pills and the opponent's rack at the native compact size on the web too. */
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail:has(.tmh) .rh-hud-pill {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: 36px !important;
+    padding: 0 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail:has(.tmh) .rh-tile-rack {
+    height: 32px !important;
+    padding: 0 2px !important;
+    gap: 3px !important;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail:has(.tmh) .rh-tile-rack__tile {
+    width: 12px !important;
+    height: 18px !important;
+    border-radius: 3px !important;
+  }
+}

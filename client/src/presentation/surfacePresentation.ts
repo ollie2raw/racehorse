@@ -53,7 +53,7 @@ export const SURFACE_BY_MODE: Record<AppMode, SurfacePresentation> = {
 export type SurfaceContext = {
   mode: AppMode;
   joinedMatch: boolean;
-  tournamentView: 'hub' | 'bracket' | 'result';
+  tournamentView: 'hub' | 'bracket' | 'result' | 'history';
   learnLessonOpen: boolean;
 };
 

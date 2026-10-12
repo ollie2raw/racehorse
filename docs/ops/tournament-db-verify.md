@@ -121,6 +121,135 @@ This script **cannot reach production**:
 
 7. **`cancel_reason`** exists on `scheduled_tournaments` (review Q9).
 
+8. **M1: tournament kind, Fritz Cup, per-user overlap lock**
+   (`2026-10-07_tournament_kind_fritz_cup.sql`, Phase 2B), on fixtures from
+   `scripts/tournament-db-verify/m1_seed.sql`:
+   - Every existing and newly seeded row is `kind='live'` with no owner; a
+     Fritz Cup without an owner, a Live Event with one, and an unknown kind are
+     rejected; the existing RPC signatures are unchanged.
+   - `start_fritz_cup` creates one `fritz_cup` row (`registration_open`, due
+     now, never a whole-second start) and only the owner's registration;
+     a retry returns the same cup (`existing: true`).
+   - Two sessions creating a cup for the same user: B blocks on the per-user
+     advisory lock, then gets A's cup. A deterministic `scheduled_start`
+     collision steps forward 1 µs; 12 users released behind a barrier all get
+     cups with unique starts.
+   - Overlap in both directions (`overlapping_tournament` with the conflicting
+     tournament), including two-session races; the same event re-registered is
+     still `already_registered`; eliminated / cancelled / completed holds no
+     longer block; Fritz Cups refuse the public registration RPC.
+   - The 60 s cooldown and the 20-per-24 h limit (`fritz_cup_cooldown`), and an
+     active cup still returned at the limit; the bracket RPC starts a cup
+     unchanged.
+
+   The fixtures for §6 use their own users, since one user can no longer hold
+   two tournaments starting minutes apart.
+
+9. **Pre-start cancellation vs start** (Phase 2B.1). The server cancels a
+   tournament before its start (`not_enough_players`, or the five-strike
+   `bracket_generation_failed:*`) with one conditional PATCH, which PostgREST
+   runs as `UPDATE … WHERE id = … AND status IN ('upcoming','registration_open')
+   RETURNING id`. Run three times in both orders against
+   `generate_tournament_bracket`:
+   - start first: the cancel blocks on the bracket's row lock, then updates 0
+     rows; the tournament stays `in_progress` with its 7 matches;
+   - cancel first: the bracket call blocks on the row lock, then raises
+     `tournament_not_startable`; the tournament stays cancelled, no matches.
+   A contrast run shows the pre-2B.1 unconditional update overwriting a
+   started tournament. Empty `registration_open` / `upcoming` events are still
+   cancelled; `in_progress`, `completed` and already-cancelled rows are
+   untouched; Fritz Cups follow the same rule.
+
+10. **Orchestrator late writes** (`2026-10-08_tournament_orchestrator_cas.sql`,
+    Phase 2C). Each guard is raced three times: a holder session commits a
+    newer write after ~3 s, and a stale session issues the guarded write at
+    ~1.5 s, built from the state read before the holder's change. Every time
+    the stale write blocks on the row lock, then updates 0 rows / is refused,
+    and the holder's state survives field for field:
+    - open registration (`status = 'upcoming'` and due);
+    - dispatch (compare-and-set on status, room_code, ready_at,
+      ready_deadline_at, status_reason) — and a started match is never moved
+      back;
+    - ready → in_progress (`status = 'ready'`) vs a recorded result;
+    - deadline extension (`status`, `ready_deadline_at`, `status_reason`);
+    - `complete_tournament_match_if_unchanged`: `attendance_changed` when the
+      named absentee joined first, `match_state_changed` when the game started
+      first (and, reversed, the no-show commits and the late join waits);
+    - `cancel_tournament_if_no_entrants`: a last-moment registration that
+      commits first prevents the cancel; once the database clock has closed
+      registration an empty event is cancelled and later registration refused;
+    - `cancel_tournament_if_bracket_unchanged`: a match completed after the
+      backstop's snapshot blocks the cancel (`bracket_changed`); so does a
+      repair that leaves every status unchanged; an unchanged bracket cancels.
+
+11. **M3 orchestrator lease** (`2026-10-08_tournament_orchestrator_lease.sql`,
+    Phase 2C): acquire on an absent key mints a token; a second owner cannot
+    acquire a valid lease (no token leaked) and the holder must renew, not
+    re-acquire; renew needs owner + token; `leased_until` is the database
+    clock + TTL; after a real 5 s expiry the old owner cannot renew and a new
+    owner acquires with a new token; the stale owner cannot release or renew
+    it; the owner's release makes the key immediately acquirable; TTL is
+    accepted only in 5..600 s; the table and RPCs are not client-reachable and
+    `assert_security_posture()` stays clean. Eight sessions released behind a
+    barrier acquire concurrently, five rounds (absent key, then an expired
+    lease taken over): exactly one owner every round.
+
+12. **Completion guard** (`2026-10-09_tournament_completion_guard.sql`,
+    Phase 2C.1): an unresolved match of a `cancelled` tournament is refused
+    with `tournament_cancelled` by every completion path (game over on a QF and
+    on the final, the no-show wrapper, forfeit), and the tournament, its
+    matches and registrations stay byte-identical (nothing promoted, no
+    placement, no champion). A result recorded before the cancellation replays
+    as an idempotent no-op (`conflict` for a different winner). A `completed`
+    tournament with an unresolved match, and `upcoming` / `registration_open`
+    tournaments, refuse with `tournament_not_in_progress`. Three rounds of each
+    race: result first (the backstop's stale snapshot cancel waits on the
+    tournament row, then `bracket_changed`; the result and its advancement
+    stand) and cancellation first (backstop cancel, and a plain conditional
+    cancel against a late final: the late result waits, then
+    `tournament_cancelled`, nothing written). Lock order, deterministically: a
+    third session holds the low-id target row while a cancel queues on it and
+    then a high-id feeder's completion arrives — with the new functions they
+    serialise on the tournament row (no deadlock; cancelled, then refused);
+    the same schedule against copies of the pre-2C.1 bodies deadlocks.
+
+13. **M2 Live Event cadence** (`2026-10-10_tournament_live_event_cadence.sql`,
+    Phase 2D). Applied last, by this section (not in `CHAIN`), so it runs over
+    a real pre-M2 state:
+    - A scratch database (`verify_m2`) with the same chain and a **fake
+      clock**: a session `search_path` of `harness_clock, pg_catalog, public`
+      resolves the seed functions' and the migration's unqualified `now()` to
+      `harness.now`. The old 48-a-day body seeds the legacy inventory from
+      2026-10-30 10:00 PT (across the 2026-11-01 fall-back), the cleanup
+      matrix is planted on it, and M2 is applied at that clock. Checked
+      against a predicate written independently of M2: exactly the eligible
+      rows are cancelled `cadence_replaced` (otherwise unchanged); every other
+      row is byte-identical except slot-time windows; the 35-minute boundary
+      (35 min kept, 36 min cancelled), past, `registration_open`,
+      `in_progress`, `completed`, cancelled, +registration, +match row and
+      three Fritz Cups are kept; slot rows keep id / start / status with a
+      12 h / 2 min window (today's 17:00 stays `upcoming` with its opening time
+      passed); a slot row with a match row is untouched; a cancelled slot is
+      not revived; no deletes; registrations and matches unchanged; every
+      desired slot exists; the migration applied again, `ensure` and `seed`
+      change nothing.
+    - Slot generation, twice: 30 local days × {17:00, 20:00} PT across
+      2026-11-01, 2027-03-14 and 2027-11-07, with the UTC instants written
+      out; 12 h / 2 min elapsed; day boundaries (16:57, 16:59, 18:00, 20:30,
+      23:59:59, 00:00:01); seeding at five clocks = exactly that set, then 0.
+    - The real database: M2 over the real legacy inventory and every fixture
+      of §2–§12; public signatures unchanged; helpers service_role only;
+      `assert_security_posture()` clean; three rounds of a pg_cron-style
+      (owner) and a Node-style (service_role) `ensure` released together
+      behind a barrier: no error, duplicate or hole, then 0 + 0; overlap stays
+      the 2-hour window at `scheduled_start` (registered 10 h ahead → a Fritz
+      Cup now is allowed; 17:00 and 20:00 can both be entered).
+    - `docs/ops/tournament-m2/preflight.sql` and `verify.sql` run before and
+      after M2 on the scratch database.
+
+The harness exits non-zero if it stops before its final banner for any
+reason (macOS bash 3.2 otherwise reports 0 after a `set -u` abort).
+
 ## Related
 
 - `supabase/tests/rls_registrations_lockdown.sql` — the same three RLS

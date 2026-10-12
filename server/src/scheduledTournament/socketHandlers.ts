@@ -1,16 +1,22 @@
 import type { Server, Socket } from 'socket.io';
 import {
   fetchBracketView,
+  fetchTournamentById,
   registerForTournament,
+  overlapConflictPayload,
   REGISTRATION_RPC_ERRORS,
   withdrawFromTournament,
 } from './persistence';
-import { TOURNAMENT_CONFIG } from './engine';
 import {
   getSocketUserId,
   rejectMismatchedPayloadUserId,
 } from './tournamentAuth';
 import { isTournamentsEnabled, TOURNAMENTS_DISABLED } from './tournamentsFeature';
+import { ackWithServerNow } from './serverNow';
+import { emitTournamentEvent } from './tournamentEvents';
+import { childLogger } from '../logger';
+
+const log = childLogger('tournament:socket');
 
 type Ack = (resp: unknown) => void;
 
@@ -24,7 +30,15 @@ function authErrorAck(ack: Ack | undefined, error: string): void {
   ack?.({ ok: false, error });
 }
 
-export function registerTournamentSocketHandlers(io: Server, socket: Socket): void {
+export function registerTournamentSocketHandlers(io: Server, rawSocket: Socket): void {
+  // Every tournament ack carries `serverNow` (see serverNow.ts).
+  const socket = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    on: (event: string, handler: (payload: any, ack?: Ack) => unknown) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rawSocket.on(event, (payload: any, ack?: Ack) => { void handler(payload, ackWithServerNow(ack)); }),
+    get data() { return rawSocket.data; },
+  } as unknown as Socket;
   socket.on('tournament:register', async (
     payload: { tournamentId?: string; userId?: string },
     ack?: Ack,
@@ -52,10 +66,13 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
         ack?.({ ok: true, alreadyRegistered: true });
         return;
       }
-      io.emit('tournament:registration_updated', { tournamentId });
       ack?.({ ok: true });
+      // After the ack: a failed broadcast never turns a registration into an error.
+      void emitTournamentEvent(io, { id: tournamentId, read: (id) => fetchTournamentById(id) }, 'tournament:registration_updated', {})
+        .catch((err) => log.warn({ err, tournamentId }, 'registration_updated not sent'));
     } catch (err) {
-      ack?.({ ok: false, error: registrationErrorCode(err) });
+      const error = registrationErrorCode(err);
+      ack?.({ ok: false, error, ...(error === 'overlapping_tournament' ? { conflict: overlapConflictPayload(err) } : {}) });
     }
   });
 
@@ -81,8 +98,10 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
       const tournamentId = payload?.tournamentId;
       if (!tournamentId) { authErrorAck(ack, 'missing_args'); return; }
       await withdrawFromTournament(tournamentId, authenticatedUserId);
-      io.emit('tournament:registration_updated', { tournamentId });
       ack?.({ ok: true });
+      // After the ack: a failed broadcast never turns a registration into an error.
+      void emitTournamentEvent(io, { id: tournamentId, read: (id) => fetchTournamentById(id) }, 'tournament:registration_updated', {})
+        .catch((err) => log.warn({ err, tournamentId }, 'registration_updated not sent'));
     } catch (err) {
       const code = registrationErrorCode(err);
       // Keep this handler's historical code for the closed-window case.
@@ -103,10 +122,9 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
       const view = await fetchBracketView(payload.tournamentId);
       ack?.({ ok: true, view });
     } catch (err) {
-      ack?.({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+      log.error({ err }, 'tournament:get_bracket failed');
+      ack?.({ ok: false, error: 'internal' });
     }
   });
 
-  // Keep the import alive so tree-shaking doesn't drop the TOURNAMENT_CONFIG export.
-  void TOURNAMENT_CONFIG;
 }

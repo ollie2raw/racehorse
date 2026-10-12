@@ -3,6 +3,8 @@ import { useCallback, useRef } from 'react';
 export function useTournamentAttachRefs() {
   const pendingTournamentAttachMatchIdRef = useRef<string | null>(null);
   const attachedTournamentMatchIdRef = useRef<string | null>(null);
+  /** The socket the server seated for the attached match (it sends that seat's updates only there). */
+  const attachedSocketIdRef = useRef<string | null>(null);
   const failedTournamentAttachByMatchIdRef = useRef<Record<string, number>>({});
   const attachInFlightRef = useRef<string | null>(null);
   const matchFinalizedRef = useRef<Set<string>>(new Set());
@@ -10,11 +12,13 @@ export function useTournamentAttachRefs() {
   const clearTournamentAttachRefs = useCallback(() => {
     pendingTournamentAttachMatchIdRef.current = null;
     attachedTournamentMatchIdRef.current = null;
+    attachedSocketIdRef.current = null;
   }, []);
 
   return {
     pendingTournamentAttachMatchIdRef,
     attachedTournamentMatchIdRef,
+    attachedSocketIdRef,
     failedTournamentAttachByMatchIdRef,
     attachInFlightRef,
     matchFinalizedRef,

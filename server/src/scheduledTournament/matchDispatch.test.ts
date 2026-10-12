@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { allHumanPlayersJoined, dispatchTournamentMatch, humanJoinedAt } from './matchDispatch';
 import type { EnginePersistence } from './persistenceInterface';
+import { SERVER_NOW_ISO } from './serverNow.testkit';
 import type { MatchRow, RegistrationRow, ScheduledTournamentRow } from './types';
 
 vi.mock('../supabaseUtils', () => ({
@@ -220,5 +221,21 @@ describe('dispatchTournamentMatch', () => {
         matchStatus: 'ready',
       }),
     );
+  });
+
+  it('match_ready carries serverNow (ms ISO UTC) from the server clock', async () => {
+    const { persistence } = makePersistence(makeMatch());
+    const { io, emitted } = makeIo();
+    const before = Date.now();
+    await dispatchTournamentMatch(io, 'm-1', {}, persistence);
+    const after = Date.now();
+    const readyEvents = emitted.filter((entry) => entry.event === 'tournament:match_ready');
+    expect(readyEvents.length).toBeGreaterThan(0);
+    for (const event of readyEvents) {
+      const serverNow = (event.payload as { serverNow?: string }).serverNow;
+      expect(serverNow).toMatch(SERVER_NOW_ISO);
+      expect(Date.parse(serverNow!)).toBeGreaterThanOrEqual(before);
+      expect(Date.parse(serverNow!)).toBeLessThanOrEqual(after);
+    }
   });
 });

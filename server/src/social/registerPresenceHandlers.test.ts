@@ -281,3 +281,32 @@ describe('emitPresenceUpdateToFriends', () => {
     );
   });
 });
+
+describe('presence:identify in flight (Phase 4A)', () => {
+  it('leaves a pending identify on the socket that settles once the user is set, or on failure', async () => {
+    for (const outcome of ['ok', 'throws'] as const) {
+      const socket = createSocketStub({ id: `sock-${outcome}` });
+      const handlers = captureHandlers(socket);
+      let finishResolve!: () => void;
+      const resolveSocketIdentity = vi.fn(() => new Promise<{ username: string; userId: string | null }>((resolve, reject) => {
+        finishResolve = () => (outcome === 'ok' ? resolve({ username: 'Alice', userId: USER_A }) : reject(new Error('auth down')));
+      }));
+      const { io } = createIo();
+      registerPresenceHandlers(socket, { io, socketsByUserId: registrySockets, resolveSocketIdentity, normalizeUserId, isUuidLike });
+
+      const done = handlers['presence:identify']({}, vi.fn());
+      const pending = socket.data.identifyPending as Promise<void>;
+      expect(pending).toBeInstanceOf(Promise);
+      let settled = false;
+      void pending.then(() => { settled = true; });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+
+      finishResolve();
+      await done;
+      await pending;
+      expect(settled).toBe(true);
+      expect(socket.data.userId).toBe(outcome === 'ok' ? USER_A : undefined);
+    }
+  });
+});

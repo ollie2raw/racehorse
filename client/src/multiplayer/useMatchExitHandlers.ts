@@ -29,7 +29,7 @@ export type UseMatchExitHandlersParams = {
   shellSetActionError: (msg: string) => void;
   setAppMode: React.Dispatch<React.SetStateAction<AppMode>>;
   setActiveTournamentId: (id: string | null) => void;
-  setTournamentSubView: (view: 'hub' | 'bracket' | 'result') => void;
+  setTournamentSubView: (view: 'hub' | 'bracket' | 'result' | 'history') => void;
 };
 
 export type UseMatchExitHandlersResult = {

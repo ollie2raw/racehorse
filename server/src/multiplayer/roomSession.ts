@@ -5,7 +5,7 @@ import type { Server, Socket } from 'socket.io';
 import { assertValidGameState } from '../game/invariants';
 import type { BranchArm, GameState } from '../game/types';
 import {
-  act,
+  actIfCurrent,
   deleteRoom,
   getRoom,
   getRoomCanDraw,
@@ -14,6 +14,7 @@ import {
   readyForNextHand,
   registerLiveRoomPersistHook,
   type ActionPayload,
+  type ActStateAfter,
   type DrawAnimationStep,
   type Room,
   type RoomConfig,
@@ -21,6 +22,8 @@ import {
 import { chooseBotMoveServer, type ServerBotTier } from '../bot/serverBot';
 import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
 import { configureDisconnectGraceSeatResolver, clearDisconnectGrace } from './disconnectGrace';
+import { disarmTournamentTurnClock, getTournamentClockState, syncTournamentTurnClock } from './tournamentTurnClock';
+import { serverNow } from '../scheduledTournament/serverNow';
 import {
   configureLiveRoomPersistence,
   schedulePersistLiveRoomSessionForRoom,
@@ -28,7 +31,7 @@ import {
 import type { MatchStartDeps } from './matchStartReady';
 import { drawAudit } from './drawAudit';
 import { maskPregameDrawForRecipient } from './preGameDraw';
-import { isLegacyLeagueRoom } from './roomKind';
+import { isLegacyLeagueRoom, roomKind } from './roomKind';
 import { publishMultiplayerSpectatorSnapshotIfEnabled } from '../spectator/spectatorIntegration';
 import type {
   LegacyMatchmakingRoomShellHydrationResult,
@@ -167,7 +170,7 @@ export function resetRoomSessionStoresForTests(): void {
   roomCleanupTimersByCode.clear();
 }
 
-function requireIo(): Server {
+export function requireIo(): Server {
   if (!ioRef) {
     throw new Error('roomSession: initRoomSession must be called before use');
   }
@@ -275,6 +278,7 @@ export function clearRoomMetadata(roomCode: string): void {
   reconnectSeatsByCode.delete(roomCode);
   clearGameActionIdempotencyForRoom(roomCode);
   clearDisconnectGrace(roomCode);
+  disarmTournamentTurnClock(roomCode);
 }
 
 export function cancelRoomCleanup(roomCode: string): void {
@@ -547,6 +551,41 @@ function buildSyntheticBotAction(roomCode: string, botSeatId: string): ActionPay
   };
 }
 
+/**
+ * Play one action for a seat on the server's behalf, through the same
+ * authoritative path a player's action takes (`act()` → state broadcast), plus
+ * the forced-draw broadcast and tournament finalize hook. Used for Fritz turns
+ * and for a timed-out tournament turn (tournamentTurnClock).
+ *
+ * With `decide`, the action is chosen inside the room's gameplay lock and may
+ * be skipped (null) if the decision it was meant for is no longer current;
+ * the result is then null. Otherwise it is the position right after the action.
+ */
+export async function performAutomaticSeatAction(
+  roomCode: string,
+  seatId: string,
+  actionOrDecide: ActionPayload | ((room: Room) => ActionPayload | null),
+): Promise<ActStateAfter | null> {
+  const io = requireIo();
+  const onStateReady = (code: string) => broadcastStateUpdate(code);
+  const decide = typeof actionOrDecide === 'function' ? actionOrDecide : () => actionOrDecide;
+  const outcome = await actIfCurrent(roomCode, seatId, io, onStateReady, decide);
+  if (!outcome) return null;
+  const { result } = outcome;
+  result.room.pendingForcedDrawBroadcast = result.forcedDrawAnimation
+    ? {
+        playerId: result.forcedDrawAnimation.playerId,
+        count: result.forcedDrawAnimation.steps.length,
+      }
+    : undefined;
+  broadcastStateUpdate(result.room.code);
+  if (result.forcedDrawAnimation) {
+    emitForcedDrawAnimationPayload(result.room.code, result.forcedDrawAnimation);
+  }
+  setImmediate(() => requireDeps().maybeFinalizeTournamentMatch?.(result.room));
+  return outcome.after;
+}
+
 export function scheduleBotTurn(roomCode: string): void {
   if (botTurnTimersByRoom.has(roomCode)) return;
 
@@ -582,24 +621,11 @@ export function scheduleBotTurn(roomCode: string): void {
         return;
       }
 
-      const result = await act(
+      await performAutomaticSeatAction(
         roomCode,
         latestBotSeatId,
         buildSyntheticBotAction(roomCode, latestBotSeatId),
-        requireIo(),
-        (code) => broadcastStateUpdate(code),
       );
-      result.room.pendingForcedDrawBroadcast = result.forcedDrawAnimation
-        ? {
-            playerId: result.forcedDrawAnimation.playerId,
-            count: result.forcedDrawAnimation.steps.length,
-          }
-        : undefined;
-      broadcastStateUpdate(result.room.code);
-      if (result.forcedDrawAnimation) {
-        emitForcedDrawAnimationPayload(result.room.code, result.forcedDrawAnimation);
-      }
-      setImmediate(() => requireDeps().maybeFinalizeTournamentMatch?.(result.room));
     } catch (error) {
       log.warn({ err: error }, '[bot] turn failed');
     }
@@ -798,6 +824,15 @@ export function broadcastStateUpdate(roomCode: string): void {
 
   const sockets = io.sockets.adapter.rooms.get(roomCode) ?? new Set<string>();
 
+  // Scheduled-tournament rooms only: the server's turn clock for this state
+  // (synced first, so the payload carries the deadline of the decision this
+  // state is waiting on) and the server clock to count down against.
+  let tournamentFields: { tournamentClock: ReturnType<typeof getTournamentClockState>; serverNow: string } | null = null;
+  if (roomKind(room) === 'scheduled_tournament') {
+    syncTournamentTurnClock(room.code);
+    tournamentFields = { tournamentClock: getTournamentClockState(room.code), serverNow: serverNow() };
+  }
+
   const pendingForcedDraw = room.pendingForcedDrawBroadcast;
   const pendingAutoPasses =
     Array.isArray(room.pendingAutoPassNotice) && room.pendingAutoPassNotice.length > 0
@@ -850,6 +885,7 @@ export function broadcastStateUpdate(roomCode: string): void {
             }
           : {}),
         ...(pendingAutoPasses ? { recentAutoPasses: pendingAutoPasses } : {}),
+        ...(tournamentFields ?? {}),
       });
 
       if (
@@ -951,6 +987,7 @@ export function broadcastStateUpdate(roomCode: string): void {
   }
 
   scheduleBotTurn(room.code);
+  syncTournamentTurnClock(room.code);
 
   if (room.state.gameOver) {
     const finRoom = room;

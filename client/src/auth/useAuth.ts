@@ -9,6 +9,7 @@ import { evaluateAuthTimeoutSessionFallback, AUTH_TIMEOUT_FALLBACK_ERROR } from 
 import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
 import { readE2eDevAuth, readMobileVisualIdentity } from './e2eDevAuth';
 import { EMAIL_CHANGE_PENDING_MESSAGE, resolveEmailChange } from './emailChange';
+import { ANONYMOUS_PLAYER_NAME } from '../identity/publicPlayerName';
 
 export interface UserProfile {
   id: string;
@@ -58,6 +59,15 @@ function normalizeDesiredUsername(value: string | null | undefined): string | nu
   if (normalized.length < 3) return null;
   if (!/^[a-z0-9_]+$/.test(normalized)) return null;
   return normalized;
+}
+
+/**
+ * The profile used until the real one loads (the real one replaces it when it
+ * arrives). Never the email's local part: this name reaches opponents and
+ * spectators (Phase 4A.1).
+ */
+export function fallbackProfileFor(sessionUser: Pick<User, 'id'>): UserProfile {
+  return { id: sessionUser.id, username: ANONYMOUS_PLAYER_NAME };
 }
 
 async function ensureProfile(user: User): Promise<void> {
@@ -206,13 +216,7 @@ function useAuthInternal() {
   const [justVerified, setJustVerified] = useState(false);
   const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(false);
 
-  const fallbackProfile = useCallback((sessionUser: User): UserProfile => {
-    const derived = sessionUser.email?.split('@')[0]?.trim().toLowerCase();
-    return {
-      id: sessionUser.id,
-      username: derived || `${TEMP_USERNAME_PREFIX}${sessionUser.id.replace(/-/g, '').slice(0, 8)}`,
-    };
-  }, []);
+  const fallbackProfile = useCallback((sessionUser: User): UserProfile => fallbackProfileFor(sessionUser), []);
 
   const refreshProfile = useCallback(async (sessionUser: User) => {
     if (!supabase) {

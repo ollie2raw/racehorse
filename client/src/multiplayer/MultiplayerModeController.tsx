@@ -14,6 +14,7 @@ import { useMultiplayerLobbyActionsContext } from './useMultiplayerLobbyControll
 import { Button } from '../components/primitives';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import '../components/leaveGameModal.css';
+import { publicPlayerName } from '../identity/publicPlayerName';
 
 const MatchmakingScreen = React.lazy(() => import('../matchmaking/MatchmakingScreen'));
 const PrivateMatchLobbyScreen = React.lazy(() => import('./PrivateMatchLobbyScreen'));
@@ -141,10 +142,10 @@ export type MultiplayerTournamentPassthroughView = {
   consumedTournamentGameOverMatchIds: ReadonlySet<string>;
   tournamentMyLabel: string;
   tournamentOpponentLabel: string | null;
-  navigateAfterTournamentMatch: (nextView: 'hub' | 'bracket' | 'result') => void;
+  navigateAfterTournamentMatch: (nextView: 'hub' | 'bracket' | 'result' | 'history') => void;
   currentTournamentContext: TournamentMatchContext | null;
   setActiveTournamentId: Dispatch<SetStateAction<string | null>>;
-  setTournamentSubView: Dispatch<SetStateAction<'hub' | 'bracket' | 'result'>>;
+  setTournamentSubView: Dispatch<SetStateAction<'hub' | 'bracket' | 'result' | 'history'>>;
 };
 
 export type MultiplayerModeViewProps = {
@@ -312,7 +313,7 @@ export default function MultiplayerModeController({
                 authUser?.id
                   ? {
                       userId: authUser.id,
-                      username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player',
+                      username: publicPlayerName(authProfile?.username),
                     }
                   : null
               }

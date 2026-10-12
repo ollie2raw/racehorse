@@ -4,7 +4,7 @@ import {
   type RawSocketHandler,
 } from '../multiplayer/socketEventBus';
 import { SOCKET_EVENTS, TOURNAMENT_SOCKET_EVENTS } from '../multiplayer/socketEventRegistry';
-import type { TournamentSocketScope } from './tournamentSocketTypes';
+import type { TournamentPushPayload, TournamentSocketScope } from './tournamentSocketTypes';
 
 export type RegisterTournamentSocketHandlersOptions = {
   getScope: () => TournamentSocketScope;
@@ -29,8 +29,8 @@ export function registerTournamentSocketHandlers(
 
   register(
     TOURNAMENT_SOCKET_EVENTS.REGISTRATION_OPEN,
-    wrapSocketHandler(TOURNAMENT_SOCKET_EVENTS.REGISTRATION_OPEN, () => {
-      getScope().hub?.onRegistrationOpen();
+    wrapSocketHandler(TOURNAMENT_SOCKET_EVENTS.REGISTRATION_OPEN, (payload: TournamentPushPayload) => {
+      getScope().hub?.onRegistrationOpen(payload);
     }, { recoverOnError: recover }),
   );
 
@@ -38,7 +38,7 @@ export function registerTournamentSocketHandlers(
     TOURNAMENT_SOCKET_EVENTS.REGISTRATION_UPDATED,
     wrapSocketHandler(
       TOURNAMENT_SOCKET_EVENTS.REGISTRATION_UPDATED,
-      (payload: { tournamentId: string }) => {
+      (payload: TournamentPushPayload) => {
         getScope().hub?.onRegistrationUpdated(payload);
       },
       { recoverOnError: recover },
@@ -49,7 +49,7 @@ export function registerTournamentSocketHandlers(
     TOURNAMENT_SOCKET_EVENTS.BRACKET_GENERATED,
     wrapSocketHandler(
       TOURNAMENT_SOCKET_EVENTS.BRACKET_GENERATED,
-      (payload: { tournamentId: string }) => {
+      (payload: TournamentPushPayload) => {
         getScope().hub?.onBracketGenerated(payload);
       },
       { recoverOnError: recover },
@@ -60,7 +60,7 @@ export function registerTournamentSocketHandlers(
     TOURNAMENT_SOCKET_EVENTS.MATCH_UPDATED,
     wrapSocketHandler(
       TOURNAMENT_SOCKET_EVENTS.MATCH_UPDATED,
-      (payload: { tournamentId: string }) => {
+      (payload: TournamentPushPayload & { matchId?: string }) => {
         getScope().hub?.onMatchUpdated(payload);
       },
       { recoverOnError: recover },
@@ -87,6 +87,8 @@ export function registerTournamentSocketHandlers(
         matchId: string;
         roomCode?: string | null;
         round?: number;
+        winnerId?: string | null;
+        winnerSource?: string | null;
       }) => {
         getScope().hub?.onMatchCompleted(payload);
         getScope().session?.onMatchCompleted(payload);
@@ -99,9 +101,31 @@ export function registerTournamentSocketHandlers(
     TOURNAMENT_SOCKET_EVENTS.COMPLETED,
     wrapSocketHandler(
       TOURNAMENT_SOCKET_EVENTS.COMPLETED,
-      (payload: { tournamentId: string }) => {
+      (payload: TournamentPushPayload & { winnerId?: string }) => {
         getScope().hub?.onTournamentCompleted(payload);
         getScope().session?.onTournamentCompleted(payload);
+      },
+      { recoverOnError: recover },
+    ),
+  );
+
+  register(
+    TOURNAMENT_SOCKET_EVENTS.ROUND_COMPLETED,
+    wrapSocketHandler(
+      TOURNAMENT_SOCKET_EVENTS.ROUND_COMPLETED,
+      (payload: TournamentPushPayload & { round?: number }) => {
+        getScope().hub?.onRoundCompleted(payload);
+      },
+      { recoverOnError: recover },
+    ),
+  );
+
+  register(
+    TOURNAMENT_SOCKET_EVENTS.CANCELLED,
+    wrapSocketHandler(
+      TOURNAMENT_SOCKET_EVENTS.CANCELLED,
+      (payload: TournamentPushPayload & { status?: 'cancelled' }) => {
+        getScope().hub?.onTournamentCancelled(payload);
       },
       { recoverOnError: recover },
     ),

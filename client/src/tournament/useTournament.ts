@@ -1,182 +1,104 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  observeMyTournamentsForAnalytics,
+  tournamentKindOf,
+  trackFritzCupCreated,
+  trackFritzCupCreateFailed,
+  trackFritzCupTapped,
+  trackLiveEventRegistered,
+  trackLiveEventRegistrationFailed,
+  trackLiveEventRegisterTapped,
+  trackTournamentMatchReady,
+} from './tournamentAnalytics';
 import * as api from './tournamentApi';
+import { TournamentApiError } from './tournamentApi';
 import { bindTournamentRecoverySignals } from './recoverySignals';
 import { isTerminalTournamentMatch } from './terminalMatches';
 import type { TournamentHubSocketDelegates } from './tournamentSocketTypes';
+import { estimatedServerNowMs, monotonicNow, msUntil, observeTournamentPush } from './tournamentClock';
+import type { FritzLaunchIntent } from './tournamentJoinPolicy';
+import { deriveTournamentLegacyView } from './myTournamentState';
 import type {
   BracketView,
   MatchReadyEvent,
+  MyTournament,
   Registration,
   ScheduledTournament,
-  TournamentMeResponse,
+  TournamentAssignedPlayable,
+  TournamentFeatures,
 } from './types';
 import { logger } from '../utils/logger';
 import { isTournamentsEnabled } from '../config/tournamentsFeature';
 
 type Args = {
   userId: string | null;
-  /** Live tournaments switched on (default: the client flag). Off: no requests. */
+  /** Live tournaments switched on (default: the client build flag). Off: no requests. */
   enabled?: boolean;
 };
 
-function sameScheduledTournament(a: ScheduledTournament, b: ScheduledTournament): boolean {
-  return (
-    a.id === b.id &&
-    a.scheduled_start === b.scheduled_start &&
-    a.registration_open_at === b.registration_open_at &&
-    a.registration_close_at === b.registration_close_at &&
-    a.status === b.status &&
-    a.format === b.format &&
-    a.win_target === b.win_target &&
-    a.max_players === b.max_players &&
-    a.winner_id === b.winner_id &&
-    a.created_at === b.created_at &&
-    (a.registered_count ?? null) === (b.registered_count ?? null)
-  );
+/** Coalescing window for event-driven refreshes (a burst of socket events → one refetch). */
+export const TOURNAMENT_REFRESH_COALESCE_MS = 250;
+/** After this long with no playable match, a Fritz Cup launch says it is taking longer than usual. */
+export const FRITZ_LAUNCH_SLOW_MS = 10_000;
+
+export type FritzLaunchPhase = 'idle' | 'creating' | 'building' | 'slow' | 'failed';
+export type FritzLaunchState = {
+  phase: FritzLaunchPhase;
+  /** The cup being started (known once the create response arrives). */
+  tournamentId: string | null;
+  startedAtMono: number;
+  error: TournamentApiError | null;
+};
+
+const IDLE_LAUNCH: FritzLaunchState = { phase: 'idle', tournamentId: null, startedAtMono: 0, error: null };
+
+/** setState that keeps the previous value when the next is structurally equal (no re-render on identical polls). */
+function useStableState<T>(initial: T): [T, (next: T) => void] {
+  const [value, setValue] = useState<T>(initial);
+  const set = useCallback((next: T) => {
+    setValue((prev) => (prev === next || JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+  }, []);
+  return [value, set];
 }
 
-function sameScheduledTournamentList(
-  prev: ScheduledTournament[],
-  next: ScheduledTournament[],
-): boolean {
-  return (
-    prev.length === next.length &&
-    prev.every((item, index) => sameScheduledTournament(item, next[index]!))
-  );
+function errorCode(err: unknown): string {
+  return err instanceof TournamentApiError ? err.code : 'network';
 }
 
-function sameRegistration(a: Registration, b: Registration): boolean {
-  return (
-    a.id === b.id &&
-    a.tournament_id === b.tournament_id &&
-    a.user_id === b.user_id &&
-    a.registered_at === b.registered_at &&
-    a.seed === b.seed &&
-    a.placement === b.placement &&
-    a.status === b.status &&
-    (a.username ?? null) === (b.username ?? null) &&
-    (a.rating ?? null) === (b.rating ?? null)
-  );
-}
-
-function sameRegistrationList(prev: Registration[], next: Registration[]): boolean {
-  return prev.length === next.length && prev.every((item, index) => sameRegistration(item, next[index]!));
-}
-
-function sameBracketView(prev: BracketView | null, next: BracketView | null): boolean {
-  if (prev === next) return true;
-  if (!prev || !next) return false;
-  if (!sameScheduledTournament(prev.tournament, next.tournament)) return false;
-  if (!sameRegistrationList(prev.registrations, next.registrations)) return false;
-  if (prev.matches.length !== next.matches.length) return false;
-  return prev.matches.every((match, index) => {
-    const other = next.matches[index]!;
-    return (
-      match.id === other.id &&
-      match.tournament_id === other.tournament_id &&
-      match.round === other.round &&
-      match.match_number === other.match_number &&
-      match.player1_id === other.player1_id &&
-      match.player2_id === other.player2_id &&
-      match.winner_id === other.winner_id &&
-      match.room_code === other.room_code &&
-      match.status === other.status &&
-      (match.bot_tier ?? null) === (other.bot_tier ?? null) &&
-      match.started_at === other.started_at &&
-      match.completed_at === other.completed_at &&
-      match.player1_score === other.player1_score &&
-      match.player2_score === other.player2_score
-    );
-  });
-}
-
-function sameRecoveryMatch(
-  prev: TournamentMeResponse['activeAssignedMatch'],
-  next: TournamentMeResponse['activeAssignedMatch'],
-): boolean {
-  if (prev === next) return true;
-  if (!prev || !next) return false;
-  return (
-    prev.matchId === next.matchId &&
-    prev.tournamentId === next.tournamentId &&
-    prev.round === next.round &&
-    prev.matchNumber === next.matchNumber &&
-    prev.roomCode === next.roomCode &&
-    prev.opponentId === next.opponentId &&
-    prev.opponentUsername === next.opponentUsername &&
-    prev.matchStatus === next.matchStatus &&
-    prev.readyDeadlineAt === next.readyDeadlineAt
-  );
-}
-
-function sameAssignedMatch(
-  prev: TournamentMeResponse['assignedMatch'],
-  next: TournamentMeResponse['assignedMatch'],
-): boolean {
-  if (prev === next) return true;
-  if (!prev || !next) return false;
-  return (
-    prev.matchId === next.matchId &&
-    prev.tournamentId === next.tournamentId &&
-    prev.round === next.round &&
-    prev.matchNumber === next.matchNumber &&
-    prev.opponentId === next.opponentId &&
-    prev.opponentUsername === next.opponentUsername &&
-    prev.roomCode === next.roomCode &&
-    prev.matchStatus === next.matchStatus &&
-    prev.scheduledStart === next.scheduledStart &&
-    prev.matchStartsAt === next.matchStartsAt &&
-    prev.readyDeadlineAt === next.readyDeadlineAt
-  );
-}
-
-function sameCountdown(
-  prev: TournamentMeResponse['countdown'],
-  next: TournamentMeResponse['countdown'],
-): boolean {
-  if (prev === next) return true;
-  if (!prev || !next) return false;
-  return prev.kind === next.kind && prev.at === next.at;
-}
-
-function samePendingMatch(prev: MatchReadyEvent | null, next: MatchReadyEvent | null): boolean {
-  if (prev === next) return true;
-  if (!prev || !next) return false;
-  return (
-    prev.tournamentId === next.tournamentId &&
-    prev.matchId === next.matchId &&
-    prev.round === next.round &&
-    prev.matchNumber === next.matchNumber &&
-    prev.roomCode === next.roomCode &&
-    prev.matchStatus === next.matchStatus &&
-    prev.readyAt === next.readyAt &&
-    prev.readyDeadlineAt === next.readyDeadlineAt &&
-    prev.opponentId === next.opponentId &&
-    prev.opponentUsername === next.opponentUsername
-  );
-}
-
+/**
+ * Tournament client state (Phase 3C).
+ *
+ * Authority: `/upcoming` (public Live Events + feature flags) and, when signed
+ * in, `/my` (the player's tournaments, registrations, the playable assigned
+ * match, feature flags). Each is fetched independently; one failing never
+ * hides what the other returned. Socket events only trigger a coalesced
+ * refetch (plus `match_ready` → `pendingMatch`); nothing here joins a match.
+ */
 export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args) {
-  const [upcoming, setUpcoming] = useState<ScheduledTournament[]>([]);
-  const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [activeBracket, setActiveBracket] = useState<BracketView | null>(null);
+  const cleanUserId = userId?.trim() || null;
+  const [upcoming, setUpcoming] = useStableState<ScheduledTournament[]>([]);
+  const [features, setFeatures] = useStableState<TournamentFeatures | null>(null);
+  const [myTournaments, setMyTournaments] = useStableState<MyTournament[]>([]);
+  const [registrations, setRegistrations] = useStableState<Registration[]>([]);
+  const [activeAssignedMatch, setActiveAssignedMatch] = useStableState<TournamentAssignedPlayable | null>(null);
+  const [pendingMatch, setPendingMatch] = useStableState<MatchReadyEvent | null>(null);
+  // When the last match_ready arrived, and when the last answered /my was sent
+  // (monotonic): a /my sent after a push supersedes it.
+  const [pendingMatchAtMono, setPendingMatchAtMono] = useState(0);
+  const [myRequestedAtMono, setMyRequestedAtMono] = useState(0);
+  const [activeBracket, setActiveBracket] = useStableState<BracketView | null>(null);
   // A failed bracket load, tagged with the id it belongs to so a stale error
   // never bleeds onto a different tournament's screen.
   const [bracketError, setBracketError] = useState<{ tournamentId: string; code: string } | null>(null);
-  const [pendingMatch, setPendingMatch] = useState<MatchReadyEvent | null>(null);
-  const [recoveryMatch, setRecoveryMatch] = useState<TournamentMeResponse['activeAssignedMatch']>(null);
-  const [tournamentPhase, setTournamentPhase] = useState<TournamentMeResponse['currentTournamentPhase']>(null);
-  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
-  const [assignedMatch, setAssignedMatch] = useState<TournamentMeResponse['assignedMatch']>(null);
-  const [countdown, setCountdown] = useState<TournamentMeResponse['countdown']>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [upcomingError, setUpcomingError] = useState<string | null>(null);
+  const [myError, setMyError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
-  // `refresh` reads load state to decide whether to show the initial spinner, but it
-  // also *sets* it. Reading through a ref keeps `refresh` referentially stable, so the
-  // effect below fires once per mount instead of re-firing when the flag flips.
-  const hasLoadedRef = useRef(false);
-  const boundaryRefreshInFlightRef = useRef(false);
+  const [cancelledTournamentIds, setCancelledTournamentIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [fritzLaunch, setFritzLaunch] = useState<FritzLaunchState>(IDLE_LAUNCH);
+  const fritzLaunchRef = useRef<FritzLaunchState>(IDLE_LAUNCH);
+  const [boundaryTick, setBoundaryTick] = useState(0);
+
   const hubSocketDelegatesRef = useRef<TournamentHubSocketDelegates>({
     onRegistrationOpen: () => undefined,
     onRegistrationUpdated: () => undefined,
@@ -184,246 +106,251 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
     onMatchUpdated: () => undefined,
     onMatchReady: () => undefined,
     onMatchCompleted: () => undefined,
+    onRoundCompleted: () => undefined,
     onTournamentCompleted: () => undefined,
+    onTournamentCancelled: () => undefined,
     onRecover: () => undefined,
   });
 
-  const applyUpcoming = useCallback((next: ScheduledTournament[]) => {
-    setUpcoming((prev) => (sameScheduledTournamentList(prev, next) ? prev : next));
+  const setLaunch = useCallback((next: FritzLaunchState) => {
+    fritzLaunchRef.current = next;
+    setFritzLaunch(next);
   }, []);
 
-  const applyRegistrations = useCallback((next: Registration[]) => {
-    setRegistrations((prev) => (sameRegistrationList(prev, next) ? prev : next));
-  }, []);
+  // ── fetching ──────────────────────────────────────────────────────────────
 
-  const applyActiveBracket = useCallback((next: BracketView | null) => {
-    setActiveBracket((prev) => (sameBracketView(prev, next) ? prev : next));
-  }, []);
+  const inFlightRef = useRef<Promise<boolean> | null>(null);
+  const rerunRef = useRef(false);
 
-  const applyRecoveryMatch = useCallback((next: TournamentMeResponse['activeAssignedMatch']) => {
-    setRecoveryMatch((prev) => (sameRecoveryMatch(prev, next) ? prev : next));
-  }, []);
-
-  const applyAssignedMatch = useCallback((next: TournamentMeResponse['assignedMatch']) => {
-    setAssignedMatch((prev) => (sameAssignedMatch(prev, next) ? prev : next));
-  }, []);
-
-  const applyCountdown = useCallback((next: TournamentMeResponse['countdown']) => {
-    setCountdown((prev) => (sameCountdown(prev, next) ? prev : next));
-  }, []);
-
-  const fetchAndApplyBracket = useCallback(async (tournamentId: string) => {
-    try {
-      const view = await api.fetchBracket(tournamentId);
-      applyActiveBracket(view);
-      setBracketError((prev) => (prev?.tournamentId === tournamentId ? null : prev));
-    } catch (err) {
-      // Never rethrow: every caller does `void tournament.openBracket(id)`, so a
-      // rejection here is an uncaught promise rejection the user never sees. A
-      // visible error state is the fix (FEATURE_COMPLETENESS_AUDIT.md P1-2).
-      const code = err instanceof Error && err.message ? err.message : 'bracket_load_failed';
-      setBracketError({ tournamentId, code });
-    }
-  }, [applyActiveBracket]);
-
-  const refresh = useCallback(async (): Promise<boolean> => {
-    // Switched off: stay empty and never call the server.
+  const fetchAll = useCallback(async (): Promise<boolean> => {
     if (!enabled) {
-      hasLoadedRef.current = true;
       setIsLoading(false);
       setHasLoaded(true);
       return true;
     }
-    const cleanUserId = userId?.trim() || null;
-    // Capture once at entry: the success path flips the ref before `finally` runs,
-    // and both the spinner-on and spinner-off decisions must see the same value.
-    const wasLoaded = hasLoadedRef.current;
-    if (!wasLoaded) {
-      setIsLoading(true);
+    const requestedAtMono = monotonicNow();
+    const [up, my] = await Promise.allSettled([
+      api.fetchUpcoming(),
+      cleanUserId ? api.fetchMy() : Promise.resolve(null),
+    ]);
+    if (up.status === 'fulfilled') {
+      setUpcoming(up.value.tournaments);
+      setUpcomingError(null);
+    } else {
+      setUpcomingError(errorCode(up.reason));
     }
-    try {
-      const u = await api.fetchUpcoming();
-      const me = !cleanUserId
-        ? null
-        : await api.fetchMe().catch((err) => {
-            console.warn(
-              '[tournament] fetchMe failed during refresh',
-              err instanceof Error ? err.message : err,
-            );
-            return null;
-          });
-      applyUpcoming(u);
-      applyRegistrations(me?.registrations ?? []);
-      const recovered = me?.activeAssignedMatch ?? null;
-      if (recovered && isTerminalTournamentMatch(recovered.matchId)) {
-        logger.operational('tournament:recovery', 'ignored completed match', {
-          matchId: recovered.matchId,
-          roomCode: recovered.roomCode,
-        });
-        applyRecoveryMatch(null);
+    if (my.status === 'fulfilled') {
+      const value = my.value;
+      setMyTournaments(value?.tournaments ?? []);
+      setRegistrations(value?.registrations ?? []);
+      const playable = value?.activeAssignedMatch ?? null;
+      if (value) {
+        observeMyTournamentsForAnalytics(value.tournaments);
+        if (playable?.matchStatus === 'ready') trackTournamentMatchReady(playable, tournamentKindOf(value.tournaments, playable.tournamentId));
+      }
+      if (playable && isTerminalTournamentMatch(playable.matchId)) {
+        logger.operational('tournament:recovery', 'ignored completed match', { matchId: playable.matchId });
+        setActiveAssignedMatch(null);
       } else {
-        if (recovered) {
-          logger.operational('tournament', 'recovery activeAssignedMatch received', recovered);
-        }
-        applyRecoveryMatch(recovered);
+        setActiveAssignedMatch(playable);
       }
-      setTournamentPhase((prev) =>
-        prev === (me?.currentTournamentPhase ?? null) ? prev : (me?.currentTournamentPhase ?? null),
-      );
-      setActiveTournamentId((prev) =>
-        prev === (me?.activeTournamentId ?? null) ? prev : (me?.activeTournamentId ?? null),
-      );
-      applyAssignedMatch(me?.assignedMatch ?? null);
-      applyCountdown(me?.countdown ?? null);
-      setError(null);
-      hasLoadedRef.current = true;
-      setHasLoaded((prev) => (prev ? prev : true));
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load tournaments');
-      return false;
-    } finally {
-      if (!wasLoaded) {
-        setIsLoading(false);
-      }
+      setMyError(null);
+      if (cleanUserId) setMyRequestedAtMono(requestedAtMono);
+    } else {
+      setMyError(errorCode(my.reason));
     }
-  }, [
-    enabled,
-    userId,
-    applyUpcoming,
-    applyRegistrations,
-    applyRecoveryMatch,
-    applyAssignedMatch,
-    applyCountdown,
-  ]);
+    // Features: /my when signed in and it answered, else /upcoming.
+    const fromMy = my.status === 'fulfilled' && my.value ? my.value.features : null;
+    const fromUpcoming = up.status === 'fulfilled' ? up.value.features : null;
+    const nextFeatures = fromMy ?? fromUpcoming;
+    if (nextFeatures) setFeatures(nextFeatures);
+    setHasLoaded(true);
+    setIsLoading(false);
+    return up.status === 'fulfilled' || (my.status === 'fulfilled' && Boolean(cleanUserId));
+  }, [enabled, cleanUserId, setUpcoming, setMyTournaments, setRegistrations, setActiveAssignedMatch, setFeatures]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- registration-close countdown driven by wall-clock time
+  // The follow-up must use the CURRENT fetch: when the signed-in user arrives
+  // (an async session restore) while the first, signed-out fetch is in flight,
+  // the follow-up is what loads /my (Phase 4A dev finding).
+  const fetchAllRef = useRef(fetchAll);
+  useEffect(() => {
+    fetchAllRef.current = fetchAll;
+  }, [fetchAll]);
+
+  /** Refetch now; concurrent calls share one request and a single follow-up. */
+  const refresh = useCallback(async (): Promise<boolean> => {
+    fetchAllRef.current = fetchAll;
+    if (inFlightRef.current) {
+      rerunRef.current = true;
+      return inFlightRef.current;
+    }
+    const run = (async () => {
+      let ok = await fetchAllRef.current();
+      while (rerunRef.current) {
+        rerunRef.current = false;
+        ok = await fetchAllRef.current();
+      }
+      return ok;
+    })();
+    inFlightRef.current = run;
+    try {
+      return await run;
+    } finally {
+      inFlightRef.current = null;
+    }
+  }, [fetchAll]);
+
+  const coalesceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Refetch soon, once for any burst of triggers. */
+  const scheduleRefresh = useCallback((delayMs: number = TOURNAMENT_REFRESH_COALESCE_MS) => {
+    if (coalesceTimerRef.current) return;
+    coalesceTimerRef.current = setTimeout(() => {
+      coalesceTimerRef.current = null;
+      void refresh();
+    }, delayMs);
+  }, [refresh]);
+
+  useEffect(() => () => {
+    if (coalesceTimerRef.current) clearTimeout(coalesceTimerRef.current);
+  }, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load
   useEffect(() => { void refresh(); }, [refresh]);
 
-  useEffect(() => {
-    if (!hasLoaded) return;
-    if (countdown?.kind !== 'registration_close') return;
-    const closeAtMs = Date.parse(countdown.at);
-    if (!Number.isFinite(closeAtMs)) return;
-
-    let cancelled = false;
-    const runBoundaryRefresh = async () => {
-      if (cancelled || Date.now() < closeAtMs) return;
-      if (boundaryRefreshInFlightRef.current) return;
-      boundaryRefreshInFlightRef.current = true;
-      logger.operational('tournament:hub', 'registration close reached, refreshing');
-      try {
-        const ok = await refresh();
-        if (!ok) {
-          logger.operational('tournament:hub', 'refresh after countdown failed', { error: 'refresh_failed' });
-        }
-      } catch (err) {
-        logger.operational('tournament:hub', 'refresh after countdown failed', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      } finally {
-        boundaryRefreshInFlightRef.current = false;
-      }
-    };
-
-    const timeout = window.setTimeout(
-      () => { void runBoundaryRefresh(); },
-      Math.max(0, closeAtMs - Date.now() + 250),
-    );
-    const interval = window.setInterval(() => { void runBoundaryRefresh(); }, 5_000);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeout);
-      window.clearInterval(interval);
-    };
-  }, [countdown?.kind, countdown?.at, hasLoaded, refresh]);
-
-  const recover = useCallback(async () => {
-    // Switched off: same as refresh, never call the server.
-    if (!enabled) return;
-    const cleanUserId = userId?.trim() || null;
-    if (!cleanUserId) {
-      applyRegistrations([]);
-      applyRecoveryMatch(null);
-      return;
+  const fetchAndApplyBracket = useCallback(async (tournamentId: string) => {
+    try {
+      const view = await api.fetchBracket(tournamentId);
+      setActiveBracket(view);
+      setBracketError((prev) => (prev?.tournamentId === tournamentId ? null : prev));
+    } catch (err) {
+      // Never rethrow: callers do `void openBracket(id)`; the screen shows the error.
+      setBracketError({ tournamentId, code: errorCode(err) });
     }
-    const me = await api.fetchMe().catch((err) => {
-      console.warn(
-        '[tournament] fetchMe failed during recover',
-        err instanceof Error ? err.message : err,
-      );
-      return null;
-    });
-    if (!me) return;
-    applyRegistrations(me.registrations);
-    const recovered = me.activeAssignedMatch;
-    if (recovered && isTerminalTournamentMatch(recovered.matchId)) {
-      logger.operational('tournament:recovery', 'ignored completed match', {
-        matchId: recovered.matchId,
-        roomCode: recovered.roomCode,
-      });
-      applyRecoveryMatch(null);
-    } else {
-      if (recovered) {
-        logger.operational('tournament', 'recovery activeAssignedMatch received', recovered);
-      }
-      applyRecoveryMatch(recovered);
-    }
-    setTournamentPhase((prev) => (prev === me.currentTournamentPhase ? prev : me.currentTournamentPhase));
-    setActiveTournamentId((prev) => (prev === me.activeTournamentId ? prev : me.activeTournamentId));
-    applyAssignedMatch(me.assignedMatch);
-    applyCountdown(me.countdown);
-    setHasLoaded((prev) => (prev ? prev : true));
-  }, [enabled, userId, applyRegistrations, applyRecoveryMatch, applyAssignedMatch, applyCountdown]);
+  }, [setActiveBracket]);
+
+  const bracketTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleBracketRefresh = useCallback((tournamentId: string) => {
+    if (bracketTimerRef.current) return;
+    bracketTimerRef.current = setTimeout(() => {
+      bracketTimerRef.current = null;
+      void fetchAndApplyBracket(tournamentId);
+    }, TOURNAMENT_REFRESH_COALESCE_MS);
+  }, [fetchAndApplyBracket]);
+
+  // ── legacy (/me-shaped) view, for consumers not yet on /my ────────────────
+
+  const legacyView = useMemo(
+    // boundaryTick re-derives at the next registration-close / start boundary.
+    () => { void boundaryTick; return deriveTournamentLegacyView(myTournaments, activeAssignedMatch, estimatedServerNowMs()); },
+    [myTournaments, activeAssignedMatch, boundaryTick],
+  );
 
   useEffect(() => {
-    const activeBracketTournamentId = activeBracket?.tournament.id ?? null;
+    const next = myTournaments
+      .flatMap((t) => [t.registration_close_at, t.scheduled_start])
+      .map((iso) => msUntil(iso))
+      .filter((ms): ms is number => ms !== null && ms > 0)
+      .sort((a, b) => a - b)[0];
+    if (next === undefined) return;
+    const timer = setTimeout(() => setBoundaryTick((n) => n + 1), Math.min(next + 250, 2 ** 31 - 1));
+    return () => clearTimeout(timer);
+  }, [myTournaments, boundaryTick]);
+
+  // ── Fritz Cup launch ──────────────────────────────────────────────────────
+
+  const startFritzCup = useCallback(async (): Promise<void> => {
+    const current = fritzLaunchRef.current.phase;
+    if (current === 'creating' || current === 'building') return; // double tap
+    trackFritzCupTapped();
+    setLaunch({ phase: 'creating', tournamentId: null, startedAtMono: monotonicNow(), error: null });
+    try {
+      const started = await api.startFritzCup();
+      if (!started.existing) trackFritzCupCreated();
+      // The first match arrives in the create response (it may be joined before any /my sees it).
+      if (started.activeAssignedMatch?.matchStatus === 'ready') trackTournamentMatchReady(started.activeAssignedMatch, 'fritz_cup');
+      const launch = fritzLaunchRef.current;
+      if (launch.phase !== 'creating') return; // ended meanwhile
+      setLaunch({ ...launch, phase: 'building', tournamentId: started.tournament.id });
+      if (started.activeAssignedMatch) setActiveAssignedMatch(started.activeAssignedMatch);
+      scheduleRefresh(0);
+    } catch (err) {
+      const error = err instanceof TournamentApiError ? err : new TournamentApiError({ code: 'network' });
+      trackFritzCupCreateFailed(error.code);
+      setLaunch({ ...fritzLaunchRef.current, phase: 'failed', error });
+      // A disabled feature: re-read the flags so the card hides.
+      if (error.code === 'tournaments_disabled') scheduleRefresh(0);
+    }
+  }, [scheduleRefresh, setActiveAssignedMatch, setLaunch]);
+
+  /** End the launch (its match was joined, the player left the hub, or dismissed the error). */
+  const endFritzLaunch = useCallback(() => {
+    if (fritzLaunchRef.current.phase !== 'idle') setLaunch(IDLE_LAUNCH);
+  }, [setLaunch]);
+
+  // creating/building → slow after FRITZ_LAUNCH_SLOW_MS without a playable match.
+  useEffect(() => {
+    if (fritzLaunch.phase !== 'creating' && fritzLaunch.phase !== 'building') return;
+    const elapsed = monotonicNow() - fritzLaunch.startedAtMono;
+    const timer = setTimeout(() => {
+      const launch = fritzLaunchRef.current;
+      if (launch.phase === 'creating' || launch.phase === 'building') setLaunch({ ...launch, phase: 'slow' });
+    }, Math.max(0, FRITZ_LAUNCH_SLOW_MS - elapsed));
+    return () => clearTimeout(timer);
+  }, [fritzLaunch.phase, fritzLaunch.startedAtMono, setLaunch]);
+
+  /**
+   * The explicit-launch intent the join policy may honour: only while the
+   * launch is in flight and younger than FRITZ_LAUNCH_INTENT_MS (the policy
+   * checks the age).
+   */
+  const fritzLaunchIntent: FritzLaunchIntent | null = useMemo(() => {
+    if (fritzLaunch.phase !== 'creating' && fritzLaunch.phase !== 'building' && fritzLaunch.phase !== 'slow') return null;
+    return { startedAtMono: fritzLaunch.startedAtMono, tournamentId: fritzLaunch.tournamentId };
+  }, [fritzLaunch.phase, fritzLaunch.startedAtMono, fritzLaunch.tournamentId]);
+
+  // ── socket events → coalesced refetch ─────────────────────────────────────
+
+  useEffect(() => {
+    const bracketId = activeBracket?.tournament.id ?? null;
+    const touch = (payload?: { tournamentId?: string; serverNow?: string }) => {
+      if (payload?.serverNow) observeTournamentPush(payload.serverNow);
+      scheduleRefresh();
+      if (payload?.tournamentId && payload.tournamentId === bracketId) scheduleBracketRefresh(bracketId);
+    };
     hubSocketDelegatesRef.current = {
-      onRegistrationOpen: () => {
-        void refresh();
-      },
-      onRegistrationUpdated: (payload) => {
-        void refresh();
-        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-      },
-      onBracketGenerated: (payload) => {
-        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-        void refresh();
-      },
-      onMatchUpdated: (payload) => {
-        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-      },
+      onRegistrationOpen: (payload) => touch(payload),
+      onRegistrationUpdated: (payload) => touch(payload),
+      onBracketGenerated: (payload) => touch(payload),
+      onMatchUpdated: (payload) => touch(payload),
+      onRoundCompleted: (payload) => touch(payload),
       onMatchReady: (payload) => {
         logger.operational('tournament', 'match_ready received', {
           matchId: payload.matchId,
           tournamentId: payload.tournamentId,
-          roomCode: payload.roomCode,
           matchStatus: payload.matchStatus,
         });
-        setPendingMatch((prev) => (samePendingMatch(prev, payload) ? prev : payload));
+        if (payload.serverNow) observeTournamentPush(payload.serverNow);
+        setPendingMatch(payload);
+        setPendingMatchAtMono(monotonicNow());
+        if (payload.matchStatus === 'ready') trackTournamentMatchReady(payload, tournamentKindOf(myTournaments, payload.tournamentId));
+        // /my says whether this player has joined it; nothing joins from here.
+        scheduleRefresh();
       },
       onMatchCompleted: (payload) => {
-        logger.operational('tournament:complete', 'received match_completed', {
-          roomCode: payload.roomCode ?? null,
-          matchId: payload.matchId,
-          tournamentId: payload.tournamentId,
-        });
-        setPendingMatch((prev) => (prev?.matchId === payload.matchId ? null : prev));
-        setRecoveryMatch((prev) => (prev?.matchId === payload.matchId ? null : prev));
-        void refresh();
-        if (activeBracketTournamentId === payload.tournamentId) {
-          void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
-        }
+        if (pendingMatch?.matchId === payload.matchId) setPendingMatch(null);
+        touch(payload);
       },
       onTournamentCompleted: (payload) => {
-        setPendingMatch((prev) => (prev?.tournamentId === payload.tournamentId ? null : prev));
-        setRecoveryMatch((prev) => (prev?.tournamentId === payload.tournamentId ? null : prev));
-        void refresh();
-        void fetchAndApplyBracket(payload.tournamentId).catch(() => undefined);
+        if (pendingMatch?.tournamentId === payload.tournamentId) setPendingMatch(null);
+        touch(payload);
       },
-      onRecover: () => {
-        void recover();
+      onTournamentCancelled: (payload) => {
+        setCancelledTournamentIds((prev) => (prev.has(payload.tournamentId) ? prev : new Set([...prev, payload.tournamentId])));
+        if (pendingMatch?.tournamentId === payload.tournamentId) setPendingMatch(null);
+        if (fritzLaunchRef.current.tournamentId === payload.tournamentId) setLaunch(IDLE_LAUNCH);
+        touch(payload);
       },
+      onRecover: () => scheduleRefresh(0),
     };
   });
 
@@ -431,69 +358,82 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
     if (typeof document === 'undefined') return;
     return bindTournamentRecoverySignals({
       documentLike: document,
-      onRecover: () => {
-        void recover();
-      },
+      onRecover: () => scheduleRefresh(0),
     });
-  }, [recover]);
+  }, [scheduleRefresh]);
 
-  const register = useCallback(async (tournamentId: string) => {
-    const cleanUserId = userId?.trim() || null;
-    if (!cleanUserId) throw new Error('Sign in to register');
-    await api.registerForTournament(tournamentId, cleanUserId);
-    setRegistrations((prev) => {
-      if (prev.some((reg) => reg.tournament_id === tournamentId && (reg.status === 'registered' || reg.status === 'active'))) {
-        return prev;
-      }
-      return [
-        ...prev,
-        {
-          id: `local-${tournamentId}-${cleanUserId}`,
-          tournament_id: tournamentId,
-          user_id: cleanUserId,
-          registered_at: new Date().toISOString(),
-          seed: null,
-          placement: null,
-          status: 'registered',
-        },
-      ];
-    });
+  // ── registration ──────────────────────────────────────────────────────────
+
+  /** Register; throws TournamentApiError. State comes from the refetch, not a local row. */
+  const register = useCallback(async (tournamentId: string): Promise<{ alreadyRegistered: boolean }> => {
+    if (!cleanUserId) throw new TournamentApiError({ code: 'not_authenticated' });
+    trackLiveEventRegisterTapped();
+    let result: { alreadyRegistered: boolean };
+    try {
+      result = await api.registerForTournament(tournamentId);
+    } catch (err) {
+      trackLiveEventRegistrationFailed(err instanceof TournamentApiError ? err.code : 'network');
+      throw err;
+    }
+    if (!result.alreadyRegistered) trackLiveEventRegistered();
     await refresh();
-  }, [userId, refresh]);
+    return result;
+  }, [cleanUserId, refresh]);
 
-  const withdraw = useCallback(async (tournamentId: string) => {
-    const cleanUserId = userId?.trim() || null;
-    if (!cleanUserId) return;
-    await api.withdrawFromTournament(tournamentId, cleanUserId);
-    setRegistrations((prev) =>
-      prev.filter((reg) => !(reg.tournament_id === tournamentId && reg.user_id === cleanUserId)),
-    );
-    void refresh();
-  }, [userId, refresh]);
+  /** Withdraw; throws TournamentApiError (e.g. withdraw_closed). Nothing is removed locally first. */
+  const withdraw = useCallback(async (tournamentId: string): Promise<void> => {
+    if (!cleanUserId) throw new TournamentApiError({ code: 'not_authenticated' });
+    await api.withdrawFromTournament(tournamentId);
+    await refresh();
+  }, [cleanUserId, refresh]);
 
   const openBracket = useCallback(async (tournamentId: string) => {
     await fetchAndApplyBracket(tournamentId);
   }, [fetchAndApplyBracket]);
 
-  const clearPendingMatch = useCallback(() => setPendingMatch(null), []);
-  const clearRecoveryMatch = useCallback(() => setRecoveryMatch(null), []);
+  const clearPendingMatch = useCallback(() => setPendingMatch(null), [setPendingMatch]);
+  /** Forget the playable match until the next refetch says otherwise. */
+  const clearRecoveryMatch = useCallback(() => setActiveAssignedMatch(null), [setActiveAssignedMatch]);
+
+  // Hub-level error only when nothing useful loaded at all.
+  const error = upcomingError && (!cleanUserId || myError) ? upcomingError : null;
 
   return {
+    // /upcoming + /my
     upcoming,
+    features,
+    myTournaments,
     registrations,
+    activeAssignedMatch,
+    upcomingError,
+    myError,
+    cancelledTournamentIds,
+    // socket
+    pendingMatch,
+    pendingMatchAtMono,
+    myRequestedAtMono,
+    // Fritz Cup launch
+    fritzLaunch,
+    fritzLaunchIntent,
+    startFritzCup,
+    endFritzLaunch,
+    // compatibility (/me-shaped, derived from /my)
+    recoveryMatch: activeAssignedMatch,
+    tournamentPhase: legacyView.tournamentPhase,
+    activeTournamentId: legacyView.activeTournamentId,
+    assignedMatch: legacyView.assignedMatch,
+    countdown: legacyView.countdown,
+    // bracket
     activeBracket,
     bracketError,
-    pendingMatch,
-    recoveryMatch,
-    tournamentPhase,
-    activeTournamentId,
-    assignedMatch,
-    countdown,
+    // status
     error,
     isLoading,
     hasLoaded,
+    // actions
     refresh,
-    recover,
+    recover: refresh,
+    scheduleRefresh,
     register,
     withdraw,
     openBracket,

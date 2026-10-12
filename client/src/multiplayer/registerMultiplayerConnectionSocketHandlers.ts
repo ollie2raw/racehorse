@@ -19,6 +19,7 @@ import {
   selectJoinedRoomCode,
 } from './session/sessionStateMachine';
 import { invalidateRoomOperations } from './roomOperationEpoch';
+import { publicPlayerName } from '../identity/publicPlayerName';
 export function registerMultiplayerConnectionSocketHandlers(options: {
   getScope: () => MultiplayerConnectionScope;
   recoveryMachineRef: RefBox<RecoveryMachine | null>;
@@ -70,10 +71,7 @@ export function registerMultiplayerConnectionSocketHandlers(options: {
         scope.ui.setServerWaking(false);
 
         const userId = scope.auth.authUserRef.current?.id;
-        const username =
-          scope.auth.authProfileRef.current?.username ??
-          scope.auth.authUserRef.current?.email?.split('@')[0] ??
-          'player';
+        const username = publicPlayerName(scope.auth.authProfileRef.current?.username);
         if (userId) {
           const socket = scope.socket.socketRef.current;
           if (socket?.connected) {

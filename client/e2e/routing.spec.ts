@@ -70,7 +70,7 @@ test.describe('browser routing', () => {
     });
     await page.goto('/tournament/route-smoke');
     await expect(page.getByRole('heading', { name: 'Compete' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('No upcoming tournaments. Check back soon.')).toBeVisible();
+    await expect(page.getByText('Tournaments are unavailable right now')).toBeVisible();
     await expect(page.getByRole('button', { name: /Back to Home/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /register/i })).toHaveCount(0);
     expect(tournamentRequests).toEqual([]);
@@ -84,7 +84,7 @@ test.describe('browser routing', () => {
     await expect(tile.locator('.rh-soon-pill')).toBeVisible();
     await tile.click();
     await expect(page).toHaveURL(/\/tournament$/);
-    await expect(page.getByText('No upcoming tournaments. Check back soon.')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Tournaments are unavailable right now')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('.rh-nav-center-desktop [aria-current="page"]')).toHaveAccessibleName('Tournament, soon');
   });
 

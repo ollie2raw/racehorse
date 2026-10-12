@@ -31,13 +31,34 @@ describe('WelcomeModal', () => {
   });
 
   it('lists Tournament only while live tournaments are switched on', () => {
-    const { unmount } = render(<WelcomeModal open onDismiss={noop} onNavigate={noop} />);
+    const on = { tournaments: true, fritzCup: true };
+    const { unmount } = render(<WelcomeModal open onDismiss={noop} onNavigate={noop} tournamentFeatures={on} />);
     expect(screen.queryByText('Tournament')).toBeNull();
     unmount();
     vi.stubEnv('VITE_ENABLE_TOURNAMENTS', 'true');
     try {
-      render(<WelcomeModal open onDismiss={noop} onNavigate={noop} />);
+      render(<WelcomeModal open onDismiss={noop} onNavigate={noop} tournamentFeatures={on} />);
       expect(screen.getByText('Tournament')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('Phase 3E: the Tournament line follows the server flags and never advertises early', () => {
+    vi.stubEnv('VITE_ENABLE_TOURNAMENTS', 'true');
+    try {
+      const { rerender } = render(<WelcomeModal open onDismiss={noop} onNavigate={noop} tournamentFeatures={null} />);
+      // Flags not loaded yet: no tournament line at all (no Fritz Cup flash).
+      expect(screen.queryByText('Tournament')).toBeNull();
+      expect(screen.queryByText(/Cup against Fritz/)).toBeNull();
+      rerender(<WelcomeModal open onDismiss={noop} onNavigate={noop} tournamentFeatures={{ tournaments: true, fritzCup: false }} />);
+      expect(screen.getByText('Join one of two Live Events each day. Fritz fills open seats. Registration opens 12 hours before start.')).toBeInTheDocument();
+      expect(screen.queryByText(/Cup against Fritz/)).toBeNull();
+      rerender(<WelcomeModal open onDismiss={noop} onNavigate={noop} tournamentFeatures={{ tournaments: true, fritzCup: true }} />);
+      expect(screen.getByText('Play a 3-round Cup against Fritz anytime, or join one of two Live Events each day. Fritz fills open seats. Live Event registration opens 12 hours before start.')).toBeInTheDocument();
+      rerender(<WelcomeModal open onDismiss={noop} onNavigate={noop} tournamentFeatures={{ tournaments: false, fritzCup: false }} />);
+      expect(screen.queryByText('Tournament')).toBeNull();
+      expect(document.body.textContent).not.toMatch(/\bPT\b|30 minutes|every 30/);
     } finally {
       vi.unstubAllEnvs();
     }
