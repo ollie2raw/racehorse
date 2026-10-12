@@ -10,6 +10,7 @@ import type {
   AppRoutesAuthProps,
   AppRoutesTournamentProps,
 } from '../appRouteTypes';
+import { publicPlayerName } from '../identity/publicPlayerName';
 
 const TournamentHubScreen = React.lazy(() => import('../tournament/TournamentHubScreen'));
 const TournamentBracketScreen = React.lazy(() => import('../tournament/TournamentBracketScreen'));
@@ -89,7 +90,7 @@ export function TournamentRoute({
   }
 
   const tIdentity = authUser?.id
-    ? { userId: authUser.id, username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player' }
+    ? { userId: authUser.id, username: publicPlayerName(authProfile?.username) }
     : null;
 
   if (tournamentSubView === 'bracket' && activeTournamentId) {

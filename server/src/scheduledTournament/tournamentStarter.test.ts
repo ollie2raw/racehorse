@@ -475,4 +475,30 @@ describe('tournament starting player', () => {
 
     expect(ack.mock.calls[0]?.[0]).toMatchObject({ ok: false, error: 'not_authenticated' });
   });
+
+  it('Phase 4A.1: the roster and the attach payload carry the identified public name, nothing email-derived', async () => {
+    // The client identifies with the profile username, or Player while the
+    // profile has not loaded (client/src/identity/publicPlayerName.ts); the
+    // server copies that name and has no email to derive one from.
+    seedMatch(P1_STARTS, U1, U2);
+    const roomCode = db.matches.get(P1_STARTS)!.room_code;
+    await dispatchTournamentMatch(makeIo(), P1_STARTS);
+    const acks: Record<string, any>[] = [];
+    for (const [userId, username] of [[U1, 'Player'], [U2, 'racer_two']] as const) {
+      const { socket, handlers } = makeSocket(userId);
+      socket.data.username = username;
+      registerRoomSessionHandlers(makeIo([socket]), socket);
+      const ack = vi.fn();
+      await handlers.get('tournament:attach_assigned_match')?.({ matchId: P1_STARTS }, ack);
+      acks.push(ack.mock.calls[0]?.[0]);
+    }
+
+    const names = getRoomRoster(roomCode).map((p) => [p.userId, p.username]);
+    expect(names).toEqual(expect.arrayContaining([[U1, 'Player'], [U2, 'racer_two']]));
+    const opponentView = acks[1];
+    expect(opponentView.players.find((p: { userId: string }) => p.userId === U1)?.username).toBe('Player');
+    const wire = JSON.stringify(acks);
+    expect(wire).not.toContain('jane.doe.private');
+    expect(wire).not.toContain('@');
+  });
 });

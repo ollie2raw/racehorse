@@ -49,6 +49,7 @@ import {
   invalidateRoomOperations,
   isCurrentRoomOperation,
 } from './roomOperationEpoch';
+import { publicPlayerName } from '../identity/publicPlayerName';
 
 type SocketWithPing = Socket & { __mpPingTimer?: ReturnType<typeof setInterval> };
 
@@ -643,10 +644,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     const userId = scope.auth.authUserRef.current?.id;
     if (!userId) return;
 
-    const username =
-      scope.auth.authProfileRef.current?.username ??
-      scope.auth.authUserRef.current?.email?.split('@')[0] ??
-      'player';
+    const username = publicPlayerName(scope.auth.authProfileRef.current?.username);
 
     void scope.config.emitWithAck<RoomAckResponse>(socket, 'presence:identify', {
       userId,

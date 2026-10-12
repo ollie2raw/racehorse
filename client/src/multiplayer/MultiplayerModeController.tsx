@@ -14,6 +14,7 @@ import { useMultiplayerLobbyActionsContext } from './useMultiplayerLobbyControll
 import { Button } from '../components/primitives';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import '../components/leaveGameModal.css';
+import { publicPlayerName } from '../identity/publicPlayerName';
 
 const MatchmakingScreen = React.lazy(() => import('../matchmaking/MatchmakingScreen'));
 const PrivateMatchLobbyScreen = React.lazy(() => import('./PrivateMatchLobbyScreen'));
@@ -312,7 +313,7 @@ export default function MultiplayerModeController({
                 authUser?.id
                   ? {
                       userId: authUser.id,
-                      username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player',
+                      username: publicPlayerName(authProfile?.username),
                     }
                   : null
               }

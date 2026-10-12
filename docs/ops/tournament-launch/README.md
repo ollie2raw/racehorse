@@ -188,9 +188,23 @@ cups play out.
 
 ## Fritz gate
 
-- Live gate held for at least a week.
-- Always-on server in place (cups add load at any hour, not just at 17:00 /
-  20:00).
+Fritz Cup may be enabled (stage 5) once all of these hold — no fixed waiting
+period beyond them:
+
+1. The new migrations, server and client are healthy in production.
+2. Live Events were enabled first (stage 3–4).
+3. Both daily Live Event slots have completed successfully at least once
+   under controlled observation — preferably one 17:00 PT and one 20:00 PT
+   event. If traffic is too low for organic players, controlled accounts may
+   staff them.
+4. About 24 hours of production monitoring (below) show no stuck events, no
+   orchestrator lease failures, no duplicate rooms or results, and no
+   unexplained recovery or dispatch failures.
+5. Then enable Fritz Cup on its own and run one controlled Cup smoke test
+   (stage 5 checks).
+
+Also: the always-on server is in place (cups add load at any hour, not just at
+17:00 / 20:00).
 
 ## Monitoring
 

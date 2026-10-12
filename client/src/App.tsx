@@ -712,11 +712,7 @@ export default function App() {
     you,
     authProfile,
   });
-  const myHandle = authProfile?.username
-    ? `@${authProfile.username}`
-    : authUser?.email
-      ? `@${authUser.email.split('@')[0]}`
-      : '@player';
+  const myHandle = authProfile?.username ? `@${authProfile.username}` : '@player';
   const homeRatingLabel = (authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : 800).toLocaleString();
   useRenderProfiler('AppNonGame');
   const isRoomHost = players[0]?.id === you;
