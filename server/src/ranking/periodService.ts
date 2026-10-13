@@ -130,69 +130,86 @@ async function commitProcessedGame(
   newRating: number;
   newRD: number;
   delta: number;
+  applied: boolean;
 }> {
-  const result = computeGlicko2(
-    {
-      rating: profile.glicko_rating,
-      rd: profile.glicko_rd,
-      vol: profile.glicko_vol,
-      gamesPlayed: profile.ranked_games_played,
-    },
-    [
+  let currentProfile = profile;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const result = computeGlicko2(
       {
-        opponent,
-        result: {
-          score: game.player_score,
-          opponentScore: game.opponent_score,
-          outcome: options.outcome ?? game.outcome ?? undefined,
-        },
+        rating: currentProfile.glicko_rating,
+        rd: currentProfile.glicko_rd,
+        vol: currentProfile.glicko_vol,
+        gamesPlayed: currentProfile.ranked_games_played,
       },
-    ],
-  );
+      [
+        {
+          opponent,
+          result: {
+            score: game.player_score,
+            opponentScore: game.opponent_score,
+            outcome: options.outcome ?? game.outcome ?? undefined,
+          },
+        },
+      ],
+    );
 
-  const newGamesPlayed = profile.ranked_games_played + 1;
-  const { scale } = options;
-  let delta = result.newRating - profile.glicko_rating;
-  if (scale != null && Number.isFinite(scale)) {
-    delta = delta * scale;
+    const newGamesPlayed = currentProfile.ranked_games_played + 1;
+    const { scale } = options;
+    let delta = result.newRating - currentProfile.glicko_rating;
+    if (scale != null && Number.isFinite(scale)) {
+      delta = delta * scale;
+    }
+    const adjustedNewRating = currentProfile.glicko_rating + delta;
+    const newPeakRating = Math.max(currentProfile.peak_rating || 0, adjustedNewRating);
+
+    try {
+      await supabaseFetch('/rest/v1/rpc/commit_glicko_game_update', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_profile_id: currentProfile.id,
+          p_glicko_rating: adjustedNewRating,
+          p_glicko_rd: result.newRD,
+          p_glicko_vol: result.newVol,
+          p_glicko_last_period: processedAt,
+          p_provisional: isProvisional(newGamesPlayed),
+          p_peak_rating: newPeakRating,
+          p_ranked_games_played: newGamesPlayed,
+          p_game_id: game.id,
+          p_delta: delta,
+          p_rating_before: currentProfile.glicko_rating,
+          p_rd_before: currentProfile.glicko_rd,
+          p_vol_before: currentProfile.glicko_vol,
+        }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('ranked_already_processed')) {
+        const fresh = await getProfile(currentProfile.id);
+        return { profile: fresh, newRating: fresh.glicko_rating, newRD: fresh.glicko_rd, delta: 0, applied: false };
+      }
+      if (!message.includes('ranked_state_conflict') || attempt === 4) throw error;
+      currentProfile = await getProfile(currentProfile.id);
+      continue;
+    }
+
+    return {
+      profile: {
+        ...currentProfile,
+        glicko_rating: adjustedNewRating,
+        glicko_rd: result.newRD,
+        glicko_vol: result.newVol,
+        glicko_last_period: processedAt,
+        provisional: isProvisional(newGamesPlayed),
+        peak_rating: newPeakRating,
+        ranked_games_played: newGamesPlayed,
+      },
+      newRating: adjustedNewRating,
+      newRD: result.newRD,
+      delta,
+      applied: true,
+    };
   }
-  const adjustedNewRating = profile.glicko_rating + delta;
-  const newPeakRating = Math.max(profile.peak_rating || 0, adjustedNewRating);
-
-  await supabaseFetch('/rest/v1/rpc/commit_glicko_game_update', {
-    method: 'POST',
-    body: JSON.stringify({
-      p_profile_id: profile.id,
-      p_glicko_rating: adjustedNewRating,
-      p_glicko_rd: result.newRD,
-      p_glicko_vol: result.newVol,
-      p_glicko_last_period: processedAt,
-      p_provisional: isProvisional(newGamesPlayed),
-      p_peak_rating: newPeakRating,
-      p_ranked_games_played: newGamesPlayed,
-      p_game_id: game.id,
-      p_delta: delta,
-      p_rating_before: profile.glicko_rating,
-      p_rd_before: profile.glicko_rd,
-      p_vol_before: profile.glicko_vol,
-    }),
-  });
-
-  return {
-    profile: {
-      ...profile,
-      glicko_rating: adjustedNewRating,
-      glicko_rd: result.newRD,
-      glicko_vol: result.newVol,
-      glicko_last_period: processedAt,
-      provisional: isProvisional(newGamesPlayed),
-      peak_rating: newPeakRating,
-      ranked_games_played: newGamesPlayed,
-    },
-    newRating: adjustedNewRating,
-    newRD: result.newRD,
-    delta,
-  };
+  throw new Error('Ranked rating state changed too many times.');
 }
 
 export async function processRatingPeriod(
@@ -223,27 +240,23 @@ export async function processRatingPeriod(
     });
     const processedAt = new Date().toISOString();
 
-    await supabaseFetch(`/rest/v1/profiles?id=eq.${userId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        glicko_rd: decayed.newRD,
-        glicko_last_period: processedAt,
-      }),
-    });
-
-    await supabaseFetch(`/rest/v1/rating_periods`, {
-      method: 'POST',
-      body: JSON.stringify({
-        user_id: userId,
-        rating_before: profile.glicko_rating,
-        rating_after: profile.glicko_rating,
-        rd_before: profile.glicko_rd,
-        rd_after: decayed.newRD,
-        vol_before: profile.glicko_vol,
-        vol_after: profile.glicko_vol,
-        processed_at: processedAt,
-      }),
-    });
+    try {
+      await supabaseFetch('/rest/v1/rpc/commit_glicko_decay_update', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_profile_id: userId,
+          p_new_rd: decayed.newRD,
+          p_processed_at: processedAt,
+          p_rating_before: profile.glicko_rating,
+          p_rd_before: profile.glicko_rd,
+          p_vol_before: profile.glicko_vol,
+          p_games_before: profile.ranked_games_played,
+        }),
+      });
+    } catch (error) {
+      if (!String(error).includes('ranked_state_conflict')) throw error;
+      return processRatingPeriod(userId, { applyDecayIfNoGames: false });
+    }
 
     return {
       newRating: profile.glicko_rating,
@@ -256,6 +269,7 @@ export async function processRatingPeriod(
   let newRating = profile.glicko_rating;
   let newRD = profile.glicko_rd;
   let totalDelta = 0;
+  let appliedGames = 0;
 
   const opponentIds = [...new Set(games.map((g) => g.opponent_id))];
   const opponentSnapshots = await Promise.all(
@@ -270,13 +284,14 @@ export async function processRatingPeriod(
     newRating = processed.newRating;
     newRD = processed.newRD;
     totalDelta += processed.delta;
+    if (processed.applied) appliedGames += 1;
   }
 
   return {
     newRating,
     newRD,
     delta: totalDelta,
-    gamesInPeriod: games.length,
+    gamesInPeriod: appliedGames,
   };
 }
 

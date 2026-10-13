@@ -89,4 +89,36 @@ describe('periodService — provisional flag derives from isProvisional(), not a
     expect(playerABody.p_provisional).toBe(false);
     expect(playerABody.p_provisional).toBe(isProvisional(20));
   });
+
+  it('recomputes from a fresh profile after a database state conflict', async () => {
+    let first = true;
+    const attempts: Array<Record<string, unknown>> = [];
+    mockedSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/rest/v1/rpc/commit_glicko_game_update') {
+        const body = JSON.parse(String(init?.body));
+        if (body.p_profile_id === 'u1') {
+          attempts.push(body);
+          if (first) {
+            first = false;
+            throw new Error('ranked_state_conflict');
+          }
+        }
+        return [] as never;
+      }
+      if (path.includes('/rest/v1/profiles?id=eq.u1')) {
+        return [{ ...profileWith(19), glicko_rating: 1520, peak_rating: 1520 }] as never;
+      }
+      return [] as never;
+    });
+    const result = await processRealtimeMultiplayerGame({
+      playerAProfile: profileWith(18),
+      playerBProfile: { ...opponentProfile(), id: 'u2' },
+      playerAGame: game,
+      playerBGame: { ...game, id: 'g2', player_id: 'u2', opponent_id: 'u1', player_score: 20, opponent_score: 60 },
+    });
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]?.p_rating_before).toBe(1500);
+    expect(attempts[1]?.p_rating_before).toBe(1520);
+    expect(result.playerA.profile.ranked_games_played).toBe(20);
+  });
 });
