@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Server } from 'socket.io';
 import type { Room } from '../rooms';
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
@@ -111,7 +111,11 @@ vi.mock('../operationalTelemetry', () => ({
   recordOperationalFailure: (...args: unknown[]) => recordOperationalFailureMock(...args),
 }));
 
-import { createGameOverPersistScheduler } from './gameOverPersistence';
+import { createGameOverPersistScheduler, CUTOVER_GATE_WAIT_CEILING_MS } from './gameOverPersistence';
+import {
+  resetRatingCutoverGateForTests,
+  setLegacyRatingWritersEnforcedForTests,
+} from '../ranking/ratingCutoverGate';
 
 const roomEmit = vi.fn();
 const io = {
@@ -810,5 +814,71 @@ describe('createGameOverPersistScheduler', () => {
         playerBGame: gameB,
       });
     });
+  });
+});
+
+
+describe('createGameOverPersistScheduler — rating cutover gate (legacy build)', () => {
+  let gateClosed: boolean;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    gateClosed = true;
+    resetRatingCutoverGateForTests();
+    setLegacyRatingWritersEnforcedForTests(true);
+    applyTournamentGameOverFromRoomMock.mockResolvedValue(false);
+    findTournamentMatchByRoomMock.mockResolvedValue(null);
+    getPendingFritzMatchContextMock.mockReturnValue(null);
+    appendMatchMock.mockResolvedValue(undefined);
+    writeMatchActivityMock.mockResolvedValue(undefined);
+    verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
+    supabaseFetchMock.mockImplementation(async (path: string) => {
+      if (path.includes('rating_cutover_gate')) {
+        return [{ quiesced: gateClosed, quiesced_at: null, enabled_boot_id: null, reason: null, ghost_expand_applied_at: null }];
+      }
+      return [{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }];
+    });
+    insertRankedGameIdempotentMock.mockResolvedValue({ isNew: false, game: null });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetRatingCutoverGateForTests();
+  });
+
+  it('makes no durable write while the gate is closed, then completes once it reopens', async () => {
+    vi.useFakeTimers();
+    const input = buildInput();
+    const pending = runPersist(input);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(appendMatchMock).not.toHaveBeenCalled();
+    expect(insertRankedGameIdempotentMock).not.toHaveBeenCalled();
+    expect(completeGhostGameMock).not.toHaveBeenCalled();
+    expect(input.room.matchLogged).toBe(false);
+
+    gateClosed = false;
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(pending).resolves.toBe('succeeded');
+    expect(appendMatchMock).toHaveBeenCalledTimes(1);
+    expect(input.room.matchLogged).toBe(true);
+  });
+
+  it('fails visibly (never reports success, never writes) when the gate stays closed past the wait ceiling', async () => {
+    vi.useFakeTimers();
+    const input = buildInput();
+    const pending = runPersist(input);
+    await vi.advanceTimersByTimeAsync(CUTOVER_GATE_WAIT_CEILING_MS * 5);
+    await expect(pending).resolves.toBe('failed');
+    expect(appendMatchMock).not.toHaveBeenCalled();
+    expect(input.room.matchLogged).toBe(false);
+    expect(input.room.gameOverPersistStatus).toBe('failed');
+    expect(roomEmit).toHaveBeenCalledWith('match:result_persist_failed', expect.anything());
+  });
+
+  it('does not hold back tournament results (not a rating-affecting legacy path)', async () => {
+    applyTournamentGameOverFromRoomMock.mockResolvedValue(true);
+    const input = buildInput({ room: { scheduledTournamentMatchId: 'tm-1' } });
+    await expect(runPersist(input)).resolves.toBe('succeeded');
+    expect(appendMatchMock).not.toHaveBeenCalled();
   });
 });

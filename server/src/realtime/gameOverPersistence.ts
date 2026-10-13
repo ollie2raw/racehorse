@@ -170,7 +170,7 @@ function evaluateHumanMoveLogVerification(
 }
 
 async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Promise<void> {
-  const { room, sourceMatchId, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
+  const { room, a, b, scoreA, scoreB, winnerSeatId } = input;
   const winnerUserId =
     winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
 

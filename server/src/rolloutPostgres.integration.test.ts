@@ -47,10 +47,14 @@ function ghostComplete(userId: string, matchId: string): string {
   return `select public.complete_ghost_rating_v2('${userId}','${matchId}',60,10,'[]'::jsonb,'ghost',1000,true)`;
 }
 
+const straddle = { user: '', match: '', completeUser: '', completeMatch: '', staleUser: '', staleMatch: '' };
+
 describe.skipIf(!allowed)('mixed-version rollout against real PostgreSQL', () => {
   beforeAll(() => {
     psql(adminUrl, `create database ${dbName}`);
     apply(resolve(process.cwd(), 'test/fixtures/remediationPostgres.sql'));
+    // Step 0: additive, applied before the bridge server is deployed.
+    apply(migration('2026-10-13_rating_cutover_gate.sql'));
   });
   afterAll(() => {
     if (allowed) psql(adminUrl, `drop database if exists ${dbName} with (force)`);
@@ -69,7 +73,31 @@ describe.skipIf(!allowed)('mixed-version rollout against real PostgreSQL', () =>
     sql(`insert into public.ghost_games(user_id,match_id,final_score,opponent_score,move_log)
       values ('${alreadyRated}','${ratedMatch}',60,10,'[]'::jsonb),
              ('${notRated}','${unratedMatch}',60,10,'[]'::jsonb)`);
+    // Expand is impossible with the gate open: the operator must have closed it.
+    expect(() => apply(migration('2026-10-13_ghost_rating_idempotent_completion.sql')))
+      .toThrow(/rating_cutover_gate_not_quiesced/);
+    expect(sql(`select count(*) from information_schema.columns
+      where table_name='ghost_games' and column_name='rating_applied_at'`)).toBe('0');
+    sql(`update public.rating_cutover_gate set quiesced=true, quiesced_at=now(), enabled_boot_id='boot-1' where id`);
+
+    // Handoff partials that happened inside the drain window, as the OLD writer
+    // leaves them: (1) straddle: ranked result committed, Ghost write never
+    // landed; (2) complete legacy pair (ranked + Ghost row, no receipt); (3) an
+    // old game with no Ghost row from long before the window.
+    straddle.user = newUser(); straddle.match = randomUUID();
+    straddle.completeUser = newUser(); straddle.completeMatch = randomUUID();
+    straddle.staleUser = newUser(); straddle.staleMatch = randomUUID();
+    sql(`insert into public.ranked_games(player_id,game_type,source_type,source_match_id)
+      values ('${straddle.user}','fritz','verified_single_player','${straddle.match}'),
+             ('${straddle.completeUser}','fritz','verified_single_player','${straddle.completeMatch}')`);
+    sql(`insert into public.ghost_games(user_id,match_id,final_score,opponent_score,move_log)
+      values ('${straddle.completeUser}','${straddle.completeMatch}',60,10,'[]'::jsonb)`);
+    sql(`insert into public.ranked_games(player_id,game_type,source_type,source_match_id,played_at)
+      values ('${straddle.staleUser}','fritz','verified_single_player','${straddle.staleMatch}',now() - interval '3 days')`);
     apply(migration('2026-10-13_ghost_rating_idempotent_completion.sql'));
+    apply(migration('2026-10-13_ghost_cutover_reconciliation.sql'));
+    expect(sql(`select (ghost_expand_applied_at is not null)::text from public.rating_cutover_gate where id`))
+      .toBe('true');
 
     const afterExpand = newUser();
     const afterExpandMatch = randomUUID();
@@ -107,6 +135,56 @@ describe.skipIf(!allowed)('mixed-version rollout against real PostgreSQL', () =>
     const dailyFritzMatch = randomUUID();
     sql(`insert into public.verified_single_player_matches(match_id,user_id,status,completion_result)
       values ('${dailyFritzMatch}','${afterExpand}','completed','{"finalScore":60}'::jsonb)`);
+  });
+
+  it('detects the Ghost/Fritz straddle partial, blocks the contract, and unblocks only after a deliberate resolution', () => {
+    const partials = sql(`select kind||'|'||user_id||'|'||match_id from public.ghost_cutover_suspicious_partials() order by 1`);
+    // Exactly the straddle: the complete legacy pair and the pre-window game are NOT partials.
+    expect(partials).toBe(`ranked_without_ghost_row|${straddle.user}|${straddle.match}`);
+    expect(() => apply(migration('2026-10-13_ghost_user_match_uniqueness.sql')))
+      .toThrow(/ghost_cutover_unreconciled/);
+    expect(sql(`select count(*) from pg_constraint where conrelid='public.ghost_games'::regclass and contype='u'
+      and conname like '%match_id%'`)).not.toBe('0');
+
+    // A resolution needs a real note and never rates anything by itself.
+    expect(() => sql(`select public.ghost_cutover_resolve('${straddle.user}','${straddle.match}',
+      'confirmed_no_effect_needed','short','op')`)).toThrow(/check constraint/);
+    expect(() => sql(`select public.ghost_cutover_resolve('${straddle.user}','${straddle.match}',
+      'rating_applied_manually','operator applied the outcome by hand','op')`))
+      .toThrow(/ghost_cutover_resolution_requires_receipt/);
+    expect(sql(`select count(*) from public.ghost_games where user_id='${straddle.user}'`)).toBe('0');
+
+    // The operator applies the outcome through the one atomic writer, then records it.
+    sql(ghostComplete(straddle.user, straddle.match));
+    sql(`select public.ghost_cutover_resolve('${straddle.user}','${straddle.match}',
+      'rating_applied_manually','applied via complete_ghost_rating_v2 after review','op')`);
+    expect(sql(`select count(*) from public.ghost_cutover_suspicious_partials()`)).toBe('0');
+  });
+
+  it('flags a Fritz ranked result committed after expand without a Ghost receipt (defensive: the DB fence should make this unreachable)', () => {
+    const user = newUser();
+    const match = randomUUID();
+    sql(`alter table public.ranked_games disable trigger ranked_fritz_ghost_receipt_v2_gate`);
+    try {
+      sql(`insert into public.ranked_games(player_id,game_type,source_type,source_match_id)
+        values ('${user}','fritz','verified_single_player','${match}')`);
+    } finally {
+      sql(`alter table public.ranked_games enable trigger ranked_fritz_ghost_receipt_v2_gate`);
+    }
+    expect(sql(`select kind from public.ghost_cutover_suspicious_partials() order by kind`))
+      .toBe('ranked_after_expand_without_receipt\nranked_without_ghost_row');
+    sql(`select public.ghost_cutover_resolve('${user}','${match}','confirmed_no_effect_needed',
+      'test row removed from consideration','op')`);
+    expect(sql(`select count(*) from public.ghost_cutover_suspicious_partials()`)).toBe('0');
+  });
+
+  it('refuses the contract when the cutover boundary was never recorded', () => {
+    sql(`update public.rating_cutover_gate set ghost_expand_applied_at=null where id`);
+    try {
+      expect(() => sql(`select public.ghost_cutover_assert_reconciled()`)).toThrow(/ghost_cutover_boundary_unknown/);
+    } finally {
+      sql(`update public.rating_cutover_gate set ghost_expand_applied_at=clock_timestamp() where id`);
+    }
   });
 
   it('serializes new Ghost games, then permits both humans only after contract', async () => {
@@ -169,5 +247,17 @@ describe.skipIf(!allowed)('mixed-version rollout against real PostgreSQL', () =>
       .toThrow(/rush_runs_open_assignment_required/);
     expect(() => sql(`select public.record_rush_report_v2('${assignedId}','${beforeUser}',
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',1,0,'[]'::jsonb,null)`)).toThrow(/rush_run_closed/);
+  });
+
+  it('refuses ranked expand with the gate open (legacy decay is only stopped by the gate), applies it closed', () => {
+    apply(migration('2026-06-30_commit_glicko_game_update_rpc.sql'));
+    sql(`update public.rating_cutover_gate set quiesced=false where id`);
+    expect(() => apply(migration('2026-10-13_ranked_rating_claim.sql'))).toThrow(/rating_cutover_gate_not_quiesced/);
+    expect(sql(`select count(*) from information_schema.columns
+      where table_name='rating_periods' and column_name='ranked_game_id'`)).toBe('0');
+    sql(`update public.rating_cutover_gate set quiesced=true where id`);
+    apply(migration('2026-10-13_ranked_rating_claim.sql'));
+    expect(sql(`select count(*) from information_schema.columns
+      where table_name='rating_periods' and column_name='ranked_game_id'`)).toBe('1');
   });
 });
