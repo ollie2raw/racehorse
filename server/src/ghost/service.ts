@@ -18,9 +18,6 @@ type GhostGameRow = {
   opponent_score: number;
   move_log: unknown;
   match_id: string | null;
-  // xmax is a Postgres system column returned when explicitly selected.
-  // '0' = freshly inserted row; non-zero = row was updated (conflict resolution).
-  xmax?: string;
 };
 
 type GhostProfileRow = {
@@ -205,57 +202,58 @@ async function upsertGhostProfile(row: {
     {
       method: 'POST',
       headers: {
-        Prefer: 'return=representation,resolution=merge-duplicates',
+        Prefer: 'return=representation,resolution=ignore-duplicates',
       },
       body: JSON.stringify([row]),
     },
   );
-  const profile = rows[0];
+  // A concurrent completion may have created and rated this profile after the
+  // caller's initial read. Never merge the default rating over that result.
+  const profile = rows[0] ?? await fetchGhostProfile(row.user_id);
   if (!profile) throw new Error('Failed to upsert ghost profile.');
   return profile;
 }
 
-async function insertGhostGameRow(params: {
+async function commitGhostRating(params: {
   userId: string;
+  matchId: string;
   finalScore: number;
   opponentScore: number;
   trainingMoveLog: GhostMoveLogEntry[];
-  matchId?: string | null;
-}): Promise<{ isNewGame: boolean }> {
-  const baseRow = {
-    user_id: params.userId,
-    final_score: Math.round(params.finalScore),
-    opponent_score: Math.round(params.opponentScore),
-    move_log: params.trainingMoveLog,
-  };
-
-  if (params.matchId) {
-    try {
-      const upsertedRows = await supabaseFetch<GhostGameRow[]>(
-        `/rest/v1/ghost_games?on_conflict=match_id&select=id,xmax`,
-        {
-          method: 'POST',
-          headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
-          body: JSON.stringify([{ ...baseRow, match_id: params.matchId }]),
-        },
-      );
-      return { isNewGame: upsertedRows[0]?.xmax === '0' };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const missingMatchIdColumn =
-        message.includes('PGRST204') ||
-        message.includes("match_id") ||
-        message.includes('schema cache');
-      if (!missingMatchIdColumn) throw error;
-      log.warn('[ghost] ghost_games missing match_id column; falling back to plain insert');
-    }
-  }
-
-  await supabaseFetch(`/rest/v1/ghost_games`, {
+  mode: 'ghost' | 'fritz';
+  opponentRating: number | null;
+  applyRating: boolean;
+}): Promise<{ isNewGame: boolean; newRating: number; ratingDelta: number }> {
+  return supabaseFetch<{ isNewGame: boolean; newRating: number; ratingDelta: number }>(
+    '/rest/v1/rpc/complete_ghost_rating_v2', {
     method: 'POST',
-    body: JSON.stringify([baseRow]),
+    body: JSON.stringify({
+      p_user_id: params.userId,
+      p_match_id: params.matchId,
+      p_final_score: Math.round(params.finalScore),
+      p_opponent_score: Math.round(params.opponentScore),
+      p_move_log: params.trainingMoveLog,
+      p_mode: params.mode,
+      p_opponent_rating: params.opponentRating,
+      p_apply_rating: params.applyRating,
+    }),
+    },
+  );
+}
+
+async function updateGhostStyle(
+  userId: string,
+  compositeLog: GhostCompositeLog,
+  styleProfile: GhostStyleProfile | null,
+): Promise<void> {
+  await supabaseFetch(`/rest/v1/ghost_profiles?user_id=eq.${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      last_updated: new Date().toISOString(),
+      composite_log: compositeLogForStorage(compositeLog),
+      style_profile: styleProfile,
+    }),
   });
-  return { isNewGame: true };
 }
 
 /**
@@ -835,28 +833,6 @@ function isGhostRatingEligible(finalScore: number | null | undefined, opponentSc
   return Math.max(Number(finalScore ?? 0), Number(opponentScore ?? 0)) >= 10;
 }
 
-function computeRatingChange(
-  playerRating: number,
-  opponentRating: number,
-  playerScore: number,
-  opponentScore: number,
-  gamesPlayed: number,
-): { newRating: number; delta: number } {
-  const k = gamesPlayed < 10 ? 40 : gamesPlayed < 30 ? 32 : 20;
-  const expected = 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
-  const total = Math.max(1, playerScore + opponentScore);
-  const margin = Math.abs(playerScore - opponentScore) / total;
-  const marginMultiplier = Math.log(margin * 10 + 1) / Math.log(11) + 0.5;
-  const actual = playerScore > opponentScore ? 1 : 0;
-  const delta = Math.round(k * (actual - expected) * marginMultiplier);
-  const newRating = playerRating + delta;
-
-  return {
-    newRating,
-    delta,
-  };
-}
-
 export function computeFritzRatingChange(
   playerRating: number,
   playerScore: number,
@@ -1024,53 +1000,12 @@ export async function getGhostProfileSummaryByUsername(
 async function persistFritzGhostTrainingProfile(params: {
   userId: string;
   profile: GhostProfileRow;
-  finalScore: number;
-  opponentScore: number;
-  trainingMoveLog: GhostMoveLogEntry[];
-  matchId?: string | null;
-  applyGlicko: boolean;
 }): Promise<void> {
-  const { isNewGame } = await insertGhostGameRow({
-    userId: params.userId,
-    finalScore: params.finalScore,
-    opponentScore: params.opponentScore,
-    trainingMoveLog: params.trainingMoveLog,
-    matchId: params.matchId,
-  });
-
   const styleGames = await fetchRecentGhostGames(params.userId, GHOST_COMPOSITE_GAME_WINDOW);
   const recentGames = styleGames.slice(0, GHOST_COMPOSITE_GAME_WINDOW);
   const compositeLog = buildCompositeLog(recentGames, styleGames, params.profile.composite_log);
   const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
-  // Same fail-closed contract as the profiles.glicko_rating write this
-  // function runs alongside: applyGlicko === false means the caller could not
-  // verify finalScore/opponentScore against a server-owned deal-snapshot
-  // replay, so this training-profile "Ghost Rating" — also shown to users —
-  // must not move from that unverified number either.
-  const isRatingEligible = params.applyGlicko && isGhostRatingEligible(params.finalScore, params.opponentScore);
-  const rating = isRatingEligible
-    ? computeFritzRatingChange(
-        Number(params.profile.ghost_rating ?? 800),
-        params.finalScore,
-        params.opponentScore,
-        Number(params.profile.games_played ?? 0),
-      )
-    : { newRating: Number(params.profile.ghost_rating ?? 800), delta: 0 };
-
-  await upsertGhostProfile({
-    user_id: params.userId,
-    ghost_rating: rating.newRating,
-    last_updated: new Date().toISOString(),
-    // Stored capped and version-stamped. The summary serves this copy when it
-    // was built by the current builder from the player's latest games (E2),
-    // and rebuilds from move logs otherwise.
-    composite_log: compositeLogForStorage(compositeLog),
-    style_profile: styleProfile,
-    games_played:
-      isNewGame && isRatingEligible
-        ? Number(params.profile.games_played ?? 0) + 1
-        : Number(params.profile.games_played ?? 0),
-  });
+  await updateGhostStyle(params.userId, compositeLog, styleProfile);
 }
 
 export async function completeGhostGame(params: {
@@ -1105,8 +1040,19 @@ export async function completeGhostGame(params: {
       : params.moveLog,
   );
   const isRatingEligible = isGhostRatingEligible(params.finalScore, params.opponentScore);
+  if (!params.matchId) throw new Error('Ghost completion requires a verified match ID.');
 
   if (isFritz) {
+    const trainingRating = await commitGhostRating({
+      userId: params.userId,
+      matchId: params.matchId,
+      finalScore: params.finalScore,
+      opponentScore: params.opponentScore,
+      trainingMoveLog,
+      mode: 'fritz',
+      opponentRating: 1000,
+      applyRating: isRatingEligible && params.applyGlicko !== false,
+    });
     const profile = await ensureGhostProfile(params.userId);
     let glickoRating: number | null = null;
     let glickoDelta: number | null = null;
@@ -1163,11 +1109,6 @@ export async function completeGhostGame(params: {
     void persistFritzGhostTrainingProfile({
       userId: params.userId,
       profile,
-      finalScore: params.finalScore,
-      opponentScore: params.opponentScore,
-      trainingMoveLog,
-      matchId: params.matchId,
-      applyGlicko: params.applyGlicko !== false,
     }).catch((error) => {
       log.warn({
         userId: params.userId,
@@ -1176,7 +1117,7 @@ export async function completeGhostGame(params: {
     });
 
     return {
-      newRating: Number(profile.ghost_rating ?? 800),
+      newRating: trainingRating.newRating,
       ratingDelta: 0,
       glickoRating,
       glickoDelta,
@@ -1202,20 +1143,22 @@ export async function completeGhostGame(params: {
   // recentGameStyles), the rating and the games count — the log returned to the
   // client below is the rebuilt one, never the stored column. The Fritz branch
   // above is different and deliberately still reads the full column.
-  const profile = await ensureGhostProfileStyleSource(params.userId);
   const opponentProfile =
     params.opponentUserId && params.opponentUserId !== params.userId
       ? await fetchGhostProfileRating(params.opponentUserId)
       : null;
-
-  const { isNewGame } = await insertGhostGameRow({
+  const ratingEligibleAndVerified = isRatingEligible && params.applyGlicko !== false;
+  const rating = await commitGhostRating({
     userId: params.userId,
+    matchId: params.matchId,
     finalScore: params.finalScore,
     opponentScore: params.opponentScore,
     trainingMoveLog,
-    matchId: params.matchId,
+    mode: 'ghost',
+    opponentRating: params.opponentUserId ? Number(opponentProfile?.ghost_rating ?? 1000) : null,
+    applyRating: ratingEligibleAndVerified,
   });
-
+  const profile = await ensureGhostProfileStyleSource(params.userId);
   const styleGames = await fetchRecentGhostGames(params.userId, GHOST_COMPOSITE_GAME_WINDOW);
   const recentGames = styleGames.slice(0, GHOST_COMPOSITE_GAME_WINDOW);
   const previousStyles: CompositeStyleSource | null = profile.recentGameStyles
@@ -1224,40 +1167,11 @@ export async function completeGhostGame(params: {
   const compositeLog = buildCompositeLog(recentGames, styleGames, previousStyles);
   const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
 
-  // Same fail-closed contract as the Fritz branch above: applyGlicko === false
-  // (no server-verified deal-snapshot replay behind this completion) means no
-  // rating change and no games_played increment — not a smaller/softer one.
-  const ratingEligibleAndVerified = isRatingEligible && params.applyGlicko !== false;
-  const rating = ratingEligibleAndVerified
-    ? params.opponentUserId
-      ? computeRatingChange(
-          Number(profile.ghost_rating ?? 800),
-          Number(opponentProfile?.ghost_rating ?? 1000),
-          params.finalScore,
-          params.opponentScore,
-          Number(profile.games_played ?? 0),
-        )
-      : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 }
-    : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 };
-
-  await upsertGhostProfile({
-    user_id: params.userId,
-    ghost_rating: rating.newRating,
-    last_updated: new Date().toISOString(),
-    // Stored capped and version-stamped. The summary serves this copy when it
-    // was built by the current builder from the player's latest games (E2),
-    // and rebuilds from move logs otherwise.
-    composite_log: compositeLogForStorage(compositeLog),
-    style_profile: styleProfile,
-    games_played:
-      isNewGame && ratingEligibleAndVerified
-        ? Number(profile.games_played ?? 0) + 1
-        : Number(profile.games_played ?? 0),
-  });
+  await updateGhostStyle(params.userId, compositeLog, styleProfile);
 
   return {
     newRating: rating.newRating,
-    ratingDelta: rating.delta,
+    ratingDelta: rating.ratingDelta,
     glickoRating: null,
     glickoDelta: null,
     playerScore: Math.round(params.finalScore),
