@@ -54,6 +54,9 @@ create table public.ranked_games (
   id uuid primary key default gen_random_uuid(),
   player_id uuid not null references auth.users(id),
   opponent_id text not null default 'bot:fritz:elite',
+  game_type text,
+  source_type text,
+  source_match_id uuid,
   played_at timestamptz not null default now(),
   rating_after double precision, rd_after double precision, delta double precision
 );
@@ -78,4 +81,8 @@ create table public.ghost_games (
   played_at timestamptz not null default now(),
   final_score integer not null, opponent_score integer not null,
   move_log jsonb not null default '[]', match_id uuid unique
+);
+create table public.verified_single_player_matches (
+  match_id uuid primary key, user_id uuid not null references auth.users(id),
+  status text not null default 'started', completion_result jsonb
 );
