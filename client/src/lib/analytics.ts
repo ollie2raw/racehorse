@@ -102,6 +102,19 @@ async function loadTransport(): Promise<AnalyticsTransport | null> {
       capture_pageview: false,
       capture_pageleave: true,
       autocapture: false,
+      // Pinned off in code so the PostHog project's remote settings cannot
+      // switch them on behind the published Privacy Policy and the App Store
+      // privacy answers, which describe event analytics only. (The project
+      // currently has session replay, dead-click, exception and network-timing
+      // capture enabled remotely; the SDK follows remote config unless the
+      // client opts out.) Turning any of these on is a deliberate product and
+      // disclosure change, not a dashboard toggle.
+      disable_session_recording: true,
+      capture_dead_clicks: false,
+      capture_exceptions: false,
+      capture_performance: false,
+      capture_heatmaps: false,
+      disable_surveys: true,
     });
     // A super property: sent with every event, so web and App Store players
     // can be told apart without touching any event or call site.

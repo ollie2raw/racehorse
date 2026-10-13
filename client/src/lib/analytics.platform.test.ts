@@ -66,5 +66,20 @@ describe('analytics platform property', () => {
     await settle();
     expect(posthog.init.mock.calls.at(-1)?.[1]).toMatchObject({ api_host: 'https://us.i.posthog.com' });
   });
+
+  it('pins replay, dead clicks, exceptions, performance, heatmaps and surveys off regardless of remote config', async () => {
+    const { track } = await freshAnalytics();
+    track('session_start');
+    await settle();
+    expect(posthog.init.mock.calls.at(-1)?.[1]).toMatchObject({
+      autocapture: false,
+      disable_session_recording: true,
+      capture_dead_clicks: false,
+      capture_exceptions: false,
+      capture_performance: false,
+      capture_heatmaps: false,
+      disable_surveys: true,
+    });
+  });
 });
 
