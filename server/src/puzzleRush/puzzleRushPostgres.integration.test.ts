@@ -6,6 +6,11 @@ import { execFile, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { createHighScorePuzzle, computeBestPossiblePuzzleScore } from '../generatePuzzles';
+import { getLegalMoves } from '../game/engine';
+import { DEFAULT_CONFIG, type GameState } from '../game/types';
+import { gradeRun } from './grading';
+import type { PuzzlePoolEntry } from './types';
 
 const execFileAsync = promisify(execFile);
 const url = process.env.RACEHORSE_REMEDIATION_TEST_DATABASE_URL;
@@ -50,6 +55,52 @@ function finalize(runId: string, score: number): string {
 
 describe.skipIf(!allowed)('Puzzle Rush real PostgreSQL assignment and completion', () => {
   beforeAll(() => sql(`insert into auth.users (id) values ('${userId}')`));
+  it('rejects a valid unassigned pool puzzle and completes with the served puzzle solution', () => {
+    let generated: ReturnType<typeof createHighScorePuzzle> | null = null;
+    for (let attempt = 1; attempt <= 40 && !generated; attempt += 1) {
+      try { generated = createHighScorePuzzle(`assignment-contract:${attempt}`, attempt, 3, 4, 5); }
+      catch { /* generator legitimately rejects some seeds */ }
+    }
+    if (!generated) throw new Error('No valid puzzle generated for assignment contract');
+    const board = generated.startingBoard;
+    const hand = generated.startingHand;
+    const bestPossibleScore = computeBestPossiblePuzzleScore(generated);
+    const state = {
+      config: { ...DEFAULT_CONFIG, tilesPerPlayer: hand.length, deadTileCount: 0, winningScore: 999 },
+      playerIds: ['you', 'bot'],
+      players: { you: { id: 'you', hand, score: 0 }, bot: { id: 'bot', hand: [], score: 0 } },
+      board, boneyard: [], deadTiles: [], currentPlayerIndex: 0, handNumber: 1,
+      handOpen: true, handOver: false, gameOver: false, winnerId: null,
+      consecutivePasses: 0, sequence: 0,
+    } as GameState;
+    const move = getLegalMoves(state, 'you').find((candidate) => candidate.type === 'play');
+    if (!move || move.type !== 'play') throw new Error('Generated puzzle had no legal solution');
+    const line = [{ tile: move.tile, position: move.position }];
+    const encodedLine = JSON.stringify(line).replaceAll("'", "''");
+    const entry: PuzzlePoolEntry = {
+      id: puzzleA, source: 'daily_puzzles', sourcePuzzleId: null,
+      startingBoard: board, startingHand: hand, maxMoves: 1,
+      puzzleType: 'one_turn_high_score', tier: 'quick_line', dealSize: 14,
+      targetScore: 999, bestPossibleScore, difficultyScore: 100,
+      playCount: 0, enabled: true,
+    };
+    const runId = createRun([puzzleA]);
+    expect(() => report(runId, puzzleC, 1, encodedLine)).toThrow(/rush_assignment_mismatch/);
+    expect(JSON.parse(report(runId, puzzleA, 1, encodedLine)).puzzle_id).toBe(puzzleA);
+    sql(`select public.claim_rush_completion_v2('${runId}','${userId}',0)`);
+    const grade = gradeRun({
+      reported: [{ ordinal: 1, puzzleId: puzzleA, submittedLine: line, clientRawScore: 0 }],
+      poolById: new Map([[puzzleA, entry]]), clientReportedScore: 0, runDurationSeconds: 1,
+    });
+    expect(grade.valid).toBe(true);
+    expect(grade.puzzles[0].gradingError).toBeNull();
+    const graded = JSON.stringify(grade.puzzles).replaceAll("'", "''");
+    const final = JSON.parse(sql(`select public.finalize_rush_run_v2('${runId}','${userId}',
+      'completed',${grade.totalScore},${grade.puzzlesSolved},null,'${graded}'::jsonb)`));
+    expect(final.outcome).toBe('applied');
+    expect(final.run.status).toBe('completed');
+    expect(final.run.total_score).toBe(grade.totalScore);
+  });
   it('rejects pool puzzles not assigned to the ordinal, repeats, and reports after claim', () => {
     const runId = createRun([puzzleA, puzzleB]);
     expect(JSON.parse(report(runId, puzzleA, 1)).puzzle_id).toBe(puzzleA);
