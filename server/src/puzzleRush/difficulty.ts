@@ -178,6 +178,34 @@ export function selectRunPuzzles(params: {
   };
 }
 
+/** Rebuild the exact safe wire shape from the IDs committed with a run. */
+export function materializeAssignedPuzzles(
+  assignedIds: string[],
+  entries: PuzzlePoolEntry[],
+): PuzzleRushClientPuzzle[] {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  return assignedIds.map((puzzleId, index) => {
+    const entry = byId.get(puzzleId);
+    if (!entry) throw new Error(`Assigned Puzzle Rush pool entry is missing: ${puzzleId}`);
+    const ordinal = index + 1;
+    const stage = stageForOrdinal(ordinal);
+    return {
+      ordinal, puzzleId,
+      startingBoard: entry.startingBoard,
+      startingHand: entry.startingHand,
+      maxMoves: entry.maxMoves,
+      puzzleType: entry.puzzleType,
+      tier: entry.tier,
+      dealSize: entry.dealSize,
+      targetScore: entry.targetScore,
+      maxPoints: stage.maxPointsPerPuzzle,
+      stageKey: stage.key,
+      stageLabel: stage.label,
+      isStageStart: isStageStartOrdinal(ordinal),
+    };
+  });
+}
+
 /** Compact ops summary of a selection's fallbacks, keyed by requested tier. */
 export function summarizeSelectionFallbacks(
   selection: RunSelection,
