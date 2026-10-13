@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import type { MatchFoundPayload } from './types';
 import { fetchRankingProfile, fetchUserStatsByUserId } from '../stats/statsApi';
+import { hidesComingSoonSurfaces } from '../config/nativeAppSurface';
 import './matchFoundOverlay.css';
 
 type Props = {
@@ -12,6 +13,11 @@ type Props = {
   yourUserId?: string | null;
   /** Queue wait time at match — used for stake band label (same bands as search UI). */
   queueElapsedMs?: number;
+  /**
+   * iOS app: leave out the head-to-head panel. It has no data source yet (every
+   * value is an em-dash and "Per-match stats coming soon"); the website keeps it.
+   */
+  hideComingSoon?: boolean;
 };
 
 function displayInitials(name: string): string {
@@ -72,7 +78,14 @@ function recordLabel(s: SeatStats | null): string {
  * Full-screen match-found layout: dual player columns, center countdown ring,
  * match facts row, footer parameters. Shown after `queue:matched`.
  */
-export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserId, queueElapsedMs = 0 }: Props) {
+export function MatchFoundOverlay({
+  payload,
+  onComplete,
+  yourUsername,
+  yourUserId,
+  queueElapsedMs = 0,
+  hideComingSoon = hidesComingSoonSurfaces(),
+}: Props) {
   const totalSeconds = useMemo(() => Math.max(1, Math.ceil(payload.countdownMs / 1000)), [payload.countdownMs]);
   const countdownKey = `${payload.roomCode}:${totalSeconds}`;
   const [trackedCountdownKey, setTrackedCountdownKey] = useState(countdownKey);
@@ -259,6 +272,7 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserI
           </section>
         </div>
 
+        {hideComingSoon ? null : (
         <section className="mm-found-stats" aria-label="Head to head">
           <div className="mm-found-stats__cell">
             <p className="mm-found-stats__label">Head-to-head</p>
@@ -290,6 +304,7 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, yourUserI
             <p className="mm-found-stats__hint">Per-match stats coming soon</p>
           </div>
         </section>
+        )}
 
         <footer className="mm-found-foot">
           <div className="mm-found-foot__item">

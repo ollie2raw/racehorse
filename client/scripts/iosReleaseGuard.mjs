@@ -38,6 +38,9 @@ const FORBIDDEN_FLAGS = [
   'VITE_DEBUG_HAND_LIFECYCLE',
   'VITE_DEBUG_BOT_MATCH',
   'VITE_FAIRNESS_LOG',
+  // Spectator UI is preview-only and not wired (docs/server-feature-flags.md);
+  // the website doesn't set it, and .env/.env.local are read for --mode ios too.
+  'VITE_ENABLE_SPECTATOR_MODE',
 ];
 
 /** Decodes a JWT payload without verifying it. Null if it isn't a JWT. */

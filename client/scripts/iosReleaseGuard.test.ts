@@ -67,6 +67,13 @@ describe('validateIosReleaseEnv', () => {
   it('rejects dev/e2e switches', () => {
     expect(validateIosReleaseEnv({ ...goodEnv, VITE_E2E_ADMIN_BYPASS: '1' }).join('\n')).toMatch(/VITE_E2E_ADMIN_BYPASS/);
   });
+
+  it('rejects the unfinished spectator mode but allows it explicitly off', () => {
+    expect(validateIosReleaseEnv({ ...goodEnv, VITE_ENABLE_SPECTATOR_MODE: 'true' }).join('\n')).toMatch(
+      /VITE_ENABLE_SPECTATOR_MODE must not be set/,
+    );
+    expect(validateIosReleaseEnv({ ...goodEnv, VITE_ENABLE_SPECTATOR_MODE: 'false' })).toEqual([]);
+  });
 });
 
 describe('scanBundleText', () => {

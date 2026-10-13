@@ -57,7 +57,7 @@ the iOS project):
      secret (`SERVICE`, `SECRET`, `PRIVATE`, `PASSWORD`);
    - PostHog key or Sentry DSN is missing;
    - `VITE_ENABLE_TOURNAMENTS` isn't explicitly `true` or `false`;
-   - an e2e/debug switch is on.
+   - an e2e/debug switch, or the unfinished spectator mode, is on.
 2. `tsc -b`, then `vite build --mode ios` (Sentry release `ios-<git sha>`
    unless `VITE_APP_VERSION` is set), then the usual prerender step, then
    source maps are deleted from `dist/` (they would only add size to the app).
@@ -116,6 +116,11 @@ features. With tournaments off it has no Tournament tab (the website shows
 "Soon"), and non-admins don't see the locked Journey card. Turning tournaments
 on (`VITE_ENABLE_TOURNAMENTS=true` in `.env.ios`) brings the tab back in the
 next build.
+
+The same policy hides the locked "Lesson Library" card in Learn and the
+data-less head-to-head panel on the Quick Match found screen. Spectator mode
+(unfinished) is refused by the env guard. Full list of what the iOS build
+exposes: `docs/ops/app-store-candidate/native-surface-audit.md`.
 
 ## Auth email links
 

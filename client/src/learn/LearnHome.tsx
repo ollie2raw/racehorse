@@ -27,6 +27,7 @@ import {
   type GuidedMatchCandidateValidationIssue,
 } from './guidedMatch/guidedMatchCandidateValidation';
 import labScientistArt from '../assets/singlePlayerHub/fritzScientistLab.webp';
+import { hidesComingSoonSurfaces } from '../config/nativeAppSurface';
 const themeVars = {
   '--rh-bg': '#0A0E17',
   '--rh-panel': '#09101A',
@@ -136,6 +137,16 @@ interface LearnHomeProps {
   onOpenGuidedMatchAnnotator?: () => void;
   canOpenHowToPlay?: boolean;
   onOpenHowToPlay?: () => void;
+  /** iOS app: leave out cards that aren't open yet (nativeAppSurface.ts). */
+  hideComingSoon?: boolean;
+}
+
+/**
+ * The website shows Lesson Library as a locked "Coming Soon" card; the iOS app
+ * leaves it out (App Review treats placeholder features as an incomplete app).
+ */
+function getVisibleLearnModeCards(hideComingSoon: boolean): LearnModeCard[] {
+  return hideComingSoon ? LEARN_MODE_CARDS.filter((card) => card.unlocked) : LEARN_MODE_CARDS;
 }
 
 export default function LearnHome({
@@ -154,7 +165,9 @@ export default function LearnHome({
   onOpenGuidedMatchAnnotator,
   canOpenHowToPlay = false,
   onOpenHowToPlay,
+  hideComingSoon = hidesComingSoonSurfaces(),
 }: LearnHomeProps) {
+  const learnModeCards = getVisibleLearnModeCards(hideComingSoon);
   const [v2AuthoringSession, setV2AuthoringSession] = useState<LessonV2AuthoringSession | null>(() =>
     isAdmin && showAdminView ? loadV2AuthoringSession() : null,
   );
@@ -405,8 +418,8 @@ export default function LearnHome({
               ) : null}
             </div>
 
-            <div className="relative z-10 mt-[42px] learn-hub-grid--modes rh-mode-card-grid min-h-0 w-full flex-1 px-14 pb-2">
-              {LEARN_MODE_CARDS.map((mode) => {
+            <div className={`relative z-10 mt-[42px] learn-hub-grid--modes rh-mode-card-grid min-h-0 w-full flex-1 px-14 pb-2${learnModeCards.length === 3 ? ' learn-hub-grid--trio' : ''}`}>
+              {learnModeCards.map((mode) => {
                 const isLocked =
                   mode.id === 'howToPlay'
                     ? !canPreviewHowToPlay || !onOpenHowToPlay
