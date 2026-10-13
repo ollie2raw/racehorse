@@ -1,5 +1,6 @@
 
 import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFritzConfig, isFritzId, isProvisional, type MatchOutcome } from './glicko2';
+import { mayContinueDecay } from './ratingCutoverGate';
 import { supabaseFetch } from '../supabaseUtils';
 import { fetchAllPages } from '../supabasePagination';
 
@@ -384,9 +385,16 @@ export async function decayInactivePlayers() {
   );
 
   let processed = 0;
+  let aborted = false;
   const errors: string[] = [];
 
   for (const user of users) {
+    // Rating cutover gate: this profile was read before the loop; stop before
+    // the write once the gate closes rather than apply a stale value.
+    if (!(await mayContinueDecay())) {
+      aborted = true;
+      break;
+    }
     try {
       // Hand over the profile we already read: four sequential round-trips
       // per user becomes three.
@@ -402,7 +410,7 @@ export async function decayInactivePlayers() {
     }
   }
 
-  return { processed, errors };
+  return { processed, errors, aborted };
 }
 
 export async function getLeaderboard(limit: number = 50) {

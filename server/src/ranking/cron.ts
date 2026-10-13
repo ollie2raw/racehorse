@@ -2,6 +2,7 @@ import { childLogger } from '../logger';
 
 import cron from 'node-cron';
 import { decayInactivePlayers, processAllPendingRatingGames } from './periodService';
+import { beginDecayRun } from './ratingCutoverGate';
 
 const log = childLogger('ranking:cron');
 
@@ -50,6 +51,30 @@ async function runPendingRatingCatchUp(source: 'boot' | 'periodic' | 'weekly'): 
   }
 }
 
+/** Weekly RD decay. Exported so the cutover-gate tests can drive the exact scheduled body. */
+export async function runWeeklyRdDecay(): Promise<void> {
+  try {
+    // Rating cutover gate: a decay run is counted from before its first
+    // read until its last write, and never starts while the gate is closed.
+    const decayRun = await beginDecayRun();
+    if (!decayRun) {
+      log.warn('weekly RD decay skipped: rating cutover gate is closed or unreadable');
+      return;
+    }
+    try {
+      const decayResult = await decayInactivePlayers();
+      log.info({ processed: decayResult.processed, aborted: decayResult.aborted }, 'processed RD decay for inactive players');
+      if (decayResult.errors.length > 0) {
+        log.error({ errors: decayResult.errors, count: decayResult.errors.length }, 'RD decay errors');
+      }
+    } finally {
+      decayRun.end();
+    }
+  } catch (err) {
+    log.error({ err }, 'failed to run weekly RD decay');
+  }
+}
+
 let scheduled = false;
 
 /** Weekly maintenance (Sundays 00:00 UTC) + boot sweep + periodic catch-up. Safe to call once at server start. */
@@ -61,15 +86,7 @@ export function startRankingCron() {
   cron.schedule('0 0 * * 0', async () => {
     log.info('starting weekly ranking maintenance');
     await runPendingRatingCatchUp('weekly');
-    try {
-      const decayResult = await decayInactivePlayers();
-      log.info({ processed: decayResult.processed }, 'processed RD decay for inactive players');
-      if (decayResult.errors.length > 0) {
-        log.error({ errors: decayResult.errors, count: decayResult.errors.length }, 'RD decay errors');
-      }
-    } catch (err) {
-      log.error({ err }, 'failed to run weekly RD decay');
-    }
+    await runWeeklyRdDecay();
   }, {
     timezone: "UTC"
   });
