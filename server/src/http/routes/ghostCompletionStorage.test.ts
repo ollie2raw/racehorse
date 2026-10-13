@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
 import type { GhostCompositeLog } from '../../ghost/service';
 import { completionResultForStorage, registerGhostRoutes } from './ghost';
+import { setLegacyRatingWritersEnforcedForTests } from '../../ranking/ratingCutoverGate';
+
+// These tests exercise route behavior, not the bridge gate (covered by ratingCutover*.test.ts).
+setLegacyRatingWritersEnforcedForTests(false);
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const OPPONENT_ID = '22222222-2222-4222-8222-222222222222';

@@ -268,6 +268,7 @@ import { getFurthestPublishedDailyPuzzleDate } from './http/stores/dailyPuzzleSt
 import { registerStatsRoutes } from './http/routes/stats';
 import { registerRankingRoutes } from './http/routes/ranking';
 import { registerGhostRoutes } from './http/routes/ghost';
+import { registerRatingCutoverRoutes } from './http/routes/ratingCutoverRoutes';
 import { registerBotMatchesRoutes } from './http/routes/botMatches';
 import { registerPuzzleRushRoutes } from './http/routes/puzzleRush';
 import { registerDailyFritzRoutes } from './http/routes/dailyFritz';
@@ -546,6 +547,8 @@ registerRankingRoutes(app, {
   DEFAULT_RATING,
   DEFAULT_RD,
 });
+
+registerRatingCutoverRoutes(app);
 
 registerGhostRoutes(app, {
   getAuthenticatedUserId,

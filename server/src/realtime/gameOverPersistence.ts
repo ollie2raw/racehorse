@@ -25,6 +25,7 @@ import {
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
 import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
 import { recordOperationalFailure } from '../operationalTelemetry';
+import { isRatingCutoverQuiescedError, withRatingCompletion } from '../ranking/ratingCutoverGate';
 import { isAnyTournamentRoom } from '../multiplayer/roomKind';
 import type { GhostMoveLogEntry } from '../ghost/service';
 import type { GhostMoveLogVerificationResult } from '../ghost/verifier';
@@ -169,7 +170,7 @@ function evaluateHumanMoveLogVerification(
 }
 
 async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Promise<void> {
-  const { room, sourceMatchId, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
+  const { room, a, b, scoreA, scoreB, winnerSeatId } = input;
   const winnerUserId =
     winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
 
@@ -226,6 +227,44 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
     }
     throw new Error(TOURNAMENT_APPLY_FAILED_ERROR);
   }
+
+  const fritzContext = getPendingFritzMatchContext(room);
+  if (!hasLegacyRatingEffects(input, fritzContext)) {
+    return persistRatedGameOverOnce(io, input);
+  }
+
+  // The old completion path can write ranked Glicko for authenticated human
+  // matches, and ranked/Ghost training state for authenticated Fritz matches
+  // with a move log. Count those paths before their first durable write.
+  // Guest-only and other unrated room results do not enter those write paths.
+  return withRatingCompletion('game_over_persist', () => persistRatedGameOverOnce(io, input));
+}
+
+function hasLegacyRatingEffects(
+  input: GameOverPersistInput,
+  fritzContext: ReturnType<typeof getPendingFritzMatchContext>,
+): boolean {
+  const { room, a, b } = input;
+  const authenticatedHumanVsHuman = Boolean(a.userId && b.userId && !fritzContext);
+  if (authenticatedHumanVsHuman) return true;
+
+  // Match the actual legacy call to completeGhostGame: a signed-in player,
+  // Fritz's bot identity, and a non-empty move log. Without a move log the
+  // old completion writes no Fritz ranked result or training profile.
+  return [
+    { player: a, opponent: b },
+    { player: b, opponent: a },
+  ].some(({ player, opponent }) =>
+    Boolean(
+      player.userId &&
+      opponent.id.startsWith('bot:fritz:') &&
+      (room.ghostMoveLogs[player.id]?.length ?? 0) > 0,
+    ),
+  );
+}
+
+async function persistRatedGameOverOnce(io: Server, input: GameOverPersistInput): Promise<void> {
+  const { room, sourceMatchId, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
 
   if (getPendingFritzMatchContext(room)) {
     await resolvePendingFritzMatch(room.code);
@@ -522,6 +561,30 @@ function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string
 }
 
 /**
+ * A game that ends while the rating cutover gate is closed has done nothing
+ * durable yet, so it can simply wait for the short drain window instead of
+ * burning its retry ceiling. Bounded: past the ceiling it fails visibly like
+ * any other persist failure and is never reported as saved.
+ */
+export const CUTOVER_GATE_WAIT_CEILING_MS = 120_000;
+export const CUTOVER_GATE_POLL_MS = 2_000;
+
+async function persistGameOverWaitingForCutoverGate(io: Server, input: GameOverPersistInput): Promise<void> {
+  const startedAt = Date.now();
+  for (;;) {
+    try {
+      await persistGameOverOnce(io, input);
+      return;
+    } catch (err) {
+      if (!isRatingCutoverQuiescedError(err) || Date.now() - startedAt >= CUTOVER_GATE_WAIT_CEILING_MS) {
+        throw err;
+      }
+      await sleep(CUTOVER_GATE_POLL_MS);
+    }
+  }
+}
+
+/**
  * Factory bound to the process `io` instance. Returns the scheduler used by `initRoomSession` `onGameOver`.
  * Bounded retries; `matchLogged` is set only after a successful attempt.
  */
@@ -538,7 +601,7 @@ export function createGameOverPersistScheduler(io: Server) {
           await sleep(delayMs);
         }
         try {
-          await persistGameOverOnce(io, input);
+          await persistGameOverWaitingForCutoverGate(io, input);
           markGameOverPersistSucceeded(room);
           emitMpAuthorityFunnel('private_game_over_persist_succeeded', {
             roomCode: room.code,

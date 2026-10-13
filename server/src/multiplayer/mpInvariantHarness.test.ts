@@ -113,6 +113,10 @@ import {
   setRoomRoster,
 } from './roomSession';
 import { registerRoomSpectateHandlers } from './registerRoomSpectateHandlers';
+import { setLegacyRatingWritersEnforcedForTests } from '../ranking/ratingCutoverGate';
+
+// Invariant harness, not a gate test: gate behavior is covered by ratingCutover*.test.ts.
+setLegacyRatingWritersEnforcedForTests(false);
 
 const io = { to: vi.fn(() => ({ emit: vi.fn() })) } as unknown as Server;
 

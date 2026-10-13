@@ -9,6 +9,10 @@ import {
   type RankedMoveSequenceEntry,
 } from '../../ghost/rankedDealAuthority';
 import { mutateOnePlayedTile, playHonestRankedGame } from '../../testing/rankedDealSelfPlay';
+import { setLegacyRatingWritersEnforcedForTests } from '../../ranking/ratingCutoverGate';
+
+// These tests exercise route behavior, not the bridge gate (covered by ratingCutover*.test.ts).
+setLegacyRatingWritersEnforcedForTests(false);
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const LOCAL_MATCH_ID = 'local-ranked-1';
