@@ -828,6 +828,7 @@ export default function App() {
       onSignIn={signIn}
       onSignUp={signUp}
       onResetPassword={resetPassword}
+      onOpenLegal={setAppMode}
       passwordRecoveryPending={passwordRecoveryPending}
       onUpdatePassword={updatePassword}
       onPasswordRecoveryClose={clearPasswordRecoveryPending}

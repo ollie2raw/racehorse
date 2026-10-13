@@ -9,6 +9,7 @@ import './RacehorseHomeArt.css';
 import { isSpectatorModeEnabled } from '../config/spectatorModeFeature.ts';
 import { isTournamentsEnabled } from '../config/tournamentsFeature.ts';
 import { hidesComingSoonSurfaces } from '../config/nativeAppSurface';
+import { LegalLinks } from '../legal/LegalLinks';
 // One AppMode, defined in ../types. A local copy here drifted the moment a
 // mode was added elsewhere — which is what `settings` did.
 import type { AppMode } from '../types';
@@ -344,6 +345,8 @@ export default function RacehorseHomeScreen({
               ))}
             </div>
           </section>
+
+          <LegalLinks className="home-legal-links" onNavigate={navigate} />
         </main>
       </div>
     </div>

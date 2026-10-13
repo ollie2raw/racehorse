@@ -7,6 +7,9 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from 'react';
+import { LegalLink } from '../legal/LegalLinks';
+import type { LegalMode } from '../legal/legalModes';
+import { PASSWORD_RESET_SENT_MESSAGE } from './authErrors';
 import './authModal.css';
 
 const AUTH_MODAL_SUBMIT_TIMEOUT_MS = 16000;
@@ -23,6 +26,8 @@ interface AuthModalProps {
     username?: string,
   ) => Promise<{ error: string | null; message?: string | null; pendingVerification?: boolean }>;
   onResetPassword: (email: string) => Promise<{ error: string | null; message?: string | null }>;
+  /** Opens a legal page in-app (the modal closes first). Without it the links navigate normally. */
+  onOpenLegal?: (mode: LegalMode) => void;
 }
 
 export default function AuthModal({
@@ -33,6 +38,7 @@ export default function AuthModal({
   onSignIn,
   onSignUp,
   onResetPassword,
+  onOpenLegal,
 }: AuthModalProps) {
   const [mode, setMode] = useState<'signin' | 'signup' | 'verify'>('signin');
   const [username, setUsername] = useState('');
@@ -70,6 +76,13 @@ export default function AuthModal({
     setMode('signin');
     onClose();
   }, [onClose]);
+
+  const openLegal = onOpenLegal
+    ? (legalMode: LegalMode) => {
+        handleClose();
+        onOpenLegal(legalMode);
+      }
+    : undefined;
 
   const handleOverlayPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     overlayPointerDownOnBackdrop.current = e.target === e.currentTarget;
@@ -284,7 +297,7 @@ export default function AuthModal({
                     } else {
                       setResetSent(true);
                       setError(null);
-                      setNotice(result.message ?? 'If that email has an account, we sent a reset link.');
+                      setNotice(result.message ?? PASSWORD_RESET_SENT_MESSAGE);
                     }
                   }}
                 >
@@ -299,6 +312,14 @@ export default function AuthModal({
             <button type="submit" className="auth-modal-submit" disabled={!canSubmit}>
               {submitting ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
             </button>
+
+            {mode === 'signup' && (
+              <p className="auth-modal-legal">
+                By creating an account you agree to the{' '}
+                <LegalLink mode="terms" onNavigate={openLegal}>Terms</LegalLink> and{' '}
+                <LegalLink mode="privacy" onNavigate={openLegal}>Privacy Policy</LegalLink>.
+              </p>
+            )}
           </form>
         )}
 

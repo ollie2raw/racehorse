@@ -34,6 +34,8 @@ import {
 } from './routes/socialRoutes';
 import { TournamentRoute } from './routes/tournamentRoutes';
 import { MultiplayerRoute } from './routes/multiplayerRoute';
+import { LegalRoute } from './routes/legalRoutes';
+import { isLegalMode } from './legal/legalModes';
 import DailyFritzHealthAdminScreen from './admin/DailyFritzHealthAdminScreen';
 import { AppPresentation } from './presentation/AppPresentation';
 import { resolveSurfacePresentation } from './presentation/surfacePresentation';
@@ -62,6 +64,10 @@ function AppRoutesContent({
 
   if (appMode === 'settings') {
     return <SettingsRoute shell={shell} navigation={navigation} auth={auth} />;
+  }
+
+  if (isLegalMode(appMode)) {
+    return <LegalRoute page={appMode} shell={shell} navigation={navigation} auth={auth} />;
   }
 
   if (appMode === 'noBrainer') {

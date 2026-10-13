@@ -806,6 +806,41 @@
   }
 }
 
+/* Privacy · Terms · Support under the mode tabs: the last, quietest thing on
+   Home. Phone keeps it inside the internal `.home-main` scroll; it never
+   grows the shell. */
+.today-home .home-legal-links {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+
+@media (--desk) {
+  .today-home .home-legal-links {
+    margin-top: 10px;
+  }
+}
+
+/* Desktop Home is a fixed composition that already fills a 720px-tall window
+   to the last pixel (mode tabs end at 716px). Below ~770px the row would sit
+   under the fold of an `overflow: hidden` shell, unreachable — so it is left
+   out there rather than squeezing the hero. Settings (account menu) and the
+   sign-up modal still link all three pages at every size. */
+@media (--desk) and (max-height: 769px) {
+  .today-home .home-legal-links {
+    display: none;
+  }
+}
+
+/* Same reason on a phone held sideways (and in the iOS app, which is
+   landscape-only at ~390pt tall): Home is a fixed, non-scrolling composition
+   there, and the row would squeeze the daily cards until their Play buttons are
+   clipped. Settings and the sign-up form link all three pages instead. */
+@media (--short-landscape) {
+  .today-home .home-legal-links {
+    display: none;
+  }
+}
+
 /* The compact Home is composed inside AppPresentation's bounded Hub content.
    The shell owns header, tabs, and safe areas; these rules own only Home. */
 @media (--compact-shell) {

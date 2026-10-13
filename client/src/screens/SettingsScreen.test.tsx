@@ -32,4 +32,23 @@ describe('SettingsScreen', () => {
 
     expect(onOpenAuth).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['signed in', authUser],
+    ['signed out', null],
+  ])('links Privacy, Terms and Support in-app when %s', (_label, user) => {
+    const onNavigate = vi.fn();
+    render(<SettingsScreen authUser={user} onNavigate={onNavigate} />);
+    expect(screen.getByRole('heading', { name: 'Legal and support' })).toBeTruthy();
+    const privacy = screen.getByRole('link', { name: /Privacy Policy/ });
+    const terms = screen.getByRole('link', { name: /Terms of Use/ });
+    const support = screen.getByRole('link', { name: /^Support/ });
+    expect([privacy, terms, support].map((link) => link.getAttribute('href'))).toEqual([
+      '/privacy',
+      '/terms',
+      '/support',
+    ]);
+    fireEvent.click(support);
+    expect(onNavigate).toHaveBeenCalledWith('support');
+  });
 });

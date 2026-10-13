@@ -429,3 +429,26 @@
     margin-top: 16px;
   }
 }
+
+/* Sign-up consent line: one quiet sentence under the button, not a checkbox. */
+.auth-modal-legal {
+  margin: 10px 0 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  color: rgba(136, 145, 160, 0.95);
+}
+
+.auth-modal-legal a {
+  color: rgba(231, 236, 245, 0.9);
+  text-decoration: underline;
+  text-decoration-color: rgba(231, 236, 245, 0.35);
+  text-underline-offset: 2px;
+}
+
+.auth-modal-legal a:hover,
+.auth-modal-legal a:focus-visible {
+  color: #fff;
+  text-decoration-color: currentColor;
+}

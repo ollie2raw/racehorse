@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { NOINDEX, crawlTargets, isIndexable, navLabel } from './prerenderNav.mjs';
 import { PRERENDER_ROUTES as routes } from './prerenderRoutes.mjs';
 import { HOW_TO_PLAY_ARTICLE } from '../src/learn/howToPlay/howToPlayArticleContent.mjs';
+import { LEGAL_DOCUMENTS } from '../src/legal/legalContent.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,6 +16,35 @@ const siteOrigin = 'https://playracehorse.com';
 const ARTICLES = {
   '/learn/how-to-play': HOW_TO_PLAY_ARTICLE,
 };
+
+/**
+ * Privacy, Terms and Support serve their full text: App Review, a crawler and
+ * a reader without JavaScript must all see the actual policy, not a lede.
+ */
+const LEGAL_PAGES = {
+  '/privacy': LEGAL_DOCUMENTS.privacy,
+  '/terms': LEGAL_DOCUMENTS.terms,
+  '/support': LEGAL_DOCUMENTS.support,
+};
+
+function renderLegalBody(doc) {
+  const block = (item) =>
+    Array.isArray(item)
+      ? `<ul>${item.map((text) => `<li>${escapeHtml(text)}</li>`).join('')}</ul>`
+      : `<p>${escapeHtml(item)}</p>`;
+  return (
+    (doc.effective ? `<p>${escapeHtml(doc.effective)}</p>` : '') +
+    `<p>${escapeHtml(doc.standfirst)}</p>` +
+    doc.sections
+      .map(
+        (section) =>
+          `<section id="${section.id}"><h2>${escapeHtml(section.heading)}</h2>` +
+          section.blocks.map(block).join('') +
+          `</section>`,
+      )
+      .join('')
+  );
+}
 
 function escapeHtml(value) {
   return value
@@ -45,7 +75,10 @@ function renderRoute(template, route) {
   // HTML carries the same words the hydrated page shows. Everything else
   // keeps its short lede.
   const article = ARTICLES[route.path];
-  const bodyHtml = article
+  const legal = LEGAL_PAGES[route.path];
+  const bodyHtml = legal
+    ? renderLegalBody(legal)
+    : article
     ? `<p>${escapeHtml(article.standfirst)}</p>` +
       article.sections
         .map(

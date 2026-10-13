@@ -2,8 +2,9 @@ import { identifyUser, resetAnalytics } from '../lib/analytics';
 import { isUsernamePolicyDbError, usernamePolicyMessage, usernamePolicyViolation } from './usernamePolicy';
 import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
-import { formatAuthErrorMessage } from './authErrors';
+import { formatAuthErrorMessage, passwordResetSentMessage } from './authErrors';
 import { clearCachedSession, setCachedSession } from './sessionToken';
 import { getAuthEmailRedirectTo } from './authRedirect';
 import { evaluateAuthTimeoutSessionFallback, AUTH_TIMEOUT_FALLBACK_ERROR } from './authTimeoutSessionFallback';
@@ -806,7 +807,7 @@ function useAuthInternal() {
         AUTH_REQUEST_TIMEOUT_MS,
       );
       if (error) return { error: formatAuthErrorMessage(error) };
-      return { error: null, message: 'If that email has an account, we sent a reset link.' };
+      return { error: null, message: passwordResetSentMessage(Capacitor.isNativePlatform()) };
     } catch (err) {
       return {
         error: formatAuthErrorMessage(
@@ -850,7 +851,11 @@ function useAuthInternal() {
       // the emailed link is followed. `user.email` deliberately is not patched.
       return { error: null, message: EMAIL_CHANGE_PENDING_MESSAGE(resolved.email) };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : 'Unable to change your email.' };
+      return {
+        error: formatAuthErrorMessage(
+          err instanceof Error ? { message: err.message } : { message: 'Unable to change your email.' },
+        ),
+      };
     }
   }, [user]);
 
