@@ -87,6 +87,10 @@ export function validateIosReleaseEnv(env) {
   if (!/^phc_[A-Za-z0-9]{10,}$/.test(get('VITE_POSTHOG_KEY'))) {
     problems.push('VITE_POSTHOG_KEY must be the production PostHog project key (phc_…).');
   }
+  const posthogHost = get('VITE_POSTHOG_HOST');
+  if (posthogHost && !/^https:\/\/[a-z0-9.-]+$/i.test(posthogHost.replace(/\/$/, ''))) {
+    problems.push(`VITE_POSTHOG_HOST must be a full https URL or left unset (got ${posthogHost}).`);
+  }
   if (!/^https:\/\/[^@\s]+@[^\s]+\.ingest\.[a-z.]*sentry\.io\/\d+$/.test(get('VITE_SENTRY_DSN'))) {
     problems.push('VITE_SENTRY_DSN must be the production Sentry DSN (https://…@….ingest…sentry.io/…).');
   }

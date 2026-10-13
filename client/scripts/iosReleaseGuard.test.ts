@@ -64,6 +64,13 @@ describe('validateIosReleaseEnv', () => {
     expect(problems).toMatch(/VITE_SENTRY_DSN/);
   });
 
+  it('accepts an unset or https PostHog host and rejects anything else', () => {
+    expect(validateIosReleaseEnv({ ...goodEnv, VITE_POSTHOG_HOST: '' })).toEqual([]);
+    expect(validateIosReleaseEnv({ ...goodEnv, VITE_POSTHOG_HOST: 'https://eu.i.posthog.com' })).toEqual([]);
+    expect(validateIosReleaseEnv({ ...goodEnv, VITE_POSTHOG_HOST: 'eu.i.posthog.com' }).join('\n')).toMatch(/VITE_POSTHOG_HOST/);
+    expect(validateIosReleaseEnv({ ...goodEnv, VITE_POSTHOG_HOST: '/e' }).join('\n')).toMatch(/VITE_POSTHOG_HOST/);
+  });
+
   it('rejects dev/e2e switches', () => {
     expect(validateIosReleaseEnv({ ...goodEnv, VITE_E2E_ADMIN_BYPASS: '1' }).join('\n')).toMatch(/VITE_E2E_ADMIN_BYPASS/);
   });

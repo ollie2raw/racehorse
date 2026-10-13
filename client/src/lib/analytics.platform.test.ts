@@ -56,4 +56,15 @@ describe('analytics platform property', () => {
     await settle();
     expect(posthog.capture).not.toHaveBeenCalled();
   });
+
+  it('falls back to PostHog US cloud when the host env var is empty (iOS env files)', async () => {
+    vi.resetModules();
+    vi.stubEnv('VITE_POSTHOG_KEY', 'phc_testkey');
+    vi.stubEnv('VITE_POSTHOG_HOST', '');
+    const { track } = await import('./analytics');
+    track('session_start');
+    await settle();
+    expect(posthog.init.mock.calls.at(-1)?.[1]).toMatchObject({ api_host: 'https://us.i.posthog.com' });
+  });
 });
+
