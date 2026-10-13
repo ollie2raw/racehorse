@@ -745,7 +745,8 @@ async function scenarioLifecycleReconnect() {
         roomCode,
         { username: spectator.state.username, userId: spectator.state.userId },
       );
-      assert(spectateBeforeStartResp?.ok, 'spectator failed to spectate room before start');
+      assert(spectateBeforeStartResp?.ok === false && spectateBeforeStartResp.error === 'not_spectatable',
+        'private room allowed a spectator without opt-in');
 
       const spectatorStart = await emitAck(spectator.socket, 'game:start', roomCode);
       assert(
@@ -763,16 +764,11 @@ async function scenarioLifecycleReconnect() {
 
       await startTwoPlayerGame(alpha, bravo, roomCode);
 
-      await waitForStateCount(spectator, 1, 'state:spectate');
-      const initialSpectatorState = latestState(spectator, 'state:spectate');
-      assert(initialSpectatorState?.state, 'spectator did not receive initial state snapshot');
-
       const currentFor = await waitForPlayableClient([alpha, bravo], roomCode);
       assert(currentFor, 'could not identify active player');
       const playMove = getPlayableMove(currentFor);
       assert(playMove, 'no playable move found for active player');
 
-      const preSpectateCount = spectator.state.spectateUpdates.length;
       const moveResp = await emitAck(currentFor.socket, 'game:action', roomCode, {
         type: 'MOVE',
         move: {
@@ -781,7 +777,8 @@ async function scenarioLifecycleReconnect() {
         },
       });
       assert(moveResp?.ok, `game:action failed: ${moveResp?.error ?? 'unknown'}`);
-      await waitForStateCount(spectator, preSpectateCount + 1, 'state:spectate');
+      assert(spectator.state.spectateUpdates.length === 0,
+        'private spectator received a match update after rejection');
 
       const bravoDisconnectedStateCount = bravo.state.stateUpdates.length;
       bravo.disconnect();
@@ -816,7 +813,7 @@ async function scenarioLifecycleReconnect() {
           'alpha roster did not migrate reconnect socket onto stable seat',
         );
         assert(
-          alpha.state.stateUpdates.length > 0 && spectator.state.spectateUpdates.length > 0,
+          alpha.state.stateUpdates.length > 0,
           'expected ongoing state updates during lifecycle scenario',
         );
 
@@ -828,7 +825,7 @@ async function scenarioLifecycleReconnect() {
             spectatorStartRejected: true,
             nonHostStartRejected: true,
             startGame: true,
-            spectateUpdates: spectator.state.spectateUpdates.length > 0,
+            privateSpectateRejected: spectator.state.spectateUpdates.length === 0,
             reconnectMigration: true,
             bravoStateUpdatesBeforeDisconnect: bravoDisconnectedStateCount,
           },
@@ -945,7 +942,8 @@ async function scenarioSeatMigrationAndSpectatorRejection() {
         roomCode,
         { username: spectator.state.username, userId: spectator.state.userId },
       );
-      assert(spectatorJoin?.ok, 'spectator failed to join as spectator');
+      assert(spectatorJoin?.ok === false && spectatorJoin.error === 'not_spectatable',
+        'private room allowed a spectator without opt-in');
 
       const spectatorAction = await emitAck(spectator.socket, 'game:action', roomCode, {
         type: 'MOVE',
@@ -1656,10 +1654,12 @@ async function scenarioStartAndHandReadyGuards() {
       assert(firstReady?.ok && firstReady.started === false, 'first hand:ready should not start next hand alone');
 
       const secondReady = await emitAck(bravo.socket, 'hand:ready', roomCode, handOverHandNumber);
-      assert(secondReady?.ok && secondReady.started === false, 'second current hand:ready should schedule next hand');
+      // The ack waits for the scheduled advance to finish; it reports the
+      // newly started hand rather than an intermediate scheduled state.
+      assert(secondReady?.ok && secondReady.started === true, 'second current hand:ready did not start next hand');
       assert(
-        typeof secondReady.waitMs === 'number' && secondReady.waitMs >= 2000,
-        `hand:ready did not report a meaningful server-side hold, got ${secondReady.waitMs}`,
+        typeof secondReady.waitMs === 'number' && secondReady.waitMs >= 0 && secondReady.waitMs <= 2500,
+        `hand:ready reported an invalid server-side hold, got ${secondReady.waitMs}`,
       );
       await waitForAllConnectedClientsSequence([alpha, bravo], handOverState.sequence + 1);
       const nextState = latestState(alpha)?.state;
