@@ -25,6 +25,7 @@ import {
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
 import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
 import { recordOperationalFailure } from '../operationalTelemetry';
+import { isRatingCutoverQuiescedError, withRatingCompletion } from '../ranking/ratingCutoverGate';
 import { isAnyTournamentRoom } from '../multiplayer/roomKind';
 import type { GhostMoveLogEntry } from '../ghost/service';
 import type { GhostMoveLogVerificationResult } from '../ghost/verifier';
@@ -226,6 +227,16 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
     }
     throw new Error(TOURNAMENT_APPLY_FAILED_ERROR);
   }
+
+  // Rating cutover gate: everything from here on is one vulnerable rating-
+  // affecting completion (ranked insert, Glicko, awaited Ghost write and the
+  // deferred Fritz training write). It is counted from this boundary, before
+  // any durable effect, and is rejected untouched while the gate is closed.
+  return withRatingCompletion('game_over_persist', () => persistRatedGameOverOnce(io, input));
+}
+
+async function persistRatedGameOverOnce(io: Server, input: GameOverPersistInput): Promise<void> {
+  const { room, sourceMatchId, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
 
   if (getPendingFritzMatchContext(room)) {
     await resolvePendingFritzMatch(room.code);
@@ -522,6 +533,30 @@ function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string
 }
 
 /**
+ * A game that ends while the rating cutover gate is closed has done nothing
+ * durable yet, so it can simply wait for the short drain window instead of
+ * burning its retry ceiling. Bounded: past the ceiling it fails visibly like
+ * any other persist failure and is never reported as saved.
+ */
+export const CUTOVER_GATE_WAIT_CEILING_MS = 120_000;
+export const CUTOVER_GATE_POLL_MS = 2_000;
+
+async function persistGameOverWaitingForCutoverGate(io: Server, input: GameOverPersistInput): Promise<void> {
+  const startedAt = Date.now();
+  for (;;) {
+    try {
+      await persistGameOverOnce(io, input);
+      return;
+    } catch (err) {
+      if (!isRatingCutoverQuiescedError(err) || Date.now() - startedAt >= CUTOVER_GATE_WAIT_CEILING_MS) {
+        throw err;
+      }
+      await sleep(CUTOVER_GATE_POLL_MS);
+    }
+  }
+}
+
+/**
  * Factory bound to the process `io` instance. Returns the scheduler used by `initRoomSession` `onGameOver`.
  * Bounded retries; `matchLogged` is set only after a successful attempt.
  */
@@ -538,7 +573,7 @@ export function createGameOverPersistScheduler(io: Server) {
           await sleep(delayMs);
         }
         try {
-          await persistGameOverOnce(io, input);
+          await persistGameOverWaitingForCutoverGate(io, input);
           markGameOverPersistSucceeded(room);
           emitMpAuthorityFunnel('private_game_over_persist_succeeded', {
             roomCode: room.code,

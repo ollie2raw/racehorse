@@ -2,6 +2,7 @@ import { childLogger } from '../logger';
 import { supabaseFetch } from '../supabaseUtils';
 import { FRITZ_ELITE_ID, isFritzId } from '../ranking/glicko2';
 import { processRatingPeriod } from '../ranking/periodService';
+import { trackDeferredRatingWork } from '../ranking/ratingCutoverGate';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { getLegalMoves } from '../game/engine';
 import { computePlayScore, getOpenEnds, simulatePlacement } from '../game/scoring';
@@ -1106,10 +1107,13 @@ export async function completeGhostGame(params: {
       glickoDelta = 0;
     }
 
-    void persistFritzGhostTrainingProfile({
+    // Counted until it settles so the cutover gate can prove no deferred
+    // training write is still pending; registered while the completion unit
+    // that owns it is still held, so there is no uncounted gap.
+    void trackDeferredRatingWork(persistFritzGhostTrainingProfile({
       userId: params.userId,
       profile,
-    }).catch((error) => {
+    })).catch((error) => {
       log.warn({
         userId: params.userId,
         error: error instanceof Error ? error.message : String(error),

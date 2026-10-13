@@ -3,6 +3,17 @@
 -- future writes without rewriting historical ratings.
 begin;
 
+-- The legacy weekly decay writer PATCHes a stale RD with no version check, and
+-- nothing in this migration fences that path. The bridge gate is what stops it
+-- (no new legacy decay run starts while closed; an active one is drained).
+-- Refuse to run with the gate open.
+do $$
+begin
+  if not exists (select 1 from public.rating_cutover_gate where id and quiesced) then
+    raise exception 'rating_cutover_gate_not_quiesced: close the gate and verify decay is drained before ranked expand';
+  end if;
+end $$;
+
 alter table public.rating_periods add column if not exists ranked_game_id uuid null;
 create unique index if not exists rating_periods_one_per_ranked_game_idx
   on public.rating_periods (ranked_game_id) where ranked_game_id is not null;

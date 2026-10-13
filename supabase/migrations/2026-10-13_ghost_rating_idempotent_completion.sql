@@ -5,6 +5,22 @@
 -- remain explicitly unresolved; never infer their rating from a NULL marker.
 begin;
 
+-- Refuse to run unless the rating cutover gate is closed. The database cannot
+-- see the bridge server's in-flight count, so the operator must ALSO have
+-- observed readyForExpand=true (see docs/ops/senior-audit-rating-rush-cutover.md)
+-- immediately before this migration. This guard only makes the step impossible
+-- to run by accident with the gate open. It also stamps the exact cutover
+-- boundary used by 2026-10-13_ghost_cutover_reconciliation.sql.
+do $$
+begin
+  if not exists (select 1 from public.rating_cutover_gate where id and quiesced) then
+    raise exception 'rating_cutover_gate_not_quiesced: close the gate and verify drain before Ghost expand';
+  end if;
+  update public.rating_cutover_gate
+     set ghost_expand_applied_at = coalesce(ghost_expand_applied_at, clock_timestamp())
+   where id;
+end $$;
+
 alter table public.ghost_games
   add column if not exists rating_before integer null,
   add column if not exists rating_after integer null,
