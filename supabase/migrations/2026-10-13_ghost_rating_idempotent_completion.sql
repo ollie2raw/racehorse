@@ -1,7 +1,8 @@
--- A verified match gets one Ghost rating outcome. The profile row lock
--- serializes independent matches for the same player. Existing game rows are
--- treated as already applied because their historical rating cannot be
--- reconstructed safely from the current profile.
+-- EXPAND. A verified match gets one Ghost rating outcome. The old server
+-- writes ghost_games and ghost_profiles in separate requests, so a legacy row
+-- cannot prove whether its rating was applied. Fence those direct writes at
+-- the database boundary before the new server is deployed. Existing rows
+-- remain explicitly unresolved; never infer their rating from a NULL marker.
 begin;
 
 alter table public.ghost_games
@@ -16,9 +17,88 @@ alter table public.ghost_games
 create unique index if not exists ghost_games_user_match_idx
   on public.ghost_games (user_id, match_id) where match_id is not null;
 
-update public.ghost_games
-   set rating_applied_at = played_at
- where rating_applied_at is null and match_id is not null;
+create or replace function public.enforce_ghost_rating_writer_v2()
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if current_setting('racehorse.ghost_rating_v2', true) = 'on' then
+    return new;
+  end if;
+  if tg_table_name = 'ghost_games' then
+    raise exception 'ghost_legacy_writer_fenced';
+  end if;
+  if tg_op = 'INSERT' then
+    if new.ghost_rating <> 800 or new.games_played <> 0 then
+      raise exception 'ghost_legacy_writer_fenced';
+    end if;
+  elsif new.ghost_rating is distinct from old.ghost_rating or
+        new.games_played is distinct from old.games_played then
+    raise exception 'ghost_legacy_writer_fenced';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists ghost_games_writer_v2_gate on public.ghost_games;
+create trigger ghost_games_writer_v2_gate before insert or update on public.ghost_games
+  for each row execute function public.enforce_ghost_rating_writer_v2();
+drop trigger if exists ghost_profiles_rating_v2_gate on public.ghost_profiles;
+create trigger ghost_profiles_rating_v2_gate before insert or update on public.ghost_profiles
+  for each row execute function public.enforce_ghost_rating_writer_v2();
+revoke execute on function public.enforce_ghost_rating_writer_v2() from public,anon,authenticated;
+
+-- The old Fritz HTTP path defers its Ghost training write and could otherwise
+-- mark a verified match completed after the fenced write failed. The Ghost
+-- route's result has ghostScore + newRating; Daily Fritz finalization uses a
+-- different result contract and is deliberately outside this guard.
+create or replace function public.require_ghost_receipt_for_verified_completion_v2()
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_becoming_completed boolean;
+begin
+  if tg_op = 'INSERT' then
+    v_becoming_completed := new.status = 'completed';
+  else
+    v_becoming_completed := new.status = 'completed' and old.status is distinct from 'completed';
+  end if;
+  if v_becoming_completed and
+     jsonb_typeof(new.completion_result) = 'object' and
+     new.completion_result ? 'ghostScore' and
+     new.completion_result ? 'newRating' and
+     not exists (
+       select 1 from public.ghost_games
+        where user_id = new.user_id and match_id = new.match_id
+          and rating_applied_at is not null
+     ) then
+    raise exception 'ghost_legacy_writer_fenced';
+  end if;
+  return new;
+end $$;
+drop trigger if exists verified_ghost_completion_v2_gate on public.verified_single_player_matches;
+create trigger verified_ghost_completion_v2_gate
+  before insert or update on public.verified_single_player_matches
+  for each row execute function public.require_ghost_receipt_for_verified_completion_v2();
+revoke execute on function public.require_ghost_receipt_for_verified_completion_v2()
+  from public,anon,authenticated;
+
+-- Old Fritz writes the ranked result before its deferred Ghost training
+-- write. A verified Fritz result needs the new atomic Ghost receipt first.
+-- Fritz abandons use a different source and are unaffected.
+create or replace function public.require_ghost_receipt_for_fritz_ranked_v2()
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if new.game_type = 'fritz' and new.source_type = 'verified_single_player'
+     and new.source_match_id is not null and not exists (
+       select 1 from public.ghost_games
+        where user_id = new.player_id and match_id = new.source_match_id
+          and rating_applied_at is not null
+     ) then
+    raise exception 'ghost_legacy_writer_fenced';
+  end if;
+  return new;
+end $$;
+drop trigger if exists ranked_fritz_ghost_receipt_v2_gate on public.ranked_games;
+create trigger ranked_fritz_ghost_receipt_v2_gate before insert on public.ranked_games
+  for each row execute function public.require_ghost_receipt_for_fritz_ranked_v2();
+revoke execute on function public.require_ghost_receipt_for_fritz_ranked_v2()
+  from public,anon,authenticated;
 
 create or replace function public.complete_ghost_rating_v2(
   p_user_id uuid, p_match_id uuid, p_final_score integer,
@@ -44,6 +124,10 @@ begin
     raise exception 'ghost_invalid_completion';
   end if;
 
+  -- Transaction-local permission for this one atomic writer. It does not
+  -- survive the PostgREST RPC transaction or authorize an old HTTP request.
+  perform set_config('racehorse.ghost_rating_v2', 'on', true);
+
   insert into public.ghost_profiles (user_id) values (p_user_id)
     on conflict (user_id) do nothing;
   select * into v_profile from public.ghost_profiles
@@ -62,14 +146,18 @@ begin
        or v_game.opponent_score <> p_opponent_score then
       raise exception 'ghost_match_conflict';
     end if;
-    if v_game.rating_applied_at is not null then
-      return jsonb_build_object(
-        'isNewGame',false,
-        'newRating',coalesce(v_game.rating_after,v_profile.ghost_rating),
-        'ratingDelta',coalesce(v_game.rating_delta,0),
-        'gamesPlayed',v_profile.games_played
-      );
+    if v_game.rating_applied_at is null then
+      -- This is a pre-cutover row. The old writer may or may not have reached
+      -- its separate profile update. An automatic retry would either double
+      -- rate or silently discard a valid result, so require reconciliation.
+      raise exception 'ghost_legacy_completion_ambiguous';
     end if;
+    return jsonb_build_object(
+      'isNewGame',false,
+      'newRating',v_game.rating_after,
+      'ratingDelta',v_game.rating_delta,
+      'gamesPlayed',v_profile.games_played
+    );
   end if;
 
   v_new_rating := v_profile.ghost_rating;

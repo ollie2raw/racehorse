@@ -2,6 +2,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
+import { holdPostgresRowLock, waitForBlockedPostgresCalls } from '../../test/support/postgresLockBarrier';
 
 const execFileAsync = promisify(execFile);
 const url = process.env.RACEHORSE_REMEDIATION_TEST_DATABASE_URL;
@@ -51,7 +52,15 @@ describe.skipIf(!allowed)('Ghost real PostgreSQL completion', () => {
   it('serializes two independent matches for the same player', async () => {
     const userId = seed();
     const ids = [randomUUID(), randomUUID()];
-    const [first, second] = await Promise.all(ids.map((id) => sqlAsync(complete(userId, id))));
+    sql(`insert into public.ghost_profiles(user_id) values ('${userId}')`);
+    const release = await holdPostgresRowLock(url!, `select 1 from public.ghost_profiles where user_id='${userId}' for update`, psqlBin);
+    const racing = Promise.all(ids.map((id) => sqlAsync(complete(userId, id))));
+    try {
+      await waitForBlockedPostgresCalls(url!, 'complete_ghost_rating_v2', 2, psqlBin);
+    } finally {
+      await release();
+    }
+    const [first, second] = await racing;
     const results = [JSON.parse(first), JSON.parse(second)];
     expect(results.every((x) => x.isNewGame)).toBe(true);
     expect(sql(`select games_played from public.ghost_profiles where user_id='${userId}'`)).toBe('2');
