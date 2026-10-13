@@ -11,11 +11,16 @@ schemas/functions. On a fresh database apply, in order:
 
 1. `server/test/fixtures/remediationPostgres.sql`
 2. `supabase/migrations/2026-06-30_commit_glicko_game_update_rpc.sql`
-3. `supabase/migrations/2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql` (expand)
-4. `supabase/migrations/2026-10-13_ranked_rating_claim.sql`
+3. `supabase/migrations/2026-10-13_rating_cutover_gate.sql` (pre-expand)
+4. Close the gate, as the production runbook does before any expand:
+   `update public.rating_cutover_gate set quiesced=true, quiesced_at=now() where id;`
+   (the Ghost and ranked expand migrations refuse to run otherwise)
 5. `supabase/migrations/2026-10-13_ghost_rating_idempotent_completion.sql` (expand)
-6. `supabase/migrations/2026-10-13_puzzle_rush_assignment_contract.sql` (contract)
-7. `supabase/migrations/2026-10-13_ghost_user_match_uniqueness.sql` (contract)
+6. `supabase/migrations/2026-10-13_ghost_cutover_reconciliation.sql`
+7. `supabase/migrations/2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql` (expand)
+8. `supabase/migrations/2026-10-13_ranked_rating_claim.sql`
+9. `supabase/migrations/2026-10-13_puzzle_rush_assignment_contract.sql` (contract)
+10. `supabase/migrations/2026-10-13_ghost_user_match_uniqueness.sql` (contract; refuses while Ghost/Fritz handoff partials are unresolved)
 
 Apply each with `psql -X -v ON_ERROR_STOP=1 -f`. Then run:
 
