@@ -67,7 +67,7 @@ const reconnectSeatsByCode = new Map<string, ReconnectSeat[]>();
 const roomCleanupTimersByCode = new Map<string, ReturnType<typeof setTimeout>>();
 
 export type RoomPlayer = { id: string; socketId: string; username: string; userId: string | null };
-export type RoomJoinConfig = { username?: string; userId?: string | null; authToken?: string | null };
+export type RoomJoinConfig = { username?: string; userId?: string | null; authToken?: string | null; guestReconnectToken?: string | null };
 export type AckFn = (payload: unknown) => void;
 
 const roomPlayersByCode = new Map<string, RoomPlayer[]>();
