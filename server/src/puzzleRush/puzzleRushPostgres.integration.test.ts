@@ -11,6 +11,7 @@ import { getLegalMoves } from '../game/engine';
 import { DEFAULT_CONFIG, type GameState } from '../game/types';
 import { gradeRun } from './grading';
 import type { PuzzlePoolEntry } from './types';
+import { holdPostgresRowLock, waitForBlockedPostgresCalls } from '../../test/support/postgresLockBarrier';
 
 const execFileAsync = promisify(execFile);
 const url = process.env.RACEHORSE_REMEDIATION_TEST_DATABASE_URL;
@@ -125,7 +126,14 @@ describe.skipIf(!allowed)('Puzzle Rush real PostgreSQL assignment and completion
     const runId = createRun([puzzleA]);
     report(runId, puzzleA, 1);
     sql(`select public.claim_rush_completion_v2('${runId}','${userId}',0)`);
-    const [a, b] = await Promise.all([concurrentSql(finalize(runId, 10)), concurrentSql(finalize(runId, 20))]);
+    const release = await holdPostgresRowLock(url!, `select 1 from public.rush_runs where id='${runId}' for update`, psqlBin);
+    const racing = Promise.all([concurrentSql(finalize(runId, 10)), concurrentSql(finalize(runId, 20))]);
+    try {
+      await waitForBlockedPostgresCalls(url!, 'finalize_rush_run_v2', 2, psqlBin);
+    } finally {
+      await release();
+    }
+    const [a, b] = await racing;
     const results = [JSON.parse(a), JSON.parse(b)];
     expect(results.map((x) => x.outcome).sort()).toEqual(['already_completed', 'applied']);
     const published = Number(sql(`select total_score from public.rush_runs where id='${runId}'`));
@@ -136,10 +144,18 @@ describe.skipIf(!allowed)('Puzzle Rush real PostgreSQL assignment and completion
 
   it('serializes a report racing the completion claim', async () => {
     const runId = createRun([puzzleA]);
-    const [claim, attemptedReport] = await Promise.allSettled([
+    const release = await holdPostgresRowLock(url!, `select 1 from public.rush_runs where id='${runId}' for update`, psqlBin);
+    const racing = Promise.allSettled([
       concurrentSql(`select public.claim_rush_completion_v2('${runId}','${userId}',0)`),
       concurrentSql(`select public.record_rush_report_v2('${runId}','${userId}','${puzzleA}',1,0,'[]'::jsonb,null)`),
     ]);
+    try {
+      await waitForBlockedPostgresCalls(url!, 'claim_rush_completion_v2', 1, psqlBin);
+      await waitForBlockedPostgresCalls(url!, 'record_rush_report_v2', 1, psqlBin);
+    } finally {
+      await release();
+    }
+    const [claim, attemptedReport] = await racing;
     expect(claim.status).toBe('fulfilled');
     expect(['fulfilled', 'rejected']).toContain(attemptedReport.status);
     expect(sql(`select completion_claimed_at is not null from public.rush_runs where id='${runId}'`)).toBe('t');

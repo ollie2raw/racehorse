@@ -17,6 +17,7 @@ import {
   finalizeRushRun,
   hasOfficialRushRunForDate,
   getRushRunById,
+  invalidateUnassignedRushRun,
   incrementPuzzlePoolPlayCounts,
   listCompletedRushRuns,
   listCompletedRushRunsForUser,
@@ -178,6 +179,11 @@ export function registerPuzzleRushRoutes(app: Application): void {
         res.status(409).json({ error: 'Puzzle Rush run is already finished.' });
         return;
       }
+      if (run.assignedPuzzleIds.length === 0) {
+        await invalidateUnassignedRushRun(runId, userId);
+        res.status(409).json({ error: 'This older run cannot be verified. Start a new run.' });
+        return;
+      }
 
       const recorded = await recordReportedRushPuzzle({
         runId,
@@ -226,6 +232,11 @@ export function registerPuzzleRushRoutes(app: Application): void {
       if (run.status !== 'in_progress') {
         // Idempotent replay: a duplicate complete returns the stored result.
         res.json({ ok: true, replayed: true, run });
+        return;
+      }
+      if (run.assignedPuzzleIds.length === 0) {
+        await invalidateUnassignedRushRun(runId, userId);
+        res.status(409).json({ error: 'This older run cannot be verified. Start a new run.' });
         return;
       }
 

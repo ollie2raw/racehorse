@@ -138,7 +138,17 @@ export async function createRushRun(params: {
   /** First run of the day for this user. Daily leaderboard only. */
   isOfficial: boolean;
   assignedPuzzleIds: string[];
-}): Promise<{ run: PuzzleRushRun; created: boolean }> {
+}, legacyRetry = 0): Promise<{ run: PuzzleRushRun; created: boolean }> {
+  const recoverOpenRun = async (): Promise<{ run: PuzzleRushRun; created: boolean }> => {
+    const existing = await getOpenRushRunForUser(params.userId);
+    if (!existing) throw new Error('Failed to create or recover puzzle rush run.');
+    if (existing.assignedPuzzleIds.length > 0) return { run: existing, created: false };
+    // An old server may have created this after the expand migration. Its
+    // served puzzles were never recorded, so close it and retry a new start.
+    await invalidateUnassignedRushRun(existing.id, params.userId);
+    if (legacyRetry >= 2) throw new Error('Legacy Puzzle Rush run kept racing start; retry shortly.');
+    return createRushRun(params, legacyRetry + 1);
+  };
   /**
    * A plain INSERT — deliberately no `on_conflict`.
    *
@@ -184,11 +194,7 @@ export async function createRushRun(params: {
     rows = await insert(params.isOfficial);
   } catch (error) {
     if (isOpenRunConflict(error)) {
-      // This user already has a run in flight: replay it rather than starting
-      // a second one. This is the phase-1 idempotent-start behaviour.
-      const existing = await getOpenRushRunForUser(params.userId);
-      if (!existing) throw new Error('Failed to create or recover puzzle rush run.');
-      return { run: existing, created: false };
+      return recoverOpenRun();
     }
     if (params.isOfficial && isOfficialConflict(error)) {
       // Lost the race for today's official slot; run as unofficial instead.
@@ -196,9 +202,7 @@ export async function createRushRun(params: {
         rows = await insert(false);
       } catch (retryError) {
         if (!isOpenRunConflict(retryError)) throw retryError;
-        const existing = await getOpenRushRunForUser(params.userId);
-        if (!existing) throw new Error('Failed to create or recover puzzle rush run.');
-        return { run: existing, created: false };
+        return recoverOpenRun();
       }
     } else {
       throw error;
@@ -208,9 +212,20 @@ export async function createRushRun(params: {
   const row = rows?.[0];
   if (row) return { run: normalizeRushRun(row), created: true };
 
-  const existing = await getOpenRushRunForUser(params.userId);
-  if (!existing) throw new Error('Failed to create or recover puzzle rush run.');
-  return { run: existing, created: false };
+  return recoverOpenRun();
+}
+
+export async function invalidateUnassignedRushRun(
+  runId: string,
+  userId: string,
+): Promise<{ invalidated: boolean; run: PuzzleRushRun }> {
+  const result = await supabaseFetch<{ invalidated: boolean; run: RushRunRow }>(
+    '/rest/v1/rpc/invalidate_unassigned_rush_run_v2', {
+      method: 'POST',
+      body: JSON.stringify({ p_run_id: runId, p_user_id: userId }),
+    },
+  );
+  return { invalidated: result.invalidated, run: normalizeRushRun(result.run) };
 }
 
 export async function getOpenRushRunForUser(userId: string): Promise<PuzzleRushRun | null> {
