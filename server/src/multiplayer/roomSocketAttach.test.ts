@@ -13,6 +13,7 @@ import { createRoomSocketAttach } from './roomSocketAttach';
 import * as livePersistence from './roomLivePersistence';
 import * as matchTerminalJoin from './matchTerminalJoin';
 import { MatchTerminalJoinError } from './matchTerminalJoin';
+import { issueGuestReconnectCapability } from './guestReconnectCapability';
 
 function makeSocket(socketId: string) {
   const socket = {
@@ -231,6 +232,7 @@ describe('createRoomSocketAttach', () => {
         roomCode,
         username: 'P1',
         userId: 'u1',
+        guestReconnectToken: issueGuestReconnectCapability(roomCode, 'p1', 'u1'),
         via: 'room:join',
         hydrateMatchmakingRoom: true,
       }),
@@ -296,6 +298,7 @@ describe('createRoomSocketAttach', () => {
         roomCode,
         username: 'P1',
         userId: 'u1',
+        guestReconnectToken: issueGuestReconnectCapability(roomCode, 'p1', 'u1'),
         via: 'room:join',
         hydrateMatchmakingRoom: true,
       }),
@@ -336,6 +339,7 @@ describe('createRoomSocketAttach', () => {
       roomCode,
       username: 'P1',
       userId: 'u1',
+      guestReconnectToken: issueGuestReconnectCapability(roomCode, 'p1', 'u1'),
       via: 'room:join',
       hydrateMatchmakingRoom: true,
     });
@@ -371,6 +375,28 @@ describe('createRoomSocketAttach', () => {
   });
 
   describe('guest reconnect seat reclaim (P1 — reclaim before allocate)', () => {
+    it('requires the original capability when a private roster is restored after process restart', async () => {
+      const roomCode = 'RESTG1';
+      const seatId = 'seat-guest';
+      const token = issueGuestReconnectCapability(roomCode, seatId, 'guest-visible');
+      createReservedRoom(roomCode);
+      joinRoom(roomCode, seatId);
+      vi.spyOn(livePersistence, 'ensureRoomHydrated').mockResolvedValue({
+        kind: 'hydrated', room: getRoom(roomCode), durabilityRecoverable: true,
+        restoredRoster: [{ seatId, userId: 'guest-visible', username: 'Guest' }],
+      });
+      const io = { sockets: { sockets: new Map() }, to: vi.fn(() => ({ emit: vi.fn() })) } as any;
+      const impostor = makeSocket('sock-impostor');
+      const { attachSocketToTrackedRoom: attack } = createRoomSocketAttach({ io, socket: impostor, handlerDeps });
+      await expect(attack({ roomCode, username: 'Guest', userId: 'guest-visible',
+        via: 'room:join', hydrateMatchmakingRoom: false })).rejects.toThrow('guest_reconnect_denied');
+      const legitimate = makeSocket('sock-legitimate');
+      const { attachSocketToTrackedRoom: rejoin } = createRoomSocketAttach({ io, socket: legitimate, handlerDeps });
+      const result = await rejoin({ roomCode, username: 'Guest', userId: 'guest-visible',
+        guestReconnectToken: token, via: 'room:join', hydrateMatchmakingRoom: false });
+      expect(result.joinedPlayerSeatId).toBe(seatId);
+    });
+
     it('solo guest host reconnects while room not full: reclaims original seat, no second seat allocated', async () => {
       const roomCode = 'GUESTR1';
       createReservedRoom(roomCode);
@@ -400,6 +426,7 @@ describe('createRoomSocketAttach', () => {
         roomCode,
         username: 'Alice',
         userId: null,
+        guestReconnectToken: issueGuestReconnectCapability(roomCode, 'seat-host', ''),
         via: 'room:join',
         hydrateMatchmakingRoom: false,
       });
@@ -441,6 +468,7 @@ describe('createRoomSocketAttach', () => {
         roomCode,
         username: 'Alice',
         userId: null,
+        guestReconnectToken: issueGuestReconnectCapability(roomCode, 'seat-host', ''),
         via: 'room:join',
         hydrateMatchmakingRoom: false,
       });
@@ -470,6 +498,7 @@ describe('createRoomSocketAttach', () => {
         roomCode,
         username: 'Alice',
         userId: null,
+        guestReconnectToken: issueGuestReconnectCapability(roomCode, 'seat-host', ''),
         via: 'room:join',
         hydrateMatchmakingRoom: false,
       });
@@ -511,6 +540,7 @@ describe('createRoomSocketAttach', () => {
         roomCode,
         username: 'Alice',
         userId: null,
+        guestReconnectToken: issueGuestReconnectCapability(roomCode, 'seat-host', ''),
         via: 'room:join',
         hydrateMatchmakingRoom: false,
       });

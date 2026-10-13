@@ -121,10 +121,19 @@ function onceWithTimeout(socket, event, predicate = () => true, timeoutMs = TIME
   });
 }
 
+const guestSeatCapabilities = new Map();
+const capabilityKey = (roomCode, userId) => `${String(roomCode).toUpperCase()}:${userId ?? ''}`;
+
 async function emitAck(socket, event, ...args) {
   let finalArgs = args;
   if (event === 'room:create' && args[0] && typeof args[0] === 'object') {
     finalArgs = [{ skipPregameDraw: true, ...args[0] }, ...args.slice(1)];
+  }
+  if (event === 'room:join' && typeof args[0] === 'string' && args[1] && typeof args[1] === 'object') {
+    const stored = guestSeatCapabilities.get(capabilityKey(args[0], args[1].userId));
+    if (stored && !Object.prototype.hasOwnProperty.call(args[1], 'guestReconnectToken')) {
+      finalArgs = [args[0], { ...args[1], guestReconnectToken: stored }, ...args.slice(2)];
+    }
   }
   if (event === 'game:action' && args.length >= 2 && args[1] && typeof args[1] === 'object') {
     const action = args[1];
@@ -141,6 +150,11 @@ async function emitAck(socket, event, ...args) {
     const timer = setTimeout(() => reject(new Error(`${event} ack timeout`)), TIMEOUT_MS);
     socket.emit(event, ...finalArgs, (resp) => {
       clearTimeout(timer);
+      if (resp?.ok && typeof resp.guestReconnectToken === 'string' &&
+          (event === 'room:create' || event === 'room:join')) {
+        const userId = event === 'room:create' ? args[0]?.userId : args[1]?.userId;
+        guestSeatCapabilities.set(capabilityKey(resp.roomCode, userId), resp.guestReconnectToken);
+      }
       resolve(resp);
     });
   });
@@ -2330,6 +2344,53 @@ async function scenarioPrivateCreateJoinStartMove() {
   );
 }
 
+async function scenarioGuestSeatCapabilityAttack() {
+  return withClients(
+    [
+      { label: 'host', userId: 'cap-host', username: 'CapHost' },
+      { label: 'guest', userId: 'cap-guest', username: 'CapGuest' },
+      { label: 'attacker', userId: 'cap-attacker', username: 'Attacker' },
+    ],
+    async ({ host, guest, attacker }) => {
+      const created = await emitAck(host.socket, 'room:create', {
+        username: host.state.username, userId: host.state.userId,
+      });
+      assert(created?.ok && created.roomCode, 'host failed to create capability test room');
+      const roomCode = created.roomCode;
+      const joined = await emitAck(guest.socket, 'room:join', roomCode, {
+        username: guest.state.username, userId: guest.state.userId,
+      });
+      assert(joined?.ok && joined.you && joined.guestReconnectToken,
+        'guest did not receive its private reconnect capability');
+      assert(!JSON.stringify(joined.players).includes(joined.guestReconnectToken),
+        'guest reconnect capability leaked into room roster');
+      await waitForRoomCount(host, 2);
+
+      const forged = await emitAck(attacker.socket, 'room:join', roomCode, {
+        username: guest.state.username,
+        userId: guest.state.userId,
+        guestReconnectToken: null,
+      });
+      assert(forged?.ok === false && /guest_reconnect_denied/.test(String(forged.error)),
+        'visible guest ID was accepted as seat ownership');
+      assert(guest.socket.connected, 'attacker displaced the original guest');
+
+      const secondTab = createClient('guestSecondTab', guest.state.userId, guest.state.username);
+      try {
+        await secondTab.connectAndIdentify();
+        const legitimate = await emitAck(secondTab.socket, 'room:join', roomCode, {
+          username: guest.state.username, userId: guest.state.userId,
+        });
+        assert(legitimate?.ok && legitimate.you === joined.you,
+          `valid guest capability failed to reclaim seat: ${legitimate?.error ?? 'unknown'}`);
+        return { roomCode, checks: { forgedSeatRejected: true, legitimateSecondTabAccepted: true } };
+      } finally {
+        secondTab.disconnect();
+      }
+    },
+  );
+}
+
 const scenarios = [
   { name: 'private-create-join-start-move', run: scenarioPrivateCreateJoinStartMove },
   { name: 'private-midmatch-leave-forfeit', run: scenarioPrivateMidMatchLeaveForfeit },
@@ -2345,6 +2406,7 @@ const scenarios = [
   { name: 'post-move-stability', run: scenarioPostMoveStability },
   { name: 'start-and-hand-ready-guards', run: scenarioStartAndHandReadyGuards },
   { name: 'guest-seat-reconnect', run: scenarioGuestSeatReconnect },
+  { name: 'guest-seat-capability-attack', run: scenarioGuestSeatCapabilityAttack },
   { name: 'tokenless-uuid-claim-rejected', run: scenarioTokenlessUuidClaimRejected },
   { name: 'hand-ended-replay', run: scenarioHandEndedReplay },
   { name: 'identity-freeze', run: scenarioIdentityFreeze },

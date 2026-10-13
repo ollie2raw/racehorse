@@ -4,6 +4,7 @@ import { appendRoomEvent } from '../roomEvents';
 import { createRoom, getRoomMatchEventMeta } from '../rooms';
 import { schedulePersistLiveRoomSessionForRoom } from './roomLivePersistence';
 import { sanitizePrivateRoomConfig } from './privateRoomConfig';
+import { isGuestSeatIdentity, issueGuestReconnectCapability } from './guestReconnectCapability';
 import {
   allocatePlayerSeatId,
   clearSocketRematchReady,
@@ -92,6 +93,9 @@ export function registerRoomLifecycleHandlers(
         roomCode: room.code,
         you: playerSeatId,
         players: roomPlayers,
+        ...(isGuestSeatIdentity(userId)
+          ? { guestReconnectToken: issueGuestReconnectCapability(room.code, playerSeatId, userId ?? '') }
+          : {}),
         eventMeta: getRoomMatchEventMeta(room.code),
         matchStarted: false,
       });

@@ -44,6 +44,7 @@ export type RoomJoinIdentity = {
   username: string;
   userId: string | null;
   authToken: string | null;
+  guestReconnectToken?: string | null;
 };
 
 export type RoomCreatePayload = {
@@ -90,18 +91,41 @@ function isMpDebugEnabled(): boolean {
   return typeof window !== 'undefined' && window.localStorage.getItem('mp_debug') === '1';
 }
 
+function guestCapabilityKey(roomCode: string, userId: string | null): string {
+  return `rh:guest-seat:${roomCode.trim().toUpperCase()}:${userId ?? ''}`;
+}
+
+function isGuestIdentity(userId: unknown): userId is string | null {
+  return userId == null || (typeof userId === 'string' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId));
+}
+
+function redactCapability(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const { guestReconnectToken: _secret, ...safe } = value as Record<string, unknown>;
+  return safe;
+}
+
 export function emitWithAck<TResp>(
   socket: SocketEmitter,
   event: string,
   ...argsWithoutAck: unknown[]
 ): Promise<TResp> {
   return new Promise((resolve, reject) => {
+    if (event === 'room:join' && typeof argsWithoutAck[0] === 'string') {
+      const identity = argsWithoutAck[1] as RoomJoinIdentity | undefined;
+      if (identity && isGuestIdentity(identity.userId)) {
+        try {
+          const stored = window.localStorage.getItem(guestCapabilityKey(argsWithoutAck[0], identity.userId));
+          if (stored) argsWithoutAck[1] = { ...identity, guestReconnectToken: stored };
+        } catch { /* unavailable storage means guest reconnect requires a fresh seat */ }
+      }
+    }
     const mpDebug = isMpDebugEnabled();
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     if (mpDebug) {
       logger.operational('mp-action-client', 'sent', {
         event,
-        payload: argsWithoutAck[argsWithoutAck.length - 1],
+        payload: redactCapability(argsWithoutAck[argsWithoutAck.length - 1]),
       });
     }
     const t = window.setTimeout(() => {
@@ -118,12 +142,23 @@ export function emitWithAck<TResp>(
     }, SOCKET_ACK_TIMEOUT_MS);
     socket.emit(event, ...argsWithoutAck, (resp: TResp) => {
       window.clearTimeout(t);
+      if ((event === 'room:create' || event === 'room:join') && resp && typeof resp === 'object') {
+        const room = resp as RoomAckResponse;
+        const identity = event === 'room:create'
+          ? argsWithoutAck[0] as RoomCreatePayload | undefined
+          : argsWithoutAck[1] as RoomJoinIdentity | undefined;
+        if (room.ok && room.roomCode && typeof room.guestReconnectToken === 'string' && isGuestIdentity(identity?.userId)) {
+          try {
+            window.localStorage.setItem(guestCapabilityKey(room.roomCode, identity?.userId ?? null), room.guestReconnectToken);
+          } catch { /* current seat remains usable; reload recovery may fail */ }
+        }
+      }
       if (mpDebug) {
         const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
         logger.operational('mp-action-client', 'ack', {
           event,
           elapsedMs: Number((endedAt - startedAt).toFixed(1)),
-          response: resp,
+          response: redactCapability(resp),
         });
       }
       resolve(resp);

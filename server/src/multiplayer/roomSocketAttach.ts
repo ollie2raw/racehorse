@@ -1,4 +1,6 @@
 import { shouldRefuseNewPrivateSeat } from '../moderation/privateRoomSeatBlocks';
+import { isGuestSeatIdentity, issueGuestReconnectCapability, verifyGuestReconnectCapability } from './guestReconnectCapability';
+import { roomKind } from './roomKind';
 import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import { appendRoomEvent } from '../roomEvents';
@@ -63,6 +65,7 @@ export type AttachSocketToTrackedRoomFn = (params: {
   roomCode: string;
   username: string;
   userId: string | null;
+  guestReconnectToken?: string | null;
   via: 'room:join' | 'tournament:attach_assigned_match';
   hydrateMatchmakingRoom: boolean;
   /** The tournament match being attached: another match's room or session under this code is refused. */
@@ -71,6 +74,7 @@ export type AttachSocketToTrackedRoomFn = (params: {
   room: Room;
   joinedPlayerSeatId: string;
   roster: RoomPlayer[];
+  guestReconnectToken?: string;
   stateWithCounts: ReturnType<typeof maskStateForRecipient> & { handCounts?: Record<string, number> } | null;
   rejoinLegalMoves: ReturnType<typeof getRoomLegalMoves>;
   rejoinCanDraw: boolean;
@@ -238,7 +242,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
   };
 
   const attachSocketToTrackedRoom: AttachSocketToTrackedRoomFn = async (params) => {
-    const { roomCode, username, userId, via, hydrateMatchmakingRoom, tournamentMatchId } = params;
+    const { roomCode, username, userId, guestReconnectToken, via, hydrateMatchmakingRoom, tournamentMatchId } = params;
     // Tournament attaches pass their match so another match's session, room
     // or archive under this code is never used; other calls are unchanged.
     const resolveTerminalJoin = () =>
@@ -429,6 +433,11 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     if (existingRoom && userId) {
       const existingPlayer = roster.find((player) => player.userId === userId);
       if (existingPlayer) {
+        if (roomKind(existingRoom) === 'private' && isGuestSeatIdentity(userId) &&
+            existingPlayer.socketId !== socket.id &&
+            !verifyGuestReconnectCapability(guestReconnectToken, roomCode, existingPlayer.id, userId)) {
+          throw new Error('guest_reconnect_denied');
+        }
         assertRoomDurabilityOperationAllowed(existingRoom, 'reconnect_existing_player', {
           attachSource: hydrated.kind === 'hydrated' ? 'hydrated' : 'already_in_memory',
         });
@@ -519,6 +528,10 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
         }),
       );
       if (reconnectCandidate) {
+        if (roomKind(existingRoom) === 'private' && isGuestSeatIdentity(userId) &&
+            !verifyGuestReconnectCapability(guestReconnectToken, roomCode, reconnectCandidate.seatId, userId ?? '')) {
+          throw new Error('guest_reconnect_denied');
+        }
         assertRoomDurabilityOperationAllowed(existingRoom, 'reconnect_existing_player', {
           attachSource: hydrated.kind === 'hydrated' ? 'hydrated' : 'already_in_memory',
         });
@@ -560,6 +573,9 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
     if (!joinedPlayerSeatId) {
       joinedPlayerSeatId = resolveActorSeatId(room.code, socket);
     }
+    const issuedGuestReconnectToken = roomKind(room) === 'private' && isGuestSeatIdentity(userId)
+      ? issueGuestReconnectCapability(room.code, joinedPlayerSeatId, userId ?? '')
+      : undefined;
     socket.join(room.code);
     socket.data.roomId = room.code;
     socket.data.username = username;
@@ -738,6 +754,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       room,
       joinedPlayerSeatId,
       roster,
+      guestReconnectToken: issuedGuestReconnectToken,
       stateWithCounts,
       rejoinLegalMoves,
       rejoinCanDraw,
