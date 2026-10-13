@@ -71,6 +71,24 @@ describe('createRushRun', () => {
     expect(mocks.supabaseFetch.mock.calls[1][0]).toContain('status=eq.in_progress');
   });
 
+  it('closes an unassigned legacy run and retries an assigned start', async () => {
+    mocks.supabaseFetch
+      .mockRejectedValueOnce(new Error('duplicate key value violates unique constraint "rush_runs_one_open_per_user_idx"'))
+      .mockResolvedValueOnce([{ ...runRow, assigned_puzzle_ids: null }])
+      .mockResolvedValueOnce({ invalidated: true, run: {
+        ...runRow, status: 'invalidated', ended_at: '2026-08-20T20:01:00.000Z',
+        assigned_puzzle_ids: null, is_official: false,
+      } })
+      .mockResolvedValueOnce([{ ...runRow, id: 'assigned-replacement' }]);
+
+    const result = await createRushRun({
+      userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true,
+      assignedPuzzleIds: ['pool-1'],
+    });
+    expect(result).toMatchObject({ created: true, run: { id: 'assigned-replacement', assignedPuzzleIds: ['pool-1'] } });
+    expect(mocks.supabaseFetch.mock.calls[2][0]).toBe('/rest/v1/rpc/invalidate_unassigned_rush_run_v2');
+  });
+
   it('two concurrent starts converge on one run rather than creating two', async () => {
     // Racer A wins the insert; racer B hits the open-run index and replays A.
     mocks.supabaseFetch
