@@ -72,11 +72,13 @@ writing**; retain the fences until a deliberate reconciliation or forward fix.
    game-over persistence failures. Resolve ambiguous pre-cutover Ghost rows
    from verified receipts, profile history, and logs individually; do not bulk
    mark them consumed or bulk re-rate them.
-4. Keep both contract migrations unapplied for at least one full server health
-   check and a successful Ghost/Rush completion and retry while the new binary
-   serves traffic. Explicitly confirm that **no old server process/instance**
-   remains, including a draining Render instance. Review errors and reconcile
-   any failed handoff writes. A failed deployment can remain on the old binary
+4. Keep both contract migrations unapplied while the new binary completes a
+   Ghost/Rush completion-and-retry smoke and then serves traffic for 15 minutes
+   without new completion errors. Check the new commit on the health endpoint,
+   the Render deploy event showing the previous instance stopped (including
+   drain completion), and the active instance/release list. **No old server
+   process/instance** may remain. Review errors and reconcile any failed
+   handoff writes. A failed deployment can remain on the old binary
    with the expand schema: Ghost/Rush writes remain fenced, other traffic can
    continue, and a corrected new deployment can resume without guessing.
 5. An operator decides to cross the contract boundary. Apply Rush contract
