@@ -107,10 +107,14 @@ function stub() {
             : { ...base, last_updated: null, composite_log: HEAVY_LOG, style_profile: null },
         ]);
       }
-      if (url.includes('/rest/v1/ghost_profiles') && method === 'POST') {
-        const sent = JSON.parse(String(init?.body))[0];
+      if (url.includes('/rest/v1/ghost_profiles') && (method === 'POST' || method === 'PATCH')) {
+        const body = JSON.parse(String(init?.body));
+        const sent = Array.isArray(body) ? body[0] : body;
         upserts.push(sent);
         return json([sent]);
+      }
+      if (url.includes('/rest/v1/rpc/complete_ghost_rating_v2')) {
+        return json({ isNewGame: true, newRating: 827, ratingDelta: 27 });
       }
       if (url.includes('/rest/v1/ghost_games') && method === 'POST') return json([{ id: 'g', xmax: '0' }]);
       if (url.includes('/rest/v1/ghost_games') && method === 'GET') return json(GAMES);
