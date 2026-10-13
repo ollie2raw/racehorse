@@ -56,4 +56,21 @@ describe('analytics platform property', () => {
     await settle();
     expect(posthog.capture).not.toHaveBeenCalled();
   });
+
+  it('pins privacy-sensitive automatic collection off while intentional events still capture', async () => {
+    const { track } = await freshAnalytics();
+    track('session_start');
+    track('game_opened', { mode: 'multiplayer' });
+    await settle();
+    expect(posthog.init.mock.calls.at(-1)?.[1]).toMatchObject({
+      autocapture: false,
+      disable_session_recording: true,
+      capture_dead_clicks: false,
+      capture_exceptions: false,
+      capture_performance: false,
+      capture_heatmaps: false,
+      disable_surveys: true,
+    });
+    expect(posthog.capture.mock.calls.map((call) => call[0])).toEqual(['session_start', 'game_opened']);
+  });
 });

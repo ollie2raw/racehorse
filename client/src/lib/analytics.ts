@@ -98,6 +98,14 @@ async function loadTransport(): Promise<AnalyticsTransport | null> {
       capture_pageview: false,
       capture_pageleave: true,
       autocapture: false,
+      // Pin optional collection off in code; remote project settings must not
+      // enable it without a deliberate product and privacy-disclosure change.
+      disable_session_recording: true,
+      capture_dead_clicks: false,
+      capture_exceptions: false,
+      capture_performance: false,
+      capture_heatmaps: false,
+      disable_surveys: true,
     });
     // A super property: sent with every event, so web and App Store players
     // can be told apart without touching any event or call site.
