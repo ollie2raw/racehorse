@@ -67,9 +67,10 @@ describe('analytics platform property', () => {
     expect(posthog.init.mock.calls.at(-1)?.[1]).toMatchObject({ api_host: 'https://us.i.posthog.com' });
   });
 
-  it('pins replay, dead clicks, exceptions, performance, heatmaps and surveys off regardless of remote config', async () => {
+  it('pins privacy-sensitive automatic collection off while intentional events still capture', async () => {
     const { track } = await freshAnalytics();
     track('session_start');
+    track('game_opened', { mode: 'multiplayer' });
     await settle();
     expect(posthog.init.mock.calls.at(-1)?.[1]).toMatchObject({
       autocapture: false,
@@ -80,6 +81,6 @@ describe('analytics platform property', () => {
       capture_heatmaps: false,
       disable_surveys: true,
     });
+    expect(posthog.capture.mock.calls.map((call) => call[0])).toEqual(['session_start', 'game_opened']);
   });
 });
-
