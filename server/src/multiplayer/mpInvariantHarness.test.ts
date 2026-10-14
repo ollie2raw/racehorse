@@ -252,16 +252,16 @@ async function runSideEffectTail(): Promise<void> {
     id: SRC,
     endedAtMs: Date.now(),
     roomCode: 'ROOM1',
-    a: { seatId: 'seat-a', userId: 'user-a', username: 'A' },
-    b: { seatId: 'seat-b', userId: 'user-b', username: 'B' },
+    a: { seatId: 'seat-a', userId: '11111111-1111-4111-8111-111111111111', username: 'A' },
+    b: { seatId: 'seat-b', userId: '22222222-2222-4222-8222-222222222222', username: 'B' },
     scoreA: 30,
     scoreB: 10,
     winnerSeatId: 'seat-a',
     pointDiff: 20,
   });
   await writeMatchActivity({
-    winnerUserId: 'user-a',
-    loserUserId: 'user-b',
+    winnerUserId: '11111111-1111-4111-8111-111111111111',
+    loserUserId: '22222222-2222-4222-8222-222222222222',
     winnerUsername: 'A',
     loserUsername: 'B',
     mode: 'online',
@@ -272,8 +272,8 @@ async function runSideEffectTail(): Promise<void> {
   await recordPublicOnlineMatch({
     roomCode: 'ROOM1',
     roomMatchId: SRC,
-    winnerUserId: 'user-a',
-    loserUserId: 'user-b',
+    winnerUserId: '11111111-1111-4111-8111-111111111111',
+    loserUserId: '22222222-2222-4222-8222-222222222222',
     winnerScore: 30,
     loserScore: 10,
   });
@@ -295,8 +295,8 @@ describe('MP-INV-15 — idempotent game-over side-effects (MP-G4)', () => {
     // (activity_feed_dedupe_key_uidx on `${SRC}:${userId}:${type}`):
     expect(s.activityFeed).toHaveLength(2);
     expect(s.activityFeed.map((r) => r.dedupe_key).sort()).toEqual([
-      `${SRC}:user-a:win`,
-      `${SRC}:user-b:loss`,
+      `${SRC}:11111111-1111-4111-8111-111111111111:win`,
+      `${SRC}:22222222-2222-4222-8222-222222222222:loss`,
     ]);
   });
 
@@ -307,8 +307,8 @@ describe('MP-INV-15 — idempotent game-over side-effects (MP-G4)', () => {
     // whole sequence from step 1 (§2.1.6).
     completeGhostGameMock.mockRejectedValueOnce(new Error('transient')).mockResolvedValue(undefined);
 
-    const a = { id: 'seat-a', userId: 'user-a', username: 'A', socketId: 'sa' };
-    const b = { id: 'seat-b', userId: 'user-b', username: 'B', socketId: 'sb' };
+    const a = { id: 'seat-a', userId: '11111111-1111-4111-8111-111111111111', username: 'A', socketId: 'sa' };
+    const b = { id: 'seat-b', userId: '22222222-2222-4222-8222-222222222222', username: 'B', socketId: 'sb' };
     const room = {
       code: 'ROOM1', players: ['seat-a', 'seat-b'], state: null, config: {},
       asyncStateVersion: 0, nextHandReady: new Set<string>(), rematchReady: new Set<string>(),
@@ -341,19 +341,19 @@ describe('MP-INV-15 — idempotent game-over side-effects (MP-G4)', () => {
 
     // game-over lands first
     await recordMatchEnd({
-      matchId: 'mm-1', status: 'completed', winnerId: 'user-a',
+      matchId: 'mm-1', status: 'completed', winnerId: '11111111-1111-4111-8111-111111111111',
       playerARatingChange: 12, playerBRatingChange: -12,
     });
     // then a late forfeit for the same match (MP-2 window)
     await recordMatchEnd({
-      matchId: 'mm-1', status: 'forfeit', winnerId: 'user-b',
+      matchId: 'mm-1', status: 'forfeit', winnerId: '22222222-2222-4222-8222-222222222222',
       playerARatingChange: 6, playerBRatingChange: -6,
     });
 
     const row = mpTestStore.matchmakingMatches.get('mm-1')!;
     // conditional PATCH `?status=eq.in_progress` ⇒ the SECOND call matched 0 rows:
     expect(row.status).toBe('completed');
-    expect(row.winner_id).toBe('user-a');
+    expect(row.winner_id).toBe('11111111-1111-4111-8111-111111111111');
     expect(row.player_a_rating_change).toBe(12);
   });
 

@@ -228,6 +228,13 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
     throw new Error(TOURNAMENT_APPLY_FAILED_ERROR);
   }
 
+  // Guest seat identities are stable reconnect keys, not auth/profile IDs.
+  // Socket identity verification permits only authenticated accounts to retain
+  // UUID user IDs. Keep the roster unchanged; persist account references only.
+  const accountId = (id: string | null): string | null =>
+    id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : null;
+  input = { ...input, a: { ...a, userId: accountId(a.userId) }, b: { ...b, userId: accountId(b.userId) } };
+
   const fritzContext = getPendingFritzMatchContext(room);
   if (!hasLegacyRatingEffects(input, fritzContext)) {
     return persistRatedGameOverOnce(io, input);

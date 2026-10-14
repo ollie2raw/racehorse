@@ -22,6 +22,8 @@ import {
   TOURNAMENT_FORFEIT_RESULT_PERSIST_FAILED_MESSAGE,
 } from './gameOverPersistPolicy';
 import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
+import { withRatingCompletion } from '../ranking/ratingCutoverGate';
+import { isAnyTournamentRoom } from './roomKind';
 
 const log = childLogger('room-forfeit');
 
@@ -78,7 +80,26 @@ function emitTournamentForfeitApplyFailed(
  *
  * Tournament (G2): `abandonedAt` is latched only after durable applyMatchResult.
  */
+function accountId(id: string | null): string | null {
+  return id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : null;
+}
+
 export async function applyActiveMatchForfeit(
+  ...args: Parameters<typeof applyActiveMatchForfeitOnce>
+): Promise<{ winnerUserId: string | null } | null> {
+  const room = getRoom(args[2]);
+  const roster = getRoomRoster(room.code);
+  const rated = room.players.length === 2 && room.players.every((seatId) =>
+    accountId(roster.find((player) => player.id === seatId)?.userId ?? null));
+  if (!isAnyTournamentRoom(room) && rated && !room.abandonedAt && !room.state?.gameOver) {
+    // Forfeit is also a completion. Enter before latching abandon state or
+    // inserting ranked rows, so drain cannot miss an active legacy writer.
+    return withRatingCompletion('room_forfeit', () => applyActiveMatchForfeitOnce(...args));
+  }
+  return applyActiveMatchForfeitOnce(...args);
+}
+
+async function applyActiveMatchForfeitOnce(
   io: Server,
   socket: Socket,
   roomCode: string,
@@ -269,7 +290,7 @@ export async function applyActiveMatchForfeit(
   // at all, which is a free way to dodge a bad deal. A forfeit at 5-0 is a real
   // loss; Glicko already scales the delta by how expected that result was, so a
   // short match does not need a separate escape hatch.
-  if (isPrivate && a.userId && b.userId) {
+  if (isPrivate && a.userId && b.userId && accountId(a.userId) && accountId(b.userId)) {
     try {
       const [profilesA, profilesB] = await Promise.all([
         supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?id=eq.${a.userId}`),

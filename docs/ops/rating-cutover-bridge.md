@@ -6,9 +6,10 @@ Ghost, Puzzle Rush, and ranked expand migrations.
 
 The gate covers two legacy completion categories:
 
-- Authenticated human-vs-human completion. The old path inserts ranked game
+- Authenticated human-vs-human completion, including manual/disconnect forfeits. The old path inserts ranked game
   rows and may update both players' Glicko state. Verified move logs may also
-  write Ghost training records. These completions are intentionally gated.
+  write Ghost training records. These completions are intentionally gated before ranked writes or abandon state.
+  A manual leave rejected during quiescence retains its seat and returns a retryable error.
 - An authenticated player's Fritz completion when that player has a non-empty
   move log. The old path can insert a Fritz ranked result and starts a deferred
   Ghost training/rating write. This completion is intentionally gated.
