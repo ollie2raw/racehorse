@@ -128,7 +128,7 @@ transition, and record an audit event. Never close solely because of age or a
 test-domain email. The older `remediateDailyFritzStrandedAttempts.ts` script is
 not used; its ID-only PATCH is insufficient for concurrent-state safety.
 
-## Candidate validation
+## Initial candidate validation
 
 - Focused recovery/lifecycle/leaderboard/QA-safety suites: 42 tests passed.
 - Full server suite, four shards: 1,940 tests passed; 17 skipped, 1 todo;
@@ -149,7 +149,7 @@ the tsx CLI could not create its local IPC pipe. Required commands passed when
 rerun with local socket/IPC access. The isolated worktree has no Supabase env
 files; no production traffic or writes were used for validation.
 
-## Production hotfix preparation
+## Initial production hotfix preparation
 
 `hotfix/daily-fritz-egress` is based directly on production main
 `18bc747ac7156d0058c5acd9cddcc545660e6e28`, at commit
@@ -163,3 +163,51 @@ shards (1,873 tests passed, 1 todo; 281 test files passed); server build passed;
 22/22 architecture invariants and responsive policy passed; branch-level
 `git diff --check` passed. Both worktrees are clean. Nothing was pushed, merged,
 migrated, deployed, or executed against production Supabase.
+
+## Malformed-row blocker closure and final gate
+
+The initial artifacts above were held at review: a JSON score object with
+non-callable `toString`/`valueOf` could throw during normalization, before the
+sweep's row error boundary, preventing cursor advancement. Those initial SHAs
+and validation counts are historical; the corrected artifacts supersede them.
+
+The shared correction is candidate commit
+`6e1f39e475b684c30c255eb76d90b7ff67f532d0`, ported minimally to hotfix commit
+`3a65ab1c37f098aa94c306c755eca8fbbc65aee2` on the same production-main base.
+
+- The classifier accepts untrusted input and encloses property access and the
+  existing normalizer in one exception boundary. Coercion/parsing errors return
+  `ambiguous`; valid completion interpretation is unchanged.
+- The sweep separately catches unforeseen eligibility errors, warns without
+  unsafe error-object coercion or per-row persistence, skips that row, and
+  continues the page/cursor. Ordinary malformed rows cause no full-row lookup.
+- Scan failures are logged and rethrown to the existing scheduler handler;
+  they do not become successful zero-work/ambiguous-row results. Retry retains
+  the cursor and releases the overlap guard.
+- Regression tests cover every numeric coercion site, malformed containers and
+  property access, a malformed first row on a 100-row page, later completions,
+  cursor advancement/wrap, repeated runs, unchanged malformed state, and scan
+  failures. Existing completion parity, resume and amplification tests remain.
+- The same classifier makes reconciliation robust. A CLI fixture containing a
+  malformed row followed by a complete row reports both, with the malformed
+  row marked `corrupt_ambiguous` and no automatic closure. The script remains
+  GET/read-only, with no write/apply mode; no production report was executed.
+
+Final gate results on corrected source:
+
+| Check | Candidate | Minimal production hotfix |
+|---|---|---|
+| Focused tests | 59 passed | 51 passed |
+| Full server suite (four shards) | 1,957 passed; 17 skipped; 1 todo | 1,888 passed; 1 todo |
+| Architecture and responsive policy | 22/22 + policy passed | 22/22 + policy passed |
+| Server build and script typecheck | Passed | Passed |
+| Branch diff check | Passed | Passed |
+| Changed runtime files lint | No findings | No findings |
+
+The corrected local memory reproducer passes on both artifacts: first sweep
+finalizes the valid later set and skips the malformed row; the second sweep
+does no further finalization; the malformed row remains unchanged; network
+calls are zero. Whole-server lint retains the same 60 existing errors and
+136 warnings. No production data, migration, tournament, rating cutover, or
+unrelated job is changed. The hotfix still contains only the original ten
+recovery/helper/test files, excluding candidate-only QA/report tooling.
