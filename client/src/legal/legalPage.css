@@ -197,8 +197,6 @@
 
 .rh-legal-foot {
   margin-top: var(--space-md);
-  padding-top: 8px;
-  border-top: 1px solid var(--border-subtle);
 }
 
 @media (--desk) {

@@ -3,7 +3,7 @@ import { GlobalNav } from '../components/GlobalNav';
 import type { AppMode } from '../types';
 import { supportEmailAddress } from './legalConfig.mjs';
 import type { LegalBlock, LegalDocument } from './legalContent.mjs';
-import { LegalLinks } from './LegalLinks';
+import { LegalFooter } from './LegalFooter';
 import type { LegalMode } from './legalModes';
 import './legalPage.css';
 
@@ -119,9 +119,7 @@ export function LegalPage({ document: doc, onNavigate, onOpenAuth, onSignOut }: 
             </section>
           ))}
 
-          <footer className="rh-legal-foot">
-            <LegalLinks current={doc.id} onNavigate={navigateLegal} />
-          </footer>
+          <LegalFooter className="rh-legal-foot" current={doc.id} onNavigate={navigateLegal} />
         </article>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from 'react';
+import { Fragment, type MouseEvent, type ReactNode } from 'react';
 import { LEGAL_HREF, LEGAL_LINKS, type LegalMode } from './legalModes';
 import './legalLinks.css';
 
@@ -56,16 +56,19 @@ export function LegalLinks({
   return (
     <nav className={['rh-legal-links', className].filter(Boolean).join(' ')} aria-label="Legal and support">
       <ul>
-        {LEGAL_LINKS.map((link) => (
-          <li key={link.mode}>
-            <a
-              href={link.href}
-              aria-current={current === link.mode ? 'page' : undefined}
-              onClick={(event) => inAppLinkClick(event, link.mode, onNavigate)}
-            >
-              {link.label}
-            </a>
-          </li>
+        {LEGAL_LINKS.map((link, index) => (
+          <Fragment key={link.mode}>
+            {index > 0 && <li className="rh-legal-separator" aria-hidden="true">·</li>}
+            <li>
+              <a
+                href={link.href}
+                aria-current={current === link.mode ? 'page' : undefined}
+                onClick={(event) => inAppLinkClick(event, link.mode, onNavigate)}
+              >
+                {link.label}
+              </a>
+            </li>
+          </Fragment>
         ))}
       </ul>
     </nav>

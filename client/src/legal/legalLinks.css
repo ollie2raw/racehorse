@@ -5,7 +5,7 @@
 
 .rh-legal-links ul {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
   gap: 0;
@@ -19,14 +19,15 @@
   align-items: center;
 }
 
-/* The middle dot between links, drawn rather than typed so screen readers
-   hear three links, not punctuation. */
-.rh-legal-links li + li::before {
-  content: '';
-  width: 3px;
-  height: 3px;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.28);
+/* Explicit, hidden punctuation stays between links in a non-wrapping row.
+   Reset list decorations so long-form page styles cannot add another bullet. */
+.rh-legal-links li::before,
+.rh-legal-links li::after {
+  content: none;
+}
+
+.rh-legal-links .rh-legal-separator {
+  color: rgba(255, 255, 255, 0.32);
 }
 
 .rh-legal-links a {
@@ -67,5 +68,46 @@
 @media (prefers-reduced-motion: reduce) {
   .rh-legal-links a {
     transition: none;
+  }
+}
+
+.rh-site-footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 0 max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rh-site-footer__copyright {
+  white-space: nowrap;
+}
+
+@media (--desk) {
+  .rh-site-footer {
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 16px;
+    padding-block: 16px max(16px, env(safe-area-inset-bottom));
+  }
+
+  .rh-site-footer .rh-legal-links li:last-child a {
+    padding-right: 0;
+  }
+}
+
+/* A single row preserves content space on phones held sideways. */
+@media (--short-landscape) {
+  .rh-site-footer {
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 12px;
+    padding-block: 8px max(8px, env(safe-area-inset-bottom));
   }
 }

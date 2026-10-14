@@ -201,7 +201,7 @@ export const TERMS_OF_USE = {
       id: 'about',
       heading: 'About these terms',
       blocks: [
-        `These terms are an agreement between you and ${operator}, which operates Racehorse Dominoes. Our Privacy Policy explains how we handle your information.`,
+        `These terms are an agreement between you and ${operator}, the operator of Racehorse Dominoes. Our Privacy Policy explains how we handle your information.`,
       ],
     },
     {
