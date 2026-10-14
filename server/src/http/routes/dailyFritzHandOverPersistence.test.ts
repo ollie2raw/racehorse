@@ -19,12 +19,13 @@ import type { DailyFritzAttemptRecord, DailyFritzRunRecord } from '../stores/dai
 // the same attempt fails with a 4xx. A hard refresh must be able to recover
 // from server-persisted state alone.
 
-const { authUserMock, getAttemptByIdMock, getAttemptMock, upsertAttemptMock, getRunMock } = vi.hoisted(() => ({
+const { authUserMock, getAttemptByIdMock, getAttemptMock, upsertAttemptMock, getRunMock, listStrandedMock } = vi.hoisted(() => ({
   authUserMock: vi.fn(),
   getAttemptByIdMock: vi.fn(),
   getAttemptMock: vi.fn(),
   upsertAttemptMock: vi.fn(),
   getRunMock: vi.fn(),
+  listStrandedMock: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../../platform/auth/supabaseAuth', () => ({
@@ -38,6 +39,7 @@ vi.mock('../stores/dailyFritzStore', async () => {
   return {
     ...actual,
     getDailyFritzAttemptById: getAttemptByIdMock,
+    listStrandedDailyFritzAttempts: listStrandedMock,
     // getDailyFritzAttempt (by run date + user) is what the /start "resume"
     // route uses to look up an in-progress attempt for a brand-new client
     // request — i.e. a hard refresh with zero prior client state.
@@ -65,6 +67,7 @@ vi.mock('../../social/activityWriter', () => ({
 }));
 
 import { registerDailyFritzRoutes } from './dailyFritz';
+import { recoverStrandedDailyFritzAttempts, resetDailyFritzRecoveryScanForTests } from '../../dailyFritzStrandedRecovery';
 
 type Handler = (req: any, res: any) => unknown | Promise<unknown>;
 
@@ -261,6 +264,7 @@ describe('Daily Fritz: refresh reconstructs state from server storage alone', ()
     getAttemptMock.mockReset();
     upsertAttemptMock.mockReset();
     getRunMock.mockReset();
+    listStrandedMock.mockReset().mockResolvedValue([]);
     if (previousFixturesFlag === undefined) delete process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED;
     else process.env.DAILY_FRITZ_TEST_FIXTURES_ENABLED = previousFixturesFlag;
   });
@@ -302,6 +306,15 @@ describe('Daily Fritz: refresh reconstructs state from server storage alone', ()
     // Simulate a hard refresh: a brand-new request, with no client-held
     // memory of the /next-hand response above — only what a fresh page load
     // always sends.
+    // Historical gameplay remains resumable after repeated scheduled sweeps.
+    resetDailyFritzRecoveryScanForTests();
+    listStrandedMock.mockResolvedValue([structuredClone(persisted)]);
+    getAttemptByIdMock.mockClear();
+    const beforeSweep = structuredClone(persisted);
+    for (let sweep = 0; sweep < 3; sweep += 1) await recoverStrandedDailyFritzAttempts();
+    expect(getAttemptByIdMock).not.toHaveBeenCalled();
+    expect(store.current()).toEqual(beforeSweep);
+
     const resumeResponse = await request('POST', '/api/daily-fritz/start', {
       body: freshClientStartRequestBody(),
     });

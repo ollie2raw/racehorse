@@ -5,8 +5,8 @@ import {
   invalidateDailyFritzLeaderboard,
   listStrandedDailyFritzAttempts,
   upsertDailyFritzAttempt,
-  type DailyFritzAttemptRecord,
 } from './http/stores/dailyFritzStore';
+import { classifyDailyFritzRecovery, type DailyFritzRecoveryCandidate } from './dailyFritzRecoveryEligibility';
 import { applyDailyFritzAttemptFinalization } from './http/routes/dailyFritzAttemptFinalize';
 import { commitDailyFritzAttemptCommand } from './http/stores/dailyFritzCommandStore';
 import { incrementDailyFritzMetric } from './http/routes/dailyFritzMetrics';
@@ -38,6 +38,14 @@ export const DAILY_FRITZ_STRANDED_RECOVERY_INTERVAL_MS = 15 * 60_000;
 export const DAILY_FRITZ_STRANDED_RECOVERY_BOOT_DELAY_MS = 20_000;
 
 type StrandedOutcome = 'finalized' | 'skipped';
+let scanAfterId: string | undefined;
+let sweepRunning = false;
+
+/** Test seam; production resets the cursor only on restart or page wrap. */
+export function resetDailyFritzRecoveryScanForTests(): void {
+  scanAfterId = undefined;
+  sweepRunning = false;
+}
 
 /**
  * Finalize Daily Fritz attempts that are stuck `status='started'` with a
@@ -56,13 +64,23 @@ export async function recoverStrandedDailyFritzAttempts(options?: {
   minAgeMs?: number;
   now?: number;
 }): Promise<{ scanned: number; finalized: number; skipped: number }> {
+  if (sweepRunning) return { scanned: 0, finalized: 0, skipped: 0 };
+  sweepRunning = true;
+  try {
+    return await runStrandedSweep(options);
+  } finally {
+    sweepRunning = false;
+  }
+}
+
+async function runStrandedSweep(options?: { minAgeMs?: number; now?: number }): Promise<{ scanned: number; finalized: number; skipped: number }> {
   const minAgeMs = options?.minAgeMs ?? DAILY_FRITZ_STRANDED_ATTEMPT_MIN_AGE_MS;
   const now = options?.now ?? Date.now();
   const startedBeforeIso = new Date(now - minAgeMs).toISOString();
 
-  let candidates: DailyFritzAttemptRecord[];
+  let candidates: DailyFritzRecoveryCandidate[];
   try {
-    candidates = await listStrandedDailyFritzAttempts(startedBeforeIso, DAILY_FRITZ_STRANDED_SCAN_LIMIT);
+    candidates = await listStrandedDailyFritzAttempts(startedBeforeIso, DAILY_FRITZ_STRANDED_SCAN_LIMIT, scanAfterId);
   } catch (error) {
     log.warn({ error: msg(error) }, 'scan failed');
     return { scanned: 0, finalized: 0, skipped: 0 };
@@ -71,6 +89,12 @@ export async function recoverStrandedDailyFritzAttempts(options?: {
   let finalized = 0;
   let skipped = 0;
   for (const candidate of candidates) {
+    // Incomplete and ambiguous rows remain untouched/resumable. They cause no
+    // full-row refetch, write or per-row event on any subsequent sweep.
+    if (classifyDailyFritzRecovery(candidate.result) !== 'complete') {
+      skipped += 1;
+      continue;
+    }
     try {
       if ((await finalizeOneStrandedAttempt(candidate)) === 'finalized') finalized += 1;
       else skipped += 1;
@@ -88,13 +112,15 @@ export async function recoverStrandedDailyFritzAttempts(options?: {
     }
   }
 
+  scanAfterId = candidates.length === DAILY_FRITZ_STRANDED_SCAN_LIMIT ? candidates[candidates.length - 1]!.id : undefined;
+
   if (candidates.length > 0) {
     log.info({ scanned: candidates.length, finalized, skipped }, 'sweep complete');
   }
   return { scanned: candidates.length, finalized, skipped };
 }
 
-async function finalizeOneStrandedAttempt(candidate: DailyFritzAttemptRecord): Promise<StrandedOutcome> {
+async function finalizeOneStrandedAttempt(candidate: DailyFritzRecoveryCandidate): Promise<StrandedOutcome> {
   return withDailyFritzAttemptLock(candidate.id, async () => {
     const attempt = await getDailyFritzAttemptById(candidate.id, candidate.userId);
     if (!attempt || attempt.status !== 'started') return 'skipped'; // resolved elsewhere / raced a live /complete

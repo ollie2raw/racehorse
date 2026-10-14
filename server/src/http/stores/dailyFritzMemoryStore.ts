@@ -117,10 +117,10 @@ export function memoryListAttemptsForDate(runDate: string): DailyFritzAttemptRec
   return [...attempts.values()].filter((attempt) => attempt.runDate === runDate);
 }
 
-export function memoryListStrandedAttempts(startedBeforeIso: string, limit: number): DailyFritzAttemptRecord[] {
+export function memoryListStrandedAttempts(startedBeforeIso: string, limit: number, afterId?: string): DailyFritzAttemptRecord[] {
   const cutoff = Date.parse(startedBeforeIso);
   return [...attempts.values()]
-    .filter((attempt) => attempt.status === 'started' && Date.parse(attempt.startedAt) < cutoff)
-    .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+    .filter((attempt) => attempt.status === 'started' && Date.parse(attempt.startedAt) < cutoff && (!afterId || attempt.id > afterId))
+    .sort((a, b) => a.id.localeCompare(b.id))
     .slice(0, limit);
 }

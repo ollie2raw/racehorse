@@ -36,7 +36,7 @@ vi.mock('./http/stores/dailyFritzCommandStore', async () => {
   return { ...actual, commitDailyFritzAttemptCommand: commitCommandMock };
 });
 
-import { recoverStrandedDailyFritzAttempts } from './dailyFritzStrandedRecovery';
+import { recoverStrandedDailyFritzAttempts, resetDailyFritzRecoveryScanForTests } from './dailyFritzStrandedRecovery';
 
 const RUN_DATE = '2026-09-01';
 const USER_ID = 'user-stranded';
@@ -102,8 +102,8 @@ function strandedAttempt(overrides: Partial<DailyFritzAttemptRecord> = {}): Dail
 /** A store that reflects upserts back through getDailyFritzAttemptById (idempotency). */
 function wireStore(initial: DailyFritzAttemptRecord[]): void {
   const byId = new Map(initial.map((a) => [a.id, { ...a }]));
-  listStrandedMock.mockImplementation(async () =>
-    [...byId.values()].filter((a) => a.status === 'started').map((a) => ({ ...a })));
+  listStrandedMock.mockImplementation(async (_cutoff: string, limit: number, afterId?: string) =>
+    [...byId.values()].filter((a) => a.status === 'started' && (!afterId || a.id > afterId)).sort((a, b) => a.id.localeCompare(b.id)).slice(0, limit).map((a) => ({ ...a })));
   getAttemptByIdMock.mockImplementation(async (id: string, userId: string) => {
     const row = byId.get(id);
     return row && row.userId === userId ? { ...row } : null;
@@ -117,6 +117,7 @@ function wireStore(initial: DailyFritzAttemptRecord[]): void {
 describe('recoverStrandedDailyFritzAttempts (DF-G1)', () => {
   const originalTransactional = process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS;
   beforeEach(() => {
+    resetDailyFritzRecoveryScanForTests();
     delete process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS;
     for (const m of [listStrandedMock, getAttemptByIdMock, upsertAttemptMock, recordEventMock, commitCommandMock]) m.mockReset();
     recordEventMock.mockResolvedValue(undefined);
@@ -210,5 +211,84 @@ describe('recoverStrandedDailyFritzAttempts (DF-G1)', () => {
       expect.objectContaining({ commandType: 'finalize_verified_attempt', operationId: 'finalize:set' }),
     );
     expect(upsertAttemptMock).not.toHaveBeenCalled();
+  });
+
+  it('records amplification before/after: 100 incomplete rows cost one scan and zero full-row reads, on repeated runs', async () => {
+    const population = Array.from({ length: 100 }, (_, i) => strandedAttempt({
+      id: `old-${String(i).padStart(3, '0')}`,
+      result: { version: 2, format: 'best_of_3', games: [], active_checkpoint: { resumable: true } },
+    }));
+    wireStore(population);
+    // The old loop always did one full-row lookup for each bulk-query row.
+    await listStrandedMock();
+    for (const row of population) await getAttemptByIdMock(row.id, row.userId);
+    const before = { scans: listStrandedMock.mock.calls.length, fullReads: getAttemptByIdMock.mock.calls.length };
+    listStrandedMock.mockClear();
+    getAttemptByIdMock.mockClear();
+    for (let run = 0; run < 4; run += 1) await recoverStrandedDailyFritzAttempts();
+    const after = { scans: listStrandedMock.mock.calls.length, fullReads: getAttemptByIdMock.mock.calls.length };
+    expect(before).toEqual({ scans: 1, fullReads: 100 });
+    expect(after).toEqual({ scans: 4, fullReads: 0 });
+    expect(upsertAttemptMock).not.toHaveBeenCalled();
+    expect(recordEventMock).not.toHaveBeenCalled();
+    for (const row of population) {
+      expect(await getAttemptByIdMock(row.id, row.userId)).toEqual(row);
+    }
+  });
+
+  it('advances past an old incomplete page to recover a newer completion and wraps without repeatedly fetching it', async () => {
+    wireStore([
+      ...Array.from({ length: 100 }, (_, i) => strandedAttempt({ id: `a-${String(i).padStart(3, '0')}`, result: { version: 2, format: 'best_of_3', games: [] } })),
+      strandedAttempt({ id: 'z-newer', startedAt: '2026-09-02T00:00:00.000Z' }),
+    ]);
+    expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(0);
+    expect(getAttemptByIdMock).not.toHaveBeenCalled();
+    expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(1);
+    expect(listStrandedMock.mock.calls[1]?.[2]).toBe('a-099');
+    expect(getAttemptByIdMock).toHaveBeenCalledTimes(1);
+    for (let run = 0; run < 4; run += 1) await recoverStrandedDailyFritzAttempts();
+    expect(getAttemptByIdMock).toHaveBeenCalledTimes(1);
+    expect(upsertAttemptMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refetch corrupt/ambiguous results or permanently pin the scan on them', async () => {
+    wireStore([strandedAttempt({ result: { version: 2, format: 'best_of_3', games: [{ corrupt: true }], setWinner: 'player' } })]);
+    for (let run = 0; run < 3; run += 1) await recoverStrandedDailyFritzAttempts();
+    expect(getAttemptByIdMock).not.toHaveBeenCalled();
+    expect(upsertAttemptMock).not.toHaveBeenCalled();
+    expect(recordEventMock).not.toHaveBeenCalled();
+  });
+
+  it('revisits a previously incomplete row after it becomes complete', async () => {
+    wireStore([strandedAttempt({ result: { version: 2, format: 'best_of_3', games: [] } })]);
+    await recoverStrandedDailyFritzAttempts();
+    await upsertAttemptMock(strandedAttempt());
+    expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(1);
+  });
+
+  it('preserves a transactional completion conflict without falling back to an upsert', async () => {
+    process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS = 'true';
+    wireStore([strandedAttempt({ challengeId: 'challenge-1' })]);
+    commitCommandMock.mockResolvedValue({ outcome: 'conflict', errorCode: 'stale_revision' });
+    expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(0);
+    expect(upsertAttemptMock).not.toHaveBeenCalled();
+  });
+
+  it('does not overlap scans or advance the cursor while another sweep is running', async () => {
+    let release!: (value: DailyFritzAttemptRecord[]) => void;
+    listStrandedMock.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+    const first = recoverStrandedDailyFritzAttempts();
+    expect(await recoverStrandedDailyFritzAttempts()).toEqual({ scanned: 0, finalized: 0, skipped: 0 });
+    expect(listStrandedMock).toHaveBeenCalledTimes(1);
+    release([]);
+    await first;
+  });
+
+  it.each(['setWinner', 'set_winner'])('recovers a one-game instant skunk using %s through the unchanged finalizer', async (alias) => {
+    const full = completedSetResult();
+    wireStore([strandedAttempt({ result: { ...full, games: (full.games as unknown[]).slice(0, 1), [alias]: 'player', instant_skunk: true } })]);
+    expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(1);
+    expect(upsertAttemptMock.mock.calls[0]![0]).toMatchObject({ status: 'completed', won: true, finalScore: 2, opponentScore: 0 });
+    expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(0);
   });
 });

@@ -22,6 +22,7 @@ import { supabaseFetch } from '../../supabaseUtils';
 import { getDailyFritzVerificationStatus } from '../routes/dailyFritzVerificationPolicy';
 import { getPacificDateKey } from '../../shared/pacificDate';
 import { isDailyFritzTransactionalAuthorityEnabled } from '../../dailyFritzAuthorityFeature';
+import { DAILY_FRITZ_RECOVERY_RESULT_FIELDS, projectDailyFritzRecoveryResult, type DailyFritzRecoveryCandidate } from '../../dailyFritzRecoveryProjection';
 import {
   isDailyFritzMemoryStoreEnabled,
   memoryCreateAttempt,
@@ -686,24 +687,26 @@ export async function listDailyFritzAttemptsForDate(runDate: string): Promise<Da
 }
 
 /**
- * DF-G1 — attempts still `status='started'` whose `started_at` is older than the
- * cutoff. Candidates for the stranded-set reaper (`recoverStrandedDailyFritzAttempts`):
- * a set the player finished but whose `/complete` never landed. The reaper
- * re-checks `status` under the per-attempt lock and only finalizes when the set
- * is actually complete, so `started_at` here is a coarse pre-filter, not the
- * safety guard.
+ * A bounded, lightweight keyset page. Do not read full result JSON here:
+ * incomplete runs can contain large checkpoints/authority ledgers. Classify
+ * in JS using the real normalizer, not a competing database winner predicate.
+ * The caller advances afterId so old incomplete/corrupt rows cannot starve
+ * completions. Revisit after wrap: an incomplete run may subsequently finish.
  */
 export async function listStrandedDailyFritzAttempts(
   startedBeforeIso: string,
   limit = 100,
-): Promise<DailyFritzAttemptRecord[]> {
-  if (isDailyFritzMemoryStoreEnabled()) return memoryListStrandedAttempts(startedBeforeIso, limit);
+  afterId?: string,
+): Promise<DailyFritzRecoveryCandidate[]> {
+  if (isDailyFritzMemoryStoreEnabled()) return memoryListStrandedAttempts(startedBeforeIso, limit, afterId)
+    .map((attempt) => ({ id: attempt.id, userId: attempt.userId, runDate: attempt.runDate, startedAt: attempt.startedAt, result: projectDailyFritzRecoveryResult(attempt.result) }));
   const bounded = Math.max(1, Math.min(500, Math.floor(limit)));
-  const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
-    `/rest/v1/daily_fritz_attempts?select=${getDailyFritzAttemptSelect()}&status=eq.started&started_at=lt.${encodeURIComponent(startedBeforeIso)}&order=started_at.asc&limit=${bounded}`,
+  const select = ['id', 'user_id', 'run_date', 'started_at', ...DAILY_FRITZ_RECOVERY_RESULT_FIELDS.map((key) => `${key}:result->${key}`)].join(',');
+  const rows = await supabaseFetch<Array<{ id: string; user_id: string; run_date: string; started_at: string } & Record<string, unknown>>>(
+    `/rest/v1/daily_fritz_attempts?select=${select}&status=eq.started&started_at=lt.${encodeURIComponent(startedBeforeIso)}&order=id.asc&limit=${bounded}${afterId ? `&id=gt.${encodeURIComponent(afterId)}` : ''}`,
     { method: 'GET', circuitBreakable: true },
   );
-  return rows.map(toDailyFritzAttemptRecord);
+  return rows.map((row) => ({ id: row.id, userId: row.user_id, runDate: row.run_date, startedAt: row.started_at, result: projectDailyFritzRecoveryResult(row) }));
 }
 
 export async function listDailyFritzAttemptsForUser(userId: string, limit = 10): Promise<DailyFritzAttemptRecord[]> {
