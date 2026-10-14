@@ -2,7 +2,10 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { NOINDEX, crawlTargets, isIndexable, navLabel } from './prerenderNav.mjs';
 import { PRERENDER_ROUTES as routes } from './prerenderRoutes.mjs';
 import { HOW_TO_PLAY_ARTICLE } from '../src/learn/howToPlay/howToPlayArticleContent.mjs';
-import { LEGAL_DOCUMENTS } from '../src/legal/legalContent.mjs';
+import { loadEnv } from 'vite';
+const legalBuildEnv = loadEnv(process.env.RACEHORSE_BUILD_MODE ?? 'production', process.cwd(), 'VITE_LEGAL_');
+for (const [key, value] of Object.entries(legalBuildEnv)) process.env[key] ??= value;
+const { LEGAL_DOCUMENTS } = await import('../src/legal/legalContent.mjs');
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 

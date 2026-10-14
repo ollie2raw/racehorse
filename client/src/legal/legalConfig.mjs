@@ -26,21 +26,25 @@
 
 export const OWNER_PLACEHOLDER_PREFIX = 'OWNER_PLACEHOLDER_';
 
+// The same VITE values feed the browser and plain-Node prerender process.
+const legalEnv = import.meta.env ?? (typeof process !== 'undefined' ? process.env : {});
+const configured = (key) => legalEnv[`VITE_LEGAL_${key}`] ?? `OWNER_PLACEHOLDER_${key}`;
+
 export const LEGAL_CONFIG = {
   /**
    * The legal entity (or individual) that operates Racehorse Dominoes.
    * Used only where the copy has to say who "we" are.
    */
-  LEGAL_ENTITY_NAME: 'OWNER_PLACEHOLDER_LEGAL_ENTITY_NAME',
+  LEGAL_ENTITY_NAME: configured('LEGAL_ENTITY_NAME'),
 
   /** Where players write for support and privacy requests. */
-  SUPPORT_EMAIL: 'OWNER_PLACEHOLDER_SUPPORT_EMAIL',
+  SUPPORT_EMAIL: configured('SUPPORT_EMAIL'),
 
   /** Minimum age to create an account, as a plain number string (e.g. '13'). */
-  MINIMUM_AGE: 'OWNER_PLACEHOLDER_MINIMUM_AGE',
+  MINIMUM_AGE: configured('MINIMUM_AGE'),
 
   /** Date the current Privacy Policy and Terms take effect, as display text. */
-  POLICY_EFFECTIVE_DATE: 'OWNER_PLACEHOLDER_POLICY_EFFECTIVE_DATE',
+  POLICY_EFFECTIVE_DATE: configured('POLICY_EFFECTIVE_DATE'),
 
   /**
    * PostHog approximate location (P2-6 in the App Store launch doc).
@@ -56,7 +60,7 @@ export const LEGAL_CONFIG = {
    * Changing this to 'discarded' without changing the PostHog project setting
    * would make the Privacy Policy false.
    */
-  POSTHOG_LOCATION: 'OWNER_PLACEHOLDER_POSTHOG_LOCATION',
+  POSTHOG_LOCATION: configured('POSTHOG_LOCATION'),
 };
 
 /** What each placeholder shows on the page until the owner fills it in. */
