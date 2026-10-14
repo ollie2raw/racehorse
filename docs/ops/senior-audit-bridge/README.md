@@ -1,33 +1,23 @@
-# BRIDGE build for the senior-audit rating cutover
+# Runtime-validated rating cutover BRIDGE artifact
 
-`rating-cutover-gate-bridge.patch` is `OLD + the rating cutover quiescence gate`,
-with `LEGACY_RATING_WRITERS_ENFORCED = true`. It is the only server build that
-can stop the OLD Ghost/Fritz completion and weekly decay writers and prove they
-are idle (see `../senior-audit-rating-rush-cutover.md`).
+Deploy exact commit `e3517fb0da9644ccede64697309d7af8d9ffb8ee` from
+`release/rating-cutover-bridge`, based on OLD `18bc747ac7156d0058c5acd9cddcc545660e6e28`.
+Do not construct or apply a patch. The historical patch beside this README is
+not the release artifact.
 
-Generated against OLD = `18bc747a` (`main` at the time of the remediation).
-Verified on that commit:
+The committed bridge includes `supabase/migrations/2026-10-13_rating_cutover_gate.sql`.
+Apply that pre-expand migration before deploying BRIDGE. No Ghost, Rush, or ranked
+expand schema is required. Without the gate row, vulnerable writers fail closed.
 
-* `git apply --check` is clean on a fresh checkout of `18bc747a`;
-* the full server suite passes with the patch applied (four shards), including
-  the gate, straddle, decay-overlap, route, and game-over tests, which here run
-  the OLD Fritz path and the OLD unconditional decay PATCH, with "control" tests
-  proving the same sequences lose the Ghost write / overwrite RD without the gate.
+Configure `ADMIN_SECRET` before deployment and require a successful authenticated
+status request. Close the gate and positively observe all completion, deferred
+Ghost, and decay counters drained on the same boot before applying any expand.
+See [the cutover runbook](../senior-audit-rating-rush-cutover.md) for the exact order.
 
-If production is not at `18bc747a`, check out the exact production SHA and run
-`git apply --check`. On a conflict, re-apply the same hooks by hand (they are
-small: the gate module, a registrar line in `index.ts`, one wrapper at the
-room-persistence boundary, one wrapper around the locked `/api/ghost/complete`
-body, `trackDeferredRatingWork` around the deferred Fritz Ghost write, and the
-decay guards in `cron.ts`/`periodService.ts`) and re-run the gate tests.
+Authenticated rated human-v-human completions, including manual/disconnect forfeits, and qualifying authenticated Fritz completions
+are gated. Guest/unrated private completions are not. Tournament routing is unchanged.
 
-```sh
-git checkout <OLD production SHA>
-git apply docs/ops/senior-audit-bridge/rating-cutover-gate-bridge.patch   # from the NEW branch checkout
-npm ci && npm test --prefix server
-```
-
-Apply `supabase/migrations/2026-10-13_rating_cutover_gate.sql` (from the NEW
-branch) before deploying the bridge; the bridge fails closed without that row.
-Never deploy the bridge after the Ghost expand migration: use it only before
-Step 3 of the runbook, and as the rollback target before the Ghost contract.
+Before Ghost contract, the rollback target is this exact BRIDGE commit, retaining
+quiescence/fail-closed behavior while preparing a forward fix. After Ghost contract,
+neither OLD nor BRIDGE is an ordinary rollback target; recovery requires a compatible
+forward fix or deliberate schema/data restoration.
