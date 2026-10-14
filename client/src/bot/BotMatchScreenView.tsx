@@ -1,3 +1,4 @@
+import { ScreenLoader } from '../ui/ScreenLoader';
 import { RotateOverlay } from '../components';
 import type { BotMatchScreenViewProps } from './botMatchScreenViewTypes';
 import { BotMatchBoardStage } from './view/board/BotMatchBoardStage.tsx';
@@ -49,6 +50,17 @@ export function BotMatchScreenView({
         onBack={navigation.returnToLearn}
       />
     );
+  }
+
+  if (match.handNumber === 0 && !hand.preGameDrawActive) {
+    return match.initializationError ? (
+      <div className="rh-screen-loader" role="alert">
+        <div className="rh-screen-loader__panel">
+          <p className="rh-screen-loader__label">{match.initializationError}</p>
+          <button type="button" className="dfd__btn" onClick={navigation.exitMatch}>Back to Play vs Fritz</button>
+        </div>
+      </div>
+    ) : <ScreenLoader label="Preparing your match…" />;
   }
 
   const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 600;

@@ -333,7 +333,7 @@ export function BotMatchRoute({
     <div className={appRootClassName}>
       <Suspense fallback={<ScreenLoader label="Loading Fritz Match…" />}>
         <ErrorBoundary context="bot-match">
-        <BotMatchScreen
+        {auth.authLoading ? <ScreenLoader label="Loading player…" /> : <BotMatchScreen
           onBack={() => {
             if (journeyChallenge) {
               clearJourneyActiveChallenge();
@@ -408,7 +408,7 @@ export function BotMatchRoute({
           rankedGamesPlayed={authProfile?.ranked_games_played ?? null}
           onProfileRefresh={refreshAuthProfile}
           onProfilePatch={applyProfilePatch}
-        />
+        />}
         </ErrorBoundary>
       </Suspense>
     </div>

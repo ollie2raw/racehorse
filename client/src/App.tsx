@@ -937,6 +937,7 @@ export default function App() {
         updateEmail,
         isAdmin,
         authUser,
+        authLoading,
         authProfile,
         supabaseEnabled,
         supabaseConfigError,

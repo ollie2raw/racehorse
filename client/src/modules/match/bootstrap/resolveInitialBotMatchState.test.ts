@@ -22,6 +22,18 @@ function baseInput(overrides: Partial<ResolveInitialBotMatchStateInput> = {}): R
 }
 
 describe('resolveInitialBotMatchState', () => {
+  it('keeps an authenticated 14-tile start inert until its authoritative seed arrives', () => {
+    const state = resolveInitialBotMatchState(baseInput({ awaitingAuthoritativeStart: true }));
+    expect(state.handNumber).toBe(0);
+    expect(state.players.you.hand).toEqual([]);
+    expect(state.handOver).toBe(true);
+  });
+
+  it('keeps guest/local deals available', () => {
+    const state = resolveInitialBotMatchState(baseInput());
+    expect(state.players.you.hand).toHaveLength(14);
+  });
+
   it('forwards matchRuleOverrides onto the dealt state for a plain bot match', () => {
     const state = resolveInitialBotMatchState(
       baseInput({
