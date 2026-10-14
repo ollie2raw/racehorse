@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { assertPersistenceQaSafety, guardPersistenceQaBrowser } from './persistenceQaSafety.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientRoot = path.resolve(__dirname, '..');
@@ -83,13 +84,15 @@ async function readProgressWidth(page) {
 
 async function main() {
   const appUrl = requestedAppUrl || 'http://127.0.0.1:5173';
+  const qaEnv = assertPersistenceQaSafety('dailyFritzHandLifecycleQa', [appUrl]);
   ensureDir(artifactsDir);
 
   const browser = await chromium.launch({ channel: browserChannel, headless });
-  const contextOptions = { viewport: { width: 1440, height: 960 } };
+  const contextOptions = { viewport: { width: 1440, height: 960 }, serviceWorkers: 'block' };
   const context = fs.existsSync(storageStatePath)
     ? await browser.newContext({ ...contextOptions, storageState: storageStatePath })
     : await browser.newContext(contextOptions);
+  await guardPersistenceQaBrowser(context, qaEnv);
   await context.addInitScript(() => {
     window.localStorage.setItem('hasSeenWelcome', '1');
   });

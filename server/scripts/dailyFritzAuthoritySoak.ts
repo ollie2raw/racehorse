@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import '../src/loadEnv';
-import { assertNotProductionSupabase } from '../src/platform/env/productionSupabaseGuard';
+import { assertAutomatedPersistenceTarget } from '../src/platform/env/automatedPersistenceGuard';
 import {
   DAILY_FRITZ_AUTHORITY_STATE_DIGEST_VERSION,
   DAILY_FRITZ_TRANSCRIPT_PROTOCOL_VERSION,
@@ -504,7 +504,7 @@ async function runOne(index: number): Promise<Json> {
 }
 
 async function main(): Promise<void> {
-  assertNotProductionSupabase('soak:daily-fritz-authority');
+  assertAutomatedPersistenceTarget('soak:daily-fritz-authority', { urls: [baseUrl] });
   const results: Json[] = [];
   process.stdout.write(`${JSON.stringify({
     phase: 'started',

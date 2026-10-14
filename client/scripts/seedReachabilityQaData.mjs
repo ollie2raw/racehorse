@@ -19,12 +19,12 @@
  *   Usage:
  *     DAILY_FRITZ_QA_USER_ID=<uuid> node client/scripts/seedReachabilityQaData.mjs [--dry-run]
  *
- * This writes to production. It only ADDS marked test rows; it never deletes or
- * modifies anything else. Run it once; re-runs are no-ops.
+ * Dev Supabase only. Production targets are refused even with manual opt-ins.
  */
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertPersistenceQaSafety } from './persistenceQaSafety.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -57,6 +57,7 @@ const cfg = {
   serviceKey: process.env.SUPABASE_SERVICE_KEY ?? fileEnv.SUPABASE_SERVICE_KEY,
   qaUserId: process.env.DAILY_FRITZ_QA_USER_ID?.trim(),
 };
+assertPersistenceQaSafety('seedReachabilityQaData', [], { ...fileEnv, ...process.env, SUPABASE_URL: cfg.url, SUPABASE_SERVICE_KEY: cfg.serviceKey });
 
 for (const [k, v] of Object.entries(cfg)) {
   if (!v) {

@@ -13,4 +13,3 @@ export function projectDailyFritzRecoveryResult(result: Record<string, unknown> 
   if (!result) return null;
   return Object.fromEntries(DAILY_FRITZ_RECOVERY_RESULT_FIELDS.map((key) => [key, result[key]]));
 }
-
