@@ -1,4 +1,5 @@
 import {
+  FRITZ_ELITE_ID,
   FRITZ_MASTER_ID,
   FRITZ_ROOKIE_ID,
   FRITZ_STANDARD_ID,
@@ -81,6 +82,7 @@ export function deriveFritzSummary(
   games: Array<{
     played_at: string;
     opponent_id: string;
+    is_fritz?: boolean;
     player_score: number;
     opponent_score: number;
     delta: number;
@@ -106,7 +108,9 @@ export function deriveFritzSummary(
   let ratingChangeThisWeek = 0;
   let bestWinMarginThisWeek: number | null = null;
 
-  for (const game of games) {
+  const fritzGames = games.filter((game) => game.is_fritz ?? [FRITZ_ROOKIE_ID, FRITZ_STANDARD_ID, FRITZ_ELITE_ID, FRITZ_MASTER_ID].includes(game.opponent_id));
+
+  for (const game of fritzGames) {
     const tier = tierFromOpponentId(game.opponent_id);
     const playerScore = Number(game.player_score ?? 0);
     const margin = Number(game.player_score ?? 0) - Number(game.opponent_score ?? 0);
@@ -136,8 +140,8 @@ export function deriveFritzSummary(
     }
   }
 
-  for (let i = games.length - 1; i >= 0; i -= 1) {
-    const margin = Number(games[i].player_score ?? 0) - Number(games[i].opponent_score ?? 0);
+  for (let i = fritzGames.length - 1; i >= 0; i -= 1) {
+    const margin = Number(fritzGames[i].player_score ?? 0) - Number(fritzGames[i].opponent_score ?? 0);
     if (margin > 0) {
       currentStreak += 1;
       continue;

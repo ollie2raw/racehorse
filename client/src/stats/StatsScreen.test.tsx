@@ -78,3 +78,24 @@ describe('StatsScreen normalized presentation', () => {
     expect(screen.queryByRole('button', { name: 'Weekly Recap' })).toBeNull();
   });
 });
+
+describe('rating and record populations', () => {
+  it.each([
+    ['Fritz-only', 3, 0, 0, 0, 3],
+    ['PvP-only', 3, 1, 2, 0, 0],
+    ['mixed', 6, 1, 2, 2, 1],
+    ['new', 0, 0, 0, 0, 0],
+  ] as const)('labels %s without presenting Fritz results as human results', (_name, rated, wins, losses, fritzWins, fritzLosses) => {
+    const fixture = model();
+    fixture.competitive = { ...fixture.competitive, rankedGames: rated, wins, losses, winRate: wins + losses ? wins / (wins + losses) * 100 : null };
+    fixture.fritz = { ...fixture.fritz, totalWins: fritzWins, totalLosses: fritzLosses };
+    identityState.current = { model: fixture, loading: false, error: null };
+    render(<StatsScreen {...props} />);
+    expect(screen.getByText('Rated games')).toBeTruthy();
+    expect(screen.getByText('Human-v-human')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Your multiplayer record' })).toBeTruthy();
+    if (wins + losses) expect(screen.getByText(`${wins}W – ${losses}L`)).toBeTruthy();
+    else expect(screen.getByText('Play a human-v-human match to start a record here.')).toBeTruthy();
+    expect(screen.queryByText('The record behind the rating')).toBeNull();
+  });
+});

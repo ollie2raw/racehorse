@@ -1,4 +1,5 @@
 import type { Router } from 'express';
+import { FRITZ_ELITE_ID, FRITZ_ROOKIE_ID, FRITZ_STANDARD_ID, FRITZ_MASTER_ID, FRITZ_GRANDMASTER_ID } from '../ranking/glicko2';
 import { supabaseFetch } from '../supabaseUtils';
 import { dedupeMatchRows } from '../stats/dedupeMatchRows';
 import { requireAuth } from './socialAuth';
@@ -131,12 +132,13 @@ export function registerSocialProfileRoutes(socialRouter: Router): void {
       const best_puzzle_score = puzzleSummary.bestScoreEver;
       const best_streak = puzzleSummary.bestStreak;
 
-      const fritzRows = await supabaseFetch<Array<{ won: boolean; final_score: number | null }>>(
-        `/rest/v1/daily_fritz_attempts?user_id=eq.${enc}&status=eq.completed` +
-        `&select=won,final_score`,
-      ).catch(() => [] as Array<{ won: boolean; final_score: number | null }>);
-      const fritz_wins = fritzRows.filter((r) => r.won).length;
-      const fritz_losses = fritzRows.filter((r) => !r.won).length;
+      const fritzIds = [FRITZ_ELITE_ID, FRITZ_ROOKIE_ID, FRITZ_STANDARD_ID, FRITZ_MASTER_ID, FRITZ_GRANDMASTER_ID];
+      const fritzRows = await supabaseFetch<Array<{ player_score: number; opponent_score: number }>>(
+        `/rest/v1/ranked_games?player_id=eq.${enc}&rating_after=not.is.null` +
+        `&opponent_id=in.(${fritzIds.join(',')})&select=player_score,opponent_score`,
+      );
+      const fritz_wins = fritzRows.filter((row) => row.player_score > row.opponent_score).length;
+      const fritz_losses = fritzRows.filter((row) => row.player_score <= row.opponent_score).length;
 
       // In-memory lookup; no query, so nothing to await or guard against.
       const presence = getPresence(targetId);

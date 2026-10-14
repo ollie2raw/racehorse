@@ -31,16 +31,16 @@ export function PlayerCompetitiveSummary({ competitive }: Props) {
           </div>
         )}
         <div className="identity-rating-block identity-rating-block--secondary">
-          <span className="identity-stat-label">WIN RATE</span>
+          <span className="identity-stat-label">HUMAN-V-HUMAN WIN RATE</span>
           <strong>{competitive.winRate == null ? '—' : `${competitive.winRate.toFixed(1)}%`}</strong>
         </div>
       </div>
       <div className="identity-fact-row">
-        <span><b>{value(competitive.wins)}</b> wins</span>
-        <span><b>{value(competitive.losses)}</b> losses</span>
-        <span><b>{value(competitive.rankedGames)}</b> ranked games</span>
-        <span><b>{value(competitive.currentStreak)}</b> current streak</span>
-        <span><b>{value(competitive.bestStreak)}</b> best streak</span>
+        <span><b>{value(competitive.wins)}</b> human wins</span>
+        <span><b>{value(competitive.losses)}</b> human losses</span>
+        <span><b>{value(competitive.rankedGames)}</b> rated games (Fritz + multiplayer)</span>
+        <span><b>{value(competitive.currentStreak)}</b> human current streak</span>
+        <span><b>{value(competitive.bestStreak)}</b> human best streak</span>
       </div>
     </section>
   );
