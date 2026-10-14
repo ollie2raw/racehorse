@@ -68,15 +68,15 @@ describe('post-game review beta gate', () => {
   });
 });
 
-describe('isPostGameReviewAudience (admin-only rollout)', () => {
+describe('isPostGameReviewAudience (player rollout)', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('limits review to the admin outside local dev', () => {
+  it('allows ordinary authenticated players outside local dev', () => {
     vi.stubEnv('DEV', false);
     vi.stubEnv('VITE_E2E_ADMIN_BYPASS', '');
     vi.stubEnv('VITE_ADMIN_EMAIL', 'admin@example.com');
     expect(isPostGameReviewAudience('Admin@Example.com')).toBe(true);
-    expect(isPostGameReviewAudience('player@example.com')).toBe(false);
+    expect(isPostGameReviewAudience('player@example.com')).toBe(true);
     expect(isPostGameReviewAudience(null)).toBe(false);
   });
 

@@ -621,6 +621,8 @@ export function usePostGamePivotalReview({
               mode: 'pvf',
               sourceMatchId,
               replayArtifact,
+            }, (message) => {
+              setCalibratedHandsAnalysis((current) => current ? { ...current, reviewPersistenceError: message } : current);
             });
           })
           .catch((error) => {

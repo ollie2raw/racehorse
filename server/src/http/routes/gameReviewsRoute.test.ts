@@ -430,6 +430,18 @@ describe('GET /api/game-reviews', () => {
     expect(readRes.body.gameDigest).toBe(baseReviewBody.gameDigest);
   });
 
+  it('lists only owned PVF history for an ordinary non-cohort account', async () => {
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('ordinary-player');
+    await request('POST', '/api/game-reviews', { body: { ...baseReviewBody, gameDigest: 'ordinary-game' } });
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('ordinary-player');
+    const list = await request('GET', '/api/game-reviews/recent', { query: { limit: '5' } });
+    expect(list.status).toBe(200);
+    expect(list.body.reviews).toHaveLength(1);
+    expect((list.body.reviews as Array<{ mode: string }>)[0].mode).toBe('pvf');
+    getAuthenticatedUserIdMock.mockResolvedValueOnce('other-player');
+    expect((await request('GET', '/api/game-reviews/recent')).body.reviews).toEqual([]);
+  });
+
   it('keeps non-PVF review writes cohort restricted', async () => {
     getAuthenticatedUserIdMock.mockResolvedValueOnce('not-in-cohort');
     const writeRes = await request('POST', '/api/game-reviews', {
@@ -438,14 +450,14 @@ describe('GET /api/game-reviews', () => {
     expect(writeRes.status).toBe(403);
   });
 
-  it('reports cohort access separately and fails closed for missing auth', async () => {
+  it('reports player access and fails closed for missing auth', async () => {
     getAuthenticatedUserIdMock.mockResolvedValueOnce('user-a');
     const enabled = await request('GET', '/api/game-reviews/access');
     expect(enabled).toEqual({ status: 200, body: { enabled: true } });
 
     getAuthenticatedUserIdMock.mockResolvedValueOnce('not-in-cohort');
     const disabled = await request('GET', '/api/game-reviews/access');
-    expect(disabled).toEqual({ status: 200, body: { enabled: false } });
+    expect(disabled).toEqual({ status: 200, body: { enabled: true } });
 
     getAuthenticatedUserIdMock.mockResolvedValueOnce(null);
     const unauthenticated = await request('GET', '/api/game-reviews/access');

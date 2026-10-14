@@ -383,12 +383,13 @@ export default function GameReviewer({
                     {`Analyzing ${
                       reviewWorkerBatch.resultsByDecisionId.size
                     } / ${
-                      decisionIdByMoveNumber?.size
-                      ?? reviewWorkerBatch.resultsByDecisionId.size
+                      reviewWorkerBatch.resultsByDecisionId.size
+                        + reviewWorkerBatch.errorsByDecisionId.size
                         + reviewWorkerBatch.pendingDecisionIds.size
                     } decisions`}
                   </p>
                 ) : null}
+                {analysis?.reviewPersistenceError ? <p role="alert">{analysis.reviewPersistenceError}</p> : null}
                 {historicalLegacyNotice ? (
                   <p className="gr-legacy-notice" role="status">
                     {historicalLegacyNotice}

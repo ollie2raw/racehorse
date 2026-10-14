@@ -48,6 +48,7 @@ export type AnalyzedMove = {
 };
 
 export type GameAnalysis = {
+  reviewPersistenceError?: string;
   accuracy: number;
   grade: 'S' | 'A' | 'B' | 'C' | 'D';
   analyzedAt: number;

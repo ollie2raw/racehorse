@@ -120,16 +120,11 @@ export function registerGameReviewsRoute(app: Application): void {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    if (!isGameReviewCohortUser(authenticatedUserId)) {
-      res.status(403).json({ error: 'Post-game review is not enabled for this account.' });
-      return;
-    }
-
     const limitRaw = typeof req.query.limit === 'string' ? Number(req.query.limit) : 10;
     const limit = Number.isFinite(limitRaw) ? limitRaw : 10;
 
     try {
-      const rows = await queryRecentGameReviews(authenticatedUserId, limit);
+      const rows = await queryRecentGameReviews(authenticatedUserId, limit, !isGameReviewCohortUser(authenticatedUserId));
       res.status(200).json({ reviews: rows.map(toGameReviewListEntry) });
     } catch (error) {
       log.error({ err: error, userId: authenticatedUserId }, 'list recent failed');
@@ -176,6 +171,6 @@ export function registerGameReviewsRoute(app: Application): void {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    res.status(200).json({ enabled: isGameReviewCohortUser(authenticatedUserId) });
+    res.status(200).json({ enabled: true });
   });
 }

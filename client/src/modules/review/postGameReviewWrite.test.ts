@@ -48,3 +48,10 @@ describe('postGameReviewWrite', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 });
+
+it('reports a failed save to the player-facing caller', async () => {
+  mockedApiPost.mockResolvedValue({ data: null, error: 'server unavailable' });
+  const failure = vi.fn();
+  postGameReviewWrite(body, failure);
+  await vi.waitFor(() => expect(failure).toHaveBeenCalledWith(expect.stringContaining('could not be saved to history')));
+});
