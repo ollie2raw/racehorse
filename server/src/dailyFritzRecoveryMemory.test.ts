@@ -17,6 +17,11 @@ describe('local memory persistence recovery', () => {
     incomplete.result = { version: 2, format: 'best_of_3', games: [], active_checkpoint: { checkpointRevision: 3 } };
     await upsertDailyFritzAttempt(incomplete);
     const before = structuredClone(incomplete);
+    const malformed = await createDailyFritzAttempt('2026-09-01', 'memory-malformed');
+    malformed.startedAt = incomplete.startedAt;
+    malformed.result = JSON.parse(JSON.stringify({ version: 2, format: 'best_of_3', setWinner: 'player', games: [{ gameNumber: 1, seed: 'seed', playerScore: { toString: 'invalid', valueOf: 'invalid' }, fritzScore: 20, playerWon: true, pointDiff: 40, completedAt: incomplete.startedAt }] }));
+    await upsertDailyFritzAttempt(malformed);
+    const malformedBefore = structuredClone(malformed);
     const complete = await createDailyFritzAttempt('2026-09-01', 'memory-complete');
     complete.startedAt = incomplete.startedAt;
     complete.result = { version: 2, format: 'best_of_3', games: [1, 2].map((gameNumber) => ({ gameNumber, seed: 'seed', playerScore: 60, fritzScore: 20, playerWon: true, pointDiff: 40, completedAt: '2026-09-01T00:10:00Z' })) };
@@ -26,7 +31,9 @@ describe('local memory persistence recovery', () => {
     const saved = await getDailyFritzAttemptById(complete.id, complete.userId);
     expect(saved).toMatchObject({ status: 'completed', finalScore: 2, opponentScore: 0, won: true });
     expect(saved?.result?.verification_status).toBe('legacy_unverified');
+    expect(await getDailyFritzAttemptById(malformed.id, malformed.userId)).toEqual(malformedBefore);
     for (let run = 0; run < 3; run += 1) expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(0);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(await getDailyFritzAttemptById(malformed.id, malformed.userId)).toEqual(malformedBefore);
   });
 });
