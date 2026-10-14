@@ -7,13 +7,20 @@ const {
   upsertAttemptMock,
   recordEventMock,
   commitCommandMock,
+  classifyMock,
 } = vi.hoisted(() => ({
   listStrandedMock: vi.fn(),
   getAttemptByIdMock: vi.fn(),
   upsertAttemptMock: vi.fn(),
   recordEventMock: vi.fn().mockResolvedValue(undefined),
   commitCommandMock: vi.fn(),
+  classifyMock: vi.fn(),
 }));
+
+vi.mock('./dailyFritzRecoveryEligibility', async () => {
+  const actual = await vi.importActual<typeof import('./dailyFritzRecoveryEligibility')>('./dailyFritzRecoveryEligibility');
+  return { ...actual, classifyDailyFritzRecovery: classifyMock };
+});
 
 vi.mock('./http/stores/dailyFritzStore', async () => {
   const actual = await vi.importActual<typeof import('./http/stores/dailyFritzStore')>('./http/stores/dailyFritzStore');
@@ -112,11 +119,14 @@ function wireStore(initial: DailyFritzAttemptRecord[]): void {
     byId.set(record.id, { ...record });
     return { ...record };
   });
+  return byId;
 }
 
 describe('recoverStrandedDailyFritzAttempts (DF-G1)', () => {
   const originalTransactional = process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS;
-  beforeEach(() => {
+  beforeEach(async () => {
+    const actual = await vi.importActual<typeof import('./dailyFritzRecoveryEligibility')>('./dailyFritzRecoveryEligibility');
+    classifyMock.mockReset().mockImplementation(actual.classifyDailyFritzRecovery);
     resetDailyFritzRecoveryScanForTests();
     delete process.env.DAILY_FRITZ_TRANSACTIONAL_COMMANDS;
     for (const m of [listStrandedMock, getAttemptByIdMock, upsertAttemptMock, recordEventMock, commitCommandMock]) m.mockReset();
@@ -290,5 +300,61 @@ describe('recoverStrandedDailyFritzAttempts (DF-G1)', () => {
     expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(1);
     expect(upsertAttemptMock.mock.calls[0]![0]).toMatchObject({ status: 'completed', won: true, finalScore: 2, opponentScore: 0 });
     expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(0);
+  });
+
+  it('isolates a malformed first row, finalizes a later row, advances a full page, and never mutates the malformed row', async () => {
+    const full = completedSetResult();
+    const malformed = strandedAttempt({ id: 'a-000', result: JSON.parse(JSON.stringify({ ...full, games: [{ ...(full.games as Record<string, unknown>[])[0], playerScore: { toString: 'invalid', valueOf: 'invalid' } }] })) });
+    const before = structuredClone(malformed);
+    const rows = wireStore([
+      malformed, strandedAttempt({ id: 'a-001' }),
+      ...Array.from({ length: 98 }, (_, i) => strandedAttempt({ id: `a-${String(i + 2).padStart(3, '0')}`, result: { version: 2, format: 'best_of_3', games: [] } })),
+      strandedAttempt({ id: 'z-later' }),
+    ]);
+    expect(await recoverStrandedDailyFritzAttempts()).toEqual({ scanned: 100, finalized: 1, skipped: 99 });
+    expect(getAttemptByIdMock).toHaveBeenCalledTimes(1);
+    expect(rows.get(malformed.id)).toEqual(before);
+    expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(1);
+    expect(listStrandedMock.mock.calls[1]?.[2]).toBe('a-099');
+    for (let run = 0; run < 3; run += 1) await recoverStrandedDailyFritzAttempts();
+    expect(listStrandedMock.mock.calls[2]?.[2]).toBeUndefined();
+    expect(getAttemptByIdMock).toHaveBeenCalledTimes(2);
+    expect(upsertAttemptMock).toHaveBeenCalledTimes(2);
+    expect(rows.get(malformed.id)).toEqual(before);
+    expect(getAttemptByIdMock.mock.calls.some(([id]) => id === malformed.id)).toBe(false);
+  });
+
+  it('isolates an unforeseen classifier exception and still advances to later work', async () => {
+    const rows = wireStore([
+      ...Array.from({ length: 100 }, (_, i) => strandedAttempt({ id: `a-${String(i).padStart(3, '0')}`, result: { version: 2, format: 'best_of_3', games: [] } })),
+      strandedAttempt({ id: 'z-later' }),
+    ]);
+    const before = structuredClone(rows.get('a-000'));
+    // A future classifier regression is independently isolated by the sweep.
+    // Throw a non-Error with unsafe string coercion to exercise safe logging.
+    classifyMock.mockImplementationOnce(() => { throw { toString: 'invalid', valueOf: 'invalid' }; });
+    expect(await recoverStrandedDailyFritzAttempts()).toEqual({ scanned: 100, finalized: 0, skipped: 100 });
+    expect(recordEventMock).not.toHaveBeenCalled();
+    expect(getAttemptByIdMock).not.toHaveBeenCalled();
+    expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(1);
+    expect(listStrandedMock.mock.calls[1]?.[2]).toBe('a-099');
+    expect(rows.get('a-000')).toEqual(before);
+  });
+
+  it('surfaces scan infrastructure failure, retains its cursor, and permits a later retry', async () => {
+    wireStore([
+      ...Array.from({ length: 100 }, (_, i) => strandedAttempt({ id: `a-${String(i).padStart(3, '0')}`, result: { version: 2, format: 'best_of_3', games: [] } })),
+      strandedAttempt({ id: 'z-later' }),
+    ]);
+    await recoverStrandedDailyFritzAttempts();
+    const failure = new Error('database scan unavailable');
+    listStrandedMock.mockRejectedValueOnce(failure);
+    classifyMock.mockClear();
+    await expect(recoverStrandedDailyFritzAttempts()).rejects.toBe(failure);
+    expect(classifyMock).not.toHaveBeenCalled();
+    expect(recordEventMock).not.toHaveBeenCalled();
+    expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(1);
+    expect(listStrandedMock.mock.calls[1]?.[2]).toBe('a-099');
+    expect(listStrandedMock.mock.calls[2]?.[2]).toBe('a-099');
   });
 });

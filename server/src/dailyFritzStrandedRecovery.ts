@@ -83,7 +83,7 @@ async function runStrandedSweep(options?: { minAgeMs?: number; now?: number }): 
     candidates = await listStrandedDailyFritzAttempts(startedBeforeIso, DAILY_FRITZ_STRANDED_SCAN_LIMIT, scanAfterId);
   } catch (error) {
     log.warn({ error: msg(error) }, 'scan failed');
-    return { scanned: 0, finalized: 0, skipped: 0 };
+    throw error; // Infrastructure failures belong to the scheduler, not row classification.
   }
 
   let finalized = 0;
@@ -91,7 +91,20 @@ async function runStrandedSweep(options?: { minAgeMs?: number; now?: number }): 
   for (const candidate of candidates) {
     // Incomplete and ambiguous rows remain untouched/resumable. They cause no
     // full-row refetch, write or per-row event on any subsequent sweep.
-    if (classifyDailyFritzRecovery(candidate.result) !== 'complete') {
+    let eligibility: ReturnType<typeof classifyDailyFritzRecovery>;
+    try {
+      eligibility = classifyDailyFritzRecovery(candidate.result);
+    } catch (error) {
+      // Defense in depth for an unforeseen classifier failure. Do not write a
+      // per-row event or refetch this row; continue the page and its cursor.
+      log.warn({
+        attemptId: candidate.id,
+        error: error instanceof Error ? error.message : 'Unexpected eligibility classification error',
+      }, 'eligibility classification failed; skipping ambiguous attempt');
+      skipped += 1;
+      continue;
+    }
+    if (eligibility !== 'complete') {
       skipped += 1;
       continue;
     }

@@ -43,4 +43,36 @@ describe('lightweight recovery eligibility matches the real completion decision'
       { version: 2, format: 'best_of_3', games: [game(1), game(2), game(3), game(4)] },
     ]) expect(classifyDailyFritzRecovery(result)).toBe('ambiguous');
   });
+
+  it.each(['gameNumber', 'playerScore', 'fritzScore', 'pointDiff', 'movesUsed', 'handsPlayed'])('isolates unsafe numeric coercion in games[].%s', (field) => {
+    const result = JSON.parse(JSON.stringify({
+      version: 2, format: 'best_of_3', setWinner: 'player',
+      games: [{ ...game(1), [field]: { toString: 'invalid', valueOf: 'invalid' } }],
+    }));
+    const before = structuredClone(result);
+    expect(() => normalizeDailyFritzSetResult(result)).toThrow(TypeError);
+    expect(classifyDailyFritzRecovery(projectDailyFritzRecoveryResult(result))).toBe('ambiguous');
+    expect(result).toEqual(before);
+  });
+
+  it.each(['playerGamesWon', 'player_games_won', 'fritzGamesWon', 'fritz_games_won'])('isolates unsafe normalization of %s on full results', (field) => {
+    const result = JSON.parse(JSON.stringify({ version: 2, format: 'best_of_3', games: [game(1), game(2)], [field]: { toString: null, valueOf: false } }));
+    expect(() => normalizeDailyFritzSetResult(result)).toThrow(TypeError);
+    expect(classifyDailyFritzRecovery(result)).toBe('ambiguous');
+  });
+
+  it('handles malformed result containers and property-access exceptions without guessing completion', () => {
+    for (const result of [false, 0, '', 'corrupt', [], [game(1)]]) expect(classifyDailyFritzRecovery(result)).toBe('ambiguous');
+    const result = Object.defineProperty({}, 'version', { get() { throw new Error('unreadable version'); } });
+    expect(classifyDailyFritzRecovery(result)).toBe('ambiguous');
+  });
+
+  it('preserves supported numeric/string coercions and optional game counters', () => {
+    const result = {
+      version: 2, format: 'best_of_3', playerGamesWon: '2', fritz_games_won: '0',
+      games: [1, 2].map((number) => ({ ...game(number), gameNumber: String(number), playerScore: '60', fritzScore: '20', pointDiff: '40', movesUsed: '12', handsPlayed: '1' })),
+    };
+    expect(classifyDailyFritzRecovery(projectDailyFritzRecoveryResult(result))).toBe('complete');
+    expect(Boolean(normalizeDailyFritzSetResult(result)?.setWinner)).toBe(true);
+  });
 });
