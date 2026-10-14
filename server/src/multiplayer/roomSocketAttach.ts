@@ -28,6 +28,7 @@ import { onPlayerSocketRejoined } from './disconnectGrace';
 import { markMatchStartReady, tryStartMatchIfReady } from './matchStartReady';
 import { assertRoomDurabilityOperationAllowed } from './roomDurabilityPolicy';
 import { applyActiveMatchForfeit } from './roomForfeit';
+import { isRatingCutoverQuiescedError } from '../ranking/ratingCutoverGate';
 import {
   allocatePlayerSeatId,
   buildHandEndedPayload,
@@ -168,6 +169,9 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
       try {
         await applyActiveMatchForfeit(io, socket, code, abandoningPlayer, 'manual');
       } catch (err) {
+        // A maintenance rejection must keep the seat and be retryable, rather
+        // than acknowledge a leave that silently discarded its rated result.
+        if (isRatingCutoverQuiescedError(err)) throw err;
         log.error({
           roomCode: code,
           playerSeatId,

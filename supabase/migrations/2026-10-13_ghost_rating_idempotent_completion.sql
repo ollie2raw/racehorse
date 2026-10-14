@@ -103,7 +103,7 @@ begin
   if new.game_type = 'fritz' and new.source_type = 'verified_single_player'
      and new.source_match_id is not null and not exists (
        select 1 from public.ghost_games
-        where user_id = new.player_id and match_id = new.source_match_id
+        where user_id = new.player_id and match_id::text = new.source_match_id
           and rating_applied_at is not null
      ) then
     raise exception 'ghost_legacy_writer_fenced';

@@ -2250,6 +2250,8 @@ async function scenarioPrivateRematchAfterShortMatch() {
       const terminal = await playUntilGameOver([alpha, bravo], roomCode, 20);
       assert(terminal?.gameOver, 'short-match cert path did not reach gameOver');
 
+      const alphaBeforeRematch = alpha.state.stateUpdates.length;
+      const bravoBeforeRematch = bravo.state.stateUpdates.length;
       const rematchStarted = onceWithTimeout(bravo.socket, 'game:rematch:started');
       const first = await emitAck(alpha.socket, 'game:rematch', roomCode);
       assert(first?.ok, `alpha rematch failed: ${first?.error ?? 'unknown'}`);
@@ -2257,8 +2259,8 @@ async function scenarioPrivateRematchAfterShortMatch() {
       assert(second?.ok, `bravo rematch failed: ${second?.error ?? 'unknown'}`);
       await rematchStarted;
 
-      await waitForStateCount(alpha, alpha.state.stateUpdates.length + 1);
-      await waitForStateCount(bravo, bravo.state.stateUpdates.length + 1);
+      await waitForStateCount(alpha, alphaBeforeRematch + 1);
+      await waitForStateCount(bravo, bravoBeforeRematch + 1);
       const after = latestState(alpha)?.state;
       assert(after && !after.gameOver, 'rematch did not reset gameOver');
       assert((after.handNumber ?? 0) >= 1, 'rematch missing active hand');

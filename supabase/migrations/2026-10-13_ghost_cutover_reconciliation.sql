@@ -40,26 +40,26 @@ begin
   v_start := v_start - interval '5 minutes';
 
   return query
-  select 'ranked_without_ghost_row'::text, rg.player_id, rg.source_match_id,
+  select 'ranked_without_ghost_row'::text, rg.player_id, rg.source_match_id::uuid,
          jsonb_build_object('ranked_game_id', rg.id, 'played_at', rg.played_at)
     from public.ranked_games rg
    where rg.game_type = 'fritz' and rg.source_type = 'verified_single_player'
      and rg.source_match_id is not null and rg.played_at >= v_start
      and not exists (select 1 from public.ghost_games gg
-                      where gg.user_id = rg.player_id and gg.match_id = rg.source_match_id)
+                      where gg.user_id = rg.player_id and gg.match_id::text = rg.source_match_id)
      and not exists (select 1 from public.ghost_cutover_resolutions r
-                      where r.user_id = rg.player_id and r.match_id = rg.source_match_id)
+                      where r.user_id = rg.player_id and r.match_id::text = rg.source_match_id)
   union all
-  select 'ranked_after_expand_without_receipt'::text, rg.player_id, rg.source_match_id,
+  select 'ranked_after_expand_without_receipt'::text, rg.player_id, rg.source_match_id::uuid,
          jsonb_build_object('ranked_game_id', rg.id, 'played_at', rg.played_at)
     from public.ranked_games rg
    where rg.game_type = 'fritz' and rg.source_type = 'verified_single_player'
      and rg.source_match_id is not null and rg.played_at >= v_expand
      and not exists (select 1 from public.ghost_games gg
-                      where gg.user_id = rg.player_id and gg.match_id = rg.source_match_id
+                      where gg.user_id = rg.player_id and gg.match_id::text = rg.source_match_id
                         and gg.rating_applied_at is not null)
      and not exists (select 1 from public.ghost_cutover_resolutions r
-                      where r.user_id = rg.player_id and r.match_id = rg.source_match_id)
+                      where r.user_id = rg.player_id and r.match_id::text = rg.source_match_id)
   union all
   select 'ghost_row_after_expand_without_receipt'::text, gg.user_id, gg.match_id,
          jsonb_build_object('ghost_game_id', gg.id, 'played_at', gg.played_at)

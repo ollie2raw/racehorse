@@ -56,7 +56,7 @@ create table public.ranked_games (
   opponent_id text not null default 'bot:fritz:elite',
   game_type text,
   source_type text,
-  source_match_id uuid,
+  source_match_id text,
   played_at timestamptz not null default now(),
   rating_after double precision, rd_after double precision, delta double precision
 );
