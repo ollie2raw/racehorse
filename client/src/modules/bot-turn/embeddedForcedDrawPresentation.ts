@@ -40,6 +40,33 @@ export function listEmbeddedForcedDrawTiles(
   return beforePlay.boneyard.slice(0, drawCount);
 }
 
+/**
+ * Visible state at the instant after the scoring/double play lands and before the
+ * first recovery draw: authoritative afterPlay with the drawn tiles and boneyard
+ * rewound. Seeding the overlay with this before afterPlay is committed means the
+ * final rack/boneyard count is never exposed.
+ */
+export function buildEmbeddedPostPlayState(input: {
+  player: BotPlayerId;
+  beforePlay: BotMatchState;
+  afterPlay: BotMatchState;
+  drawnTiles: Tile[];
+}): BotMatchState {
+  const { player, beforePlay, afterPlay, drawnTiles } = input;
+  return {
+    ...afterPlay,
+    currentPlayer: player,
+    boneyard: beforePlay.boneyard,
+    players: {
+      ...afterPlay.players,
+      [player]: {
+        ...afterPlay.players[player],
+        hand: handWithoutTiles(afterPlay.players[player].hand, drawnTiles),
+      },
+    },
+  };
+}
+
 export type PresentEmbeddedForcedDrawsDeps = {
   player: BotPlayerId;
   beforePlay: BotMatchState;
@@ -82,19 +109,8 @@ export async function presentEmbeddedForcedDraws(
 
   if (drawnTiles.length === 0) return;
 
-  const postPlayHand = handWithoutTiles(afterPlay.players[player].hand, drawnTiles);
-  const postPlayState: BotMatchState = {
-    ...afterPlay,
-    currentPlayer: player,
-    boneyard: beforePlay.boneyard,
-    players: {
-      ...afterPlay.players,
-      [player]: {
-        ...afterPlay.players[player],
-        hand: postPlayHand,
-      },
-    },
-  };
+  const postPlayState = buildEmbeddedPostPlayState({ player, beforePlay, afterPlay, drawnTiles });
+  const postPlayHand = postPlayState.players[player].hand;
 
   setDrawSequenceActiveBoth(true);
   try {

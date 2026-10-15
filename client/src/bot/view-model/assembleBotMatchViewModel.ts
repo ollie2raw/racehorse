@@ -2,6 +2,7 @@ import type { CreateBotMatchViewModelArgs } from './createBotMatchViewModelArgs.
 import { buildHandRevealTileReveals } from './buildHandRevealTileReveals.ts';
 import { resolveHistoryScrubberView } from './resolveHistoryScrubberView.ts';
 import type { BotMatchScreenViewModel } from './botMatchViewModelTypes.ts';
+import { isFritzTurnHeldByPresentation } from '../../modules/bot-turn/fritzPresentation.ts';
 
 export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): BotMatchScreenViewModel {
   const {
@@ -62,6 +63,16 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     preGameDrawActive,
   } = bootstrap;
 
+  // Fritz's engine turn may already be over (embedded forced-draw chain) while its
+  // draws are still being presented — keep it Fritz's turn on screen until they finish.
+  const botTurn =
+    presentation.botTurn
+    || isFritzTurnHeldByPresentation({
+      handActive: presentation.handActive,
+      presentation: turns.fritzPresentation,
+      drawSequenceActive: turns.drawSequenceActive,
+    });
+
   const navigationVm = {
     onBack,
     onNavigate,
@@ -120,7 +131,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
   const hud = {
     opponentLabel,
     ghostSubLabel: ghost.ghostSubLabel,
-    botTurn: presentation.botTurn,
+    botTurn,
     handActive: presentation.handActive,
     handReveal: turns.handReveal,
     preGameDrawActive,
@@ -180,7 +191,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     setSelectedController,
     // Parked on a past move: the hand is view-only until "back to live".
     handActive: presentation.handActive && !viewingHistory,
-    botTurn: presentation.botTurn,
+    botTurn,
     drawSequenceActive: turns.drawSequenceActive,
     drawPulseIndex: turns.drawPulseIndex,
     playableTileKeys: presentation.playableTileKeys,
