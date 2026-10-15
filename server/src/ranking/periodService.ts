@@ -3,6 +3,31 @@ import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFr
 import { mayContinueDecay } from './ratingCutoverGate';
 import { supabaseFetch } from '../supabaseUtils';
 import { fetchAllPages } from '../supabasePagination';
+import { childLogger } from '../logger';
+
+const log = childLogger('ranking:catch-up');
+export const RANKING_CATCHUP_SCAN_LIMIT = 100;
+const RANKED_GAME_COLUMNS = 'id,player_id,opponent_id,player_score,opponent_score,played_at,rating_after,delta,outcome';
+let catchUpCursor: { playedAt: string; id: string } | undefined;
+let catchUpRunning = false;
+const failedGames = new Map<string, { attempts: number; retryAt: number }>();
+const MAX_FAILURE_CACHE = 1000;
+function isInfrastructureFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Supabase request (?:failed: (?:401|403|404|429|5\d\d)|timed out)|fetch failed|ECONN|ETIMEDOUT|^503 /i.test(message);
+}
+function deferFailedGame(id: string): void {
+  const attempts = Math.min(6, (failedGames.get(id)?.attempts ?? 0) + 1);
+  failedGames.delete(id);
+  failedGames.set(id, { attempts, retryAt: Date.now() + Math.min(6 * 60 * 60_000, 30 * 60_000 * 2 ** (attempts - 1)) });
+  if (failedGames.size > MAX_FAILURE_CACHE) failedGames.delete(failedGames.keys().next().value!);
+}
+
+export function resetRatingCatchUpForTests(): void {
+  catchUpCursor = undefined;
+  catchUpRunning = false;
+  failedGames.clear();
+}
 
 export interface Profile {
   id: string;
@@ -48,6 +73,10 @@ interface ProcessRatingPeriodOptions {
    * second read returned bytes it already had.
    */
   profile?: Profile;
+  /** Internal catch-up page; foreground callers still read their own pending games. */
+  games?: RankedGame[];
+  onGameError?: (game: RankedGame, error: unknown) => void;
+  onGameProcessed?: (game: RankedGame, applied: boolean) => void;
 }
 
 interface OpponentSnapshot {
@@ -93,7 +122,7 @@ async function getProfile(userId: string): Promise<Profile> {
 
 async function getPendingGames(userId: string): Promise<RankedGame[]> {
   return supabaseFetch<RankedGame[]>(
-    `/rest/v1/ranked_games?player_id=eq.${userId}&rating_after=is.null&order=played_at.asc,id.asc`,
+    `/rest/v1/ranked_games?select=${RANKED_GAME_COLUMNS}&player_id=eq.${userId}&rating_after=is.null&order=played_at.asc,id.asc&limit=1000`,
   );
 }
 
@@ -221,7 +250,7 @@ export async function processRatingPeriod(
   let profile = options.profile
     ? await normalizeLegacyStartingProfile(options.profile)
     : await getProfile(userId);
-  const games = await getPendingGames(userId);
+  const games = options.games ?? await getPendingGames(userId);
 
   if (games.length === 0) {
     if (!applyDecayIfNoGames) {
@@ -264,6 +293,7 @@ export async function processRatingPeriod(
       newRD: decayed.newRD,
       delta: 0,
       gamesInPeriod: 0,
+      decayApplied: true,
     };
   }
 
@@ -272,20 +302,37 @@ export async function processRatingPeriod(
   let totalDelta = 0;
   let appliedGames = 0;
 
-  const opponentIds = [...new Set(games.map((g) => g.opponent_id))];
-  const opponentSnapshots = await Promise.all(
-    opponentIds.map((id) => getOpponentSnapshot(id)),
-  );
-  const opponentMap = new Map(opponentIds.map((id, i) => [id, opponentSnapshots[i]!]));
-
+  // Cache successful AND failed lookups within a page. A missing opponent
+  // must not make 100 identical network requests or abort unrelated games.
+  const opponentIds = [...new Set(games.filter((game) => game && typeof game.opponent_id === 'string').map((game) => game.opponent_id))];
+  // Keep the existing per-user snapshot semantics: all opponents are sampled
+  // before committing any game for this user.
+  const snapshots = await Promise.allSettled(opponentIds.map(getOpponentSnapshot));
+  const opponentSnapshots = new Map(opponentIds.map((id, index) => [id, snapshots[index]!]));
+  if (!options.onGameError) {
+    const failure = snapshots.find((result) => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  }
   for (const game of games) {
-    const opponent = opponentMap.get(game.opponent_id)!;
-    const processed = await commitProcessedGame(profile, game, opponent, new Date().toISOString());
-    profile = processed.profile;
-    newRating = processed.newRating;
-    newRD = processed.newRD;
-    totalDelta += processed.delta;
-    if (processed.applied) appliedGames += 1;
+    try {
+      if (!game || typeof game.id !== 'string' || typeof game.opponent_id !== 'string'
+        || !Number.isFinite(game.player_score) || !Number.isFinite(game.opponent_score)) {
+        throw new Error('Malformed pending ranked game');
+      }
+      const snapshot = opponentSnapshots.get(game.opponent_id)!;
+      if (snapshot.status === 'rejected') throw snapshot.reason;
+      const opponent = snapshot.value;
+      const processed = await commitProcessedGame(profile, game, opponent, new Date().toISOString());
+      profile = processed.profile;
+      newRating = processed.newRating;
+      newRD = processed.newRD;
+      totalDelta += processed.delta;
+      if (processed.applied) appliedGames += 1;
+      options.onGameProcessed?.(game, processed.applied);
+    } catch (error) {
+      if (!options.onGameError) throw error;
+      options.onGameError(game, error);
+    }
   }
 
   return {
@@ -347,29 +394,74 @@ export async function processRealtimeMultiplayerGame(params: {
 }
 
 export async function processAllPendingRatingGames() {
-  // Paged: this scan had no limit, so one response carried every unprocessed
-  // ranked game and grew with the backlog.
-  const games = await fetchAllPages<{ player_id: string }>((offset, limit) =>
-    supabaseFetch<Array<{ player_id: string }>>(
-      '/rest/v1/ranked_games?select=player_id&rating_after=is.null' +
-        `&order=id.asc&offset=${offset}&limit=${limit}`,
-    ),
-  );
-  const userIds = [...new Set(games.map((game) => game.player_id))];
-
-  let processed = 0;
-  const errors: string[] = [];
-
-  for (const userId of userIds) {
-    try {
-      const result = await processRatingPeriod(userId);
-      processed += result.gamesInPeriod;
-    } catch (err: unknown) {
-      errors.push(`Error processing user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
-    }
+  if (catchUpRunning) {
+    log.info({ outcome: 'already_running' }, 'pending rating sweep');
+    return { processed: 0, errors: [], scanned: 0, failed: 0, skipped: 0, paged: false, alreadyRunning: true };
   }
-
-  return { processed, errors };
+  catchUpRunning = true;
+  const startedAt = Date.now();
+  let scanned = 0;
+  let processed = 0;
+  let failed = 0;
+  const errors: string[] = [];
+  const paged = catchUpCursor !== undefined;
+  let outcome = 'success';
+  try {
+    // Keyset over immutable chronology: one modest page per cadence, including
+    // all inputs the rating operation needs. No list-users-then-refetch-games.
+    const cursorFilter = catchUpCursor
+      ? `&or=(played_at.gt.${encodeURIComponent(catchUpCursor.playedAt)},and(played_at.eq.${encodeURIComponent(catchUpCursor.playedAt)},id.gt.${encodeURIComponent(catchUpCursor.id)}))`
+      : '';
+    const games = await supabaseFetch<RankedGame[]>(
+      `/rest/v1/ranked_games?select=${RANKED_GAME_COLUMNS}&rating_after=is.null&order=played_at.asc,id.asc&limit=${RANKING_CATCHUP_SCAN_LIMIT}${cursorFilter}`,
+    );
+    scanned = games.length;
+    const byUser = new Map<string, RankedGame[]>();
+    for (const game of games) {
+      if (!game || typeof game.player_id !== 'string') {
+        failed += 1;
+        errors.push('Malformed pending ranked game identity');
+        continue;
+      }
+      if ((failedGames.get(game.id)?.retryAt ?? 0) > Date.now()) continue;
+      const userGames = byUser.get(game.player_id) ?? [];
+      userGames.push(game);
+      byUser.set(game.player_id, userGames);
+    }
+    for (const [userId, userGames] of byUser) {
+      try {
+        await processRatingPeriod(userId, {
+          games: userGames,
+          onGameProcessed: (game, applied) => {
+            if (applied) processed += 1;
+            failedGames.delete(game.id);
+          },
+          onGameError: (game, error) => {
+            failed += 1;
+            if (isInfrastructureFailure(error)) throw error;
+            deferFailedGame(game.id);
+            errors.push(`Game ${game?.id}: ${error instanceof Error ? error.message : String(error)}`);
+          },
+        });
+      } catch (error) {
+        if (isInfrastructureFailure(error)) throw error;
+        failed += userGames.length;
+        for (const game of userGames) deferFailedGame(game.id);
+        errors.push(`User ${userId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    const last = games[games.length - 1];
+    catchUpCursor = games.length === RANKING_CATCHUP_SCAN_LIMIT && last
+      ? { playedAt: last.played_at, id: last.id } : undefined;
+    outcome = failed ? 'partial' : 'success';
+    return { processed, errors, scanned, failed, skipped: scanned - processed - failed, paged, alreadyRunning: false };
+  } catch (error) {
+    outcome = 'failed';
+    throw error; // Scan failure retains the cursor; it is not a row skip.
+  } finally {
+    catchUpRunning = false;
+    log.info({ durationMs: Date.now() - startedAt, scanned, processed, failed, skipped: outcome === 'failed' ? 0 : scanned - processed - failed, unprocessed: outcome === 'failed' ? scanned - processed - failed : 0, paged, outcome }, 'pending rating sweep');
+  }
 }
 
 export async function decayInactivePlayers() {
@@ -377,12 +469,18 @@ export async function decayInactivePlayers() {
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   // Paged, and projected: this was `select=*` with no limit, so a single
   // response carried every column of every inactive profile.
-  const users = await fetchAllPages<Profile>((offset, limit) =>
-    supabaseFetch<Profile[]>(
+  let afterId: string | undefined;
+  let pages = 0;
+  const users = await fetchAllPages<Profile>(async (_offset, limit) => {
+    const page = await supabaseFetch<Profile[]>(
       `/rest/v1/profiles?or=(glicko_last_period.lt.${sevenDaysAgo},glicko_last_period.is.null)` +
-        `&select=${PROFILE_COLUMNS}&order=id.asc&offset=${offset}&limit=${limit}`,
-    ),
-  );
+        `&select=${PROFILE_COLUMNS}&order=id.asc&limit=${limit}` +
+        (afterId ? `&id=gt.${encodeURIComponent(afterId)}` : ''),
+    );
+    pages += 1;
+    afterId = page[page.length - 1]?.id;
+    return page;
+  });
 
   let processed = 0;
   let aborted = false;
@@ -402,15 +500,14 @@ export async function decayInactivePlayers() {
         applyDecayIfNoGames: true,
         profile: user,
       });
-      if (result.gamesInPeriod === 0) {
-        processed++;
-      }
+      if (result.decayApplied) processed++;
     } catch (err: unknown) {
+      if (isInfrastructureFailure(err)) throw err;
       errors.push(`Error decaying user ${user.id}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  return { processed, errors, aborted };
+  return { processed, errors, aborted, scanned: users.length, pages, failed: errors.length };
 }
 
 export async function getLeaderboard(limit: number = 50) {

@@ -112,4 +112,20 @@ describe('startRankingCron — RK-6 boot + periodic catch-up', () => {
     expect(cronScheduleMock).toHaveBeenCalledTimes(1);
     expect(processAllPendingRatingGamesMock).toHaveBeenCalledTimes(1);
   });
+  it('does not overlap weekly decay and releases single flight after a failure', async () => {
+    const { runWeeklyRdDecay } = await import('./cron');
+    let release!: () => void;
+    decayInactivePlayersMock.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      release = () => reject(new Error('database unavailable'));
+    }));
+    const first = runWeeklyRdDecay();
+    await Promise.resolve();
+    await runWeeklyRdDecay();
+    expect(decayInactivePlayersMock).toHaveBeenCalledTimes(1);
+    release();
+    await first;
+    await runWeeklyRdDecay();
+    expect(decayInactivePlayersMock).toHaveBeenCalledTimes(2);
+  });
+
 });

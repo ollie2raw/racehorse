@@ -1,7 +1,7 @@
 import type { Room } from '../rooms';
 import { getRoomMatchEventSnapshot } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
-import { finalizeAndDeleteLiveRoomSession } from './roomLivePersistence';
+import { finalizeAndDeleteLiveRoomSession, type RoomArchiveGuard } from './roomLivePersistence';
 import { emitMpAuthorityFunnel, resolveMpAuthoritySourceType } from './mpAuthorityTelemetry';
 import { getRoomPlayersWithFallback, type PersistedRoomMatchLogStatus } from './roomSession';
 
@@ -160,6 +160,7 @@ export function isRoomMatchLogsPersistenceAvailable(): boolean {
 export async function persistRoomMatchLog(
   room: Room,
   status: PersistedRoomMatchLogStatus,
+  guard?: RoomArchiveGuard,
 ): Promise<void> {
   if (room.events.length === 0) return;
   if (persistentRoomMatchLogsAvailable === false) return;
@@ -181,7 +182,7 @@ export async function persistRoomMatchLog(
       sourceType: resolveMpAuthoritySourceType(room),
       extra: { status, matchId: room.matchId },
     });
-    await finalizeAndDeleteLiveRoomSession(room, status);
+    await finalizeAndDeleteLiveRoomSession(room, status, guard);
   } catch (error) {
     if (isMissingRoomMatchLogsTable(error)) {
       persistentRoomMatchLogsAvailable = false;

@@ -44,15 +44,23 @@ async function runPendingRatingCatchUp(source: 'boot' | 'periodic' | 'weekly'): 
       log.info({ source, processed: pendingResult.processed }, 'processed missed ranked game updates');
     }
     if (pendingResult.errors.length > 0) {
-      log.error({ source, errors: pendingResult.errors, count: pendingResult.errors.length }, 'rating processing errors');
+      log.error({ source, errors: pendingResult.errors.slice(0, 5), count: pendingResult.errors.length }, 'rating processing errors');
     }
   } catch (err) {
     log.error({ source, err }, 'pending-rating catch-up sweep failed');
   }
 }
 
+let weeklyDecayRunning = false;
+
 /** Weekly RD decay. Exported so the cutover-gate tests can drive the exact scheduled body. */
 export async function runWeeklyRdDecay(): Promise<void> {
+  if (weeklyDecayRunning) {
+    log.info({ outcome: 'already_running' }, 'weekly RD decay');
+    return;
+  }
+  weeklyDecayRunning = true;
+  const startedAt = Date.now();
   try {
     // Rating cutover gate: a decay run is counted from before its first
     // read until its last write, and never starts while the gate is closed.
@@ -63,7 +71,7 @@ export async function runWeeklyRdDecay(): Promise<void> {
     }
     try {
       const decayResult = await decayInactivePlayers();
-      log.info({ processed: decayResult.processed, aborted: decayResult.aborted }, 'processed RD decay for inactive players');
+      log.info({ processed: decayResult.processed, scanned: decayResult.scanned, pages: decayResult.pages, failed: decayResult.failed, aborted: decayResult.aborted }, 'processed RD decay for inactive players');
       if (decayResult.errors.length > 0) {
         log.error({ errors: decayResult.errors, count: decayResult.errors.length }, 'RD decay errors');
       }
@@ -72,6 +80,9 @@ export async function runWeeklyRdDecay(): Promise<void> {
     }
   } catch (err) {
     log.error({ err }, 'failed to run weekly RD decay');
+  } finally {
+    weeklyDecayRunning = false;
+    log.info({ durationMs: Date.now() - startedAt }, 'weekly RD decay finished');
   }
 }
 

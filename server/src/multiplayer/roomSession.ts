@@ -27,6 +27,8 @@ import { serverNow } from '../scheduledTournament/serverNow';
 import {
   configureLiveRoomPersistence,
   schedulePersistLiveRoomSessionForRoom,
+  flushScheduledLiveRoomPersistence,
+  type RoomArchiveGuard,
 } from './roomLivePersistence';
 import type { MatchStartDeps } from './matchStartReady';
 import { drawAudit } from './drawAudit';
@@ -115,7 +117,7 @@ export type RoomSessionHandlerDeps = {
   onAfterMatchStarted: (room: Room) => Promise<void>;
   notifyRoomPlayersInGame: (roomCode: string) => void;
   maybeFinalizeTournamentMatch?: (room: Room) => void;
-  persistRoomMatchLog: (room: Room, status: PersistedRoomMatchLogStatus) => Promise<void>;
+  persistRoomMatchLog: (room: Room, status: PersistedRoomMatchLogStatus, guard?: RoomArchiveGuard) => Promise<void>;
 };
 
 export type RoomSessionDeps = RoomSessionHandlerDeps & {
@@ -307,10 +309,33 @@ export function scheduleRoomCleanup(roomCode: string): void {
     });
     if (activePlayers.length > 0) return;
     try {
-      await requireDeps().persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned');
+      await requireDeps().persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned', {
+        shouldFinalize: () => {
+          let latest: Room;
+          try { latest = getRoom(roomCode); } catch { return true; }
+          return latest === room && !latest.players.some((seatId) => {
+            const socketId = getSocketForSeat(roomCode, seatId);
+            return Boolean(socketId && io.sockets.sockets.has(socketId));
+          });
+        },
+        restoreLiveSession: async () => {
+          let latest: Room;
+          try { latest = getRoom(roomCode); } catch { return; }
+          schedulePersistLiveRoomSessionForRoom(latest);
+          await flushScheduledLiveRoomPersistence(roomCode);
+        },
+      });
     } catch (error) {
       log.error({ err: error }, '[room-match-logs] failed to archive room before cleanup');
     }
+    // Archiving yields to reconnects and room replacement. Never tear down
+    // a room a player rejoined while that database request was in flight.
+    let currentRoom: Room;
+    try { currentRoom = getRoom(roomCode); } catch { return; }
+    if (currentRoom !== room || currentRoom.players.some((seatId) => {
+      const socketId = getSocketForSeat(roomCode, seatId);
+      return Boolean(socketId && io.sockets.sockets.has(socketId));
+    })) return;
     const botTimer = botTurnTimersByRoom.get(roomCode);
     if (botTimer) clearTimeout(botTimer);
     botTurnTimersByRoom.delete(roomCode);

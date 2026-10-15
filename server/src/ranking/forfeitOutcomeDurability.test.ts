@@ -70,7 +70,7 @@ describe('deferred rating period honours a persisted forfeit outcome', () => {
       if (path.startsWith('/rest/v1/profiles?id=eq.u2')) {
         return [{ ...profile, id: 'u2', username: 'stayer' }] as never;
       }
-      if (path.startsWith('/rest/v1/ranked_games?player_id=eq.u1')) {
+      if (path.startsWith('/rest/v1/ranked_games?') && path.includes('player_id=eq.u1')) {
         return [
           {
             id: 'g1',

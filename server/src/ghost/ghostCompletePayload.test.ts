@@ -119,13 +119,13 @@ function stub() {
       if (url.includes('/rest/v1/ghost_games') && method === 'POST') return json([{ id: 'g', xmax: '0' }]);
       if (url.includes('/rest/v1/ghost_games') && method === 'GET') return json(GAMES);
       if (url.includes('/rest/v1/profiles') && method === 'GET') {
-        return json([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200 }]);
+        return json([{ id: USER_ID, username: 'tester', glicko_rating: 1500, glicko_rd: 200, glicko_vol: 0.06, ranked_games_played: 30, peak_rating: 1500, provisional: false, glicko_last_period: null }]);
       }
       if (url.includes('/rest/v1/profiles') && (method === 'PATCH' || method === 'POST')) {
         return json([{ id: USER_ID }]);
       }
       if (url.includes('/rest/v1/rpc/')) return json([]);
-      if (url.includes('/rest/v1/ranked_games')) return json([{ id: 'rg', player_id: USER_ID }]);
+      if (url.includes('/rest/v1/ranked_games')) return json([{ id: 'rg', player_id: USER_ID, opponent_id: FRITZ_ELITE_ID, player_score: 60, opponent_score: 30, played_at: '2026-10-01T00:00:00.000Z', rating_after: null }]);
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     }),
   );

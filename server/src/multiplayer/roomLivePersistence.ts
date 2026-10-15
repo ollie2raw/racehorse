@@ -410,10 +410,12 @@ export function parseRoomShell(raw: unknown): PersistedRoomShell {
       ? { actionReceipts: shell.actionReceipts as PersistedGameActionReceipt[] }
       : {}),
     ...(shell.logStorage === 'entries' ? { logStorage: 'entries' as const } : {}),
-    ...(typeof shell.eventCount === 'number' ? { eventCount: shell.eventCount } : {}),
+    ...(shell.logStorage === 'entries'
+      ? { eventCount: typeof shell.eventCount === 'number' ? shell.eventCount : NaN }
+      : {}),
     ...(shell.ghostMoveLogCounts && typeof shell.ghostMoveLogCounts === 'object'
       ? { ghostMoveLogCounts: { ...(shell.ghostMoveLogCounts as Record<string, number>) } }
-      : {}),
+      : shell.logStorage === 'entries' ? { ghostMoveLogCounts: { invalid: NaN } } : {}),
   };
 }
 
@@ -888,10 +890,49 @@ async function attachLogEntries(row: RoomLiveSessionRow): Promise<{ ok: true } |
   const shell = row.room_shell;
   const eventCount = shell.eventCount ?? 0;
   const ghostCounts = shell.ghostMoveLogCounts ?? {};
-  const loaded = await supabaseFetch<LoadedLogEntryRow[]>(
-    `/rest/v1/room_live_session_entries?select=stream,idx,entry&room_code=eq.${encodeURIComponent(row.room_code)}&order=stream.asc,idx.asc`,
-    { method: 'GET', headers: { Prefer: 'return=representation' } },
-  );
+  const counts = new Map<string, number>([
+    [LIVE_SESSION_EVENTS_STREAM, eventCount],
+    ...Object.entries(ghostCounts).map(([seatId, count]) => [`${GHOST_STREAM_PREFIX}${seatId}`, count] as const),
+  ]);
+  // Persisted JSON is untrusted. Never turn invalid counts into a scan or a
+  // loop; bound the total recovery allocation as well as each response.
+  if ([...counts.values()].some((count) => !Number.isSafeInteger(count) || count < 0)) {
+    return { ok: false, error: 'snapshot_log_counts_invalid' };
+  }
+  const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
+  if (!Number.isSafeInteger(total) || total > 100_000) {
+    return { ok: false, error: 'snapshot_log_counts_invalid' };
+  }
+  const quote = (value: string) => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  const streams = [...counts].filter(([, count]) => count > 0);
+  const loaded: LoadedLogEntryRow[] = [];
+  let after: LoadedLogEntryRow | undefined;
+  while (loaded.length < total) {
+    const limit = Math.min(500, total - loaded.length);
+    const params = new URLSearchParams({
+      select: 'stream,idx,entry', room_code: `eq.${row.room_code}`,
+      order: 'stream.asc,idx.asc', limit: String(limit),
+      // Exclude stale rematch tails BEFORE paging, so they cannot consume a
+      // page and hide the current snapshot's other streams.
+      or: `(${streams.map(([stream, count]) => `and(stream.eq.${quote(stream)},idx.lt.${count})`).join(',')})`,
+    });
+    if (after) params.set('and', `(or(stream.gt.${quote(after.stream)},and(stream.eq.${quote(after.stream)},idx.gt.${after.idx})))`);
+    const page = await supabaseFetch<LoadedLogEntryRow[]>(
+      `/rest/v1/room_live_session_entries?${params.toString()}`,
+      { method: 'GET', headers: { Prefer: 'return=representation' } },
+    );
+    if (!Array.isArray(page) || page.some((item) => !item || !counts.has(item.stream)
+      || !Number.isSafeInteger(item.idx) || item.idx < 0 || item.idx >= counts.get(item.stream)!)) {
+      return { ok: false, error: 'snapshot_log_entries_missing' };
+    }
+    loaded.push(...page);
+    if (page.length < limit) break;
+    const last = page[page.length - 1]!;
+    if (after && last.stream === after.stream && last.idx <= after.idx) {
+      return { ok: false, error: 'snapshot_log_entries_missing' };
+    }
+    after = last;
+  }
   const byStream = new Map<string, Map<number, unknown>>();
   for (const item of loaded ?? []) {
     if (!item || typeof item.stream !== 'string' || typeof item.idx !== 'number') continue;
@@ -1016,12 +1057,19 @@ export function cancelScheduledLiveRoomPersistence(roomCode: string): void {
  * After a terminal archive: write game_over/abandoned to room_live_sessions, then delete.
  * Cancels any debounced playing-state persist first so it cannot race after delete.
  */
+export type RoomArchiveGuard = {
+  shouldFinalize(): boolean;
+  restoreLiveSession(): Promise<void>;
+};
+
 export async function finalizeAndDeleteLiveRoomSession(
   room: Room,
   archiveStatus: 'completed' | 'abandoned',
+  guard?: RoomArchiveGuard,
 ): Promise<void> {
   if (liveSessionsTableAvailable === false) return;
 
+  if (guard && !guard.shouldFinalize()) return;
   cancelScheduledLiveRoomPersistence(room.code);
   if (refusesLiveSessionOverwrite(room)) return;
 
@@ -1033,7 +1081,14 @@ export async function finalizeAndDeleteLiveRoomSession(
   const result = await persistLiveSessionRowNow(row);
   if (!result.ok) return;
 
+  if (guard && !guard.shouldFinalize()) {
+    await guard.restoreLiveSession();
+    return;
+  }
   await deleteLiveRoomSession(room.code);
+  // A reconnect can also arrive during the DELETE itself. Restore the latest
+  // retained room before cleanup returns; do not leave a live room terminal.
+  if (guard && !guard.shouldFinalize()) await guard.restoreLiveSession();
 }
 
 /** Debounced upsert — coalesces rapid state commits per room. */

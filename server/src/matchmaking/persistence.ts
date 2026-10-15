@@ -63,8 +63,9 @@ export async function recordMatchStart(params: {
       await sleep(delayMs);
     }
     try {
-      await supabaseFetch('/rest/v1/matchmaking_matches', {
+      await supabaseFetch('/rest/v1/matchmaking_matches?on_conflict=id', {
         method: 'POST',
+        headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' },
         body: JSON.stringify({
           id,
           room_code: params.roomCode,

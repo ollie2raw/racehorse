@@ -357,4 +357,27 @@ describe('recoverStrandedDailyFritzAttempts (DF-G1)', () => {
     expect(listStrandedMock.mock.calls[1]?.[2]).toBe('a-099');
     expect(listStrandedMock.mock.calls[2]?.[2]).toBe('a-099');
   });
+  it('backs off a complete poison attempt without refetching or journaling every cadence', async () => {
+    wireStore([strandedAttempt()]);
+    upsertAttemptMock.mockRejectedValue(new Error('permanent invalid authority state'));
+    const now = Date.parse('2026-10-15T00:00:00Z');
+    await recoverStrandedDailyFritzAttempts({ now });
+    await recoverStrandedDailyFritzAttempts({ now: now + 15 * 60_000 });
+    expect(getAttemptByIdMock).toHaveBeenCalledTimes(1);
+    expect(upsertAttemptMock).toHaveBeenCalledTimes(1);
+    expect(recordEventMock).toHaveBeenCalledTimes(1);
+    await recoverStrandedDailyFritzAttempts({ now: now + 30 * 60_000 });
+    expect(getAttemptByIdMock).toHaveBeenCalledTimes(2);
+    expect(recordEventMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops the sweep on a finalization infrastructure outage instead of refetching the whole page', async () => {
+    wireStore(Array.from({ length: 100 }, (_, i) => strandedAttempt({ id: `a-${i}` })));
+    getAttemptByIdMock.mockRejectedValueOnce(new Error('Supabase request failed: 503 unavailable'));
+    await expect(recoverStrandedDailyFritzAttempts()).rejects.toThrow('503');
+    expect(getAttemptByIdMock).toHaveBeenCalledTimes(1);
+    expect(recordEventMock).not.toHaveBeenCalled();
+    expect((await recoverStrandedDailyFritzAttempts()).finalized).toBe(100);
+  });
+
 });
