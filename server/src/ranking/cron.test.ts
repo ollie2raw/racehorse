@@ -16,6 +16,12 @@ vi.mock('./periodService', () => ({
   decayInactivePlayers: decayInactivePlayersMock,
 }));
 
+vi.mock('./ratingCutoverGate', () => ({
+  withRatingCompletion: async (_operation: string, work: () => Promise<unknown>) => work(),
+  isRatingCutoverQuiescedError: () => false,
+  beginDecayRun: async () => ({ end() {} }),
+}));
+
 // node-cron's `schedule()` sets up its own real-clock trigger unrelated to
 // the boot/interval sweep under test here; mocking it keeps the fake-timer
 // clock the only clock in play and avoids a dangling real timer past the test.
