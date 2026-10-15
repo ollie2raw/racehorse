@@ -29,6 +29,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import net from 'node:net';
+import fs from 'node:fs';
 import { join } from 'node:path';
 import { io, type Socket } from 'socket.io-client';
 import '../src/loadEnv';
@@ -315,9 +316,32 @@ async function main() {
       : cur.latest?.canDraw
         ? { type: 'DRAW', requestId: randomUUID() }
         : { type: 'PASS', requestId: randomUUID() };
+    const heldResponse = process.env.CHAOS_COMMITTED_RESPONSE_BARRIER === 'true';
+    if (heldResponse) {
+      if (supabaseUrl !== 'http://127.0.0.1:55447' || process.env.CHAOS_RESTART_SIGNAL !== 'SIGTERM') throw new Error('response barrier requires owned loopback fixture + SIGTERM');
+      fs.rmSync('/private/tmp/lifecycle-response-entered', { force: true });
+      fs.writeFileSync('/private/tmp/lifecycle-response-hold', 'hold');
+    }
     cur.socket.emit('game:action', roomCode, action, () => {});
-    await sleep(20); // broadcast frame goes out; persist likely still in flight
-    await killHard(child);
+    if (heldResponse && !(await waitFor(() => fs.existsSync('/private/tmp/lifecycle-response-entered'), 10_000))) throw new Error('committed response barrier was not reached');
+    else await sleep(20); // broadcast frame goes out; persist likely still in flight
+    if (process.env.CHAOS_RESTART_SIGNAL === 'SIGTERM') {
+      const stopped = new Promise<number | null>((resolve) => child!.once('exit', resolve));
+      const announced = new Promise<void>((resolve) => hostC.socket.once('server:shutdown', () => resolve()));
+      child.kill('SIGTERM');
+      if (heldResponse) {
+        await Promise.race([announced, sleep(5000).then(() => { throw new Error('shutdown was not announced'); })]);
+        const late = await emitAck(cur.socket, 'game:action', roomCode, action);
+        if (late.ok || late.error !== 'server_shutting_down') throw new Error('late mutation was admitted');
+        result.lateMutationRejected = true;
+        result.committedBeforeResponse = JSON.parse(fs.readFileSync('/private/tmp/lifecycle-response-entered', 'utf8'));
+        fs.rmSync('/private/tmp/lifecycle-response-hold', { force: true });
+      }
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const exitCode = await Promise.race([stopped, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('graceful shutdown exceeded deadline')), 28_000); })]).finally(() => { if (timer) clearTimeout(timer); });
+      result.gracefulExitCode = exitCode;
+      if (exitCode !== 0) throw new Error(`graceful shutdown failed: ${exitCode}`);
+    } else await killHard(child);
     child = null;
     hostC.socket.disconnect();
     guestC.socket.disconnect();
@@ -358,6 +382,14 @@ async function main() {
       typeof hostState?.sequence === 'number' &&
       hostState.sequence < lastSeenBeforeKill;
     result.clientsAgreeAfterRehydrate = boardKey(hostState) === boardKey(guestState);
+    if (heldResponse) {
+      const expected = (result.committedBeforeResponse as { sequence: number }).sequence;
+      if ((hostState?.sequence ?? -1) < expected) throw new Error('committed state lost across SIGTERM');
+      const replayActor = [hostC, guestC].find((c) => c.seatId === cur.seatId)!;
+      const replay = await emitAck(replayActor.socket, 'game:action', roomCode, action);
+      if (!replay.ok || hostC.latest?.state?.sequence !== hostState?.sequence) throw new Error('duplicate action was applied or not replayable');
+      result.committedResponseRecoveredOnce = true;
+    }
 
     // The match must be playable past the restart.
     let progressed = 0;
@@ -367,6 +399,11 @@ async function main() {
       await playOneMove(roomCode, hostC, guestC);
       if ((hostC.latest?.state?.sequence ?? -1) > seqAtResume) progressed += 1;
     }
+    // The action ACK and the two state_update deliveries are separate packets.
+    // Compare only after both clients have received the same committed sequence.
+    await waitFor(() => Boolean(hostC.latest?.state && guestC.latest?.state &&
+      hostC.latest.state.sequence === guestC.latest.state.sequence &&
+      boardKey(hostC.latest.state) === boardKey(guestC.latest.state)), 15_000);
     result.movesPlayedAfterRestart = progressed;
     result.finalSequence = hostC.latest?.state?.sequence ?? null;
     result.clientsAgreeAfterResumePlay =
@@ -397,6 +434,7 @@ async function main() {
       );
     }
   } finally {
+    fs.rmSync('/private/tmp/lifecycle-response-hold', { force: true });
     await killHard(child);
     if (roomCode) {
       await sb(`/rest/v1/matches?room_code=eq.${roomCode}`, { method: 'DELETE' }).catch(() => {});

@@ -1,3 +1,4 @@
+import { processTimeout, cancelProcessTimeout } from '../platform/processLifecycle';
 import { childLogger } from '../logger';
 const log = childLogger('room-session');
 import { randomUUID } from 'crypto';
@@ -163,11 +164,11 @@ export function resetRoomSessionStoresForTests(): void {
   roomPlayersByCode.clear();
   reconnectSeatsByCode.clear();
   for (const timer of botTurnTimersByRoom.values()) {
-    clearTimeout(timer);
+    cancelProcessTimeout(timer);
   }
   botTurnTimersByRoom.clear();
   for (const timer of roomCleanupTimersByCode.values()) {
-    clearTimeout(timer);
+    cancelProcessTimeout(timer);
   }
   roomCleanupTimersByCode.clear();
 }
@@ -286,7 +287,7 @@ export function clearRoomMetadata(roomCode: string): void {
 export function cancelRoomCleanup(roomCode: string): void {
   const timer = roomCleanupTimersByCode.get(roomCode);
   if (timer) {
-    clearTimeout(timer);
+    cancelProcessTimeout(timer);
     roomCleanupTimersByCode.delete(roomCode);
   }
 }
@@ -294,7 +295,7 @@ export function cancelRoomCleanup(roomCode: string): void {
 export function scheduleRoomCleanup(roomCode: string): void {
   if (!roomCode || roomCleanupTimersByCode.has(roomCode)) return;
   const io = requireIo();
-  const timer = setTimeout(async () => {
+  const timer = processTimeout('room', async () => {
     roomCleanupTimersByCode.delete(roomCode);
     let room;
     try {
@@ -337,7 +338,7 @@ export function scheduleRoomCleanup(roomCode: string): void {
       return Boolean(socketId && io.sockets.sockets.has(socketId));
     })) return;
     const botTimer = botTurnTimersByRoom.get(roomCode);
-    if (botTimer) clearTimeout(botTimer);
+    if (botTimer) cancelProcessTimeout(botTimer);
     botTurnTimersByRoom.delete(roomCode);
     deleteRoom(roomCode);
     clearRoomMetadata(roomCode);
@@ -631,7 +632,7 @@ export function scheduleBotTurn(roomCode: string): void {
   }
 
   const delayMs = 800 + Math.floor(Math.random() * 701);
-  const timer = setTimeout(async () => {
+  const timer = processTimeout('room', async () => {
     botTurnTimersByRoom.delete(roomCode);
     try {
       const latest = getRoom(roomCode);
@@ -997,7 +998,7 @@ export function broadcastStateUpdate(roomCode: string): void {
   if (roomAfter?.state?.handOver && !roomAfter.state.gameOver) {
     for (const pid of roomAfter.players) {
       if (pid.startsWith('bot:fritz:') && !roomAfter.nextHandReady.has(pid)) {
-        setTimeout(async () => {
+        processTimeout('room', async () => {
           try {
             const result = await readyForNextHand(roomCode, pid, io);
             if (result.started) {

@@ -1,3 +1,5 @@
+import { expiringReservations } from './reservationExpiryState';
+import { processInterval, isProcessClosing, cancelProcessInterval } from '../platform/processLifecycle';
 import { childLogger } from '../logger';
 import { deleteRoom, peekRoom } from '../rooms';
 import { clearRoomMetadata } from '../multiplayer/roomSession';
@@ -63,9 +65,12 @@ export function getTrackedMatchmakingReservationsForTests(): string[] {
  *
  * Returns the codes torn down (used by tests/ops logging).
  */
-export function sweepMatchmakingReservations(nowMs = Date.now()): string[] {
+export async function sweepMatchmakingReservations(nowMs = Date.now()): Promise<string[]> {
   const reaped: string[] = [];
+  let attempted = 0;
   for (const [code, reservedAt] of [...reservationsByRoomCode.entries()]) {
+    if (isProcessClosing() || attempted >= 100) break;
+    if (expiringReservations.has(code)) continue;
     const room = peekRoom(code);
     if (!room) {
       reservationsByRoomCode.delete(code);
@@ -77,22 +82,23 @@ export function sweepMatchmakingReservations(nowMs = Date.now()): string[] {
       continue;
     }
     if (nowMs - reservedAt < MATCHMAKING_RESERVATION_GRACE_MS) continue;
-    reservationsByRoomCode.delete(code);
-    const matchmakingMatchId = room.matchmakingMatchId;
-    deleteRoom(code);
-    clearRoomMetadata(code);
-    clearMatchedPair(code);
-    if (matchmakingMatchId) {
-      // Close the row too, or the next `MM<code>` join would hydrate a shell for
-      // a match nobody is playing (and the `in_progress` row leaks forever).
-      void recordMatchEnd({
-        matchId: matchmakingMatchId,
-        status: 'abandoned',
-        winnerId: null,
-        playerARatingChange: null,
-        playerBRatingChange: null,
-      });
-    }
+    attempted += 1;
+    expiringReservations.add(code);
+    try {
+      if (room.matchmakingMatchId) {
+        // Durable terminal state FIRST. A failed/lost response retains the
+        // room and retry owner; the conditional PATCH is safe to repeat.
+        await recordMatchEnd({ matchId: room.matchmakingMatchId, status: 'abandoned',
+          winnerId: null, playerARatingChange: null, playerBRatingChange: null, throwOnError: true });
+      }
+      reservationsByRoomCode.delete(code);
+      deleteRoom(code);
+      clearRoomMetadata(code);
+      clearMatchedPair(code);
+    } catch (err) {
+      log.warn({ err, roomCode: code }, 'reservation terminal write failed; retained for retry');
+      continue;
+    } finally { expiringReservations.delete(code); }
     reaped.push(code);
     log.info(
       { roomCode: code, ageMs: nowMs - reservedAt },
@@ -104,12 +110,10 @@ export function sweepMatchmakingReservations(nowMs = Date.now()): string[] {
 
 export function startMatchmakingReservationSweeper(): void {
   if (sweepTimer) return;
-  sweepTimer = setInterval(() => {
-    try {
-      sweepMatchmakingReservations();
-    } catch (err) {
+  sweepTimer = processInterval('reservations', () => {
+    return sweepMatchmakingReservations().catch((err) => {
       log.warn({ err: err instanceof Error ? err.message : err }, 'reservation sweep failed');
-    }
+    });
   }, RESERVATION_SWEEP_INTERVAL_MS);
   sweepTimer.unref?.();
 }
@@ -117,8 +121,9 @@ export function startMatchmakingReservationSweeper(): void {
 /** Test-only: stop the sweeper and forget every tracked reservation. */
 export function resetMatchmakingReservationsForTests(): void {
   if (sweepTimer) {
-    clearInterval(sweepTimer);
+    cancelProcessInterval(sweepTimer);
     sweepTimer = null;
   }
   reservationsByRoomCode.clear();
+  expiringReservations.clear();
 }

@@ -1,3 +1,4 @@
+import { trackProcessWork, isProcessClosing, onProcessStop, processInterval, cancelProcessInterval } from '../platform/processLifecycle';
 import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import * as rooms from '../rooms';
@@ -247,7 +248,7 @@ export function registerMatchmakingHandlers(
 function getOrCreateService(io: Server): QueueService {
   if (serviceSingleton) return serviceSingleton;
   serviceSingleton = new QueueService({
-    onMatched: (a, b) => { void handleMatched(io, a, b); },
+    onMatched: (a, b) => { if (!isProcessClosing()) void trackProcessWork('match-reservation', () => handleMatched(io, a, b)); },
     onTimeout: (socketId) => {
       if (matchmakingDebugEnabled()) {
         log.info({ socketId }, '[debug] queue:timeout');
@@ -256,9 +257,10 @@ function getOrCreateService(io: Server): QueueService {
     },
   });
   serviceSingleton.start();
+  onProcessStop(() => serviceSingleton?.stop());
 
   if (!onlineBroadcastTimer) {
-    onlineBroadcastTimer = setInterval(() => {
+    onlineBroadcastTimer = processInterval('matchmaking-presence', () => {
       const online = getOnlineCount(io);
       const queued = serviceSingleton!.size();
       // io.emit reaches every connected socket on every screen, not just the
@@ -448,7 +450,7 @@ export function resetMatchmakingRuntimeForTests(): void {
     serviceSingleton = null;
   }
   if (onlineBroadcastTimer) {
-    clearInterval(onlineBroadcastTimer);
+    cancelProcessInterval(onlineBroadcastTimer);
     onlineBroadcastTimer = null;
     lastBroadcastCounts = null;
   }

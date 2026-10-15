@@ -1,3 +1,4 @@
+import { processTimeout, processInterval, cancelProcessTimeout, cancelProcessInterval } from '../platform/processLifecycle';
 import { childLogger } from '../logger';
 import { listRoomCodes } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
@@ -96,19 +97,20 @@ export function scheduleRoomRetention(): void {
     log.info('room retention DISABLED (ROOM_RETENTION_REAPER_ENABLED=false)');
     return;
   }
-  bootTimer = setTimeout(() => {
+  bootTimer = processTimeout('retention', () => {
     bootTimer = null;
-    void runRoomRetention();
-    intervalTimer = setInterval(() => { void runRoomRetention(); }, ROOM_RETENTION_INTERVAL_MS);
+    const run = runRoomRetention();
+    intervalTimer = processInterval('retention', () => { return runRoomRetention(); }, ROOM_RETENTION_INTERVAL_MS);
     intervalTimer.unref?.();
+    return run;
   }, ROOM_RETENTION_BOOT_DELAY_MS);
   bootTimer.unref?.();
 }
 
 /** Test-only. */
 export function resetRoomRetentionForTests(): void {
-  if (bootTimer) clearTimeout(bootTimer);
-  if (intervalTimer) clearInterval(intervalTimer);
+  if (bootTimer) cancelProcessTimeout(bootTimer);
+  if (intervalTimer) cancelProcessInterval(intervalTimer);
   bootTimer = null;
   intervalTimer = null;
 }

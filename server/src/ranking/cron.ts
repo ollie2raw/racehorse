@@ -1,3 +1,4 @@
+import { processTimeout, processInterval, onProcessStop, isProcessClosing, trackProcessWork } from '../platform/processLifecycle';
 import { childLogger } from '../logger';
 
 import cron from 'node-cron';
@@ -59,6 +60,7 @@ let weeklyDecayRunning = false;
 
 /** Weekly RD decay. Exported so the cutover-gate tests can drive the exact scheduled body. */
 export async function runWeeklyRdDecay(): Promise<void> {
+  if (isProcessClosing()) return;
   if (weeklyDecayRunning) {
     log.info({ outcome: 'already_running' }, 'weekly RD decay');
     return;
@@ -98,20 +100,24 @@ export function startRankingCron() {
   scheduled = true;
 
   // Schedule: every Sunday at midnight UTC ('0 0 * * 0')
-  cron.schedule('0 0 * * 0', async () => {
+  const weekly = cron.schedule('0 0 * * 0', async () => {
+    if (isProcessClosing()) return;
+    await trackProcessWork('weekly-ranking', async () => {
     log.info('starting weekly ranking maintenance');
     await runPendingRatingCatchUp('weekly');
     await runWeeklyRdDecay();
+    });
   }, {
     timezone: "UTC"
   });
+  onProcessStop(() => weekly.stop());
 
   // RK-6: boot sweep + periodic catch-up so a pending game doesn't wait for Sunday.
-  setTimeout(() => {
-    void runPendingRatingCatchUp('boot');
+  processTimeout('ranking', () => {
+    return runPendingRatingCatchUp('boot');
   }, RANKING_CATCHUP_BOOT_DELAY_MS);
-  setInterval(() => {
-    void runPendingRatingCatchUp('periodic');
+  processInterval('ranking', () => {
+    return runPendingRatingCatchUp('periodic');
   }, RANKING_CATCHUP_INTERVAL_MS);
 
   log.info(

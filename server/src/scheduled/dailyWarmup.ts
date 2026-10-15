@@ -1,3 +1,4 @@
+import { processTimeout } from '../platform/processLifecycle';
 import { childLogger } from '../logger';
 import { dailyFritzRunCache, ensureDailyFritzRunForDate } from '../http/stores/dailyFritzStore';
 import { buildDailyFritzPublishedChallenge } from '../dailyFritzPublishedChallenge';
@@ -132,7 +133,7 @@ export async function warmDailyFritzRuns(
 export function scheduleDailyFritzWarmup(): void {
   const nextWarmupAt = getNextPacificWarmupAt(0, 2);
   const delayMs = Math.max(1000, nextWarmupAt.getTime() - Date.now());
-  setTimeout(async () => {
+  processTimeout('daily-warmup', async () => {
     await warmDailyFritzRuns('scheduled', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]);
     scheduleDailyFritzWarmup();
   }, delayMs);
@@ -143,9 +144,9 @@ const STARTUP_DAILY_WARMUP_DELAY_MS = 12_000;
 /** Optional startup warmup (off unless ENABLE_STARTUP_FRITZ_WARMUP=true). */
 export function scheduleStartupDailyWarmups(): void {
   const startupWarmupDates = [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)];
-  setTimeout(() => {
+  processTimeout('daily-warmup', () => {
     if (isStartupDailyFritzWarmupEnabled()) {
-      void warmDailyFritzRuns('startup', startupWarmupDates).catch((err) => {
+      return warmDailyFritzRuns('startup', startupWarmupDates).catch((err) => {
         log.warn('[daily-fritz-warmup] startup failed', err instanceof Error ? err.message : err);
       });
     } else {

@@ -1,3 +1,4 @@
+import { trackProcessWork } from '../platform/processLifecycle';
 import * as Sentry from '@sentry/node';
 import { childLogger } from '../logger';
 import { countRecentMoveLogVerificationFailuresForUser } from '../multiplayer/mpAuthorityEventStore';
@@ -585,7 +586,7 @@ export function createGameOverPersistScheduler(io: Server) {
     input: GameOverPersistInput,
   ): () => Promise<GameOverPersistOutcome> {
     const { room, sourceMatchId } = input;
-    return async () => {
+    return () => trackProcessWork('game-over-persistence', async () => {
       let lastError: unknown = null;
       for (let attempt = 0; attempt < GAME_OVER_PERSIST_MAX_ATTEMPTS; attempt += 1) {
         const delayMs = GAME_OVER_PERSIST_RETRY_DELAYS_MS[attempt] ?? 0;
@@ -604,7 +605,7 @@ export function createGameOverPersistScheduler(io: Server) {
               attempt: attempt + 1,
             },
           });
-          return 'succeeded';
+          return 'succeeded' as const;
         } catch (err) {
           lastError = err;
           log.warn(
@@ -639,7 +640,7 @@ export function createGameOverPersistScheduler(io: Server) {
       });
       markGameOverPersistFailed(room);
       emitGameOverPersistFailed(io, room, sourceMatchId, lastError);
-      return 'failed';
-    };
+      return 'failed' as const;
+    });
   };
 }

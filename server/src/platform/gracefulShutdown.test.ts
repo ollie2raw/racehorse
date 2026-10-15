@@ -125,17 +125,19 @@ describe('gracefulShutdown', () => {
 
     expect(flushLiveSessions).toHaveBeenCalled();
     expect(io.close).toHaveBeenCalled();
-    expect(exitProcess).toHaveBeenCalledWith(0);
+    expect(exitProcess).toHaveBeenCalledWith(1);
   });
 
-  it('drains orchestration first and waits for it before closing HTTP, flushing and exiting', async () => {
+  it('closes HTTP admission before draining orchestration, then flushes and closes sockets', async () => {
     const server = createMockHttpServer();
     const io = createMockSocketServer();
     const callOrder: string[] = [];
     const exitProcess = vi.fn(() => { callOrder.push('exit'); });
     let finishDrain!: () => void;
     const drainOrchestration = vi.fn((options: { timeoutMs: number }) => {
-      callOrder.push(`drain_start:${options.timeoutMs}`);
+      expect(options.timeoutMs).toBeGreaterThan(0);
+      expect(options.timeoutMs).toBeLessThanOrEqual(4321);
+      callOrder.push('drain_start');
       return new Promise<{ drained: boolean; released: boolean }>((resolve) => {
         finishDrain = () => { callOrder.push('drain_done'); resolve({ drained: true, released: true }); };
       });
@@ -151,12 +153,12 @@ describe('gracefulShutdown', () => {
       server: server as any, io: io as any, exitProcess, flushLiveSessions, drainOrchestration, shutdownFlushTimeoutMs: 4321,
     });
     await new Promise((r) => setImmediate(r));
-    // The in-flight orchestration is still running: nothing else has closed.
-    expect(callOrder).toEqual(['drain_start:4321']);
+    // Admission is closed, while orchestration still prevents the final flush.
+    expect(callOrder).toEqual(['http_close', 'drain_start']);
     expect(io.emit).toHaveBeenCalledWith('server:shutdown', expect.anything());
     finishDrain();
     await done;
-    expect(callOrder).toEqual(['drain_start:4321', 'drain_done', 'http_close', 'flush', 'socket_close', 'exit']);
+    expect(callOrder).toEqual(['http_close', 'drain_start', 'drain_done', 'flush', 'socket_close', 'exit']);
     expect(exitProcess).toHaveBeenCalledWith(0);
   });
 
@@ -173,7 +175,7 @@ describe('gracefulShutdown', () => {
     });
     expect(server.close).toHaveBeenCalled();
     expect(io.close).toHaveBeenCalled();
-    expect(exitProcess).toHaveBeenCalledWith(0);
+    expect(exitProcess).toHaveBeenCalledWith(1);
   });
 
   it('Phase 4A: does not wait for open websockets to end before flushing and closing sockets', async () => {
@@ -231,7 +233,7 @@ describe('gracefulShutdown', () => {
       await done;
 
       expect(io.close).toHaveBeenCalled();
-      expect(exitProcess).toHaveBeenCalledWith(0);
+      expect(exitProcess).toHaveBeenCalledWith(1);
     } finally {
       vi.useRealTimers();
     }

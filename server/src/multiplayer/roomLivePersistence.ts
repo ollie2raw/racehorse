@@ -1113,6 +1113,7 @@ export function schedulePersistLiveRoomSession(room: Room, roster: LiveRosterEnt
 }
 
 export type FlushScheduledLiveRoomPersistenceResult = {
+  failedRoomCodes?: string[];
   flushedRoomCodes: string[];
 };
 
@@ -1124,6 +1125,7 @@ export async function flushScheduledLiveRoomPersistence(
     : [...new Set([...pendingPersistByRoomCode.keys(), ...flushTimersByRoomCode.keys()])];
 
   const flushedRoomCodes: string[] = [];
+  const failedRoomCodes: string[] = [];
 
   for (const code of codes) {
     const timer = flushTimersByRoomCode.get(code);
@@ -1134,18 +1136,20 @@ export async function flushScheduledLiveRoomPersistence(
     const pending = pendingPersistByRoomCode.get(code);
     pendingPersistByRoomCode.delete(code);
     if (pending) {
-      await persistLiveRoomSessionNow(pending.room, pending.roster);
+      const ok = await persistLiveRoomSessionNow(pending.room, pending.roster);
+      if (!ok) failedRoomCodes.push(code);
       flushedRoomCodes.push(code);
     }
   }
 
-  return { flushedRoomCodes };
+  return { flushedRoomCodes, failedRoomCodes };
 }
 
 export type FlushAllPendingLiveSessionsResult = {
   flushedRoomCodes: string[];
   awaitedInFlightRoomCodes: string[];
   timedOut: boolean;
+  failedRoomCodes?: string[];
 };
 
 /**
@@ -1164,13 +1168,17 @@ export async function flushAllPendingLiveSessions(options?: {
   flushAllPendingInFlight = (async () => {
     const flushedRoomCodes: string[] = [];
     let timedOut = false;
+    const failedRoomCodes: string[] = [];
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const flushWork = async (): Promise<string[]> => {
       const scheduled = await flushScheduledLiveRoomPersistence();
       flushedRoomCodes.push(...scheduled.flushedRoomCodes);
+      failedRoomCodes.push(...(scheduled.failedRoomCodes ?? []));
 
       const inFlightCodes = [...inFlightPersistByRoomCode.keys()];
-      await Promise.all([...inFlightPersistByRoomCode.values()]);
+      const results = await Promise.all([...inFlightPersistByRoomCode.values()]);
+      results.forEach((ok, i) => { if (!ok) failedRoomCodes.push(inFlightCodes[i]); });
       return inFlightCodes;
     };
 
@@ -1179,7 +1187,7 @@ export async function flushAllPendingLiveSessions(options?: {
       awaitedInFlightRoomCodes = await Promise.race([
         flushWork(),
         new Promise<string[]>((_, reject) => {
-          setTimeout(() => reject(new Error('live_persist_flush_timeout')), timeoutMs);
+          timeout = setTimeout(() => reject(new Error('live_persist_flush_timeout')), timeoutMs);
         }),
       ]);
     } catch (error) {
@@ -1198,7 +1206,9 @@ export async function flushAllPendingLiveSessions(options?: {
       }
     }
 
+    if (timeout) clearTimeout(timeout);
     return {
+      failedRoomCodes: [...new Set(failedRoomCodes)],
       flushedRoomCodes: [...new Set(flushedRoomCodes)],
       awaitedInFlightRoomCodes,
       timedOut,

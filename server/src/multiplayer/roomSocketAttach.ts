@@ -1,3 +1,4 @@
+import { assertReservationNotExpiring } from '../matchmaking/reservationExpiryState';
 import { shouldRefuseNewPrivateSeat } from '../moderation/privateRoomSeatBlocks';
 import { isGuestSeatIdentity, issueGuestReconnectCapability, verifyGuestReconnectCapability } from './guestReconnectCapability';
 import { roomKind } from './roomKind';
@@ -570,6 +571,7 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
           throw new Error('Room not found.');
         }
         joinedPlayerSeatId = allocatePlayerSeatId();
+        assertReservationNotExpiring(roomCode);
         room = joinRoom(roomCode, joinedPlayerSeatId);
       }
     }

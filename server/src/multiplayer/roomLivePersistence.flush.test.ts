@@ -4,6 +4,7 @@ import type { Room } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
 import { createInitialRoomDurabilityState } from './roomDurability';
 import {
+  ensureRoomHydrated,
   flushAllPendingLiveSessions,
   flushScheduledLiveRoomPersistence,
   getLiveRoomDurabilityState,
@@ -112,7 +113,7 @@ describe('roomLivePersistence flush', () => {
     persistenceStore.liveSessions.clear();
     persistenceStore.persistCalls = 0;
     persistenceStore.persistedSequences = [];
-    vi.mocked(supabaseFetch).mockClear();
+    vi.mocked(supabaseFetch).mockReset();
   });
 
   afterEach(() => {
@@ -169,6 +170,38 @@ describe('roomLivePersistence flush', () => {
     expect(result.timedOut).toBe(true);
     expect(result.flushedRoomCodes).toEqual([]);
     releasePersist();
+  });
+
+  it('reports a failed dirty snapshot instead of claiming a successful drain', async () => {
+    vi.mocked(supabaseFetch).mockImplementationOnce(async () => { throw new Error('database unavailable'); });
+    schedulePersistLiveRoomSession(mkRoom({ code: 'FAILED' }), roster);
+    const result = await flushAllPendingLiveSessions({ timeoutMs: 1000 });
+    expect(result.failedRoomCodes).toEqual(['FAILED']);
+    expect(result.timedOut).toBe(false);
+  });
+
+  it('refuses a durable terminal snapshot after restart (completion gap evidence)', async () => {
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes('/room_live_sessions') && init?.method === 'POST') {
+        for (const row of JSON.parse(String(init.body))) persistenceStore.liveSessions.set(row.room_code, row);
+        return undefined;
+      }
+      if (path.includes('/mp_authority_events')) return undefined;
+      throw new Error(`unexpected persist request: ${path}`);
+    });
+    const room = mkRoom({ code: 'TERMGAP', state: mkGameState({ gameOver: true, winnerId: 'seat-a' }) });
+    await persistLiveRoomSessionNow(room, roster);
+    const row = structuredClone(persistenceStore.liveSessions.get(room.code)!);
+    expect(row.status).toBe('game_over');
+    expect((row.room_shell as Record<string, unknown>).matchLogged).toBe(false);
+    resetLiveRoomPersistenceForTests();
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string) => {
+      if (path.includes('/room_live_sessions?')) return [row];
+      if (path.includes('/mp_authority_events')) return undefined;
+      throw new Error(`unexpected recovery request: ${path}`);
+    });
+    const result = await ensureRoomHydrated(room.code);
+    expect(result).toEqual({ kind: 'snapshot_stale', error: 'snapshot_terminal' });
   });
 
   it('coalesces duplicate in-flight writes for the same room', async () => {
@@ -264,7 +297,7 @@ describe('roomLivePersistence flush', () => {
     room.eventSequence = 1;
     releaseFirstPersist();
 
-    await expect(persist).resolves.toEqual({ flushedRoomCodes: ['EVENT1'] });
+    await expect(persist).resolves.toEqual({ flushedRoomCodes: ['EVENT1'], failedRoomCodes: [] });
     expect(persistenceStore.persistCalls).toBe(2);
     expect(persistenceStore.liveSessions.get('EVENT1')?.last_event_sequence).toBe(1);
     expect(getLiveRoomDurabilityState(room).status).toBe('healthy');

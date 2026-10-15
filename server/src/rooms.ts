@@ -1,3 +1,4 @@
+import { assertReservationNotExpiring } from './matchmaking/reservationExpiryState';
 import { GameState, Config, PlacementPosition, Move, Tile, BoardState } from './game/types';
 import type { RoomGameActionPayload } from '@racehorse/game-core';
 import { assertTileCountInvariant, assertValidGameState } from './game/invariants';
@@ -524,6 +525,7 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
 }
 
 export function joinRoom(code: string, playerSeatId: string): Room {
+  assertReservationNotExpiring(code);
   const room = rooms.get(code);
   if (!room) throw new Error('Room not found.');
   assertRoomNotAbandonedOrForfeitBlocked(room);

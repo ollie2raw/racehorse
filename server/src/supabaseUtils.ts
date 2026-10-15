@@ -1,3 +1,4 @@
+import { trackProcessWork } from './platform/processLifecycle';
 
 import * as Sentry from '@sentry/node';
 import { config } from './config';
@@ -149,7 +150,11 @@ export function takeSupabaseUsage(): Map<string, SupabaseUsageEntry> {
 // Core fetch
 // ---------------------------------------------------------------------------
 
-export async function supabaseFetch<T>(path: string, init?: SupabaseFetchOptions): Promise<T> {
+export function supabaseFetch<T>(path: string, init?: SupabaseFetchOptions): Promise<T> {
+  return trackProcessWork('database', () => supabaseFetchImpl<T>(path, init));
+}
+
+async function supabaseFetchImpl<T>(path: string, init?: SupabaseFetchOptions): Promise<T> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const isReadRequest = method === 'GET' || method === 'HEAD';
 
