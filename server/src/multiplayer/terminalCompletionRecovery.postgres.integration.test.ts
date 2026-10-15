@@ -143,7 +143,8 @@ run('terminal completion recovery (real PostgreSQL + PostgREST)', () => {
       const first = await sweep();
       expect(first.outcomes.failed).toBe(1);
       expect(rankedFor(g.matchId).length).toBeLessThan(2);
-      expect(shell(g.code)).toMatchObject({ completionPending: true, completionRecovery: { attempts: 1 } });
+      // a lost request is infrastructure: recorded as a transient failure, NOT against the quarantine budget
+      expect(shell(g.code)).toMatchObject({ completionPending: true, completionRecovery: { attempts: 0, transientFailures: 1 } });
 
       const second = await sweep();
       expect(second.outcomes.recovered).toBe(1);
@@ -478,6 +479,31 @@ run('terminal completion recovery (real PostgreSQL + PostgREST)', () => {
       localSql(`update public.room_live_sessions set updated_at = now() - interval '30 days' where room_code='${bad}'`);
       await runRoomRetention();
       expect(rowExists(bad)).toBe(true);
+    });
+
+    it('a long infrastructure outage never quarantines a legitimate completion; it completes when the outage ends', async () => {
+      const acct1 = seedAccount('tou1');
+      const acct2 = seedAccount('tou2');
+      const seeded = await seedTerminalSession({ seatA: { userId: acct1 }, seatB: { userId: acct2 } });
+      const stranded = seeded.code;
+      const matchId = seeded.matchId;
+      gateway.faults.push({ name: 'outage', phase: 'before', times: 999, match: (r) => r.method === 'POST' && r.path.startsWith('/ranked_games') });
+      for (let i = 1; i <= TERMINAL_RECOVERY_MAX_ATTEMPTS + 3; i += 1) {
+        const r = await sweep();
+        expect(r.outcomes.quarantined).toBe(0);
+        expect(r.outcomes.failed).toBe(1);
+      }
+      const during = shell(stranded).completionRecovery as { attempts: number; transientFailures: number; quarantinedAt?: string };
+      expect(during.attempts).toBe(0);
+      expect(during.transientFailures).toBe(TERMINAL_RECOVERY_MAX_ATTEMPTS + 3);
+      expect(during.quarantinedAt).toBeUndefined();
+      expect(shell(stranded).completionPending).toBe(true);
+      expect(rankedFor(matchId)).toEqual([]);
+      gateway.faults.length = 0;
+      const recovered = await sweep();
+      expect(recovered.outcomes.recovered).toBe(1);
+      expect(rankedFor(matchId)).toHaveLength(2);
+      expect(rowExists(stranded)).toBe(false);
     });
 
     it('a persistently failing row backs off behind younger rows and quarantines after the attempt ceiling', async () => {

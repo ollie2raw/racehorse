@@ -62,6 +62,8 @@ export type CompletionRecoveryState = {
   lastAttemptAt: string;
   lastError: string;
   quarantinedAt?: string;
+  /** Infrastructure failures (outage/5xx/timeouts). Never counted toward the quarantine ceiling. */
+  transientFailures?: number;
 };
 
 export type PersistedRoomShell = {
@@ -384,6 +386,9 @@ function parseCompletionRecovery(raw: unknown): CompletionRecoveryState | null {
     lastAttemptAt: typeof value.lastAttemptAt === 'string' ? value.lastAttemptAt : '',
     lastError: typeof value.lastError === 'string' ? value.lastError : '',
     ...(typeof value.quarantinedAt === 'string' ? { quarantinedAt: value.quarantinedAt } : {}),
+    ...(typeof value.transientFailures === 'number' && Number.isFinite(value.transientFailures)
+      ? { transientFailures: value.transientFailures }
+      : {}),
   };
 }
 

@@ -304,8 +304,23 @@ export async function recoverTerminalCompletion(
   }
 }
 
+/**
+ * Errors that say nothing about the row itself: network/DB/gateway outages, timeouts, throttling,
+ * auth blips and a missing table/RPC (deploy order). They are retried forever (with backoff) and
+ * never spend the quarantine budget. Everything else (RPC rejections 400/409/422, invariant
+ * violations, unexpected code errors) is deterministic for that row.
+ */
+export function isTransientInfrastructureError(error: unknown): boolean {
+  const message = errorMessage(error);
+  return (
+    /Supabase request (?:failed: (?:401|403|404|408|425|429|5\d\d)\b|timed out)/i.test(message) ||
+    /fetch failed|ECONN|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|socket hang up|UND_ERR|network|timed out|aborted/i.test(message)
+  );
+}
+
 async function failed(candidate: StrandedTerminalCandidate, error: unknown): Promise<TerminalReplayOutcome> {
   const message = errorMessage(error);
+  const transient = isTransientInfrastructureError(error);
   log.warn({ roomCode: candidate.room_code, matchId: candidate.match_id, error: message }, 'terminal completion replay failed');
   // Count the attempt only if the database is reachable enough to record it: an outage must
   // not march every pending row toward quarantine.
@@ -313,6 +328,7 @@ async function failed(candidate: StrandedTerminalCandidate, error: unknown): Pro
   try {
     recorded = await recordTerminalReplayFailure(candidate.room_code, candidate.match_id, message, {
       maxAttempts: TERMINAL_RECOVERY_MAX_ATTEMPTS,
+      transient,
     });
   } catch {
     recorded = null;

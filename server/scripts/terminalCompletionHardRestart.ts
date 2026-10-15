@@ -14,6 +14,11 @@
  *                row COMMITS and before the response (crash during replay, before acknowledgment).
  *                A THIRD process finishes it. Exactly one logical completion overall.
  *
+ *   precontract-ghost (run alone, on a freshly built PRE-CONTRACT database) the integrated Ghost acceptance:
+ *                two accounts, boundary-B SIGKILL, restart converges core completion with seat B Ghost work
+ *                durably deferred, restart again, apply the real Ghost contract, restart, deferred seat
+ *                drains exactly once, restart again is a no-op.
+ *
  * Refuses anything but the exact loopback test instances. Usage (see server/test/fixtures/README.md):
  *   TERMINAL_R1_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/racehorse_terminal_r1 \
  *   TERMINAL_R1_POSTGREST_URL=http://127.0.0.1:55440 npx tsx scripts/terminalCompletionHardRestart.ts
@@ -106,6 +111,7 @@ async function spawnServer(extraEnv: Record<string, string> = {}): Promise<Child
         TOURNAMENT_SCHEDULER_ENABLED: 'false',
         ROOM_CLEANUP_GRACE_MS: '60000',
         TERMINAL_COMPLETION_RECOVERY_BOOT_DELAY_MS: '2000',
+        GHOST_DEFERRED_DRAIN_BOOT_DELAY_MS: '2000',
         NODE_ENV: 'production',
         ...extraEnv,
       },
@@ -205,8 +211,10 @@ async function playUntilServerDies(roomCode: string, host: Client, guest: Client
 const count = (query: string) => Number(sql(query));
 type Snapshot = {
   liveRow: string; ranked: number; receipts: number; matches: number; archive: number; activity: number;
-  completionPending: string; matchLogged: string; ghostGames: number;
+  completionPending: string; matchLogged: string; ghostGames: number; ghostDeferred: number;
 };
+const legacyConstraintPresent = () =>
+  count(`select count(*) from pg_constraint where conname='ghost_games_match_id_unique' and conrelid='public.ghost_games'::regclass`) === 1;
 function snapshot(roomCode: string, ids: string[]): Snapshot {
   const idList = ids.map((i) => `'${i}'`).join(',');
   return {
@@ -219,6 +227,7 @@ function snapshot(roomCode: string, ids: string[]): Snapshot {
     archive: count(`select count(*) from public.room_match_logs where room_code='${roomCode}'`),
     activity: count(`select count(*) from public.activity_feed where user_id in (${idList})`),
     ghostGames: count(`select count(*) from public.ghost_games where user_id in (${idList})`),
+    ghostDeferred: count(`select count(*) from public.ghost_deferred_completions where user_id in (${idList})`),
   };
 }
 
@@ -266,7 +275,7 @@ async function assertNotPlayable(roomCode: string, who: { id: string; token: str
 }
 
 async function scenarioBoundaryB(result: Record<string, unknown>, failures: string[]) {
-  sql('truncate public.ghost_games, public.room_live_sessions, public.room_match_logs, public.ranked_games, public.rating_periods, public.matches, public.activity_feed, public.bot_match_pending cascade');
+  sql('truncate public.ghost_deferred_completions, public.ghost_games, public.room_live_sessions, public.room_match_logs, public.ranked_games, public.rating_periods, public.matches, public.activity_feed, public.bot_match_pending cascade');
   gateway.reset();
   let child: ChildProcess | null = null;
   const played = await playToTerminalWithKill((roomCode) => {
@@ -303,6 +312,8 @@ async function scenarioBoundaryB(result: Record<string, unknown>, failures: stri
     if (final.matches !== 1) failures.push(`B: expected exactly 1 matches row, got ${final.matches}`);
     if (final.archive !== 1) failures.push(`B: expected exactly 1 archive row, got ${final.archive}`);
     if (final.liveRow !== 'none') failures.push(`B: terminal live row not cleaned up (${final.liveRow})`);
+    if (final.ghostGames + final.ghostDeferred !== 2) failures.push(`B: ghost seats completed (${final.ghostGames}) + deferred (${final.ghostDeferred}) != 2`);
+    if (legacyConstraintPresent() ? final.ghostGames !== 1 || final.ghostDeferred !== 1 : final.ghostGames !== 2 || final.ghostDeferred !== 0) failures.push(`B: unexpected Ghost state for the live schema: ${JSON.stringify({ ghostGames: final.ghostGames, ghostDeferred: final.ghostDeferred })}`);
     result.boundaryB_rejoin = await assertNotPlayable(roomCode, played.host, failures);
   } finally {
     await killHard(child);
@@ -310,7 +321,7 @@ async function scenarioBoundaryB(result: Record<string, unknown>, failures: stri
 }
 
 async function scenarioReplayCrash(result: Record<string, unknown>, failures: string[]) {
-  sql('truncate public.ghost_games, public.room_live_sessions, public.room_match_logs, public.ranked_games, public.rating_periods, public.matches, public.activity_feed, public.bot_match_pending cascade');
+  sql('truncate public.ghost_deferred_completions, public.ghost_games, public.room_live_sessions, public.room_match_logs, public.ranked_games, public.rating_periods, public.matches, public.activity_feed, public.bot_match_pending cascade');
   gateway.reset();
   const played = await playToTerminalWithKill((roomCode) => {
     let terminalSeen = false;
@@ -359,10 +370,91 @@ async function scenarioReplayCrash(result: Record<string, unknown>, failures: st
     if (final.receipts !== 2) failures.push(`R: expected exactly 2 rating receipts, got ${final.receipts}`);
     if (final.matches !== 1) failures.push(`R: expected exactly 1 matches row, got ${final.matches}`);
     if (final.archive !== 1) failures.push(`R: expected exactly 1 archive row, got ${final.archive}`);
+    if (final.ghostGames + final.ghostDeferred !== 2) failures.push(`R: ghost seats completed (${final.ghostGames}) + deferred (${final.ghostDeferred}) != 2`);
+    if (legacyConstraintPresent() ? final.ghostGames !== 1 || final.ghostDeferred !== 1 : final.ghostGames !== 2 || final.ghostDeferred !== 0) failures.push(`R: unexpected Ghost state for the live schema: ${JSON.stringify({ ghostGames: final.ghostGames, ghostDeferred: final.ghostDeferred })}`);
     result.replayCrash_rejoin = await assertNotPlayable(roomCode, played.host, failures);
   } finally {
     await killHard(second);
   }
+}
+
+/**
+ * Integrated acceptance (pre-contract NEW schema -> Ghost contract). Mutates the database by applying
+ * the REAL Ghost contract migration, so it must run last and needs a freshly built pre-contract DB.
+ */
+async function scenarioPreContractGhost(result: Record<string, unknown>, failures: string[]) {
+  if (!legacyConstraintPresent()) { failures.push('G: database is not in the pre-contract schema (rebuild with TERMINAL_TEST_SCHEMA=pre-contract)'); return; }
+  sql('truncate public.ghost_deferred_completions, public.ghost_games, public.room_live_sessions, public.room_match_logs, public.ranked_games, public.rating_periods, public.matches, public.activity_feed, public.bot_match_pending cascade');
+  gateway.reset();
+  const played = await playToTerminalWithKill((roomCode) => {
+    let terminalSeen = false;
+    gateway.faults.push({
+      name: 'sigkill-ghost-boundary-b',
+      phase: 'before',
+      match: (r, body) => {
+        if (r.method === 'POST' && r.path.startsWith('/room_live_sessions') && body.includes(`"room_code":"${roomCode}"`) && body.includes('"status":"game_over"')) terminalSeen = true;
+        return terminalSeen && r.method === 'GET' && r.path.startsWith('/scheduled_tournament_matches') && r.path.includes(roomCode);
+      },
+      onFired: () => killHardNow((globalThis as { __child?: ChildProcess }).__child ?? null),
+    });
+  });
+  const { roomCode, ids } = played;
+  const killed = snapshot(roomCode, ids);
+  result.ghost_1_afterKill = killed;
+  if (killed.liveRow !== 'game_over' || killed.completionPending !== 'true') failures.push('G1: boundary B was not durable (terminal pending snapshot missing)');
+  if (killed.ranked !== 0 || killed.ghostGames !== 0 || killed.ghostDeferred !== 0) failures.push('G1: completion effects existed before the kill');
+
+  gateway.faults.length = 0;
+  let proc = await spawnServer(); // fresh process #2: replay the terminal completion pre-contract
+  const converged = await waitDb(() => { const s = snapshot(roomCode, ids); return s.ranked === 2 && s.liveRow === 'none' && s.ghostDeferred === 1; }, 90_000);
+  if (!converged) failures.push('G2: core completion did not converge pre-contract (a Ghost conflict must not strand it)');
+  await sleep(6_000);
+  const core = snapshot(roomCode, ids);
+  result.ghost_2_preContractFinal = core;
+  if (core.ranked !== 2 || core.receipts !== 2 || core.matches !== 1 || core.archive !== 1) failures.push(`G2: core completion not exactly-once: ${JSON.stringify(core)}`);
+  if (core.ghostGames !== 1 || core.ghostDeferred !== 1) failures.push(`G2: expected 1 completed + 1 deferred Ghost seat, got ${core.ghostGames}+${core.ghostDeferred}`);
+  if (core.liveRow !== 'none') failures.push(`G2: terminal room not finalized (${core.liveRow})`);
+  result.ghost_2_rejoin = await assertNotPlayable(roomCode, played.host, failures);
+  const deferredUser = sql(`select user_id from public.ghost_deferred_completions limit 1`);
+  const completedUser = sql(`select user_id from public.ghost_games where user_id in ('${ids[0]}','${ids[1]}')`);
+  if (deferredUser === completedUser || !(ids as string[]).includes(deferredUser)) failures.push('G2: deferred and completed Ghost seats are not the two distinct accounts');
+
+  // Restart again: the deferral must survive and not be retried into the ground.
+  await killHard(proc);
+  gateway.reset();
+  proc = await spawnServer();
+  await sleep(8_000); // boot drain at +2s
+  const drainRequests = gateway.count((r) => r.path.startsWith('/ghost_deferred_completions') || r.path.includes('complete_ghost_rating_v2'));
+  await killHard(proc);
+  const afterRestart = snapshot(roomCode, ids);
+  result.ghost_3_afterSecondRestart = { ...afterRestart, drainRequests };
+  if (afterRestart.ghostDeferred !== 1 || afterRestart.ghostGames !== 1) failures.push(`G3: deferred seat changed across restart: ${afterRestart.ghostGames}+${afterRestart.ghostDeferred}`);
+  if (afterRestart.ranked !== 2 || afterRestart.receipts !== 2 || afterRestart.matches !== 1) failures.push('G3: restart duplicated core effects');
+  if (drainRequests > 3) failures.push(`G3: pre-contract drain made ${drainRequests} Ghost requests in one boot (retry storm?)`);
+
+  // Apply the REAL Ghost contract, then restart: the boot sweep drains the deferred seat.
+  execFileSync(process.env.PSQL_BIN || 'psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-q', DB_URL, '-f', join(serverRoot, '../supabase/migrations/2026-10-13_ghost_user_match_uniqueness.sql')], { encoding: 'utf8' });
+  if (legacyConstraintPresent()) failures.push('G4: contract migration did not remove the legacy constraint');
+  proc = await spawnServer();
+  const drained = await waitDb(() => snapshot(roomCode, ids).ghostDeferred === 0, 60_000);
+  await sleep(6_000);
+  await killHard(proc);
+  const finalG = snapshot(roomCode, ids);
+  result.ghost_4_postContractFinal = finalG;
+  if (!drained) failures.push('G4: deferred Ghost seat did not drain after the contract');
+  if (finalG.ghostGames !== 2 || finalG.ghostDeferred !== 0) failures.push(`G4: expected 2 Ghost rows and 0 deferred, got ${finalG.ghostGames}+${finalG.ghostDeferred}`);
+  if (count(`select count(distinct user_id) from public.ghost_games where user_id in ('${ids[0]}','${ids[1]}')`) !== 2) failures.push('G4: not exactly one Ghost completion per account');
+  if (count(`select count(*) from public.ghost_games where user_id in ('${ids[0]}','${ids[1]}') and rating_applied_at is not null`) !== 2) failures.push('G4: a Ghost completion lacks its rating receipt');
+  if (count(`select coalesce(sum(games_played),0) from public.ghost_profiles where user_id in ('${ids[0]}','${ids[1]}')`) !== 2) failures.push('G4: Ghost games_played is not exactly 1 per account');
+  if (finalG.ranked !== 2 || finalG.receipts !== 2 || finalG.matches !== 1 || finalG.archive !== 1 || finalG.activity !== core.activity) failures.push(`G4: core/ranked/stat effects changed by the Ghost drain: ${JSON.stringify(finalG)} vs ${JSON.stringify(core)}`);
+
+  // One more restart: replay is a no-op.
+  proc = await spawnServer();
+  await sleep(8_000);
+  await killHard(proc);
+  const again = snapshot(roomCode, ids);
+  if (JSON.stringify(again) !== JSON.stringify(finalG)) failures.push(`G5: another restart changed state: ${JSON.stringify(again)}`);
+  result.ghost_5_afterThirdRestart = again;
 }
 
 async function main() {
@@ -384,6 +476,7 @@ async function main() {
   try {
     if (!only || only === 'boundary-b') await scenarioBoundaryB(result, failures);
     if (!only || only === 'replay-crash') await scenarioReplayCrash(result, failures);
+    if (only === 'precontract-ghost') await scenarioPreContractGhost(result, failures);
   } catch (error) {
     failures.push(`aborted: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
   } finally {

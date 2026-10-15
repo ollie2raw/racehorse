@@ -121,7 +121,7 @@ export async function recordTerminalReplayFailure(
   roomCode: string,
   matchId: string,
   error: string,
-  options: { maxAttempts: number; quarantineNow?: boolean },
+  options: { maxAttempts: number; quarantineNow?: boolean; transient?: boolean },
 ): Promise<{ attempts: number; quarantined: boolean } | null> {
   let result: { attempts: number; quarantined: boolean } | null = null;
   const nowIso = new Date().toISOString();
@@ -130,13 +130,19 @@ export async function recordTerminalReplayFailure(
     matchId,
     (shell) => {
       const previous = shell.completionRecovery as Partial<CompletionRecoveryState> | undefined;
-      const attempts = (typeof previous?.attempts === 'number' ? previous.attempts : 0) + 1;
-      const quarantined = options.quarantineNow === true || attempts >= options.maxAttempts;
+      const priorAttempts = typeof previous?.attempts === 'number' ? previous.attempts : 0;
+      const priorTransient = typeof previous?.transientFailures === 'number' ? previous.transientFailures : 0;
+      // An infrastructure failure (outage, 5xx, timeout, missing schema mid-rollout) is not evidence
+      // that the row is bad: it only backs the row off (updated_at) and is counted separately, so a
+      // long outage can never march a legitimately recoverable completion into quarantine.
+      const attempts = options.transient ? priorAttempts : priorAttempts + 1;
+      const quarantined = !options.transient && (options.quarantineNow === true || attempts >= options.maxAttempts);
       result = { attempts, quarantined };
       const recovery: CompletionRecoveryState = {
         attempts,
         lastAttemptAt: nowIso,
         lastError: error.slice(0, 500),
+        ...(options.transient || priorTransient > 0 ? { transientFailures: priorTransient + (options.transient ? 1 : 0) } : {}),
         ...(quarantined ? { quarantinedAt: nowIso } : {}),
       };
       return { ...shell, completionRecovery: recovery };

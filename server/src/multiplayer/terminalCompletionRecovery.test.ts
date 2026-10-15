@@ -111,6 +111,32 @@ describe('recoverTerminalCompletion classification', () => {
     expect(typeof body.updated_at).toBe('string');
   });
 
+  it('classifies infrastructure vs deterministic failures', async () => {
+    const { isTransientInfrastructureError } = await import('./terminalCompletionRecovery');
+    for (const m of [
+      'fetch failed', 'Supabase request timed out', 'ECONNRESET', 'Supabase request failed: 503 busy',
+      'Supabase request failed: 502 bad gateway', 'Supabase request failed: 429 slow down',
+      'Supabase request failed: 404 {"message":"Could not find the table"}', 'Supabase request failed: 401 jwt expired',
+    ]) expect(isTransientInfrastructureError(new Error(m))).toBe(true);
+    for (const m of [
+      'Supabase request failed: 409 {"message":"ghost_match_conflict"}', 'Supabase request failed: 400 bad',
+      'Supabase request failed: 422 unprocessable', 'boom', 'permanent_downstream_failure', 'TypeError: x is undefined',
+    ]) expect(isTransientInfrastructureError(new Error(m))).toBe(false);
+  });
+
+  it('an infrastructure failure never spends the quarantine budget, even on a row already at attempts=4', async () => {
+    const row = terminalRow();
+    (row.room_shell as Record<string, unknown>).completionRecovery = { attempts: 4, lastAttemptAt: 'x', lastError: 'old' };
+    serve(row);
+    replayMock.mockRejectedValue(new Error('Supabase request failed: 503 busy'));
+    await expect(recoverTerminalCompletion(candidate)).resolves.toBe('failed');
+    const patch = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')!;
+    const body = JSON.parse(String((patch[1] as RequestInit).body));
+    expect(body.room_shell.completionRecovery).toMatchObject({ attempts: 4, transientFailures: 1 });
+    expect(body.room_shell.completionRecovery.quarantinedAt).toBeUndefined();
+    expect(typeof body.updated_at).toBe('string'); // still backs off behind younger rows
+  });
+
   it('a database outage is not charged to the row (the attempt cannot be recorded)', async () => {
     fetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
       if (init?.method === 'PATCH') throw new Error('db down');

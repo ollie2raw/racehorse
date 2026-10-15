@@ -19,6 +19,11 @@ const log = childLogger('ghost-deferred');
  * interval, no row is touched, no attempt is burned.
  */
 export const GHOST_DEFERRED_BOOT_DELAY_MS = 30_000;
+/** Operational/test knob: shorten the boot delay (never below 1s, never above the default). */
+export function resolveGhostDeferredBootDelayMs(): number {
+  const raw = Number(process.env.GHOST_DEFERRED_DRAIN_BOOT_DELAY_MS);
+  return Number.isFinite(raw) && raw >= 1_000 ? Math.min(raw, GHOST_DEFERRED_BOOT_DELAY_MS) : GHOST_DEFERRED_BOOT_DELAY_MS;
+}
 export const GHOST_DEFERRED_INTERVAL_MS = 15 * 60_000;
 export const GHOST_DEFERRED_PAGE_SIZE = 10;
 export const GHOST_DEFERRED_MAX_ATTEMPTS = 10;
@@ -139,7 +144,7 @@ export function scheduleDeferredGhostDrain(): void {
   scheduled = true;
   const sweep = () =>
     drainDeferredGhostCompletions().catch((error) => log.warn({ error: errorText(error) }, 'deferred ghost sweep failed'));
-  processTimeout('ghost-deferred-drain', sweep, GHOST_DEFERRED_BOOT_DELAY_MS);
+  processTimeout('ghost-deferred-drain', sweep, resolveGhostDeferredBootDelayMs());
   processInterval('ghost-deferred-drain', sweep, GHOST_DEFERRED_INTERVAL_MS);
 }
 
