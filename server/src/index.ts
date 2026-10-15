@@ -1,3 +1,4 @@
+import { beginRatingCompletion } from './ranking/ratingCutoverGate';
 import './platform/env/refuseProductionSupabaseInDev'; // B4: must stay the first import
 import * as Sentry from '@sentry/node';
 import { config } from './config';
@@ -790,6 +791,8 @@ io.on('connection', (socket: Socket) => {
       void (async () => {
         let fritzTier: string | null = null;
         try {
+          const unit = await beginRatingCompletion('fritz_disconnect');
+          try {
           const pendingRows = await supabaseFetch<BotMatchPendingRow[]>(
             `/rest/v1/bot_match_pending?select=id,fritz_tier&room_code=eq.${roomCode}&user_id=eq.${verifiedUserId}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
           );
@@ -814,6 +817,7 @@ io.on('connection', (socket: Socket) => {
             botScore: scores?.botScore ?? null,
             verifiedScores: scores,
           });
+          } finally { unit.end(); }
         } catch (error) {
           console.error('[Fritz] disconnect loss handling failed:', error);
           Sentry.withScope((scope) => {

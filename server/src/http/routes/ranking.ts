@@ -1,3 +1,4 @@
+import { withRatingCompletion, isRatingCutoverQuiescedError } from '../../ranking/ratingCutoverGate';
 import type { Application, Request } from 'express';
 import { setPublicShortCache } from './cacheControl';
 import type { ProfileRow } from '../../supabaseTypes';
@@ -155,9 +156,14 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
     }
 
     try {
-      const result = await processRatingPeriod(userId);
+      const result = await withRatingCompletion('ranking_admin_process', () => processRatingPeriod(userId));
       res.json({ ok: true, result });
     } catch (error) {
+      if (isRatingCutoverQuiescedError(error)) {
+        res.setHeader('Retry-After', '2');
+        res.status(503).json({ error: 'rating_cutover_quiesced' });
+        return;
+      }
       res.status(500).json({
         error: error instanceof Error ? error.message : 'Failed to process rating period.',
       });
