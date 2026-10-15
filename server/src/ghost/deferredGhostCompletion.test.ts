@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fetchMock = vi.hoisted(() => vi.fn());
+const timeoutMock = vi.hoisted(() => vi.fn());
+const intervalMock = vi.hoisted(() => vi.fn());
+const closing = vi.hoisted(() => ({ value: false }));
+vi.mock('../platform/processLifecycle', () => ({
+  processTimeout: timeoutMock,
+  processInterval: intervalMock,
+  isProcessClosing: () => closing.value,
+}));
 vi.mock('../supabaseUtils', () => ({ supabaseFetch: fetchMock }));
 vi.mock('../ranking/ratingCutoverGate', async () => {
   class Quiesced extends Error {}
@@ -142,19 +150,30 @@ describe('deferred Ghost drain', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('scheduler: unref timers, once, disable flag', () => {
-    vi.useFakeTimers();
+  it('scheduler: registers one process-owned boot timeout + interval, once; the disable flag schedules nothing', () => {
+    timeoutMock.mockClear();
+    intervalMock.mockClear();
+    process.env.GHOST_DEFERRED_DRAIN_ENABLED = 'false';
+    scheduleDeferredGhostDrain();
+    expect(timeoutMock).not.toHaveBeenCalled();
+    delete process.env.GHOST_DEFERRED_DRAIN_ENABLED;
+    scheduleDeferredGhostDrain();
+    scheduleDeferredGhostDrain();
+    expect(timeoutMock).toHaveBeenCalledTimes(1);
+    expect(intervalMock).toHaveBeenCalledTimes(1);
+    expect(timeoutMock.mock.calls[0]![2]).toBe(30_000);
+    expect(intervalMock.mock.calls[0]![2]).toBe(15 * 60_000);
+  });
+
+  it('shutdown admission closed: no row is replayed', async () => {
+    closing.value = true;
     try {
-      process.env.GHOST_DEFERRED_DRAIN_ENABLED = 'false';
-      scheduleDeferredGhostDrain();
-      expect(vi.getTimerCount()).toBe(0);
-      delete process.env.GHOST_DEFERRED_DRAIN_ENABLED;
-      scheduleDeferredGhostDrain();
-      scheduleDeferredGhostDrain();
-      expect(vi.getTimerCount()).toBe(1);
+      fetchMock.mockResolvedValueOnce([row()]);
+      const r = await drainDeferredGhostCompletions();
+      expect(r.stoppedEarly).toBe('closing');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
-      resetDeferredGhostDrainForTests();
-      vi.useRealTimers();
+      closing.value = false;
     }
   });
 });

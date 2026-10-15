@@ -1,5 +1,6 @@
 import { childLogger } from '../logger';
 import { supabaseFetch } from '../supabaseUtils';
+import { isProcessClosing, processInterval, processTimeout } from '../platform/processLifecycle';
 import { isRatingCutoverQuiescedError, withRatingCompletion } from '../ranking/ratingCutoverGate';
 import { completeDeferredGhostSeat, type DeferredGhostSeat } from './service';
 
@@ -35,7 +36,7 @@ export type GhostDeferredSweepResult = {
   quarantined: number;
   failed: number;
   /** Sweep stopped early on an infrastructure error / closed gate; no row attempt was consumed. */
-  stoppedEarly: 'infrastructure' | 'quiesced' | null;
+  stoppedEarly: 'infrastructure' | 'quiesced' | 'closing' | null;
 };
 
 /** Deterministic data/contract rejections (RPC `raise exception` => 400/409/422). Everything else is infrastructure. */
@@ -74,6 +75,10 @@ async function runSweep(): Promise<GhostDeferredSweepResult> {
   );
   result.scanned = rows.length;
   for (const row of rows) {
+    if (isProcessClosing()) {
+      result.stoppedEarly = 'closing';
+      break;
+    }
     try {
       const outcome = await withRatingCompletion('ghost_deferred_drain', () => completeDeferredGhostSeat(row));
       if (outcome === 'waiting_for_contract') {
@@ -119,32 +124,26 @@ async function runSweep(): Promise<GhostDeferredSweepResult> {
   return result;
 }
 
-let bootTimer: ReturnType<typeof setTimeout> | null = null;
-let intervalTimer: ReturnType<typeof setInterval> | null = null;
+let scheduled = false;
 
-/** On unless GHOST_DEFERRED_DRAIN_ENABLED is exactly "false". */
+/**
+ * On unless GHOST_DEFERRED_DRAIN_ENABLED is exactly "false". Timers are process-owned: cancelled at
+ * shutdown admission, and an admitted sweep is counted until it settles.
+ */
 export function scheduleDeferredGhostDrain(): void {
-  if (bootTimer || intervalTimer) return;
+  if (scheduled) return;
   if (process.env.GHOST_DEFERRED_DRAIN_ENABLED === 'false') {
     log.info('deferred ghost drain DISABLED (GHOST_DEFERRED_DRAIN_ENABLED=false)');
     return;
   }
-  const run = () => {
-    void drainDeferredGhostCompletions().catch((error) => log.warn({ error: errorText(error) }, 'deferred ghost sweep failed'));
-  };
-  bootTimer = setTimeout(() => {
-    bootTimer = null;
-    run();
-    intervalTimer = setInterval(run, GHOST_DEFERRED_INTERVAL_MS);
-    intervalTimer.unref?.();
-  }, GHOST_DEFERRED_BOOT_DELAY_MS);
-  bootTimer.unref?.();
+  scheduled = true;
+  const sweep = () =>
+    drainDeferredGhostCompletions().catch((error) => log.warn({ error: errorText(error) }, 'deferred ghost sweep failed'));
+  processTimeout('ghost-deferred-drain', sweep, GHOST_DEFERRED_BOOT_DELAY_MS);
+  processInterval('ghost-deferred-drain', sweep, GHOST_DEFERRED_INTERVAL_MS);
 }
 
 export function resetDeferredGhostDrainForTests(): void {
-  if (bootTimer) clearTimeout(bootTimer);
-  if (intervalTimer) clearInterval(intervalTimer);
-  bootTimer = null;
-  intervalTimer = null;
+  scheduled = false;
   sweeping = null;
 }
