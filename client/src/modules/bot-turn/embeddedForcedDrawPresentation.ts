@@ -80,6 +80,12 @@ export type PresentEmbeddedForcedDrawsDeps = {
   onPresentationComplete?: () => void;
   drawStepMs: number;
   isMuted: boolean;
+  /**
+   * Polled before every visual step and after every beat. True means this presentation no
+   * longer owns the screen (unmount, restart, a newer sequence): stop without touching
+   * overlay/match state. The authoritative commit already happened and is unaffected.
+   */
+  shouldAbort?: () => boolean;
 };
 
 /**
@@ -105,9 +111,10 @@ export async function presentEmbeddedForcedDraws(
     onPresentationComplete,
     drawStepMs,
     isMuted,
+    shouldAbort,
   } = deps;
 
-  if (drawnTiles.length === 0) return;
+  if (drawnTiles.length === 0 || shouldAbort?.()) return;
 
   const postPlayState = buildEmbeddedPostPlayState({ player, beforePlay, afterPlay, drawnTiles });
   const postPlayHand = postPlayState.players[player].hand;
@@ -122,6 +129,7 @@ export async function presentEmbeddedForcedDraws(
     onDrawVisualStep?.(player, postPlayState);
 
     for (let index = 0; index < drawnTiles.length; index += 1) {
+      if (shouldAbort?.()) return;
       const stepHand = [...postPlayHand, ...drawnTiles.slice(0, index + 1)];
       const stepState: BotMatchState = {
         ...afterPlay,
@@ -148,6 +156,7 @@ export async function presentEmbeddedForcedDraws(
       }
       await new Promise<void>((resolve) => setTimeout(resolve, drawStepMs));
     }
+    if (shouldAbort?.()) return;
     onPresentationComplete?.();
   } finally {
     setDrawSequenceActiveBoth(false);

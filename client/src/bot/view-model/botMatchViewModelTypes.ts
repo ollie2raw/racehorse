@@ -135,6 +135,8 @@ export type MatchHudViewModel = {
 export type BoardViewModel = {
   boardRef: RefObject<BoardHandle | null>;
   boneyardRef: RefObject<HTMLDivElement | null>;
+  /** Presented (not authoritative) boneyard count while a draw sequence is being shown. */
+  boneyardDisplayCount: number | null;
   /** Board to render: the live board, or a projected historical board while scrubbing. */
   displayBoard: BoardState | null;
   /** True while the player is parked on a past move — board interaction is suppressed. */

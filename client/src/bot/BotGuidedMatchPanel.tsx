@@ -46,6 +46,8 @@ export interface BotGuidedMatchPanelProps {
   setScoreTrackOpen: (open: boolean) => void;
   opponentLabel: string;
   match: BotMatchState;
+  fritzTileCount?: number | null;
+  boneyardCount?: number | null;
   botTurn: boolean;
   turnLabel: string | null;
   openEndsSum: number;
@@ -72,6 +74,8 @@ export const BotGuidedMatchPanel: React.FC<BotGuidedMatchPanelProps> = ({
   setScoreTrackOpen,
   opponentLabel,
   match,
+  fritzTileCount = null,
+  boneyardCount = null,
   botTurn,
   turnLabel,
   openEndsSum,
@@ -192,8 +196,8 @@ export const BotGuidedMatchPanel: React.FC<BotGuidedMatchPanelProps> = ({
                     <div className="fritz-summary-value">
                       <AnimatedScore value={match.players.bot.score} className="learn-guided-summary-score" />
                     </div>
-                    <span className="learn-guided-summary-tiles" aria-label={`${opponentLabel} has ${match.players.bot.hand.length} tiles remaining`}>
-                      {match.players.bot.hand.length} {match.players.bot.hand.length === 1 ? 'tile' : 'tiles'}
+                    <span className="learn-guided-summary-tiles" aria-label={`${opponentLabel} has ${fritzTileCount ?? match.players.bot.hand.length} tiles remaining`}>
+                      {fritzTileCount ?? match.players.bot.hand.length} {(fritzTileCount ?? match.players.bot.hand.length) === 1 ? 'tile' : 'tiles'}
                     </span>
                   </div>
                 </button>
@@ -234,7 +238,7 @@ export const BotGuidedMatchPanel: React.FC<BotGuidedMatchPanelProps> = ({
                   data-ui="guided-boneyard-draw-anchor"
                 >
                   <div>
-                    <div className="fritz-summary-value">{match.boneyard.length}</div>
+                    <div className="fritz-summary-value">{boneyardCount ?? match.boneyard.length}</div>
                     <div className="fritz-summary-key">Boneyard</div>
                   </div>
                 </div>

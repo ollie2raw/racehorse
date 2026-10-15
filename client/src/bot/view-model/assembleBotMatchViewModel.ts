@@ -162,6 +162,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
   const board = {
     boardRef: refs.boardRef,
     boneyardRef: refs.boneyardRef,
+    boneyardDisplayCount: turns.boneyardDisplayCount,
     displayBoard,
     viewingHistory,
     ghostBoardPulse: ghost.ghostBoardPulse,

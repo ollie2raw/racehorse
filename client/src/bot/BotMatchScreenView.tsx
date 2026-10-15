@@ -126,6 +126,7 @@ export function BotMatchScreenView({
       isLessonLayoutMode={layout.isLessonLayoutMode}
       openEndsSum={board.openEndsSum}
       boneyardRef={board.boneyardRef}
+      boneyardDisplayCount={board.boneyardDisplayCount}
       isGhostMode={board.isGhostMode}
       ghostAgreementType={board.ghostAgreementType}
       ghostPlayedTile={board.ghostPlayedTile}
@@ -233,6 +234,8 @@ export function BotMatchScreenView({
             setScoreTrackOpen={layout.setScoreTrackOpen}
             opponentLabel={hud.opponentLabel}
             match={match}
+            fritzTileCount={hud.drawStepBotHandCount}
+            boneyardCount={board.boneyardDisplayCount}
             botTurn={hud.botTurn}
             turnLabel={turnLabel}
             openEndsSum={board.openEndsSum}

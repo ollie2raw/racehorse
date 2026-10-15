@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/refs -- test harness mirrors production wiring (ref-synced match, ref-backed draw lock); the rule cannot see across the hook boundary */
-import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import { useBotMatchRefs } from '../match/hooks/useBotMatchRefs.ts';
 import { createRunDrawSequence } from './drawSequence.ts';
@@ -46,6 +46,15 @@ export type HarnessOptions = {
   drawStepMs: number;
   onRender: (model: VisibleModel) => void;
   onAppend?: (kind: string) => void;
+  /** Receives imperative handles for restart/abort scenarios. */
+  controlsRef?: { current: HarnessControls | null };
+  /** Counts every overlay write so stale continuations are observable. */
+  onVisualStep?: (player: 'you' | 'bot', handCount: number) => void;
+};
+
+export type HarnessControls = {
+  invalidateLocalRuns: () => void;
+  setDrawSequenceActiveBoth: (v: boolean) => void;
 };
 
 /** Real useBotTurnEffect + real draw sequence + real overlay refs; stub ports. */
@@ -64,6 +73,23 @@ export function useForcedDrawHarness(options: HarnessOptions): VisibleModel {
 
   const refs = useBotMatchRefs();
   const localRun = useLocalRunSession(refs.setDrawSequenceActiveBoth);
+  const { controlsRef } = options;
+  useEffect(() => {
+    if (controlsRef) {
+      controlsRef.current = {
+        invalidateLocalRuns: localRun.invalidateLocalRuns,
+        setDrawSequenceActiveBoth: refs.setDrawSequenceActiveBoth,
+      };
+    }
+  }, [controlsRef, localRun.invalidateLocalRuns, refs.setDrawSequenceActiveBoth]);
+  const onDrawVisualStep = useCallback(
+    (player: 'you' | 'bot', state: BotMatchState) => {
+      options.onVisualStep?.(player, state.players[player].hand.length);
+      refs.onDrawVisualStep(player, state);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- options is a fresh object per render; the callback only reads its latest fields
+    [refs.onDrawVisualStep],
+  );
   const [presentation, setPresentation] = useState<FritzPresentationState>(IDLE_FRITZ_PRESENTATION);
   const botChainPauseRef = useRef(false);
   const botTurnInFlightRef = useRef(false);
@@ -72,7 +98,7 @@ export function useForcedDrawHarness(options: HarnessOptions): VisibleModel {
   const triggerDrawStepAnimation = useCallback(() => {}, []);
   const runDrawSequence = createRunDrawSequence({
     setMatch,
-    onDrawVisualStep: refs.onDrawVisualStep,
+    onDrawVisualStep,
     isMuted: true,
     isLocalRunCurrent: localRun.isLocalRunCurrent,
     triggerDrawStepAnimation,
@@ -115,7 +141,7 @@ export function useForcedDrawHarness(options: HarnessOptions): VisibleModel {
     botChainPauseRef,
     botTurnInFlightRef,
     setMatch,
-    onDrawVisualStep: refs.onDrawVisualStep,
+    onDrawVisualStep,
     triggerDrawStepAnimation,
     drawStepMs: options.drawStepMs,
     opponentLabel: 'Fritz',
