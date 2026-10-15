@@ -1,3 +1,4 @@
+import { trackProcessWork, beginProcessWork } from '../platform/processLifecycle';
 import { randomUUID } from 'node:crypto';
 import { childLogger } from '../logger';
 import { supabaseFetch } from '../supabaseUtils';
@@ -101,8 +102,9 @@ function makeEnder(release: () => void): () => void {
  * visible in the count an operator reads after closing the gate.
  */
 export async function beginRatingCompletion(operation: string): Promise<CompletionUnit> {
+  const release = beginProcessWork('rating-completion');
   counters.completions += 1;
-  const end = makeEnder(() => { counters.completions -= 1; });
+  const end = makeEnder(() => { counters.completions -= 1; release(); });
   if (!legacyEnforced) return { end };
   try {
     const fence = await readCutoverFence();
@@ -135,7 +137,7 @@ export async function withRatingCompletion<T>(operation: string, run: () => Prom
 export function trackDeferredRatingWork<T>(work: Promise<T>): Promise<T> {
   counters.deferredGhostWrites += 1;
   const end = makeEnder(() => { counters.deferredGhostWrites -= 1; });
-  return work.finally(end);
+  return trackProcessWork('deferred-ghost', () => work).finally(end);
 }
 
 export type DecayRun = { end(): void };

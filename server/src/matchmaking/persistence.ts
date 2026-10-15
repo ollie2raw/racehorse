@@ -101,6 +101,7 @@ export async function recordMatchEnd(params: {
   playerARatingChange: number | null;
   playerBRatingChange: number | null;
   isSim?: boolean;
+  throwOnError?: boolean;
 }): Promise<void> {
   if (params.isSim) return;
   const endedAt = new Date().toISOString();
@@ -124,6 +125,7 @@ export async function recordMatchEnd(params: {
       },
     );
   } catch (err) {
+    if (params.throwOnError) throw err;
     console.warn('[matchmaking] recordMatchEnd failed', err instanceof Error ? err.message : err);
   }
 }

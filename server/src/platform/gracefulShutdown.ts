@@ -1,124 +1,89 @@
+import { listRoomCodes } from '../rooms';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as SocketServer } from 'socket.io';
 import { childLogger } from '../logger';
 import {
-  flushAllPendingLiveSessions,
-  setLiveRoomPersistenceShuttingDown,
+  flushAllPendingLiveSessions, setLiveRoomPersistenceShuttingDown,
+  getPendingLiveRoomPersistenceRoomCodes,
   type FlushAllPendingLiveSessionsResult,
 } from '../multiplayer/roomLivePersistence';
+import { activeProcessWork, closeProcessAdmission, drainProcessWork, isProcessClosing, resetProcessLifecycleForTests } from './processLifecycle';
 
-export const DEFAULT_SHUTDOWN_SIGNAL_FLUSH_TIMEOUT_MS = 10_000;
-
+// Leave headroom inside the platform's termination grace. One total budget,
+// including hung socket close and custom drains, rather than one per phase.
+export const DEFAULT_SHUTDOWN_SIGNAL_FLUSH_TIMEOUT_MS = 25_000;
 const log = childLogger('platform:shutdown');
-
-let gracefulShutdownInProgress = false;
 let gracefulShutdownPromise: Promise<void> | null = null;
-
 export type GracefulShutdownDeps = {
   server: HttpServer;
   io: SocketServer;
   flushLiveSessions?: (options: { timeoutMs: number }) => Promise<FlushAllPendingLiveSessionsResult>;
   exitProcess?: (code: number) => void;
   shutdownFlushTimeoutMs?: number;
-  /**
-   * Stop new background orchestration and let the operation in flight finish
-   * (the tournament orchestrator: drain, then release its lease only if it
-   * finished in time). Runs first, alongside nothing else.
-   */
   drainOrchestration?: (options: { timeoutMs: number }) => Promise<unknown>;
 };
-
-export function isGracefulShutdownInProgress(): boolean {
-  return gracefulShutdownInProgress;
-}
-
+export const isGracefulShutdownInProgress = isProcessClosing;
 export function resetGracefulShutdownStateForTests(): void {
-  gracefulShutdownInProgress = false;
   gracefulShutdownPromise = null;
+  resetProcessLifecycleForTests();
 }
 
-/**
- * SIGTERM/SIGINT lifecycle:
- * notify clients → stop accepting new HTTP work → flush live sessions → close sockets → exit.
- */
-export async function runGracefulShutdown(
-  signal: string,
-  deps: GracefulShutdownDeps,
-): Promise<void> {
+export function runGracefulShutdown(signal: string, deps: GracefulShutdownDeps): Promise<void> {
   if (gracefulShutdownPromise) return gracefulShutdownPromise;
-
+  // Synchronous admission closure precedes the first await and notification.
+  closeProcessAdmission();
+  setLiveRoomPersistenceShuttingDown(true);
   gracefulShutdownPromise = (async () => {
-    if (gracefulShutdownInProgress) return;
-    gracefulShutdownInProgress = true;
-    setLiveRoomPersistenceShuttingDown(true);
-
-    const timeoutMs = deps.shutdownFlushTimeoutMs ?? DEFAULT_SHUTDOWN_SIGNAL_FLUSH_TIMEOUT_MS;
-    const flushLiveSessions =
-      deps.flushLiveSessions ??
-      ((options) => flushAllPendingLiveSessions({ timeoutMs: options.timeoutMs }));
-    const exitProcess = deps.exitProcess ?? ((code) => process.exit(code));
-
-    try {
-      console.warn(`[server] ${signal} — beginning graceful shutdown`);
+    const started = Date.now();
+    const budget = deps.shutdownFlushTimeoutMs ?? DEFAULT_SHUTDOWN_SIGNAL_FLUSH_TIMEOUT_MS;
+    const remaining = () => Math.max(0, budget - (Date.now() - started));
+    const timedOut: string[] = [];
+    const completed: string[] = [];
+    const activeAtStart = activeProcessWork();
+    const dirtyAtStart = getPendingLiveRoomPersistenceRoomCodes().length;
+    let failed = false;
+    const bounded = async (name: string, task: () => Promise<unknown>, ms = remaining()) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        deps.io.emit('server:shutdown', { reason: 'server_restart', signal });
-      } catch {
-        /* ignore */
-      }
-
-      if (deps.drainOrchestration) {
-        try {
-          const drained = await deps.drainOrchestration({ timeoutMs });
-          log.warn({ drained }, 'orchestration drained');
-        } catch (err) {
-          log.error({ err }, 'orchestration drain failed');
-        }
-      }
-
-      // Stop accepting connections now, but don't wait for close()'s callback
-      // here: it fires only once every connection has ended, and socket.io's
-      // websockets stay open until io.close() below. Waiting first hung the
-      // shutdown with clients still attached (Phase 4A dev finding: the old
-      // process kept serving tournament rooms, turn clocks included, after it
-      // had released the orchestrator lease to the new one).
-      const httpClosed = new Promise<void>((resolve) => {
-        deps.server.close(() => resolve());
+        const ok = await Promise.race([
+          Promise.resolve().then(task).then(() => true),
+          new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), ms); }),
+        ]);
+        (ok ? completed : timedOut).push(name);
+      } catch (err) { failed = true; log.error({ err, phase: name }, 'shutdown drain failed'); }
+      finally { if (timer) clearTimeout(timer); }
+    };
+    try {
+      deps.io.emit('server:shutdown', { reason: 'server_restart', signal });
+      // Do not await connections here: websockets close only after the flush.
+      const httpClosed = new Promise<void>((resolve) => deps.server.close(() => resolve()));
+      await bounded('work', async () => {
+        if (deps.drainOrchestration) await deps.drainOrchestration({ timeoutMs: remaining() });
+        await drainProcessWork();
+      }, Math.max(0, remaining() - Math.min(5_000, budget / 3)));
+      // All admitted room mutations must finish BEFORE taking this final snapshot.
+      await bounded('rooms', async () => {
+        const result = await (deps.flushLiveSessions ?? flushAllPendingLiveSessions)({ timeoutMs: remaining() });
+        if (result.timedOut) timedOut.push('room-persistence');
+        if (result.failedRoomCodes?.length) { failed = true; log.error({ count: result.failedRoomCodes.length }, 'shutdown room persistence failed'); }
       });
-      console.warn('[server] HTTP listener closed — no longer accepting new connections');
-
-      const flushResult = await flushLiveSessions({ timeoutMs });
-      console.warn('[server] live session flush complete', {
-        flushedRoomCount: flushResult.flushedRoomCodes.length,
-        timedOut: flushResult.timedOut,
-      });
-
-      await new Promise<void>((resolve) => {
-        deps.io.close(() => resolve());
-      });
-      console.warn('[server] socket server closed');
-
-      let closeTimer: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([
-        httpClosed,
-        new Promise<void>((resolve) => { closeTimer = setTimeout(resolve, timeoutMs); }),
-      ]);
-      if (closeTimer) clearTimeout(closeTimer);
-
-      exitProcess(0);
-    } catch (error) {
-      console.error('[server] graceful shutdown failed', error);
-      exitProcess(1);
-    }
+      await bounded('sockets', () => new Promise<void>((resolve) => deps.io.close(() => resolve())));
+      deps.server.closeAllConnections?.();
+      await bounded('http', () => httpClosed);
+    } catch (err) { failed = true; log.error({ err }, 'shutdown failed'); }
+    const code = failed || timedOut.length ? 1 : 0;
+    log.warn({ signal, admissionClosed: true, socketsActive: deps.io.engine?.clientsCount ?? 0,
+      roomsActive: listRoomCodes().length, dirtyAtStart, activeAtStart, activeAtExit: activeProcessWork(), completed, timedOut,
+      durationMs: Date.now() - started, outcome: code ? 'incomplete' : 'drained' }, 'process shutdown summary');
+    (deps.exitProcess ?? ((exitCode) => process.exit(exitCode)))(code);
   })();
-
   return gracefulShutdownPromise;
 }
 
 export function registerGracefulShutdownHandlers(deps: GracefulShutdownDeps): void {
-  const onSignal = (signal: NodeJS.Signals) => {
-    void runGracefulShutdown(signal, deps);
-  };
-
-  process.once('SIGTERM', onSignal);
-  process.once('SIGINT', onSignal);
+  // Keep handlers installed: a second SIGTERM must not invoke Node's default
+  // immediate exit in the middle of the first signal's persistence drain.
+  const onSignal = (signal: NodeJS.Signals) => { void runGracefulShutdown(signal, deps); };
+  process.on('SIGTERM', onSignal);
+  process.on('SIGINT', onSignal);
 }

@@ -1,3 +1,4 @@
+import { processInterval, cancelProcessInterval, trackProcessWork, isProcessClosing, onProcessStop } from '../platform/processLifecycle';
 import type { Application, Request, Response } from 'express';
 import {
   createReviewCompletionJob,
@@ -88,7 +89,7 @@ export function takeReviewFunnel(): { eligible: number; started: number; opened:
 
 function startReviewFunnelLog(): void {
   if (reviewFunnelTimer) return;
-  reviewFunnelTimer = setInterval(() => {
+  reviewFunnelTimer = processInterval('review', () => {
     log.info({ ...takeReviewFunnel(), windowMs: 3_600_000 }, 'review funnel');
   }, 3_600_000);
   reviewFunnelTimer.unref?.();
@@ -124,8 +125,8 @@ export async function enqueueReviewCompletionJob(input: {
     throw new Error('Failed to durably persist review completion job');
   }
   // The job stays queued when the sweep is off; it runs once the sweep is back on.
-  if (isReviewSweepEnabled()) {
-    void sweepReviewCompletionJobs().catch((error) => {
+  if (isReviewSweepEnabled() && !isProcessClosing()) {
+    void trackProcessWork('review-kick', () => sweepReviewCompletionJobs()).catch((error) => {
       log.warn({ err: error, jobId: job.jobId }, 'kick failed');
     });
   }
@@ -180,7 +181,7 @@ export function sweepReviewCompletionJobs(limit = 4): Promise<SweepResult> {
       total.ran += round.ran;
       total.completed += round.completed;
       total.recovered += round.recovered;
-    } while (sweepRequestedAgain);
+    } while (sweepRequestedAgain && !isProcessClosing());
     return total;
   })();
   sweepInFlight = run;
@@ -203,6 +204,7 @@ async function sweepOnce(limit: number): Promise<SweepResult> {
 
   // One job at a time: there is one search worker thread.
   for (const job of claimable) {
+    if (isProcessClosing()) break;
     const hadForeignClaim =
       job.claimToken != null
       && job.leaseExpiresAt != null
@@ -245,8 +247,8 @@ async function runJobPass(jobId: string, claimToken: string) {
       onClaimed: (claimed) => {
         if (!store.renewLease) return;
         const generation = claimed.claimGeneration ?? 1;
-        heartbeat = setInterval(() => {
-          void store.renewLease!(jobId, claimToken, generation, REVIEW_COMPLETION_LEASE_MS)
+        heartbeat = processInterval('review', () => {
+          return store.renewLease!(jobId, claimToken, generation, REVIEW_COMPLETION_LEASE_MS)
             .then((renewed) => {
               if (renewed || leaseLost) return;
               leaseLost = true;
@@ -262,7 +264,7 @@ async function runJobPass(jobId: string, claimToken: string) {
       },
     });
   } finally {
-    if (heartbeat) clearInterval(heartbeat);
+    if (heartbeat) cancelProcessInterval(heartbeat);
   }
 }
 
@@ -305,9 +307,10 @@ export function scheduleReviewCompletionSweep(): void {
   }
   log.info('review completion sweep ENABLED (REVIEW_SWEEP_ENABLED=true)');
   if (sweepTimer) return;
-  sweepTimer = setInterval(() => {
+  onProcessStop(() => searchRunner?.abort('process shutting down'));
+  sweepTimer = processInterval('review', () => {
     if (!shouldRunPeriodicSweep(Date.now())) return;
-    void sweepReviewCompletionJobs()
+    return sweepReviewCompletionJobs()
       .then((result) => notePeriodicSweep(Date.now(), result.ran))
       .catch((error) => {
         log.warn({ err: error }, 'periodic sweep failed');
@@ -318,7 +321,7 @@ export function scheduleReviewCompletionSweep(): void {
 
 /** Test seam: clear the periodic sweep timer and its idle state. */
 export function stopReviewCompletionSweepForTests(): void {
-  if (sweepTimer) clearInterval(sweepTimer);
+  if (sweepTimer) cancelProcessInterval(sweepTimer);
   sweepTimer = null;
   lastPeriodicSweepAt = 0;
   lastPeriodicSweepIdle = false;

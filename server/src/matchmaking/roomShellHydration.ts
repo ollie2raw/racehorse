@@ -1,3 +1,4 @@
+import { assertReservationNotExpiring } from './reservationExpiryState';
 import { childLogger } from '../logger';
 import type { Server } from 'socket.io';
 import { createReservedRoom, peekRoom, type Room } from '../rooms';
@@ -94,6 +95,7 @@ export async function tryHydrateMatchmakingRoomShell(
       );
       return { kind: 'forbidden', matchmakingMatchId: id };
     }
+    assertReservationNotExpiring(code);
     const room = createReservedRoom(code, { winningScore: 60 });
     room.matchmakingMatchId = id;
     if (participants.length > 0) {

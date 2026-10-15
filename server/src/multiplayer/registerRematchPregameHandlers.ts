@@ -1,3 +1,4 @@
+import { processTimeout, cancelProcessTimeout } from '../platform/processLifecycle';
 import type { Server, Socket } from 'socket.io';
 import { appendRoomEvent, resetRoomEventLog } from '../roomEvents';
 import {
@@ -197,9 +198,9 @@ export function registerRematchPregameHandlers(
           broadcastStateUpdate(roomCode);
 
           // Schedule tie-hold redraw
-          if (room.preGameDrawTimer) clearTimeout(room.preGameDrawTimer);
-          room.preGameDrawTimer = setTimeout(() => {
-            withRoomGameplayLock(roomCode, async () => {
+          if (room.preGameDrawTimer) cancelProcessTimeout(room.preGameDrawTimer);
+          room.preGameDrawTimer = processTimeout('room-timer', () => {
+            return withRoomGameplayLock(roomCode, async () => {
               const innerRoom = getRoom(roomCode);
               const innerDraw = innerRoom.preGameDraw;
               if (!innerDraw || innerDraw.phase !== 'showing-tie') return;
@@ -224,9 +225,9 @@ export function registerRematchPregameHandlers(
           broadcastStateUpdate(roomCode);
 
           // Stagger timeouts to resolved then done/startGame
-          if (room.preGameDrawTimer) clearTimeout(room.preGameDrawTimer);
-          room.preGameDrawTimer = setTimeout(() => {
-            withRoomGameplayLock(roomCode, async () => {
+          if (room.preGameDrawTimer) cancelProcessTimeout(room.preGameDrawTimer);
+          room.preGameDrawTimer = processTimeout('room-timer', () => {
+            return withRoomGameplayLock(roomCode, async () => {
               const innerRoom = getRoom(roomCode);
               const innerDraw = innerRoom.preGameDraw;
               if (!innerDraw || innerDraw.phase !== 'showing-reveal') return;
@@ -234,9 +235,9 @@ export function registerRematchPregameHandlers(
               innerDraw.phase = 'showing-result';
               broadcastStateUpdate(roomCode);
 
-              if (innerRoom.preGameDrawTimer) clearTimeout(innerRoom.preGameDrawTimer);
-              innerRoom.preGameDrawTimer = setTimeout(() => {
-                withRoomGameplayLock(roomCode, async () => {
+              if (innerRoom.preGameDrawTimer) cancelProcessTimeout(innerRoom.preGameDrawTimer);
+              innerRoom.preGameDrawTimer = processTimeout('room-timer', () => {
+                return withRoomGameplayLock(roomCode, async () => {
                   const finalRoom = getRoom(roomCode);
                   const finalDraw = finalRoom.preGameDraw;
                   if (!finalDraw || finalDraw.phase !== 'showing-result') return;
@@ -248,7 +249,7 @@ export function registerRematchPregameHandlers(
 
                   // Clear preGameDraw properties before starting game to avoid loops
                   if (finalRoom.preGameDrawTimer) {
-                    clearTimeout(finalRoom.preGameDrawTimer);
+                    cancelProcessTimeout(finalRoom.preGameDrawTimer);
                     finalRoom.preGameDrawTimer = null;
                   }
                   finalRoom.preGameDraw = null;

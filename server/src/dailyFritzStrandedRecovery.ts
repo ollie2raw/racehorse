@@ -1,3 +1,4 @@
+import { processTimeout, processInterval } from './platform/processLifecycle';
 import { childLogger } from './logger';
 import { withDailyFritzAttemptLock } from './dailyFritzAttemptLock';
 import {
@@ -253,10 +254,10 @@ let scheduled = false;
 export function scheduleStrandedDailyFritzRecovery(): void {
   if (scheduled) return;
   scheduled = true;
-  setTimeout(() => {
-    void recoverStrandedDailyFritzAttempts().catch((error) => log.warn({ error: msg(error) }, 'boot sweep failed'));
+  processTimeout('daily-fritz-recovery', () => {
+    return recoverStrandedDailyFritzAttempts().catch((error) => log.warn({ error: msg(error) }, 'boot sweep failed'));
   }, DAILY_FRITZ_STRANDED_RECOVERY_BOOT_DELAY_MS);
-  setInterval(() => {
-    void recoverStrandedDailyFritzAttempts().catch((error) => log.warn({ error: msg(error) }, 'periodic sweep failed'));
+  processInterval('daily-fritz-recovery', () => {
+    return recoverStrandedDailyFritzAttempts().catch((error) => log.warn({ error: msg(error) }, 'periodic sweep failed'));
   }, DAILY_FRITZ_STRANDED_RECOVERY_INTERVAL_MS);
 }

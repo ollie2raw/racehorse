@@ -1,5 +1,6 @@
 import { beginRatingCompletion } from './ranking/ratingCutoverGate';
 import './platform/env/refuseProductionSupabaseInDev'; // B4: must stay the first import
+import { processAdmissionMiddleware, trackSocketHandlers, isProcessClosing, processInterval, onProcessStop } from './platform/processLifecycle';
 import * as Sentry from '@sentry/node';
 import { config } from './config';
 import { sentryBeforeSend } from './sentryScrubbers';
@@ -348,6 +349,7 @@ const app = express();
 // prefers the Cloudflare-verified `CF-Connecting-IP`.
 app.set('trust proxy', TRUSTED_PROXY);
 app.use(cors(corsOptions));
+app.use(processAdmissionMiddleware);
 /**
  * gzip every JSON response above the default 1 KB threshold.
  *
@@ -613,6 +615,12 @@ const DEFAULT_SOCKET_EVENT_LIMIT: RateLimitRule = { windowMs: 60_000, max: confi
 
 function installSocketRateLimit(socket: Socket): void {
   socket.use((packet, next) => {
+    if (isProcessClosing()) {
+      const ack = packet.find((arg): arg is AckFn => typeof arg === 'function');
+      ack?.({ ok: false, error: 'server_shutting_down' });
+      next(new Error('server_shutting_down'));
+      return;
+    }
     const eventName = typeof packet[0] === 'string' ? packet[0] : 'unknown';
 
     // Protect room:join and room:spectate from brute-force scans
@@ -830,6 +838,7 @@ io.on('connection', (socket: Socket) => {
     }
     log.info({ socketId: socket.id }, 'client disconnected');
   });
+  trackSocketHandlers(socket);
 });
 registerGracefulShutdownHandlers({ server, io, drainOrchestration: drainTournamentOrchestrator });
 process.on('unhandledRejection', (reason) => {
@@ -931,8 +940,8 @@ server.listen(PORT, () => {
   const serverUrl = config.serverUrl;
   if (serverUrl) {
     const pingUrl = `${serverUrl.replace(/\/$/, '')}/ping`;
-    setInterval(() => {
-      void fetch(pingUrl).catch((err) => log.warn({ err }, 'ping failed'));
+    processInterval('self-ping', () => {
+      return fetch(pingUrl, { signal: AbortSignal.timeout(10_000) }).catch((err) => log.warn({ err }, 'ping failed'));
     }, 10 * 60 * 1000);
   }
   startMatchmakingReservationSweeper();
@@ -942,8 +951,8 @@ server.listen(PORT, () => {
   scheduleStrandedDailyFritzRecovery();
   scheduleRoomRetention();
   scheduleReviewCompletionSweep();
-  startResourceUsageLog();
-  startEventLoopLagMonitor({
+  onProcessStop(startResourceUsageLog());
+  const lagMonitor = startEventLoopLagMonitor({
     sentry: {
       dsn: config.sentryDsn || undefined,
       enabled: config.isProd && Boolean(config.sentryDsn),
@@ -951,4 +960,5 @@ server.listen(PORT, () => {
       release: config.renderGitCommit ?? config.packageVersion,
     },
   });
+  onProcessStop(() => lagMonitor.stop());
 });
