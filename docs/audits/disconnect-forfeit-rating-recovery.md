@@ -1,3 +1,5 @@
+> Historical first remediation, superseded by [the final parity and BRIDGE gate report](backend-runtime-final-gate.md). Its opponent-only context and parity certification do not describe the final design.
+
 # Disconnect-forfeit rating recovery R1
 
 Local continuation of `4488b5a9c009fc6821a16f4e0cd05b43515e73bf` on `audit/backend-runtime-reliability`. Production was not accessed or changed. Nothing was pushed or integrated.

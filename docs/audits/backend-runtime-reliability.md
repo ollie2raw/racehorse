@@ -1,4 +1,4 @@
-> Continuation: the disconnect-forfeit R1 below is closed by [disconnect-forfeit-rating-recovery.md](disconnect-forfeit-rating-recovery.md). This document preserves the original pass results and deferred findings at commit 4488b5a.
+> Continuation: the R1s below and subsequent parity/BRIDGE findings are closed by [backend-runtime-final-gate.md](backend-runtime-final-gate.md). This document preserves the original pass results and deferred findings at commit 4488b5a.
 
 # Backend runtime reliability pass
 

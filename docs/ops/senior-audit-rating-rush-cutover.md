@@ -11,15 +11,24 @@ Three server builds appear below. Keep them straight:
 * **OLD** — the server currently in production (the base of this remediation,
   `main` at the commit you record in preflight).
 * **BRIDGE** — the exact runtime-validated committed artifact
-  `e3517fb0da9644ccede64697309d7af8d9ffb8ee` on
+  `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353` on
   `release/rating-cutover-bridge` (OLD plus the quiescence gate). It is the
   only build that can *stop* the OLD rating writers and *prove* they are idle.
   The OLD binary cannot be told to stop; that is why a bridge deploy comes first.
-* **NEW** — this branch's server. It writes ratings through atomic database
+* **NEW** — `feat/app-store-candidate` after the backend-runtime gate integration.
+  The former candidate `74ad0fec46dc6b79c7c1689f95b16ce93b7e4a67` is superseded;
+  resolve and record the current remote branch SHA, rather than reuse that old artifact.
+  Validated runtime remediation code is `cba5667564c956c1f269a492e06ad107ce3af2f3`.
+  It writes ratings through atomic database
   functions, so it counts the gate's state but is never blocked by it.
 
-The original BRIDGE `d8198d98` was superseded after live validation exposed guest
-identity and forfeit gate gaps. Deploy the exact corrected artifact above.
+Historical BRIDGEs `d8198d98` and `e3517fb0da9644ccede64697309d7af8d9ffb8ee`
+are superseded. The latter reported drained while scheduled ranking catch-up
+could still commit. **Do not deploy either historical artifact.** The corrected
+artifact above gates boot/periodic/weekly catch-up, admin ranking processing and
+authenticated Fritz disconnect handling with the existing admission primitive.
+The disconnect unit begins before its pending-match mutation. No candidate
+features or full reliability branch were merged into BRIDGE.
 
 ## Why the expand steps fence old writes
 
@@ -98,7 +107,7 @@ fence that PATCH.
 | Completion unit | One unit spans the entire vulnerable operation: from before the first durable write (room persistence: before `resolvePendingFritzMatch`/`appendMatch`; HTTP: the whole locked `/api/ghost/complete` body) through the last awaited step. The unfulfilled deferred Ghost training write is registered, while the owning unit is still held, and stays counted until it settles — there is no uncounted gap between the ranked commit and the Ghost write. |
 | New work while closed | A BRIDGE completion is rejected **before any write** with a retryable `rating_cutover_quiesced` (HTTP 503 + `Retry-After` on `/api/ghost/complete`). Room game-over persistence waits (polls every 2 s, up to 120 s) and then fails visibly as "result couldn't be saved"; it never reports success without writing. A BRIDGE weekly decay does not start, and a running one stops before its next per-user write. |
 | Fail closed | If the fence row cannot be read, BRIDGE completions are rejected and decay does not run. |
-| Scope | Authenticated rated human-vs-human completion (including manual/disconnect forfeits) and qualifying authenticated Play vs Fritz completion are gated before their first durable write. Guest/unrated private completion is not gated. Tournament routing remains unchanged. The NEW build's atomic writers are not blocked. |
+| Scope | Authenticated rated human-vs-human completion (including manual/disconnect forfeits), qualifying authenticated Play vs Fritz completion, scheduled ranked catch-up, admin ranking processing and authenticated Fritz disconnect rating handling are gated before their first durable write. Guest/unrated private completion is not gated. Tournament routing remains unchanged. The NEW build's atomic writers are not blocked. |
 | Drain evidence | `GET /api/ops/rating-cutover/status` → `readyForExpand: true` only when the BRIDGE build is running, the gate is closed, **this process** enabled it, and all three in-flight measures are zero. Counters are raised **before** the fence is read, so a unit that read "open" is always visible once you close the gate; once closed and zero it cannot rise. |
 | Restart | The fence row survives. After a restart the new process refuses legacy writes but reports `readyForExpand: false` ("enabled by a different process") until you re-run enable, because killed in-flight work is not drain evidence. |
 | Database guard | The Ghost expand and ranked expand migrations abort unless the gate row is closed, and the Ghost expand stamps `ghost_expand_applied_at`. The database cannot see the in-flight counters; the operator must have observed `readyForExpand: true` immediately before. |
@@ -123,7 +132,7 @@ a secondary precaution only; the gate, not the calendar, is the invariant.
 1. Apply `supabase/migrations/2026-10-13_rating_cutover_gate.sql` (additive;
    safe for OLD; a single table).
 2. Configure a valid `ADMIN_SECRET` before deployment. Deploy the exact committed
-   BRIDGE artifact `e3517fb0da9644ccede64697309d7af8d9ffb8ee`; do not construct or
+   BRIDGE artifact `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353`; do not construct or
    apply a patch. Its gate migration is self-contained in that commit. Deploy it
    as a normal release. This deploy is the same
    exposure as any ordinary deploy because no expand migration exists yet.
@@ -137,7 +146,7 @@ Confirm and record each:
 * exactly one Render server instance (dashboard, or `curl -s -H "Authorization: Bearer $RENDER_API_KEY" https://api.render.com/v1/services/$SERVICE_ID`, `numInstances == 1`);
 * server health (`/health`) and DB health (`/ready`) are green;
 * no deployment or migration currently running;
-* OLD SHA, BRIDGE SHA, NEW SHA (`git rev-parse` of each) written down; rollback SHA = `e3517fb0da9644ccede64697309d7af8d9ffb8ee`;
+* OLD SHA, BRIDGE SHA, NEW SHA (`git rev-parse` of each) written down; rollback SHA = `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353`;
 * the migration files below have been read and the DB backup/recovery point exists;
 * `status.decayInFlight == false` and the next scheduled decay (Sunday 00:00 UTC) is not within the window;
 * record read-only counts: open unassigned Rush runs; legacy Ghost rows with `rating_applied_at is null`.
@@ -169,13 +178,25 @@ Apply each with `psql -X -v ON_ERROR_STOP=1 "$DATABASE_URL" -f <file>` in this o
 2. `supabase/migrations/2026-10-13_ghost_cutover_reconciliation.sql` (additive checks; no rating writes)
 3. `supabase/migrations/2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql`
 4. `supabase/migrations/2026-10-13_ranked_rating_claim.sql` (aborts if the gate is open)
+5. `supabase/migrations/2026-10-15_ranked_rating_context.sql` — **depends on step 4**, including its receipt key/index and CAS RPC. Adds immutable owner/opponent inputs, serializes new ranked-game admission, and fences decay against pending snapshots. Apply before NEW; this is not a contract migration.
 
 The BRIDGE process is still serving but fenced for vulnerable rating work; Rush
 old report/result writes fail closed as before.
 
+The context migration has no default or historical backfill. NULL retains the
+historical full-strength policy; do not infer old disconnects. New context rows
+must contain the complete corrected v1 owner/opponent shape. The intermediate
+unshipped opponent-only v1 shape is unsupported. Old RPC callers process NULL
+rows but are rejected for new context rows. NEW on a pre-context schema can
+boot/liveness may pass, but ranked scans/inserts fail closed; liveness is not
+proof of schema readiness. Do not deploy NEW before all five expansion steps.
+The context migration is reapplicable; its historical CHECK validation runs
+after committing the expansion DDL, under the weaker validation lock. Schedule
+normal migration lock management and stop if any statement fails.
+
 ### Step 4 — Deploy NEW
 
-Deploy this branch's server. Verify, in the target nonproduction environment
+Deploy the current canonical candidate SHA recorded in preflight. Verify, in the target nonproduction environment
 first, then in production:
 
 * `/health`, `/ready`, and `release` equals the NEW SHA;
@@ -246,7 +267,7 @@ Repeat the completion/retry smoke and watch for operational errors.
 2. Step 0: precheck and record SHAs.
 3. Step 1: `quiesce true`.
 4. Step 2: two `readyForExpand: true` reads, 30 s apart, same `bootId`.
-5. Step 3: Ghost expand, reconciliation, Rush expand, ranked claim.
+5. Step 3: Ghost expand, reconciliation, Rush expand, ranked claim, **ranked context** (exactly in that order).
 6. Step 4: deploy NEW and run the smoke.
 7. Step 5: confirm BRIDGE is gone, then `quiesce false`.
 8. Step 6: observe.
@@ -265,7 +286,7 @@ Repeat the completion/retry smoke and watch for operational errors.
 while the expand schema remains, but rolling back does not return to unrestricted
 OLD rating behavior: the Ghost, Rush and ranked fences stay in the database and
 fail the OLD writers closed. Roll back to the exact **BRIDGE** artifact
-`e3517fb0da9644ccede64697309d7af8d9ffb8ee` (never to plain OLD), leave `quiesce true`, and keep rating-affecting completions failing
+`3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353` (never to plain OLD), leave `quiesce true`, and keep rating-affecting completions failing
 retryably until a corrected NEW build is deployed. Do not turn the fences off to
 make old requests appear successful.
 

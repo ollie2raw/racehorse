@@ -1,7 +1,9 @@
 # Runtime-validated rating cutover BRIDGE artifact
 
-Deploy exact commit `e3517fb0da9644ccede64697309d7af8d9ffb8ee` from
-`release/rating-cutover-bridge`, based on OLD `18bc747ac7156d0058c5acd9cddcc545660e6e28`.
+Deploy exact commit `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353` from
+`release/rating-cutover-bridge`. This isolated correction is based exactly on
+historical `e3517fb0da9644ccede64697309d7af8d9ffb8ee`, which is superseded and
+**must not be deployed**: it could report drain while ranked catch-up still wrote.
 Do not construct or apply a patch. The historical patch beside this README is
 not the release artifact.
 
@@ -11,11 +13,13 @@ expand schema is required. Without the gate row, vulnerable writers fail closed.
 
 Configure `ADMIN_SECRET` before deployment and require a successful authenticated
 status request. Close the gate and positively observe all completion, deferred
-Ghost, and decay counters drained on the same boot before applying any expand.
+Ghost, and decay counters drained (catch-up and admin processing use the completion counter) on the same boot before applying any expand.
 See [the cutover runbook](../senior-audit-rating-rush-cutover.md) for the exact order.
 
 Authenticated rated human-v-human completions, including manual/disconnect forfeits, and qualifying authenticated Fritz completions
-are gated. Guest/unrated private completions are not. Tournament routing is unchanged.
+are gated. Boot/periodic/weekly ranked catch-up, admin rating processing and
+authenticated Fritz disconnect rating work use the same admission/in-flight
+protocol. The disconnect unit starts before pending-match mutation. Guest/unrated private completions are not. Tournament routing is unchanged.
 
 Before Ghost contract, the rollback target is this exact BRIDGE commit, retaining
 quiescence/fail-closed behavior while preparing a forward fix. After Ghost contract,
