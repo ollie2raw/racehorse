@@ -32,9 +32,9 @@ for p in files: apply(p.relative_to(root))
 print('HISTORICAL CHAIN PASS',flush=True)
 subprocess.run([pg,'-X','-v','ON_ERROR_STOP=1','postgresql://postgres@127.0.0.1:55439/postgres','-c','create database '+upgrade+' template '+fresh],stdout=log,stderr=log,check=True)
 # Future expand/contract order, never lexical ordering of the same-date migrations.
-for n in ['2026-10-13_rating_cutover_gate.sql','2026-10-13_ghost_rating_idempotent_completion.sql','2026-10-13_ghost_cutover_reconciliation.sql','2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql','2026-10-13_ranked_rating_claim.sql','2026-10-15_ranked_rating_context.sql','2026-10-13_puzzle_rush_assignment_contract.sql','2026-10-13_ghost_user_match_uniqueness.sql']:
+for n in ['2026-10-13_rating_cutover_gate.sql','2026-10-13_ghost_rating_idempotent_completion.sql','2026-10-13_ghost_cutover_reconciliation.sql','2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql','2026-10-13_ranked_rating_claim.sql','2026-10-15_ranked_rating_context.sql','2026-10-15_ghost_precontract_deferral.sql','2026-10-13_puzzle_rush_assignment_contract.sql','2026-10-13_ghost_user_match_uniqueness.sql']:
  if n=='2026-10-13_ghost_rating_idempotent_completion.sql':sql("update rating_cutover_gate set quiesced=true,quiesced_at=now(),enabled_boot_id='local-migration-fixture' where id")
  apply(Path('supabase/migrations')/n)
 print('FRESH FULL CHAIN PASS',flush=True)
 
-print(json.dumps({'freshDatabase':fresh,'historicalUpgradeDatabase':upgrade,'historicalMigrations':len(files),'pendingMigrations':8,'result':'PASS'}),flush=True)
+print(json.dumps({'freshDatabase':fresh,'historicalUpgradeDatabase':upgrade,'historicalMigrations':len(files),'pendingMigrations':9,'result':'PASS'}),flush=True)

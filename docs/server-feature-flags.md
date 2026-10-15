@@ -175,3 +175,11 @@ lost.
   read exists with no manifest row). That would be real logic and a real test —
   it's a legitimate Step-2 if the convention proves worth enforcing, but it's
   exactly the "flag-management system" this pass was told not to build.
+
+## `GHOST_DEFERRED_DRAIN_ENABLED`
+
+On unless exactly `false`. Drains `ghost_deferred_completions` (second human account of a match completed while the
+legacy global `ghost_games_match_id_unique` still existed; see `docs/ops/senior-audit-rating-rush-cutover.md`
+Step 8). Boot sweep at +30 s, then every 15 min. While the legacy constraint exists a sweep is 2 requests and
+changes nothing. Requires `2026-10-15_ghost_precontract_deferral.sql`; without it the sweep's first request 404s and
+logs a warning.

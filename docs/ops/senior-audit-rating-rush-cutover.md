@@ -61,7 +61,8 @@ reconstructs an unknown assignment or grades an old unassigned run.
 | G0 | Existing schema | Yes | No | Existing Ghost flow |
 | G1 | Ghost expand | Fail closed for new Ghost writes | Yes | New atomic Ghost RPC; old rating writes rejected |
 | G2 | Ghost expand, new binary live | Old instances fail closed | Yes | New atomic Ghost RPC; ambiguous legacy rows require reconciliation |
-| G3 | Ghost contract | No: old `on_conflict=match_id` is invalid | Yes | Per-user Ghost receipts, including both human seats |
+| G2 (+deferral) | Ghost expand + `ghost_precontract_deferral`, legacy `match_id` constraint still present | Old instances fail closed | Yes: seat A of a two-account match completes; seat B's Ghost work is durably deferred, the match completes | Deferred seats wait in `ghost_deferred_completions` |
+| G3 | Ghost contract | No: old `on_conflict=match_id` is invalid | Yes | Per-user Ghost receipts, including both human seats; deferred seats drain |
 
 | Rush stage | DB state | Old server safe? | New server safe? | Allowed writes |
 | --- | --- | --- | --- | --- |
@@ -179,6 +180,7 @@ Apply each with `psql -X -v ON_ERROR_STOP=1 "$DATABASE_URL" -f <file>` in this o
 3. `supabase/migrations/2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql`
 4. `supabase/migrations/2026-10-13_ranked_rating_claim.sql` (aborts if the gate is open)
 5. `supabase/migrations/2026-10-15_ranked_rating_context.sql` — **depends on step 4**, including its receipt key/index and CAS RPC. Adds immutable owner/opponent inputs, serializes new ranked-game admission, and fences decay against pending snapshots. Apply before NEW; this is not a contract migration.
+6. `supabase/migrations/2026-10-15_ghost_precontract_deferral.sql` — **depends on the Ghost expand (step 1)**. Additive: creates `ghost_deferred_completions` and replaces `complete_ghost_rating_v2` so that, while the legacy global `ghost_games_match_id_unique` still exists, the SECOND human account of one match is durably deferred (typed `deferred_legacy_match_uniqueness`) instead of failing the whole multiplayer completion. BRIDGE never calls this RPC and its fenced writers are unchanged. Apply before NEW.
 
 The BRIDGE process is still serving but fenced for vulnerable rating work; Rush
 old report/result writes fail closed as before.
@@ -189,7 +191,7 @@ must contain the complete corrected v1 owner/opponent shape. The intermediate
 unshipped opponent-only v1 shape is unsupported. Old RPC callers process NULL
 rows but are rejected for new context rows. NEW on a pre-context schema can
 boot/liveness may pass, but ranked scans/inserts fail closed; liveness is not
-proof of schema readiness. Do not deploy NEW before all five expansion steps.
+proof of schema readiness. Do not deploy NEW before all six expansion steps.
 The context migration is reapplicable; its historical CHECK validation runs
 after committing the expansion DDL, under the weaker validation lock. Schedule
 normal migration lock management and stop if any statement fails.
@@ -258,6 +260,18 @@ resolve. Ghost contract aborts while any row remains.
 
 1. `supabase/migrations/2026-10-13_puzzle_rush_assignment_contract.sql`
 2. `supabase/migrations/2026-10-13_ghost_user_match_uniqueness.sql` — begins with `select public.ghost_cutover_assert_reconciled()` and aborts with `ghost_cutover_unreconciled` if Step 7 is not clean.
+3. **Drain deferred Ghost seats (mandatory after the Ghost contract).** Human-vs-human matches completed between Step 4 and the Ghost contract left the second account's Ghost work in `ghost_deferred_completions`. NEW's drain (`GHOST_DEFERRED_DRAIN_ENABLED` is on unless exactly `false`) replays them every 15 minutes through the same idempotent RPC; restart NEW to run it immediately (boot sweep at +30 s). While the legacy constraint exists the drain costs 2 requests per interval and changes nothing. Require the pending set to reach zero:
+
+   ```sql
+   select count(*) filter (where quarantined_at is null) as pending,
+          count(*) filter (where quarantined_at is not null) as quarantined
+     from public.ghost_deferred_completions;   -- pending must reach 0; quarantined must be 0 or explained
+   select match_id, count(*) as ghost_rows, count(distinct user_id) as users
+     from public.ghost_games where match_id is not null
+    group by match_id having count(*) <> count(distinct user_id);   -- must return no rows
+   ```
+
+   `quarantined` rows (deterministic RPC rejection after 10 attempts) are retained for an operator and are never deleted by automation.
 
 Repeat the completion/retry smoke and watch for operational errors.
 
@@ -272,7 +286,7 @@ Repeat the completion/retry smoke and watch for operational errors.
 7. Step 5: confirm BRIDGE is gone, then `quiesce false`.
 8. Step 6: observe.
 9. Step 7: reconciliation query returns zero rows.
-10. Step 8: Rush contract, then Ghost contract.
+10. Step 8: Rush contract, then Ghost contract, then drain deferred Ghost seats to zero.
 
 ## Restart reasoning
 

@@ -215,6 +215,13 @@ async function upsertGhostProfile(row: {
   return profile;
 }
 
+/** Typed RPC outcome: a second human account hit the legacy global `match_id` constraint (pre-contract). */
+export const GHOST_DEFERRED_LEGACY_MATCH_UNIQUENESS = 'deferred_legacy_match_uniqueness' as const;
+
+type GhostCommitOutcome =
+  | { isNewGame: boolean; newRating: number; ratingDelta: number; status?: undefined }
+  | { status: typeof GHOST_DEFERRED_LEGACY_MATCH_UNIQUENESS };
+
 async function commitGhostRating(params: {
   userId: string;
   matchId: string;
@@ -224,8 +231,8 @@ async function commitGhostRating(params: {
   mode: 'ghost' | 'fritz';
   opponentRating: number | null;
   applyRating: boolean;
-}): Promise<{ isNewGame: boolean; newRating: number; ratingDelta: number }> {
-  return supabaseFetch<{ isNewGame: boolean; newRating: number; ratingDelta: number }>(
+}): Promise<GhostCommitOutcome> {
+  return supabaseFetch<GhostCommitOutcome>(
     '/rest/v1/rpc/complete_ghost_rating_v2', {
     method: 'POST',
     body: JSON.stringify({
@@ -1009,6 +1016,53 @@ async function persistFritzGhostTrainingProfile(params: {
   await updateGhostStyle(params.userId, compositeLog, styleProfile);
 }
 
+async function refreshGhostStyle(userId: string): Promise<{ compositeLog: GhostCompositeLog; styleProfile: GhostStyleProfile | null }> {
+  const profile = await ensureGhostProfileStyleSource(userId);
+  const styleGames = await fetchRecentGhostGames(userId, GHOST_COMPOSITE_GAME_WINDOW);
+  const recentGames = styleGames.slice(0, GHOST_COMPOSITE_GAME_WINDOW);
+  const previousStyles: CompositeStyleSource | null = profile.recentGameStyles
+    ? { recentGameStyles: profile.recentGameStyles }
+    : null;
+  const compositeLog = buildCompositeLog(recentGames, styleGames, previousStyles);
+  const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
+  await updateGhostStyle(userId, compositeLog, styleProfile);
+  return { compositeLog, styleProfile };
+}
+
+/** A row of `ghost_deferred_completions`, replayed with the exact parameters stored at match time. */
+export type DeferredGhostSeat = {
+  user_id: string;
+  match_id: string;
+  final_score: number;
+  opponent_score: number;
+  move_log: GhostMoveLogEntry[];
+  mode: 'ghost' | 'fritz';
+  opponent_rating: number | null;
+  apply_rating: boolean;
+};
+
+/**
+ * Replays one deferred seat through the same idempotent RPC (one receipt per (user, match)), then
+ * rebuilds the style profile as the original completion would have. `'waiting_for_contract'` means
+ * the legacy constraint still exists: nothing was written and nothing should be retried yet.
+ */
+export async function completeDeferredGhostSeat(row: DeferredGhostSeat): Promise<'completed' | 'waiting_for_contract'> {
+  const outcome = await commitGhostRating({
+    userId: row.user_id,
+    matchId: row.match_id,
+    finalScore: row.final_score,
+    opponentScore: row.opponent_score,
+    trainingMoveLog: row.move_log,
+    mode: row.mode,
+    opponentRating: row.opponent_rating,
+    applyRating: row.apply_rating,
+  });
+  if (outcome.status === GHOST_DEFERRED_LEGACY_MATCH_UNIQUENESS) return 'waiting_for_contract';
+  if (row.mode === 'ghost') await refreshGhostStyle(row.user_id);
+  return 'completed';
+}
+
+
 export async function completeGhostGame(params: {
   userId: string;
   finalScore: number;
@@ -1028,6 +1082,12 @@ export async function completeGhostGame(params: {
   playerWon: boolean;
   compositeLog: GhostCompositeLog;
   styleProfile: GhostStyleProfile | null;
+  /**
+   * True only when this account's Ghost work was durably deferred (pre-contract, second human
+   * account of one match). The numeric/composite fields are then NOT meaningful; the match itself
+   * is still complete and the deferred seat is replayed by the deferred-Ghost drain.
+   */
+  ghostDeferred?: true;
 }> {
   log.info({
     userId: params.userId,
@@ -1054,6 +1114,10 @@ export async function completeGhostGame(params: {
       opponentRating: 1000,
       applyRating: isRatingEligible && params.applyGlicko !== false,
     });
+    if (trainingRating.status !== undefined) {
+      // The legacy-constraint deferral is only meaningful for two human accounts sharing one match.
+      throw new Error(`Unexpected Ghost completion status for Fritz match: ${trainingRating.status}`);
+    }
     const profile = await ensureGhostProfile(params.userId);
     let glickoRating: number | null = null;
     let glickoDelta: number | null = null;
@@ -1166,16 +1230,25 @@ export async function completeGhostGame(params: {
     opponentRating: params.opponentUserId ? Number(opponentProfile?.ghost_rating ?? 1000) : null,
     applyRating: ratingEligibleAndVerified,
   });
-  const profile = await ensureGhostProfileStyleSource(params.userId);
-  const styleGames = await fetchRecentGhostGames(params.userId, GHOST_COMPOSITE_GAME_WINDOW);
-  const recentGames = styleGames.slice(0, GHOST_COMPOSITE_GAME_WINDOW);
-  const previousStyles: CompositeStyleSource | null = profile.recentGameStyles
-    ? { recentGameStyles: profile.recentGameStyles }
-    : null;
-  const compositeLog = buildCompositeLog(recentGames, styleGames, previousStyles);
-  const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
-
-  await updateGhostStyle(params.userId, compositeLog, styleProfile);
+  if (rating.status === GHOST_DEFERRED_LEGACY_MATCH_UNIQUENESS) {
+    log.warn(
+      { userId: params.userId, matchId: params.matchId },
+      'ghost completion durably deferred: legacy global match_id constraint still present (pre-contract)',
+    );
+    return {
+      newRating: 0,
+      ratingDelta: 0,
+      glickoRating: null,
+      glickoDelta: null,
+      playerScore: Math.round(params.finalScore),
+      ghostScore: Math.round(params.opponentScore),
+      playerWon: params.finalScore > params.opponentScore,
+      compositeLog: { generatedAt: new Date().toISOString(), sourceGameIds: [], states: [], recentGameStyles: [] },
+      styleProfile: null,
+      ghostDeferred: true,
+    };
+  }
+  const { compositeLog, styleProfile } = await refreshGhostStyle(params.userId);
 
   return {
     newRating: rating.newRating,

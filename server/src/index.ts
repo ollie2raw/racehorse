@@ -6,6 +6,7 @@ import { sentryBeforeSend } from './sentryScrubbers';
 import { startEventLoopLagMonitor } from './platform/health/eventLoopLagMonitor';
 import { startResourceUsageLog } from './platform/health/resourceUsageLog';
 import { scheduleRoomRetention } from './multiplayer/roomRetentionReaper';
+import { scheduleDeferredGhostDrain } from './ghost/deferredGhostCompletion';
 
 Sentry.init({
   dsn: config.sentryDsn || undefined,
@@ -941,6 +942,7 @@ server.listen(PORT, () => {
   scheduleStartupDailyWarmups();
   scheduleStrandedDailyFritzRecovery();
   scheduleRoomRetention();
+  scheduleDeferredGhostDrain();
   scheduleReviewCompletionSweep();
   startResourceUsageLog();
   startEventLoopLagMonitor({

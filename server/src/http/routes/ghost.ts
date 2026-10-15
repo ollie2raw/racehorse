@@ -363,6 +363,10 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         matchId,
         applyGlicko,
       });
+      if (result.ghostDeferred) {
+        // Single-account solo matches cannot hit the two-account legacy constraint; never store a non-result.
+        throw new Error('ghost_completion_deferred_unexpected');
+      }
       verifiedMatch.status = 'completed';
       verifiedMatch.completedAt = new Date().toISOString();
       verifiedMatch.completionHash = completionHash;
