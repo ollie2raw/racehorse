@@ -71,7 +71,7 @@ A crash before terminal commit leaves an in-progress durable reservation that is
 
 **Mode matrix** (all covered on real PG): ranked and unranked H2H, authenticated and guest Fritz, disconnect forfeit, ordinary forfeit (half-weight parity), guest forfeit (not scanned), tournament rooms (excluded), live room skip/takeover.
 
-**Migration:** none. The pipeline depends on migrations already pending for the candidate (`2026-10-13` incl. ghost contract, `2026-10-15`). Optional: a partial index on `room_live_sessions(updated_at, room_code) where status in ('game_over','abandoned')`; the terminal scan is a seq scan at current volumes.
+**Migration:** none for terminal recovery itself. CORRECTION (integration gate): the earlier statement that the pipeline "depends on migrations already pending (incl. the ghost contract)" described the test fixture, which had applied the Ghost contract. The runtime does NOT need either contract migration, but the first integration run proved that any two-account match with Ghost logs failed on the legacy `ghost_games_match_id_unique` before the contract. That is closed by `fix/ghost-precontract-compat` (`2026-10-15_ghost_precontract_deferral.sql`, an expand-phase migration that must be applied before NEW) and a post-contract drain; see `docs/audits/ghost-precontract-compat.md`. Optional: a partial index on `room_live_sessions(updated_at, room_code) where status in ('game_over','abandoned')`; the terminal scan is a seq scan at current volumes.
 
 No R0 found in the reviewed lifecycle paths. This is not a claim that unrelated systems were audited.
 

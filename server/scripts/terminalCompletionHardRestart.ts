@@ -432,6 +432,9 @@ async function scenarioPreContractGhost(result: Record<string, unknown>, failure
   if (afterRestart.ranked !== 2 || afterRestart.receipts !== 2 || afterRestart.matches !== 1) failures.push('G3: restart duplicated core effects');
   if (drainRequests > 3) failures.push(`G3: pre-contract drain made ${drainRequests} Ghost requests in one boot (retry storm?)`);
 
+  const gamesPlayed = () => count(`select coalesce(sum(games_played),0) from public.ghost_profiles where user_id in ('${ids[0]}','${ids[1]}')`);
+  const gamesBeforeDrain = gamesPlayed();
+  const expectedIncrement = count(`select count(*) from public.ghost_deferred_completions where apply_rating and greatest(final_score,opponent_score) >= 10 and opponent_rating is not null`);
   // Apply the REAL Ghost contract, then restart: the boot sweep drains the deferred seat.
   execFileSync(process.env.PSQL_BIN || 'psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-q', DB_URL, '-f', join(serverRoot, '../supabase/migrations/2026-10-13_ghost_user_match_uniqueness.sql')], { encoding: 'utf8' });
   if (legacyConstraintPresent()) failures.push('G4: contract migration did not remove the legacy constraint');
@@ -445,7 +448,7 @@ async function scenarioPreContractGhost(result: Record<string, unknown>, failure
   if (finalG.ghostGames !== 2 || finalG.ghostDeferred !== 0) failures.push(`G4: expected 2 Ghost rows and 0 deferred, got ${finalG.ghostGames}+${finalG.ghostDeferred}`);
   if (count(`select count(distinct user_id) from public.ghost_games where user_id in ('${ids[0]}','${ids[1]}')`) !== 2) failures.push('G4: not exactly one Ghost completion per account');
   if (count(`select count(*) from public.ghost_games where user_id in ('${ids[0]}','${ids[1]}') and rating_applied_at is not null`) !== 2) failures.push('G4: a Ghost completion lacks its rating receipt');
-  if (count(`select coalesce(sum(games_played),0) from public.ghost_profiles where user_id in ('${ids[0]}','${ids[1]}')`) !== 2) failures.push('G4: Ghost games_played is not exactly 1 per account');
+  if (gamesPlayed() - gamesBeforeDrain !== expectedIncrement) failures.push(`G4: deferred seat rated ${gamesPlayed() - gamesBeforeDrain} times, expected ${expectedIncrement} (exactly once, or zero when the result is not rating-eligible)`);
   if (finalG.ranked !== 2 || finalG.receipts !== 2 || finalG.matches !== 1 || finalG.archive !== 1 || finalG.activity !== core.activity) failures.push(`G4: core/ranked/stat effects changed by the Ghost drain: ${JSON.stringify(finalG)} vs ${JSON.stringify(core)}`);
 
   // One more restart: replay is a no-op.
@@ -453,7 +456,7 @@ async function scenarioPreContractGhost(result: Record<string, unknown>, failure
   await sleep(8_000);
   await killHard(proc);
   const again = snapshot(roomCode, ids);
-  if (JSON.stringify(again) !== JSON.stringify(finalG)) failures.push(`G5: another restart changed state: ${JSON.stringify(again)}`);
+  if (JSON.stringify(again) !== JSON.stringify(finalG) || gamesPlayed() - gamesBeforeDrain !== expectedIncrement) failures.push(`G5: another restart changed state: ${JSON.stringify(again)}`);
   result.ghost_5_afterThirdRestart = again;
 }
 

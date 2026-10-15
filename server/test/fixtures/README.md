@@ -64,3 +64,11 @@ faults around real commits: lost-before-commit, committed-response-lost, hold-th
 `test/support/syntheticAuth.ts` stands in for the three Auth endpoints the server/chaos scripts use. The existing
 `chaos:multiplayer-restart` and `chaos:ranked-restart` scripts run unmodified against
 `scripts/localChaosGateway.ts` (set `SUPABASE_URL` to its printed URL and both keys to its printed JWT).
+
+### Pre-/post-contract schema (Ghost mixed-version gate)
+`scripts/setupTerminalCompletionTestDb.sh` builds the database in the exact cutover order and takes
+`TERMINAL_TEST_SCHEMA=pre-contract` (default: what is live when NEW deploys, legacy `ghost_games_match_id_unique` present,
+Rush/Ghost contracts NOT applied) or `post-contract`. Run every real-DB suite against both.
+`src/ghost/ghostPreContractCompat.postgres.integration.test.ts` and
+`terminalCompletionHardRestart.ts precontract-ghost` START from a fresh pre-contract database and APPLY the real Ghost
+contract migration themselves; rebuild the database before re-running them.
