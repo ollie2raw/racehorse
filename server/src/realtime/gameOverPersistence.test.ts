@@ -884,7 +884,8 @@ describe('createGameOverPersistScheduler — rating cutover gate (legacy build)'
     const pending = runPersist(input);
     await vi.runAllTimersAsync();
     await expect(pending).resolves.toBe('succeeded');
-    expect(supabaseFetchMock).not.toHaveBeenCalled();
+    // No account/profile/ranking writes: the only DB traffic is the terminal-session marker.
+    expect(supabaseFetchMock.mock.calls.every(([path]) => String(path).includes('/room_live_sessions'))).toBe(true);
     expect(insertRankedGameIdempotentMock).not.toHaveBeenCalled();
     expect(completeGhostGameMock).not.toHaveBeenCalled();
     expect(appendMatchMock).toHaveBeenCalledWith(expect.objectContaining({

@@ -2,7 +2,7 @@
 
 Base: `origin/feat/app-store-candidate` at `fc864689f541032844887e978a9932a98d27fae4` (fetched and verified). Worktree: `/private/tmp/racehorse-backend-lifecycle`; branch: `audit/backend-lifecycle-reliability`. Production and corrected BRIDGE are reference-only. No push, integration, production access, deployment or migration.
 
-**Verdict: BACKEND LIFECYCLE REMEDIATION INCOMPLETE.** The shutdown/reservation fixes below pass regression tests, but the terminal-completion restart boundary remains R1. Passing mid-game restart and atomic-rating tests does not close that gap.
+**Verdict: BACKEND LIFECYCLE RELIABILITY PASS READY FOR REVIEW.** The shutdown/reservation fixes pass regression tests and the terminal-completion restart boundary (formerly R1) is closed by the durable replay owner described below, proven by a real PostgreSQL/PostgREST crash matrix and a real-process SIGKILL test.
 
 ## Process lifecycle map
 
@@ -16,7 +16,7 @@ All listed timers now use process-owned admission/cancellation, except request d
 | Live room persistence | 75ms coalescing debounce; single-flight per room | Shutdown stops scheduling new debounce timers, keeps pending rooms, waits mutations then flushes | Snapshot and, when enabled, transactional entry stream | Remaining global budget; false writes reported as failures; timeout is incomplete, never success |
 | Matchmaking queue / presence | Queue tick 2s; online count broadcast 10s | Queue service stopped; process-owned broadcast timer cancelled; detached `handleMatched` promise counted | Match row committed before `queue:matched`; stable UUID retry | Four attempts, 4.4s retry delay plus requests; can exceed shutdown deadline |
 | Reservation cleanup | 60s tick; 5m unused reservation grace | At most 100 expiry attempts/run; no new expiry after closing; pending terminal PATCH counted; per-room expiry exclusion | First-terminal-writer conditional PATCH now precedes deletion; failure retains room and retry owner | Already committed response can be retried safely; restart can hydrate still-in-progress reservation on demand |
-| Game-over persistence | On completed room; max 4 attempts | Entire detached retry lifetime tracked, including delay gaps | Stable match/source IDs, unique insert keys, atomic rating receipts | **R1: terminal room before completion insert has no restart completion owner** |
+| Game-over persistence | On completed room; max 4 attempts | Entire detached retry lifetime tracked, including delay gaps | Stable match/source IDs, unique insert keys, atomic rating receipts | R1 closed: terminal snapshot carries `completionPending`; boot/periodic `terminalCompletionRecovery` replays it idempotently |
 | Ranked catch-up | Boot 20s; 15m; weekly | Boot/interval cancelled; cron task stopped; admitted sweep counted; existing service single-flight retained | Pending ranked rows plus atomic claim/receipt; boot sweep re-discovers unprocessed rows | 100-row scan; shared shutdown deadline; process-local backoff resets on restart |
 | Weekly decay | Sunday 00:00 UTC | Cron stopped; admitted run counted; no new decay starts while closing | Per-profile conditional/idempotent updates | Shared deadline; missed weekly invocation has no durable scheduler ledger; next scheduled run remains owner (R2) |
 | Daily Fritz recovery | Boot 20s; 15m | Both timers cancelled; admitted sweep promise counted; existing single-flight retained | Durable attempt checkpoint, authority ledger and completion receipts | Scan 100; recoverable incomplete work remains discoverable after restart |
@@ -46,17 +46,32 @@ Expiry now marks the room as expiring, awaits a conditional terminal PATCH with 
 
 A crash before terminal commit leaves an in-progress durable reservation that is still legitimately recoverable, rather than a room already torn down as terminal. A commit followed by response loss leaves a terminal row which shell hydration excludes. No memory-only instruction is required to recreate a committed reservation. Unvisited old reservation rows can still accumulate; a durable expiry policy/boot sweep remains an operational R2, distinct from deleting before acknowledgment.
 
-### OPEN R1: terminal room snapshot has no completion replay owner
+### CLOSED R1: terminal room snapshot now has a durable completion replay owner
 
-Exact sequence:
+**Root cause.** The terminal snapshot (`status=game_over`, `matchLogged=false`) is durable before `onGameOver` runs, but nothing durable recorded that completion was *owed*. After a hard crash, hydration (correctly) refuses terminal snapshots and no worker consumed them.
 
-1. The final gameplay state is persisted in `room_live_sessions`, with `status=game_over`, stable `match_id`, and `room_shell.matchLogged=false`.
-2. `roomSession.ts:broadcastStateUpdate` schedules `deps.onGameOver`; `gameOverPersistence.ts` has not yet inserted its durable completion/ranked rows.
-3. Hard crash, or global shutdown deadline before that insert succeeds.
-4. On restart, `roomLivePersistence.ts:validateLiveRoomHydrationRow` returns `snapshot_stale/snapshot_terminal` before applying the room.
-5. Ranked catch-up scans `ranked_games`; the not-yet-inserted row is absent. No enabled boot worker consumes the terminal room as a pending completion.
+**Durability invariant.** If a terminal snapshot is durable and the result is not durably logged, the `room_live_sessions` row says so (`room_shell.completionPending=true`), is never deleted by cleanup/retention/finalize, and a restarted process can finish the completion from that row alone.
 
-The added terminal-snapshot fixture persists this exact false `matchLogged` state, resets live persistence, then demonstrates terminal hydration refusal. Normal terminal join refusal must remain: blindly reopening completed rooms would introduce another correctness defect. A durable completion handoff/replay owner is required, with source identity, final roster/logs and correct application ordering. Merely lengthening shutdown or flushing a terminal snapshot does not solve it. This commit does **not** certify that interruption point or implement an unreviewed completion worker.
+**Durable owner (no migration).** The existing `room_live_sessions` row. `buildLiveSessionRow` sets `completionPending` from `roomOwesTerminalCompletion` (game over or rated forfeit, non-tournament, two players, not `matchLogged`). Forfeits also persist `abandonedForfeitReason`; the abandoned snapshot is written *before* ranked rows (write-ahead). Foreground success calls `markTerminalCompletionLogged` (`matchLogged=true`, `completionPending=false`, CAS on `updated_at`).
+
+**Recovery (`multiplayer/terminalCompletionRecovery.ts`).** Separate from hydration: hydration still returns `snapshot_terminal` and never makes the room playable. Recovery materializes a *detached* room (`createDetachedRoom`, unregistered), and replays through the same pipeline (`replayGameOverCompletion`, shared `completeRatedForfeit`) with stable `sourceMatchId = matchId`, so every write is idempotent (ranked `(player_id, source_match_id)`, matches unique, activity dedupe, ghost matchId, first-writer `recordMatchEnd`, rating receipts). The archive row is inserted with `ignore-duplicates`, then the session row is deleted conditionally on `matchLogged=true`.
+
+| Boundary | Result |
+|---|---|
+| A. crash before terminal snapshot is durable | not terminal; mid-game hydration owns it (unchanged) |
+| B. snapshot durable, nothing else | recovered: one completion |
+| C. partial ranked (one of two rows committed) | replay completes the rest; no duplicates |
+| D. ranked committed, marker unwritten | replay is a no-op through idempotency keys; row marked and archived |
+| E. marker written, archive/delete pending | `already_logged` path finishes archive + delete |
+| F. hard process kill during replay | next process converges (real-process `replay-crash` scenario) |
+
+**Bounded sweep.** Single-flight; lightweight projection (`room_code,match_id,status,updated_at`); order `(updated_at, room_code)` with keyset paging (25/page, 4 pages, 25 rows/sweep); min age 30s; row isolation; failed replays bump `updated_at` (backoff + no starvation); 5 durable failures or any structural problem quarantine the row (`quarantinedAt`, retained for operators, never rescanned); rating-cutover quiescence defers without counting an attempt; live in-memory rooms are skipped unless their foreground persist is `failed`. Request budget: 0 stranded = 1 request; one stranded <= 8; 100 already-logged = 1; 100 stranded drain over 4 sweeps, oldest first. Boot delay 15s, interval 15m, `TERMINAL_COMPLETION_RECOVERY_ENABLED=false` disables.
+
+**Cleanup interaction.** `finalizeAndDeleteLiveRoomSession` retains a `completionPending` row; the reaper uses two simple-filter DELETEs (`completionPending=is.null` and `=eq.false`). A single `or=` over the JSON path returns 400 on PostgREST 12.2.3 (found by the real-DB test). A rematch after a foreground give-up is refused (`MATCH_RESULT_RETRYING_MESSAGE`) until replay logs the result, because the terminal row is keyed by room code. Reservation cleanup never touches terminal rows.
+
+**Mode matrix** (all covered on real PG): ranked and unranked H2H, authenticated and guest Fritz, disconnect forfeit, ordinary forfeit (half-weight parity), guest forfeit (not scanned), tournament rooms (excluded), live room skip/takeover.
+
+**Migration:** none. The pipeline depends on migrations already pending for the candidate (`2026-10-13` incl. ghost contract, `2026-10-15`). Optional: a partial index on `room_live_sessions(updated_at, room_code) where status in ('game_over','abandoned')`; the terminal scan is a seq scan at current volumes.
 
 No R0 found in the reviewed lifecycle paths. This is not a claim that unrelated systems were audited.
 
@@ -69,7 +84,7 @@ No R0 found in the reviewed lifecycle paths. This is not a claim that unrelated 
 5. Close sockets, force-close remaining HTTP connections, and finish within the remaining common budget.
 6. Emit one structured summary: signal, admission closure, active rooms/sockets, dirty count, work present at admission/exit, completed/timed-out phases, duration and outcome. Exit 0 only for a completed drain; exit 1 for timeout/error/failed room persistence.
 
-Database requests retain their existing 15s response-body-inclusive deadline. The shutdown deadline is a waiting bound, not a promise to cancel a database transaction. A committed atomic RPC remains committed and its receipt owns retry. Pending ranked/DF/review work is durable and can be rediscovered. Cache, probes, telemetry and immutable warmup generation can be abandoned. Dirty unconfirmed room writes and completion work before durable handoff cannot be declared safe to abandon; timeout explicitly reports incomplete. The open R1 prevents a general no-loss claim.
+Database requests retain their existing 15s response-body-inclusive deadline. The shutdown deadline is a waiting bound, not a promise to cancel a database transaction. A committed atomic RPC remains committed and its receipt owns retry. Pending ranked/DF/review work is durable and can be rediscovered. Cache, probes, telemetry and immutable warmup generation can be abandoned. Dirty unconfirmed room writes cannot be declared safe to abandon; timeout explicitly reports incomplete. Completion work lost to the deadline or a crash is owned by the durable terminal replay (R1 closed), so shutdown drain is not relied on for it.
 
 ## Socket / reconnect result
 
@@ -108,4 +123,15 @@ Test logs and the owned fixture are under `/private/tmp/lifecycle-*`. Production
 
 ## Outstanding certification limits
 
-The open terminal-completion R1 prevents readiness and any integration. Not every enabled worker has a real-process interruption matrix at every database boundary: review/retention/warmup stop semantics have unit/regression coverage and shared admission tests, not the complete real-process matrix used for room writes. HTTP response close is not a universal ownership primitive for arbitrary unregistered detached continuations. The explicitly identified completion, verification, reservation, Ghost and DB tails are tracked; this is not an assertion that every possible future detached task is safe.
+Not every enabled worker has a real-process interruption matrix at every database boundary: review/retention/warmup stop semantics have unit/regression coverage and shared admission tests, not the complete real-process matrix used for room writes. HTTP response close is not a universal ownership primitive for arbitrary unregistered detached continuations. The explicitly identified completion, verification, reservation, Ghost and DB tails are tracked; this is not an assertion that every possible future detached task is safe.
+
+## R1 validation (terminal-completion restart)
+
+- New real PostgreSQL 16 + PostgREST 12.2.3 integration (`terminalCompletionRecovery.postgres.integration.test.ts`): **28/28** (built from real migrations by `scripts/setupTerminalCompletionTestDb.sh`; loopback only).
+- New mocked unit tests: terminalCompletion + recovery + scheduler wiring (**24**), plus updated rematch/match-log/retention/forfeit/game-over tests.
+- Real process SIGKILL (`scripts/terminalCompletionHardRestart.ts`): `boundary-b` and `replay-crash` PASS; fresh process finalizes: ranked 2, receipts 2, matches 1, archive 1, live row deleted, rejoin returns `match_terminal`.
+- Existing chaos: `multiplayerProcessRestartChaos` PASS; `rankedRestartChaos` PASS (full-row and `LIVE_SESSION_LOG_ENTRIES=true`).
+- Full server (4 shards): **508 / 599 / 507 / 453 passed**, 0 failed (42+23+3 skipped, 1 todo; DB tests skip without the env gate).
+- Architecture 22/22; server build, scripts typecheck, `git diff --check` PASS; changed-file lint: 7 pre-existing `no-console` errors (none added), 0 new.
+- `gracefulShutdown.test.ts`: a pre-existing flaky exact `timeoutMs: 1_000` assertion (about 5/16 failures at baseline) now asserts `0 < timeoutMs <= 1000`.
+- Known benign: `activity_feed` 409 duplicate warnings on replay (`on_conflict` not sent) and the Fritz+ghost move-log path relying on matchId-idempotent RPCs.

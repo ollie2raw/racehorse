@@ -38,10 +38,14 @@ export function getFritzTierForRoom(room: Room, botPlayerId: string | null): str
   return 'elite';
 }
 
-export function getPendingFritzMatchContext(room: Room): { realPlayer: RoomPlayer; fritzTier: string } | null {
-  const rosterCached = getRoomRoster(room.code);
+export function getPendingFritzMatchContext(
+  room: Room,
+  /** Replay path: the durable roster of a room that is not (and must not be) in memory. */
+  rosterOverride?: readonly RoomPlayer[],
+): { realPlayer: RoomPlayer; fritzTier: string } | null {
+  const rosterCached = rosterOverride ?? getRoomRoster(room.code);
   const roster =
-    rosterCached.length > 0 ? rosterCached : getRoomPlayersWithFallback(room.code, room.players);
+    rosterCached.length > 0 ? [...rosterCached] : getRoomPlayersWithFallback(room.code, room.players);
   const botPlayer = roster.find((player) => typeof player.id === 'string' && player.id.startsWith('bot:fritz:')) ?? null;
   const realPlayers = roster.filter((player) => player.userId);
   if (!botPlayer || realPlayers.length !== 1) return null;

@@ -7,6 +7,7 @@ import { sentryBeforeSend } from './sentryScrubbers';
 import { startEventLoopLagMonitor } from './platform/health/eventLoopLagMonitor';
 import { startResourceUsageLog } from './platform/health/resourceUsageLog';
 import { scheduleRoomRetention } from './multiplayer/roomRetentionReaper';
+import { scheduleTerminalCompletionRecovery } from './multiplayer/terminalCompletionRecovery';
 
 Sentry.init({
   dsn: config.sentryDsn || undefined,
@@ -950,6 +951,7 @@ server.listen(PORT, () => {
   scheduleStartupDailyWarmups();
   scheduleStrandedDailyFritzRecovery();
   scheduleRoomRetention();
+  scheduleTerminalCompletionRecovery();
   scheduleReviewCompletionSweep();
   onProcessStop(startResourceUsageLog());
   const lagMonitor = startEventLoopLagMonitor({

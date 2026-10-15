@@ -75,7 +75,12 @@ describe('gracefulShutdown', () => {
       signal: 'SIGTERM',
     });
     expect(callOrder).toEqual(['http_close', 'flush', 'socket_close']);
-    expect(flushLiveSessions).toHaveBeenCalledWith({ timeoutMs: 1_000 });
+    // The flush gets the REMAINING budget (wall clock), so it is at most the configured
+    // ceiling and may be a millisecond or two under it — asserting equality was a flake.
+    expect(flushLiveSessions).toHaveBeenCalledTimes(1);
+    const flushTimeout = flushLiveSessions.mock.calls[0]![0].timeoutMs;
+    expect(flushTimeout).toBeGreaterThan(0);
+    expect(flushTimeout).toBeLessThanOrEqual(1_000);
     expect(exitProcess).toHaveBeenCalledWith(0);
   });
 

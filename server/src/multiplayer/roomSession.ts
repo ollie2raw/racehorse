@@ -90,6 +90,11 @@ export type GameOverPersistInput = {
   scoreA: number;
   scoreB: number;
   winnerSeatId: string;
+  /**
+   * Terminal-completion replay only: the durable roster of a room that is not in memory.
+   * Absent for foreground completions (the live roster is used).
+   */
+  replayRoster?: RoomPlayer[];
 };
 
 export type RoomSessionHandlerDeps = {

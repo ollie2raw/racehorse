@@ -42,8 +42,18 @@ export type RoomRetentionResult = {
 
 type DeletedRow = { room_code: string };
 
-function liveSessionsPath(cutoffIso: string, liveRoomCodes: string[]): string {
+/**
+ * Never reap the only durable replay source of an unlogged terminal completion (incl. a
+ * quarantined one awaiting an operator): rows with `completionPending=true` are kept. Expressed as
+ * two simple filters (`is.null` = written before the flag existed, `eq.false` = nothing owed)
+ * because PostgREST rejects `or=` over a JSON path on a DELETE that returns rows.
+ */
+export const LIVE_SESSION_REAPABLE_FLAGS = ['room_shell->>completionPending=is.null', 'room_shell->>completionPending=eq.false'] as const;
+
+function liveSessionsPath(cutoffIso: string, liveRoomCodes: string[], flagFilter: string): string {
   const params = new URLSearchParams({ updated_at: `lt.${cutoffIso}`, select: 'room_code' });
+  const [flagKey, flagValue] = flagFilter.split('=') as [string, string];
+  params.set(flagKey, flagValue);
   if (liveRoomCodes.length > 0) {
     params.set('room_code', `not.in.(${liveRoomCodes.map((code) => `"${code}"`).join(',')})`);
   }
@@ -69,8 +79,15 @@ export async function runRoomRetention(nowMs = Date.now()): Promise<RoomRetentio
   } else {
     try {
       const cutoff = new Date(nowMs - ROOM_LIVE_SESSION_RETENTION_MS).toISOString();
-      const deleted = await supabaseFetch<DeletedRow[] | null>(liveSessionsPath(cutoff, liveRoomCodes), { method: 'DELETE' });
-      result.liveSessionsDeleted = deleted?.length ?? 0;
+      let total = 0;
+      for (const flagFilter of LIVE_SESSION_REAPABLE_FLAGS) {
+        const deleted = await supabaseFetch<DeletedRow[] | null>(
+          liveSessionsPath(cutoff, liveRoomCodes, flagFilter),
+          { method: 'DELETE' },
+        );
+        total += deleted?.length ?? 0;
+      }
+      result.liveSessionsDeleted = total;
     } catch (err) {
       log.warn({ err: err instanceof Error ? err.message : err }, 'live-session retention failed');
     }

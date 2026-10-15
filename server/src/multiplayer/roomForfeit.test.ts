@@ -674,3 +674,90 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     );
   });
 });
+
+describe('forfeit completion durability (terminal-completion R1)', () => {
+  const U1 = '11111111-1111-4111-8111-111111111111';
+  const U2 = '22222222-2222-4222-8222-222222222222';
+
+  beforeEach(() => {
+    resetLiveRoomPersistenceForTests();
+    resetRoomRuntimeForTests();
+    resetRatingCutoverGateForTests();
+    persistRoomMatchLogMock.mockClear();
+    vi.mocked(insertRankedGameIdempotent).mockClear();
+    vi.mocked(supabaseFetch).mockClear();
+    initRoomSession({} as any, {
+      resolveSocketIdentity: async () => ({ username: 'Player', userId: U1 }),
+      normalizeUsername: (value) => (typeof value === 'string' && value.trim() ? value.trim() : 'Guest'),
+      normalizeUserId: (value) => (typeof value === 'string' && value.trim() ? value.trim() : null),
+      tryHydrateMatchmakingRoomShell: async () => 'skipped',
+      waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+      onAfterMatchStarted: async () => undefined,
+      notifyRoomPlayersInGame: () => undefined,
+      persistRoomMatchLog: persistRoomMatchLogMock,
+      onGameOver: () => null,
+    });
+  });
+
+  afterEach(() => {
+    resetRatingCutoverGateForTests();
+    resetLiveRoomPersistenceForTests();
+  });
+
+  function seed(roomCode: string) {
+    createReservedRoom(roomCode);
+    joinRoom(roomCode, 'p1');
+    joinRoom(roomCode, 'p2');
+    setRoomRoster(roomCode, [
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: U1 },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: U2 },
+    ]);
+    const room = getRoom(roomCode);
+    room.state = {
+      config: { scoringMultiple: 5, winningScore: 60, deadTileCount: 2, maxPips: 6, tilesPerPlayer: 7 },
+      playerIds: ['p1', 'p2'],
+      players: { p1: { id: 'p1', hand: [], score: 3 }, p2: { id: 'p2', hand: [], score: 10 } },
+      boneyard: [], deadTiles: [], board: null, sequence: 1,
+    } as any;
+    return room;
+  }
+  const leaver = { id: 'p1', username: 'P1', userId: U1 };
+  const socket = { id: 'sock-p1', data: { userId: U1 } } as any;
+
+  it('makes the abandoned intent durable BEFORE any ranked row, carrying the reason a restart replay needs', async () => {
+    const room = seed('WAHEAD');
+    await applyActiveMatchForfeit(makeIo(), socket, 'WAHEAD', leaver, 'disconnect_timeout');
+    const snapshotCall = vi.mocked(supabaseFetch).mock.calls.findIndex(
+      ([path, init]) => String(path).includes('/room_live_sessions') && (init as RequestInit | undefined)?.method === 'POST',
+    );
+    expect(snapshotCall).toBeGreaterThanOrEqual(0);
+    const snapshotOrder = vi.mocked(supabaseFetch).mock.invocationCallOrder[snapshotCall]!;
+    expect(snapshotOrder).toBeLessThan(vi.mocked(insertRankedGameIdempotent).mock.invocationCallOrder[0]!);
+    const body = JSON.parse(String((vi.mocked(supabaseFetch).mock.calls[snapshotCall]![1] as RequestInit).body))[0];
+    expect(body.status).toBe('abandoned');
+    expect(body.room_shell).toMatchObject({
+      completionPending: true,
+      matchLogged: false,
+      abandonedReason: 'forfeit',
+      abandonedForfeitReason: 'disconnect_timeout',
+      abandonedByUserId: U1,
+    });
+    expect(room.abandonedForfeitReason).toBe('disconnect_timeout');
+  });
+
+  it('marks the completion logged only when the rated rows were written', async () => {
+    const room = seed('WLOGGED');
+    await applyActiveMatchForfeit(makeIo(), socket, 'WLOGGED', leaver, 'manual');
+    expect(room.matchLogged).toBe(true);
+  });
+
+  it('a failed rating write leaves the completion owed (not logged) while the abandon still completes', async () => {
+    const room = seed('WOWED');
+    vi.mocked(insertRankedGameIdempotent).mockRejectedValueOnce(new Error('db down'));
+    const result = await applyActiveMatchForfeit(makeIo(), socket, 'WOWED', leaver, 'manual');
+    expect(result).toEqual({ winnerUserId: U2 });
+    expect(room.matchLogged).toBe(false);
+    expect(room.abandonedAt).toBeTruthy();
+    expect(persistRoomMatchLogMock).toHaveBeenCalledWith(room, 'abandoned');
+  });
+});

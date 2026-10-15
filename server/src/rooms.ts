@@ -114,6 +114,12 @@ export type Room = {
   abandonedWinnerUserId?: string | null;
   abandonedReason?: 'forfeit' | 'abandon';
   /**
+   * Why a forfeit was latched (rating treatment depends on it). Set in the same
+   * synchronous step as `abandonedAt` so every snapshot that says abandoned also
+   * carries the treatment a restart-time replay needs.
+   */
+  abandonedForfeitReason?: 'manual' | 'disconnect_timeout' | 'missed_turns';
+  /**
    * Tournament forfeit → applyMatchResult durability (G2).
    * `abandonedAt` is latched only after apply succeeds. pending/failed block
    * gameplay without pretending the bracket advanced.
@@ -477,17 +483,14 @@ export function createRoom(hostPlayerSeatId: string, config: RoomConfig = {}): R
   return room;
 }
 
-export function createReservedRoom(code: string, config: Partial<Config> = {}): Room {
+/** A fully-formed empty room that is NOT registered in the room map and emits no events. */
+export function createDetachedRoom(code: string, config: Partial<Config> = {}): Room {
   const normalizedCode = code.trim().toUpperCase();
   if (!normalizedCode) {
     throw new Error('Room code is required.');
   }
-  if (rooms.has(normalizedCode)) {
-    return rooms.get(normalizedCode)!;
-  }
   const eventState = createRoomEventState();
-
-  const room: Room = {
+  return {
     code: normalizedCode,
     players: [],
     state: null,
@@ -511,6 +514,17 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
       eventSequence: eventState.eventSequence,
     }),
   };
+}
+
+export function createReservedRoom(code: string, config: Partial<Config> = {}): Room {
+  const normalizedCode = code.trim().toUpperCase();
+  if (!normalizedCode) {
+    throw new Error('Room code is required.');
+  }
+  if (rooms.has(normalizedCode)) {
+    return rooms.get(normalizedCode)!;
+  }
+  const room = createDetachedRoom(normalizedCode, config);
   appendRoomEvent(room, {
     type: 'room_created',
     payload: {

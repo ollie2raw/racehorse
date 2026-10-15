@@ -20,7 +20,7 @@ import { comparePregameDrawTiles } from './preGameDraw';
 import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 import { isAnyTournamentRoom } from './roomKind';
 import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
-import { MATCH_RESULT_STILL_SAVING_MESSAGE } from './gameOverPersistPolicy';
+import { MATCH_RESULT_RETRYING_MESSAGE, MATCH_RESULT_STILL_SAVING_MESSAGE } from './gameOverPersistPolicy';
 
 export type RegisterRematchPregameHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -96,7 +96,15 @@ export function registerRematchPregameHandlers(
           error: MATCH_RESULT_STILL_SAVING_MESSAGE,
         });
       }
-      // succeeded | failed: rematch allowed (failed = give-up ceiling, not forever-blocked).
+      // A give-up is not an excuse to destroy the replay source: the terminal row is keyed by
+      // room code and a rematch overwrites it, so the rematch waits for the durable replay
+      // (restart-time/periodic sweep) to log the result. succeeded: rematch allowed.
+      if (persistOutcome === 'failed' && !liveRoom.matchLogged) {
+        return cb?.({
+          ok: false,
+          error: MATCH_RESULT_RETRYING_MESSAGE,
+        });
+      }
 
       room.rematchReady.clear();
 
