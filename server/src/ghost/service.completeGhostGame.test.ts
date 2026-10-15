@@ -239,7 +239,7 @@ describe('completeGhostGame — Fritz branch ranked_games idempotency (RK-2, HAR
         // Non-legacy shape (ranked_games_played/peak_rating already set) so
         // periodService's normalizeLegacyStartingProfile doesn't fire an
         // extra PATCH this stub doesn't otherwise handle.
-        return jsonResponse([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200, ranked_games_played: 30, peak_rating: 1600, provisional: false }]);
+        return jsonResponse([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200, glicko_vol: 0.06, ranked_games_played: 30, peak_rating: 1600, provisional: false }]);
       }
       if (url.includes('/rest/v1/ranked_games') && method === 'POST') {
         rankedGamesCalls.push({ path: url, body: JSON.parse(String(init?.body)) });

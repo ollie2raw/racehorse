@@ -69,7 +69,7 @@ function installDatabase() {
     }
     if (url.includes('/rest/v1/ghost_games') && method === 'GET') return jsonResponse([]);
     if (url.includes('/rest/v1/profiles') && method === 'GET') {
-      return jsonResponse([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200, ranked_games_played: 30, peak_rating: 1600, provisional: false }]);
+      return jsonResponse([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200, glicko_vol: 0.06, ranked_games_played: 30, peak_rating: 1600, provisional: false }]);
     }
     if (url.includes('/rest/v1/ranked_games') && method === 'POST') {
       db.rankedCommitted += 1; // durable at this point

@@ -2,7 +2,7 @@ import { childLogger } from '../logger';
 
 import cron from 'node-cron';
 import { decayInactivePlayers, processAllPendingRatingGames } from './periodService';
-import { beginDecayRun } from './ratingCutoverGate';
+import { beginDecayRun, withRatingCompletion, isRatingCutoverQuiescedError } from './ratingCutoverGate';
 
 const log = childLogger('ranking:cron');
 
@@ -39,7 +39,7 @@ export const RANKING_CATCHUP_BOOT_DELAY_MS = 20_000;
  */
 async function runPendingRatingCatchUp(source: 'boot' | 'periodic' | 'weekly'): Promise<void> {
   try {
-    const pendingResult = await processAllPendingRatingGames();
+    const pendingResult = await withRatingCompletion('ranked catch-up', processAllPendingRatingGames);
     if (pendingResult.processed > 0 || pendingResult.errors.length > 0 || source === 'weekly') {
       log.info({ source, processed: pendingResult.processed }, 'processed missed ranked game updates');
     }
@@ -47,6 +47,10 @@ async function runPendingRatingCatchUp(source: 'boot' | 'periodic' | 'weekly'): 
       log.error({ source, errors: pendingResult.errors.slice(0, 5), count: pendingResult.errors.length }, 'rating processing errors');
     }
   } catch (err) {
+    if (isRatingCutoverQuiescedError(err)) {
+      log.info({ source }, 'pending-rating catch-up skipped while quiesced');
+      return;
+    }
     log.error({ source, err }, 'pending-rating catch-up sweep failed');
   }
 }

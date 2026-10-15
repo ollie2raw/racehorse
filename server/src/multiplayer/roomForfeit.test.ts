@@ -26,7 +26,7 @@ vi.mock('../ranking/periodService', () => ({
 vi.mock('../ranking/insertRankedGameIdempotent', () => ({
   insertRankedGameIdempotent: vi.fn(async (input) => ({
     isNew: true,
-    game: { id: 'game-123', ...buildRankedGameInsertPayload(input) },
+    game: { id: 'game-123', ...buildRankedGameInsertPayload({ ...input, playerState: { rating: input.ratingBefore, rd: input.rdBefore, vol: 0.06, gamesPlayed: 30, peakRating: 1600 } }) },
   })),
 }));
 

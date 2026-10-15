@@ -6,7 +6,7 @@ import { holdPostgresRowLock, waitForBlockedPostgresCalls } from '../../test/sup
 
 const execFileAsync = promisify(execFile);
 const url = process.env.RACEHORSE_REMEDIATION_TEST_DATABASE_URL;
-const allowed = Boolean(url && /^postgres(?:ql)?:\/\/[^/]*127\.0\.0\.1:55432\/racehorse_remediation$/.test(url));
+const allowed = Boolean(url && /^postgres(?:ql)?:\/\/[^/]*127\.0\.0\.1:(?:55432|55439)\/racehorse_remediation$/.test(url));
 const psqlBin = process.env.PSQL_BIN || 'psql';
 
 function sql(query: string): string {

@@ -381,6 +381,7 @@ async function persistRatedGameOverOnce(io: Server, input: GameOverPersistInput)
             opponentScore: p.oppScore,
             gameType: 'multiplayer',
             ratingTreatment: 'standard',
+            completionCause: 'completed',
             opponentRating: rankingProfiles.get(opponentId)?.glicko_rating ?? NaN,
             opponentRd: rankingProfiles.get(opponentId)?.glicko_rd ?? NaN,
             ratingBefore: profile.glicko_rating ?? 0,

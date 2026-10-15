@@ -8,7 +8,7 @@ import { readRankedRatingContext, rankedRatingWeight } from './ratingContext';
 
 const log = childLogger('ranking:catch-up');
 export const RANKING_CATCHUP_SCAN_LIMIT = 100;
-const RANKED_GAME_COLUMNS = 'id,player_id,opponent_id,player_score,opponent_score,played_at,rating_after,delta,outcome,rating_context';
+const RANKED_GAME_COLUMNS = 'id,player_id,opponent_id,player_score,opponent_score,played_at,rating_after,delta,outcome,rating_context,source_match_id';
 let catchUpCursor: { playedAt: string; id: string } | undefined;
 let catchUpRunning = false;
 const failedGames = new Map<string, { attempts: number; retryAt: number }>();
@@ -65,6 +65,7 @@ interface RankedGame {
    */
   outcome?: MatchOutcome | null;
   rating_context?: unknown;
+  source_match_id?: string | null;
 }
 
 interface ProcessRatingPeriodOptions {
@@ -157,13 +158,14 @@ async function commitProcessedGame(
   if (context && game.outcome !== context.outcome) throw new Error('Ranked rating outcome/context mismatch');
   const authoritativeOpponent = context?.opponent ?? opponent;
   let currentProfile = profile;
+  const player = context?.player;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const result = computeGlicko2(
       {
-        rating: currentProfile.glicko_rating,
-        rd: currentProfile.glicko_rd,
-        vol: currentProfile.glicko_vol,
-        gamesPlayed: currentProfile.ranked_games_played,
+        rating: player?.rating ?? currentProfile.glicko_rating,
+        rd: player?.rd ?? currentProfile.glicko_rd,
+        vol: player?.vol ?? currentProfile.glicko_vol,
+        gamesPlayed: player?.gamesPlayed ?? currentProfile.ranked_games_played,
       },
       [
         {
@@ -177,10 +179,12 @@ async function commitProcessedGame(
       ],
     );
 
-    const newGamesPlayed = currentProfile.ranked_games_played + 1;
-    const delta = (result.newRating - currentProfile.glicko_rating) * rankedRatingWeight(context);
-    const adjustedNewRating = currentProfile.glicko_rating + delta;
-    const newPeakRating = Math.max(currentProfile.peak_rating || 0, adjustedNewRating);
+    const before = player ?? { rating: currentProfile.glicko_rating, rd: currentProfile.glicko_rd, vol: currentProfile.glicko_vol, gamesPlayed: currentProfile.ranked_games_played, peakRating: currentProfile.peak_rating };
+    if (![result.newRating, result.newRD, result.newVol].every(Number.isFinite)) throw new Error('Non-finite ranked rating result');
+    const newGamesPlayed = before.gamesPlayed + 1;
+    const delta = (result.newRating - before.rating) * rankedRatingWeight(context);
+    const adjustedNewRating = before.rating + delta;
+    const newPeakRating = Math.max(before.peakRating || 0, adjustedNewRating);
 
     try {
       await supabaseFetch('/rest/v1/rpc/commit_glicko_game_update', {
@@ -197,9 +201,9 @@ async function commitProcessedGame(
           p_ranked_games_played: newGamesPlayed,
           p_game_id: game.id,
           p_delta: delta,
-          p_rating_before: currentProfile.glicko_rating,
-          p_rd_before: currentProfile.glicko_rd,
-          p_vol_before: currentProfile.glicko_vol,
+          p_rating_before: before.rating,
+          p_rd_before: before.rd,
+          p_vol_before: before.vol,
         }),
       });
     } catch (error) {
@@ -208,7 +212,7 @@ async function commitProcessedGame(
         const fresh = await getProfile(currentProfile.id);
         return { profile: fresh, newRating: fresh.glicko_rating, newRD: fresh.glicko_rd, delta: 0, applied: false };
       }
-      if (!message.includes('ranked_state_conflict') || attempt === 4) throw error;
+      if (context || !message.includes('ranked_state_conflict') || attempt === 4) throw error;
       currentProfile = await getProfile(currentProfile.id);
       continue;
     }
@@ -375,6 +379,40 @@ export async function processRealtimeMultiplayerGame(params: {
     playerA: playerAResult,
     playerB: playerBResult,
   };
+}
+
+/** Drain predecessors before taking the immutable owner snapshot. The insert
+ * trigger rechecks under the profile lock, closing the concurrent-insert race. */
+export async function prepareRankedGameProfile(userId: string, excludeSourceMatchId?: string): Promise<Profile> {
+  const games = await getPendingGames(userId); // missing expansion fails before normalization writes
+  const profile = await getProfile(userId);
+  if (!games.length) return profile;
+  const sameMatch = excludeSourceMatchId && games.find((game) => game.source_match_id === excludeSourceMatchId);
+  if (sameMatch) {
+    const context = readRankedRatingContext(sameMatch.rating_context);
+    return context ? { ...profile, glicko_rating: context.player.rating, glicko_rd: context.player.rd,
+      glicko_vol: context.player.vol, ranked_games_played: context.player.gamesPlayed, peak_rating: context.player.peakRating } : profile;
+  }
+  await processRatingPeriod(userId, { profile, games });
+  return getProfile(userId);
+}
+export async function readRankedOpponentSnapshot(opponentId: string, sourceMatchId?: string): Promise<OpponentSnapshot> {
+  if (isFritzId(opponentId)) return getOpponentSnapshot(opponentId);
+  // The other seat of this same match may already be inserted/applied. Its
+  // immutable pre-game owner state is the shared opponent input, not its result.
+  const sameMatchSnapshot = async () => {
+    if (!sourceMatchId?.trim()) return null;
+    const [sameMatch] = await supabaseFetch<RankedGame[]>(`/rest/v1/ranked_games?select=${RANKED_GAME_COLUMNS}&player_id=eq.${encodeURIComponent(opponentId)}&source_match_id=eq.${encodeURIComponent(sourceMatchId.trim())}&limit=1`);
+    return sameMatch && readRankedRatingContext(sameMatch.rating_context);
+  };
+  let context = await sameMatchSnapshot();
+  if (context) return { rating: context.player.rating, rd: context.player.rd };
+  const profile = await prepareRankedGameProfile(opponentId, sourceMatchId?.trim());
+  // Close the race where the other seat was inserted/applied between the
+  // first lookup and the profile read. Never sample this match's own result.
+  context = await sameMatchSnapshot();
+  return context ? { rating: context.player.rating, rd: context.player.rd }
+    : { rating: profile.glicko_rating, rd: profile.glicko_rd };
 }
 
 export async function processAllPendingRatingGames() {

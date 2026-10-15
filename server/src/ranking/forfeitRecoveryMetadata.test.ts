@@ -14,7 +14,8 @@ function install(treatment: 'standard' | 'disconnect_forfeit', forfeit = true) {
   const rows = ['u1', 'u2'].map((id, index) => ({
     ...buildRankedGameInsertPayload({ playerId: id, opponentId: index === 0 ? 'u2' : 'u1',
       playerScore: index === 0 ? 40 : 20, opponentScore: index === 0 ? 20 : 40, gameType: 'multiplayer',
-      ratingTreatment: treatment, opponentRating: profile(index === 0 ? 'u2' : 'u1').glicko_rating, opponentRd: 200,
+      ratingTreatment: treatment, completionCause: treatment === 'disconnect_forfeit' ? 'disconnect_timeout' : forfeit ? 'manual_forfeit' : 'completed',
+      playerState: { rating: profile(id).glicko_rating, rd: 200, vol: 0.06, gamesPlayed: 30, peakRating: 1600 }, opponentRating: profile(index === 0 ? 'u2' : 'u1').glicko_rating, opponentRd: 200,
       ratingBefore: profile(id).glicko_rating, rdBefore: 200, playedAt: '2026-10-01T00:00:00.000Z',
       ...(forfeit ? { outcome: index === 0 ? 'loss' as const : 'win' as const } : {}),
     }), id: `g${index}`, rating_after: null as number | null, delta: null as number | null,

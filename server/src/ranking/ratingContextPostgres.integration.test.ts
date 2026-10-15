@@ -15,12 +15,13 @@ vi.mock('../config', async () => {
   const encoded = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const message = `${encoded({ alg: 'HS256', typ: 'JWT' })}.${encoded({ role: 'service_role', exp: Math.floor(Date.now() / 1000) + 3600 })}`;
   const key = `${message}.${createHmac('sha256', 'racehorse-forfeit-r1-local-validation-only-secret').update(message).digest('base64url')}`;
-  return { config: { isProd: false, nodeEnv: 'test', supabaseUrl: 'http://127.0.0.1:55440', supabaseServiceKey: key } };
+  return { config: { isProd: false, nodeEnv: 'test', supabaseUrl: process.env.SUPABASE_URL === 'http://127.0.0.1:55445' ? 'http://127.0.0.1:55445' : 'http://127.0.0.1:55440', supabaseServiceKey: key } };
 });
 
 const dbUrl = process.env.FORFEIT_R1_TEST_DATABASE_URL;
-const enabled = dbUrl === 'postgresql://postgres@127.0.0.1:55439/racehorse_forfeit_r1'
-  && process.env.SUPABASE_URL === 'http://127.0.0.1:55440';
+const localRestUrl = process.env.SUPABASE_URL;
+const enabled = (dbUrl === 'postgresql://postgres@127.0.0.1:55439/racehorse_final_r1' && localRestUrl === 'http://127.0.0.1:55440')
+  || (dbUrl === 'postgresql://postgres@127.0.0.1:55439/racehorse_runtime_upgrade' && localRestUrl === 'http://127.0.0.1:55445');
 const psql = process.env.PSQL_BIN || '/opt/homebrew/opt/postgresql@16/bin/psql';
 function sql(query: string): string {
   assertNotProductionSupabase('forfeit R1 local PostgreSQL');
@@ -30,16 +31,17 @@ function sql(query: string): string {
 const cohort: string[] = [];
 const owner = (id: string, rating: number): Profile => ({ id, username: id, glicko_rating: rating,
   glicko_rd: 200, glicko_vol: 0.06, glicko_last_period: null, ranked_games_played: 30, peak_rating: 1600, provisional: false });
-async function seed(treatment: 'standard' | 'disconnect_forfeit', forfeit = true) {
+async function seed(treatment: 'standard' | 'disconnect_forfeit', forfeit = true, zero: readonly boolean[] = [false, false], seats = 2) {
   const ids = [randomUUID(), randomUUID()]; cohort.push(...ids);
   sql(`insert into auth.users values ('${ids[0]}'),('${ids[1]}');
-    insert into profiles(id,username,glicko_rating) values ('${ids[0]}','A',1500),('${ids[1]}','B',1600);`);
-  const profiles = [owner(ids[0]!, 1500), owner(ids[1]!, 1600)];
+    insert into profiles(id,username,glicko_rating,glicko_rd,glicko_vol,ranked_games_played,peak_rating) values ('${ids[0]}','ctx${ids[0]!.replaceAll('-', '').slice(0, 12)}',1500,200,0.06,${zero[0] ? 0 : 30},${zero[0] ? 1500 : 1600}),('${ids[1]}','ctx${ids[1]!.replaceAll('-', '').slice(0, 12)}',${zero[1] ? 1500 : 1600},200,0.06,${zero[1] ? 0 : 30},${zero[1] ? 1500 : 1600}) on conflict(id) do update set username=excluded.username,glicko_rating=excluded.glicko_rating,glicko_rd=excluded.glicko_rd,glicko_vol=excluded.glicko_vol,ranked_games_played=excluded.ranked_games_played,peak_rating=excluded.peak_rating;`);
+  const profiles = [owner(ids[0]!, 1500), owner(ids[1]!, zero[1] ? 1500 : 1600)].map((p, i) => zero[i] ? { ...p, ranked_games_played: 0, peak_rating: 1500 } : p);
   const source = randomUUID();
-  const results = await Promise.all(ids.map((id, i) => insertRankedGameIdempotent({
+  const results = await Promise.all(ids.slice(0, seats).map((id, i) => insertRankedGameIdempotent({
     playerId: id, opponentId: ids[1 - i]!, playerScore: i === 0 ? 40 : 20, opponentScore: i === 0 ? 20 : 40,
     gameType: 'multiplayer', ratingBefore: profiles[i]!.glicko_rating, rdBefore: 200,
     playedAt: new Date().toISOString(), ratingTreatment: treatment,
+    completionCause: treatment === 'disconnect_forfeit' ? 'disconnect_timeout' : forfeit ? 'manual_forfeit' : 'completed',
     opponentRating: profiles[1 - i]!.glicko_rating, opponentRd: 200,
     ...(forfeit ? { outcome: i === 0 ? 'loss' as const : 'win' as const } : {}),
     source: { sourceType: 'live_room', sourceMatchId: source },
@@ -67,7 +69,7 @@ describe.skipIf(!enabled)('ranked context real Postgres/PostgREST crash matrix',
     // gateway. Adapt only that prefix, retaining real network/SQL behavior.
     vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
-      if (url.origin !== 'http://127.0.0.1:55440') throw new Error('Refusing nonlocal PostgREST request');
+      if (url.origin !== localRestUrl) throw new Error('Refusing nonlocal PostgREST request');
       url.pathname = url.pathname.replace(/^\/rest\/v1/, '');
       return nativeFetch(url, init);
     });
@@ -101,6 +103,74 @@ describe.skipIf(!enabled)('ranked context real Postgres/PostgREST crash matrix',
     expect(crashed.receipts()).toBe(2);
     expect((await processAllPendingRatingGames()).processed).toBe(0);
     expect(crashed.receipts()).toBe(2);
+  });
+
+  const matrix = ([['zero/zero', [true, true]], ['zero/established', [true, false]], ['established/zero', [false, true]]] as const)
+    .flatMap(([label, zero]) => ([['normal', 'standard', false], ['manual', 'standard', true], ['disconnect', 'disconnect_forfeit', true]] as const)
+      .map(([mode, treatment, forfeit]) => ({ name: `${label} ${mode}`, zero, treatment, forfeit })));
+  it.each(matrix)('$name: exact parity through insert interruption, partial commit, lost reply and overlap', async ({ zero, treatment, forfeit }) => {
+    const baseline = await seed(treatment, forfeit, zero); await baseline.inline(); const expected = baseline.snapshot();
+    baseline.rows.forEach((row, i) => expect((row.rating_context as { player: { rating: number } }).player.rating).toBe(zero[i] ? 800 : i === 0 ? 1500 : 1600));
+    const before = await seed(treatment, forfeit, zero);
+    expect((await processAllPendingRatingGames()).processed).toBe(2); expect(before.snapshot()).toEqual(expected);
+    const partial = await seed(treatment, forfeit, zero); const actual = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).includes('/rpc/commit_glicko_game_update') && JSON.parse(String(init?.body)).p_profile_id === partial.ids[1]) throw Error('matrix interruption');
+      return actual(input, init);
+    });
+    await expect(partial.inline()).rejects.toThrow('matrix interruption');
+    await vi.waitFor(() => expect(partial.receipts()).toBe(1)); vi.restoreAllMocks(); resetRatingCatchUpForTests();
+    expect((await processAllPendingRatingGames()).processed).toBe(1); expect(partial.snapshot()).toEqual(expected);
+    const lost = await seed(treatment, forfeit, zero); const transport = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const response = await transport(input, init);
+      if (String(input).includes('/rpc/commit_glicko_game_update') && JSON.parse(String(init?.body)).p_profile_id === lost.ids[0]) { await response.text(); throw Error('matrix lost reply'); }
+      return response;
+    });
+    await expect(lost.inline()).rejects.toThrow('matrix lost reply'); await vi.waitFor(() => expect(lost.receipts()).toBe(2));
+    vi.restoreAllMocks(); resetRatingCatchUpForTests(); await processAllPendingRatingGames(); expect(lost.snapshot()).toEqual(expected);
+    const race = await seed(treatment, forfeit, zero);
+    await Promise.all([race.inline(), processAllPendingRatingGames()]); expect(race.snapshot()).toEqual(expected); expect(race.receipts()).toBe(2);
+    expect((await processAllPendingRatingGames()).processed).toBe(0); expect(race.receipts()).toBe(2);
+  });
+
+  it('crash between participant inserts preserves the other seat pre-game input after first seat applies', async () => {
+    const baseline = await seed('disconnect_forfeit', true, [true, true]); await baseline.inline(); const expected = baseline.snapshot();
+    const partial = await seed('disconnect_forfeit', true, [true, true], 1);
+    expect((await processAllPendingRatingGames()).processed).toBe(1);
+    const second = await insertRankedGameIdempotent({ playerId: partial.ids[1]!, opponentId: partial.ids[0]!,
+      playerScore: 20, opponentScore: 40, gameType: 'multiplayer', ratingBefore: 1500, rdBefore: 200,
+      playedAt: new Date().toISOString(), ratingTreatment: 'disconnect_forfeit', completionCause: 'disconnect_timeout',
+      opponentRating: 1500, opponentRd: 200, outcome: 'win', source: { sourceType: 'live_room', sourceMatchId: partial.source } });
+    expect(second.isNew).toBe(true); if (!second.isNew) throw Error('not inserted');
+    expect((second.game.rating_context as { opponent: { rating: number } }).opponent.rating).toBe(800);
+    expect((await processAllPendingRatingGames()).processed).toBe(1); expect(partial.snapshot()).toEqual(expected);
+  });
+
+  it('successor insertion drains its predecessor and concurrent catch-up cannot bypass ordering', async () => {
+    const db = await seed('disconnect_forfeit', true, [true, true]);
+    const predecessor = db.rows[0]!;
+    const successor = await Promise.all([insertRankedGameIdempotent({ playerId: db.ids[0]!, opponentId: db.ids[1]!,
+      playerScore: 60, opponentScore: 10, gameType: 'multiplayer', ratingBefore: 0, rdBefore: 200,
+      playedAt: new Date().toISOString(), ratingTreatment: 'standard', completionCause: 'completed', opponentRating: 0, opponentRd: 200,
+      source: { sourceType: 'live_room', sourceMatchId: randomUUID() } }), processAllPendingRatingGames()]);
+    const result = successor[0]; expect(result.isNew).toBe(true); if (!result.isNew) throw Error('not inserted');
+    const before = result.game.rating_context as { player: { rating: number; gamesPlayed: number }; opponent: { rating: number } };
+    expect(before.player.gamesPlayed).toBe(1);
+    expect(before.player.rating).toBe(Number(sql(`select rating_after from ranked_games where id='${predecessor.id}'`)));
+    expect(before.opponent.rating).toBe(Number(sql(`select rating_after from ranked_games where id='${db.rows[1]!.id}'`)));
+    expect((await processAllPendingRatingGames()).processed).toBe(1);
+    expect(db.receipts()).toBe(3); expect((await processAllPendingRatingGames()).processed).toBe(0);
+  });
+
+  it('DB rejects a successor admitted without draining and fences stale decay against pending context', async () => {
+    const db = await seed('disconnect_forfeit'); const row = db.rows[0]!;
+    await expect(supabaseFetch('/rest/v1/ranked_games', { method: 'POST', body: JSON.stringify({ ...row, id: randomUUID(), source_match_id: randomUUID() }) })).rejects.toThrow('ranked_predecessor_pending');
+    await expect(supabaseFetch('/rest/v1/rpc/commit_glicko_decay_update', { method: 'POST', body: JSON.stringify({
+      p_profile_id: db.ids[0], p_new_rd: 201, p_processed_at: new Date().toISOString(), p_rating_before: 1500,
+      p_rd_before: 200, p_vol_before: 0.06, p_games_before: 30,
+    }) })).rejects.toThrow('ranked_state_conflict');
+    expect(db.receipts()).toBe(0); expect(sql(`select glicko_rd from profiles where id='${db.ids[0]}'`)).toBe('200');
   });
 
   it('one committed side + process restart recovers the other with the original opponent inputs', async () => {
@@ -138,7 +208,7 @@ describe.skipIf(!enabled)('ranked context real Postgres/PostgREST crash matrix',
   it('receipt failure rolls back the profile and game writes in the actual transaction', async () => {
     const db = await seed('disconnect_forfeit');
     // Force the final statement to fail after UPDATE profiles and UPDATE game.
-    sql(`insert into rating_periods(user_id,ranked_game_id) values ('${db.ids[0]}','${db.rows[0]!.id}')`);
+    sql(`insert into rating_periods(user_id,ranked_game_id,rating_before,rating_after,rd_before,rd_after) values ('${db.ids[0]}','${db.rows[0]!.id}',1500,1500,200,200)`);
     await expect(rawCommit(db.profiles[0]!, db.rows[0]!)).rejects.toThrow('duplicate key');
     expect(sql(`select glicko_rating || ',' || ranked_games_played from profiles where id='${db.ids[0]}'`)).toBe('1500,30');
     expect(sql(`select count(*) from ranked_games where id='${db.rows[0]!.id}' and rating_after is null and delta is null`)).toBe('1');
@@ -180,7 +250,14 @@ describe.skipIf(!enabled)('ranked context real Postgres/PostgREST crash matrix',
     for (const invalid of [{}, { version: 2 }, 'disconnect_forfeit',
       { ...(row.rating_context as object), treatment: 'unknown' },
       { ...(row.rating_context as object), opponent: { rating: '1500', rd: 200 } },
-      { ...(row.rating_context as object), opponent: { rating: 1500, rd: 0 } }]) {
+      { ...(row.rating_context as object), opponent: { rating: 1500, rd: 0 } },
+      { ...(row.rating_context as object), cause: 'completed' },
+      ...[undefined, null, { rating: 1500, rd: 200, gamesPlayed: 30, peakRating: 1600 },
+        ...[NaN, Infinity, -10001, 10001].map((rating) => ({ rating, rd: 200, vol: 0.06, gamesPlayed: 30, peakRating: 1600 })),
+        { rating: 1500, rd: 200, vol: 0, gamesPlayed: 30, peakRating: 1600 },
+        { rating: 1500, rd: 200, vol: 0.06, gamesPlayed: -1, peakRating: 1600 },
+        { rating: 1500, rd: 200, vol: 0.06, gamesPlayed: 1.5, peakRating: 1600 }]
+        .map((player) => ({ ...(row.rating_context as object), player }))]) {
       await expect(supabaseFetch('/rest/v1/ranked_games', { method: 'POST', body: JSON.stringify({
         player_id: db.ids[0], opponent_id: db.ids[1], player_score: 40, opponent_score: 20,
         game_type: 'multiplayer', rating_before: 1500, rd_before: 200, outcome: 'loss', rating_context: invalid,
@@ -195,7 +272,7 @@ describe.skipIf(!enabled)('ranked context real Postgres/PostgREST crash matrix',
     const db = await seed('disconnect_forfeit');
     const duplicate = await insertRankedGameIdempotent({ playerId: db.ids[0]!, opponentId: db.ids[1]!,
       playerScore: 40, opponentScore: 20, gameType: 'multiplayer', ratingBefore: 1500, rdBefore: 200,
-      playedAt: new Date().toISOString(), ratingTreatment: 'standard', opponentRating: 1600, opponentRd: 200,
+      playedAt: new Date().toISOString(), ratingTreatment: 'standard', completionCause: 'manual_forfeit', opponentRating: 1600, opponentRd: 200,
       outcome: 'loss', source: { sourceType: 'live_room', sourceMatchId: db.source } });
     expect(duplicate.isNew).toBe(false);
     expect(sql(`select rating_context->>'treatment' from ranked_games where id='${db.rows[0]!.id}'`)).toBe('disconnect_forfeit');

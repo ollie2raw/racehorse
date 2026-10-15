@@ -1,5 +1,5 @@
 import type { MatchOutcome } from './glicko2';
-import { readRankedRatingContext, type RankedRatingContext, type RankedRatingTreatment } from './ratingContext';
+import { readRankedRatingContext, type RankedRatingContext, type RankedPlayerSnapshot, type RankedCompletionCause, type RankedRatingTreatment } from './ratingContext';
 
 export type RankedGameSourceType =
   | 'live_room'
@@ -25,6 +25,8 @@ export interface RankedGameInsertInput {
   source?: RankedGameSource | null;
   /** Persisted before rating processing; no transient override is accepted. */
   ratingTreatment: RankedRatingTreatment;
+  completionCause: RankedCompletionCause;
+  playerState: RankedPlayerSnapshot;
   opponentRating: number;
   opponentRd: number;
   outcome?: MatchOutcome | null;
@@ -48,7 +50,7 @@ export interface RankedGameInsertPayload {
 
 export function buildRankedGameInsertPayload(input: RankedGameInsertInput): RankedGameInsertPayload {
   const outcome = input.outcome ?? (input.playerScore > input.opponentScore ? 'win' : input.playerScore < input.opponentScore ? 'loss' : 'draw');
-  const context = readRankedRatingContext({ version: 1, treatment: input.ratingTreatment, outcome,
+  const context = readRankedRatingContext({ version: 1, treatment: input.ratingTreatment, cause: input.completionCause, outcome, player: input.playerState,
     opponent: { rating: input.opponentRating, rd: input.opponentRd } })!;
   const payload: RankedGameInsertPayload = {
     rating_context: context,

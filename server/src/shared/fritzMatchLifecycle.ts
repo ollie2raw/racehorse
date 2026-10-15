@@ -237,6 +237,7 @@ export async function recordPendingFritzDisconnectLoss(
     opponentScore: verifiedScores.botScore,
     gameType,
     ratingTreatment: 'standard',
+            completionCause: 'completed',
     opponentRating: getFritzConfig(fritzId).rating,
     opponentRd: getFritzConfig(fritzId).rd,
     ratingBefore: profile.glicko_rating ?? 0,

@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
 const rootUrl = process.env.RACEHORSE_REMEDIATION_TEST_DATABASE_URL;
-const allowed = Boolean(rootUrl && /^postgres(?:ql)?:\/\/[^/]*127\.0\.0\.1:55432\/racehorse_remediation$/.test(rootUrl));
+const allowed = Boolean(rootUrl && /^postgres(?:ql)?:\/\/[^/]*127\.0\.0\.1:(?:55432|55439)\/racehorse_remediation$/.test(rootUrl));
 const psqlBin = process.env.PSQL_BIN || 'psql';
 const dbName = `racehorse_rollout_${process.pid}_${Date.now()}`;
 const databaseUrl = rootUrl?.replace(/\/racehorse_remediation$/, `/${dbName}`) ?? '';

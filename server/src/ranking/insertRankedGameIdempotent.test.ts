@@ -6,6 +6,11 @@ vi.mock('../supabaseUtils', () => ({
   supabaseFetch: vi.fn(),
 }));
 
+vi.mock('./periodService', () => ({
+  prepareRankedGameProfile: vi.fn(async () => ({ glicko_rating: 812.5, glicko_rd: 180.25, glicko_vol: 0.06, ranked_games_played: 30, peak_rating: 1600 })),
+  readRankedOpponentSnapshot: vi.fn(async () => ({ rating: 1500, rd: 200 })),
+}));
+
 const mockedSupabaseFetch = vi.mocked(supabaseFetch);
 
 const baseInput = {
@@ -14,7 +19,7 @@ const baseInput = {
   playerScore: 61,
   opponentScore: 42,
   gameType: 'multiplayer',
-  ratingTreatment: 'standard' as const, opponentRating: 1500, opponentRd: 200,
+  ratingTreatment: 'standard' as const, completionCause: 'completed' as const, opponentRating: 1500, opponentRd: 200,
   ratingBefore: 812.5,
   rdBefore: 180.25,
   playedAt: '2026-06-02T00:00:00.000Z',
@@ -26,7 +31,7 @@ const baseInput = {
 
 const insertedRow = {
   id: 'game-row-1',
-  outcome: 'win', rating_context: { version: 1, treatment: 'standard', outcome: 'win', opponent: { rating: 1500, rd: 200 } },
+  outcome: 'win', rating_context: { version: 1, treatment: 'standard', cause: 'completed', player: { rating: 812.5, rd: 180.25, vol: 0.06, gamesPlayed: 30, peakRating: 1600 }, outcome: 'win', opponent: { rating: 1500, rd: 200 } },
   player_id: baseInput.playerId,
   opponent_id: baseInput.opponentId,
   player_score: 61,

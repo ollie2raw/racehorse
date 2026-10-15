@@ -1082,6 +1082,7 @@ export async function completeGhostGame(params: {
         opponentScore: Math.round(params.opponentScore),
         gameType: 'fritz',
         ratingTreatment: 'standard',
+            completionCause: 'completed',
         opponentRating: getFritzConfig(fritzId).rating,
         opponentRd: getFritzConfig(fritzId).rd,
         playedAt: now,

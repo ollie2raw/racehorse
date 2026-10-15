@@ -17,6 +17,8 @@ vi.mock('../supabaseUtils', () => ({
 }));
 
 vi.mock('../ranking/periodService', () => ({
+  prepareRankedGameProfile: async () => ({ glicko_rating: 1500, glicko_rd: 200, glicko_vol: 0.06, ranked_games_played: 30, peak_rating: 1600 }),
+  readRankedOpponentSnapshot: async () => ({ rating: 1700, rd: 50 }),
   processRatingPeriod: (...args: unknown[]) => processRatingPeriodMock(...args),
 }));
 

@@ -70,6 +70,16 @@ describe('pending ranking catch-up request budgets', () => {
     expect(fetchMock.mock.calls.filter(([p]) => p.startsWith('/rest/v1/ranked_games'))).toHaveLength(1);
   });
 
+  it('100 new-context human games cost 201 calls with no mutable opponent reads', async () => {
+    const rows = Array.from({ length: 100 }, (_, i) => ({ ...game(i, `u-${i}`), opponent_id: `opponent-${i}`, outcome: 'win' as const,
+      rating_context: { version: 1, cause: 'completed', treatment: 'standard', outcome: 'win',
+        player: { rating: 1000, rd: 200, vol: 0.06, gamesPlayed: 30, peakRating: 1100 }, opponent: { rating: 1500, rd: 200 } } }));
+    database(rows);
+    expect(await processAllPendingRatingGames()).toMatchObject({ processed: 100, failed: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(201);
+    expect(fetchMock.mock.calls.filter(([path]) => path.includes('id=eq.opponent-'))).toHaveLength(0);
+  });
+
   it('100 no-op poison games cost three reads, back off, and cannot starve a later game', async () => {
     const rows = [...Array.from({ length: 100 }, (_, i) => ({ ...game(i), opponent_id: 'deleted-opponent' })), game(100)];
     const before = structuredClone(rows.slice(0, 100));

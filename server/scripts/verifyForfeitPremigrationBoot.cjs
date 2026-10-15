@@ -11,10 +11,14 @@ const encoded = (value) => Buffer.from(JSON.stringify(value)).toString('base64ur
 const message = `${encoded({ alg: 'HS256', typ: 'JWT' })}.${encoded({ role: 'service_role', exp: Math.floor(Date.now() / 1000) + 3600 })}`;
 const key = `${message}.${createHmac('sha256', 'racehorse-forfeit-r1-local-validation-only-secret').update(message).digest('base64url')}`;
 const psql = process.env.PSQL_BIN || '/opt/homebrew/opt/postgresql@16/bin/psql';
-const dbUrl = 'postgresql://postgres@127.0.0.1:55439/racehorse_forfeit_r1_premigration';
+const databaseName = process.env.FORFEIT_R1_PREMIGRATION_DATABASE_NAME || 'racehorse_forfeit_r1_premigration';
+assert.ok(['racehorse_forfeit_r1_premigration', 'racehorse_runtime_prectx'].includes(databaseName));
+const dbUrl = 'postgresql://postgres@127.0.0.1:55439/' + databaseName;
 const sql = (query) => execFileSync(psql, ['-X', '-v', 'ON_ERROR_STOP=1', '-At', dbUrl, '-c', query], { encoding: 'utf8', timeout: 10000 }).trim();
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function main() {
+  const beforeGames = sql('select count(*) from ranked_games where rating_after is not null');
+  const beforePeriods = sql('select count(*) from rating_periods');
   assert.equal(sql("select count(*) from information_schema.columns where table_schema='public' and table_name='ranked_games' and column_name='rating_context'"), '0');
   // Reproduce only the local Supabase gateway's /rest/v1 prefix rewrite.
   const gateway = http.createServer((req, res) => {
@@ -45,9 +49,18 @@ async function main() {
     await wait(21000); // observe the real boot catch-up, not just listen()
     assert.equal(child.exitCode, null, output);
     assert.match(output, /rating_context.*does not exist|column.*rating_context/);
-    assert.equal(sql('select count(*) from ranked_games where rating_after is not null'), '0');
-    assert.equal(sql('select count(*) from rating_periods'), '0');
-    console.log(JSON.stringify({ premigrationBoot: 'PASS', httpHealth: 200, bootCatchUp: 'failed closed: missing rating_context', ratingWrites: 0 }));
+    process.env.SUPABASE_URL = 'http://127.0.0.1:55443';
+    process.env.SUPABASE_SERVICE_KEY = key;
+    const { insertRankedGameIdempotent } = require('../dist/ranking/insertRankedGameIdempotent');
+    await assert.rejects(() => insertRankedGameIdempotent({
+      playerId: '11111111-1111-4111-8111-111111111111', opponentId: '00000000-0000-0000-0000-000000000001',
+      playerScore: 40, opponentScore: 20, gameType: 'multiplayer', ratingBefore: 1500, rdBefore: 200,
+      playedAt: new Date().toISOString(), ratingTreatment: 'disconnect_forfeit', completionCause: 'disconnect_timeout',
+      opponentRating: 1700, opponentRd: 50, outcome: 'loss', source: { sourceType: 'live_room', sourceMatchId: 'premigration-fail-closed' },
+    }), /rating_context/);
+    assert.equal(sql('select count(*) from ranked_games where rating_after is not null'), beforeGames);
+    assert.equal(sql('select count(*) from rating_periods'), beforePeriods);
+    console.log(JSON.stringify({ premigrationBoot: 'PASS', httpHealth: 200, bootCatchUp: 'failed closed: missing rating_context', ratingWrites: 0, disconnectInsert: 'failed closed' }));
   } finally {
     const exited = new Promise((resolve) => child.once('exit', resolve));
     child.kill('SIGTERM');
