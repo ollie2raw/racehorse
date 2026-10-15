@@ -1,3 +1,5 @@
+> Historical proposal, superseded by the implemented [disconnect-forfeit rating recovery remediation](disconnect-forfeit-rating-recovery.md). The continuation explicitly authorized creating and validating the migration locally; no production operation was performed.
+
 # Deferred R1: preserve forfeit policy across rating recovery
 
 This is a design proposal, not a migration. No SQL, production operation, historical reconciliation, or rating-policy change is authorized by this document.

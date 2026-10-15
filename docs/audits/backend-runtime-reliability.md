@@ -1,3 +1,5 @@
+> Continuation: the disconnect-forfeit R1 below is closed by [disconnect-forfeit-rating-recovery.md](disconnect-forfeit-rating-recovery.md). This document preserves the original pass results and deferred findings at commit 4488b5a.
+
 # Backend runtime reliability pass
 
 Base: `origin/feat/app-store-candidate`, verified after fetch at
@@ -103,4 +105,4 @@ Final validation (2026-10-15 UTC):
 
 Implemented changes: nine production TypeScript files; focused/contract fixture tests; this inventory and the separate deferred metadata proposal. Final Git state and commit are reported in the handoff; this document deliberately does not embed its own commit hash.
 
-**BACKEND RUNTIME REMEDIATION INCOMPLETE** — durable forfeit policy metadata remains an R1 schema-dependent blocker.
+**Original pass verdict:** BACKEND RUNTIME REMEDIATION INCOMPLETE. The subsequent authorized R1 remediation and current validation are recorded in [disconnect-forfeit-rating-recovery.md](disconnect-forfeit-rating-recovery.md).

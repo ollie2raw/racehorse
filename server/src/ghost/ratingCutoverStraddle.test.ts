@@ -32,6 +32,7 @@ function installDatabase() {
   const fence = newFenceStore();
   const db = {
     rankedCommitted: 0,
+    rankedPayload: null as Record<string, unknown> | null,
     ghostTrainingLanded: 0,
     ghostTrainingFenced: 0,
     expanded: false,
@@ -74,10 +75,11 @@ function installDatabase() {
       db.rankedCommitted += 1; // durable at this point
       if (db.holdRankedInsert) await db.holdRankedInsert;
       sample();
-      return jsonResponse([{ id: 'rg-1', player_id: USER_ID, source_match_id: MATCH_ID }]);
+      db.rankedPayload = JSON.parse(String(init?.body));
+      return jsonResponse([{ id: 'rg-1', ...db.rankedPayload }]);
     }
     if (url.includes('/rest/v1/ranked_games') && method === 'GET') {
-      return jsonResponse([{ id: 'rg-1', player_id: USER_ID, opponent_id: FRITZ_ELITE_ID, player_score: 60,
+      return jsonResponse([{ ...db.rankedPayload, id: 'rg-1', player_id: USER_ID, opponent_id: FRITZ_ELITE_ID, player_score: 60,
         opponent_score: 10, played_at: new Date().toISOString() }]);
     }
     if (url.includes('/rest/v1/rpc/')) return jsonResponse([]);

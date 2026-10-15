@@ -125,7 +125,7 @@ function stub() {
         return json([{ id: USER_ID }]);
       }
       if (url.includes('/rest/v1/rpc/')) return json([]);
-      if (url.includes('/rest/v1/ranked_games')) return json([{ id: 'rg', player_id: USER_ID, opponent_id: FRITZ_ELITE_ID, player_score: 60, opponent_score: 30, played_at: '2026-10-01T00:00:00.000Z', rating_after: null }]);
+      if (url.includes('/rest/v1/ranked_games')) return json([{ ...(method === 'POST' ? JSON.parse(String(init?.body)) : {}), id: 'rg', player_id: USER_ID, opponent_id: FRITZ_ELITE_ID, player_score: 60, opponent_score: 30, played_at: '2026-10-01T00:00:00.000Z', rating_after: null }]);
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     }),
   );

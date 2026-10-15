@@ -331,41 +331,48 @@ async function persistRatedGameOverOnce(io: Server, input: GameOverPersistInput)
   const humanGlickoEligible = humanMoveLogVerification.eligible;
 
 
+  for (const participant of rankingParticipants) {
+    if (!participant.me.userId) continue;
+    let profile = rankingProfiles.get(participant.me.userId);
+    if (!profile) {
+      let profileData: Profile[] | undefined;
+      let profileFetchError: string | null = null;
+      try {
+        profileData = await supabaseFetch<Profile[]>(`/rest/v1/profiles?id=eq.${participant.me.userId}`);
+      } catch (err) {
+        profileFetchError = err instanceof Error ? err.message : String(err);
+      }
+      profile = profileData?.[0];
+      if (profile) {
+        rankingProfiles.set(participant.me.userId, profile);
+      } else if (participant.opp.userId && humanGlickoEligible) {
+        // RK-10: this is the silent-skip. A ranked human game reached here,
+        // was eligible, and got no `ranked_games` row purely because the
+        // profile lookup came back empty (or threw). Make it loud — a falsy
+        // profile lookup must NOT let the pipeline report success silently.
+        recordOperationalFailure(
+          'ranked_insert_skipped_no_profile',
+          profileFetchError ?? 'profiles lookup returned no row',
+          {
+            roomCode: room.code,
+            sourceMatchId,
+            playerId: participant.me.userId,
+            opponentId: participant.opp.userId,
+            profileFetchThrew: Boolean(profileFetchError),
+            rowsReturned: Array.isArray(profileData) ? profileData.length : null,
+          },
+        );
+      }
+    }
+  }
+
+
   for (const p of rankingParticipants) {
     if (p.me.userId) {
       const opponentId = p.opp.userId || (p.opp.id.startsWith('bot:fritz:') ? FRITZ_SYSTEM_ID : null);
       if (opponentId) {
-        let profile = rankingProfiles.get(p.me.userId);
-        if (!profile) {
-          let profileData: Profile[] | undefined;
-          let profileFetchError: string | null = null;
-          try {
-            profileData = await supabaseFetch<Profile[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
-          } catch (err) {
-            profileFetchError = err instanceof Error ? err.message : String(err);
-          }
-          profile = profileData?.[0];
-          if (profile) {
-            rankingProfiles.set(p.me.userId, profile);
-          } else if (opponentId !== FRITZ_SYSTEM_ID && humanGlickoEligible) {
-            // RK-10: this is the silent-skip. A ranked human game reached here,
-            // was eligible, and got no `ranked_games` row purely because the
-            // profile lookup came back empty (or threw). Make it loud — a falsy
-            // profile lookup must NOT let the pipeline report success silently.
-            recordOperationalFailure(
-              'ranked_insert_skipped_no_profile',
-              profileFetchError ?? 'profiles lookup returned no row',
-              {
-                roomCode: room.code,
-                sourceMatchId,
-                playerId: p.me.userId,
-                opponentId,
-                profileFetchThrew: Boolean(profileFetchError),
-                rowsReturned: Array.isArray(profileData) ? profileData.length : null,
-              },
-            );
-          }
-        }
+        const profile = rankingProfiles.get(p.me.userId);
+
         if (profile && opponentId !== FRITZ_SYSTEM_ID && humanGlickoEligible) {
           const insertResult = await insertRankedGameIdempotent({
             playerId: p.me.userId,
@@ -373,6 +380,9 @@ async function persistRatedGameOverOnce(io: Server, input: GameOverPersistInput)
             playerScore: p.myScore,
             opponentScore: p.oppScore,
             gameType: 'multiplayer',
+            ratingTreatment: 'standard',
+            opponentRating: rankingProfiles.get(opponentId)?.glicko_rating ?? NaN,
+            opponentRd: rankingProfiles.get(opponentId)?.glicko_rd ?? NaN,
             ratingBefore: profile.glicko_rating ?? 0,
             rdBefore: profile.glicko_rd ?? 0,
             playedAt: rankedPlayedAt,

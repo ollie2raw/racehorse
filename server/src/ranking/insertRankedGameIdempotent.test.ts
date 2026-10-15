@@ -14,6 +14,7 @@ const baseInput = {
   playerScore: 61,
   opponentScore: 42,
   gameType: 'multiplayer',
+  ratingTreatment: 'standard' as const, opponentRating: 1500, opponentRd: 200,
   ratingBefore: 812.5,
   rdBefore: 180.25,
   playedAt: '2026-06-02T00:00:00.000Z',
@@ -25,6 +26,7 @@ const baseInput = {
 
 const insertedRow = {
   id: 'game-row-1',
+  outcome: 'win', rating_context: { version: 1, treatment: 'standard', outcome: 'win', opponent: { rating: 1500, rd: 200 } },
   player_id: baseInput.playerId,
   opponent_id: baseInput.opponentId,
   player_score: 61,

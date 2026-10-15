@@ -1,5 +1,6 @@
 import { supabaseFetch } from '../supabaseUtils';
 import type { MatchOutcome } from './glicko2';
+import { readRankedRatingContext } from './ratingContext';
 import {
   buildRankedGameInsertPayload,
   type RankedGameInsertInput,
@@ -17,6 +18,7 @@ export type InsertedRankedGameRow = {
   source_type?: string | null;
   source_match_id?: string | null;
   outcome?: MatchOutcome | null;
+  rating_context?: unknown;
 };
 
 export type InsertRankedGameResult =
@@ -54,6 +56,8 @@ export async function insertRankedGameIdempotent(
     if (!game) {
       return { isNew: false, game: null };
     }
+    if (JSON.stringify(readRankedRatingContext(game.rating_context)) !== JSON.stringify(payload.rating_context)
+      || game.outcome !== payload.outcome) throw new Error('Ranked insert did not return its authoritative rating context');
     return { isNew: true, game };
   }
 
@@ -72,5 +76,7 @@ export async function insertRankedGameIdempotent(
   if (!game) {
     return { isNew: false, game: null };
   }
+  if (JSON.stringify(readRankedRatingContext(game.rating_context)) !== JSON.stringify(payload.rating_context)
+    || game.outcome !== payload.outcome) throw new Error('Ranked insert did not return its authoritative rating context');
   return { isNew: true, game };
 }

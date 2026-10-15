@@ -8,6 +8,7 @@ describe('buildRankedGameInsertPayload', () => {
     playerScore: 61,
     opponentScore: 42,
     gameType: 'multiplayer',
+    ratingTreatment: 'standard' as const, opponentRating: 1500, opponentRd: 200,
     ratingBefore: 812.5,
     rdBefore: 180.25,
     playedAt: '2026-06-02T00:00:00.000Z',
@@ -39,6 +40,7 @@ describe('buildRankedGameInsertPayload', () => {
 
   it('omits the source columns only when the input carries no sourceMatchId (completeGhostGame null-matchId path)', () => {
     expect(buildRankedGameInsertPayload({ ...baseInput, source: null })).toEqual({
+      outcome: 'win', rating_context: { version: 1, treatment: 'standard', outcome: 'win', opponent: { rating: 1500, rd: 200 } },
       player_id: '11111111-1111-4111-8111-111111111111',
       opponent_id: '22222222-2222-4222-8222-222222222222',
       player_score: 61,
@@ -52,6 +54,7 @@ describe('buildRankedGameInsertPayload', () => {
 
   it('includes source_type and source_match_id', () => {
     expect(buildRankedGameInsertPayload(baseInput)).toEqual({
+      outcome: 'win', rating_context: { version: 1, treatment: 'standard', outcome: 'win', opponent: { rating: 1500, rd: 200 } },
       player_id: '11111111-1111-4111-8111-111111111111',
       opponent_id: '22222222-2222-4222-8222-222222222222',
       player_score: 61,

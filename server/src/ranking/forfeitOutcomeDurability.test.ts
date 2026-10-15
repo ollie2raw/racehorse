@@ -26,6 +26,7 @@ describe('ranked_games outcome column', () => {
     playerScore: 40,
     opponentScore: 20,
     gameType: 'multiplayer',
+    ratingTreatment: 'standard' as const, opponentRating: 1500, opponentRd: 200,
     ratingBefore: 1500,
     rdBefore: 200,
     playedAt: '2026-08-28T00:00:00.000Z',
@@ -40,14 +41,14 @@ describe('ranked_games outcome column', () => {
     });
   });
 
-  it('omits the outcome when the column is not enabled, so the insert still succeeds', () => {
+  it('persists the authoritative outcome even when the retired flag is off', () => {
     delete process.env[OUTCOME_FLAG];
-    expect(buildRankedGameInsertPayload({ ...base, outcome: 'loss' })).not.toHaveProperty('outcome');
+    expect(buildRankedGameInsertPayload({ ...base, outcome: 'loss' })).toHaveProperty('outcome', 'loss');
   });
 
-  it('omits the outcome for a match with no explicit result', () => {
+  it('derives the ordinary completed outcome from scores', () => {
     process.env[OUTCOME_FLAG] = 'true';
-    expect(buildRankedGameInsertPayload(base)).not.toHaveProperty('outcome');
+    expect(buildRankedGameInsertPayload(base)).toHaveProperty('outcome', 'win');
   });
 });
 

@@ -35,21 +35,15 @@ Do **not** add a flag for: cosmetic changes, pure refactors with no behaviour
 delta, debug logging (those are their own category — see below), or anything you
 would not actually want the ability to toggle live.
 
-### The worked example — `RANKED_GAMES_OUTCOME_COLUMN_ENABLED`
+### Retired example — `RANKED_GAMES_OUTCOME_COLUMN_ENABLED`
 
-`server/src/ranking/rankedGamePayload.ts`. New `outcome` column on `ranked_games`
-(persists the authoritative forfeit sign for the deferred rating path). The flag:
-
-- **defaults OFF** — `process.env.RANKED_GAMES_OUTCOME_COLUMN_ENABLED === 'true'`,
-  so a server deployed before the migration lands doesn't send an unknown column
-  and 500 every ranked insert;
-- **is inert for correctness when OFF** — the inline rating path passes `outcome`
-  in memory regardless, so the forfeit sign is right either way; the flag only
-  governs whether the *deferred* path can recover it from the row;
-- **has a docstring explaining the ordering hazard it exists for.**
-
-That is the shape to copy. The one thing it's missing is the last step — see
-"When to remove."
+The disconnect-forfeit recovery R1 remediation retires this flag. New ranked
+writers always persist `outcome` together with immutable `rating_context`.
+Inline and deferred rating now consume those durable fields. Deploying this
+writer requires `2026-10-15_ranked_rating_context.sql` first; an old-schema
+server may boot but cannot accept/process new rating-context work. The old
+flag no longer changes server behavior. No production environment value was
+changed as part of the remediation.
 
 ### When to enable in prod
 
@@ -98,7 +92,6 @@ Render dashboard. `?` = unknown from the repo.
 |---|---|---|---|---|---|
 | `DAILY_FRITZ_TRANSACTIONAL_COMMANDS` | `dailyFritzAuthorityFeature.ts` → ~10 Daily Fritz route/store files | transactional authority commands for Daily Fritz record-game / next-hand / completion / stranded-recovery; select-column shape; canonical telemetry writes | `false` | ? | docstring says "enable after all four `2026-08-01_daily_fritz_*` migrations applied" — but that's an *enable*-when, not a *remove*-when. Migrations are checked in and ~5 weeks old. **remove-when:** confirm applied in prod → make unconditional, delete the helper + `.env.example` line. |
 | ~~`RANKED_GAMES_SOURCE_COLUMNS_ENABLED`~~ | — | ~~writes `source_type` / `source_match_id`; gated the `on_conflict` dedup guard~~ | — | — | **✅ REMOVED 2026-09-06 (RK-8 clean fix).** The write + `on_conflict` are now unconditional in `rankedGamePayload.ts` / `insertRankedGameIdempotent.ts`; the flag, the `index.ts` boot check, and all six consumer call sites are deleted. Live re-confirm before removal: 476 prod `ranked_games` rows, every row since ~2026-08-10 carries a non-NULL `source_match_id`, 0 duplicate `(player_id, source_match_id)` keys; the 358 NULL rows are all pre-migration history (newest `2026-08-01`). No `.env.example` line existed to remove. |
-| `RANKED_GAMES_OUTCOME_COLUMN_ENABLED` | `rankedGamePayload.ts` | writes the `outcome` column on `ranked_games` (deferred rating path recovers forfeit sign from the row) | `false` | ? | docstring explains the *why* but **never states a remove-when**. Sibling of the removed flag above; not yet made unconditional (recent migration `2026-08-28`, 0 prod rows carry a non-NULL `outcome` — ambiguous). **Finding #2 below.** |
 
 ### Permanent operational toggles (keep — not rollout flags)
 
@@ -153,10 +146,8 @@ now also shipped** — the flag is gone. #2–#4 remain logged, not fixed.
    (`completeGhostGame` with a null `matchId`), which the full unique index
    treats as non-conflicting by design. Live re-confirm 2026-09-06: 476 prod
    rows, every row since ~2026-08-10 carries `source_match_id`, 0 duplicate keys.
-2. **`RANKED_GAMES_OUTCOME_COLUMN_ENABLED` has no remove-when.** Sibling of #1,
-   same migration era. The docstring documents the ordering hazard but never
-   says when the flag should die. Needs: confirm prod state, confirm migration
-   applied, then same treatment as #1.
+2. **Closed by the disconnect-forfeit R1:** outcome durability is unconditional
+   with immutable rating context; see the migration-first rollout above.
 3. **`DAILY_FRITZ_TRANSACTIONAL_COMMANDS` has an *enable*-when but no
    *remove*-when.** "Enable after the four `2026-08-01` migrations" is written
    down; "then delete the flag" is not. The migrations are checked in and weeks

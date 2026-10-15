@@ -4,10 +4,11 @@ import { mayContinueDecay } from './ratingCutoverGate';
 import { supabaseFetch } from '../supabaseUtils';
 import { fetchAllPages } from '../supabasePagination';
 import { childLogger } from '../logger';
+import { readRankedRatingContext, rankedRatingWeight } from './ratingContext';
 
 const log = childLogger('ranking:catch-up');
 export const RANKING_CATCHUP_SCAN_LIMIT = 100;
-const RANKED_GAME_COLUMNS = 'id,player_id,opponent_id,player_score,opponent_score,played_at,rating_after,delta,outcome';
+const RANKED_GAME_COLUMNS = 'id,player_id,opponent_id,player_score,opponent_score,played_at,rating_after,delta,outcome,rating_context';
 let catchUpCursor: { playedAt: string; id: string } | undefined;
 let catchUpRunning = false;
 const failedGames = new Map<string, { attempts: number; retryAt: number }>();
@@ -63,6 +64,7 @@ interface RankedGame {
    * natural conclusion — both correctly fall back to comparing scores.
    */
   outcome?: MatchOutcome | null;
+  rating_context?: unknown;
 }
 
 interface ProcessRatingPeriodOptions {
@@ -139,22 +141,11 @@ async function getOpponentSnapshot(opponentId: string): Promise<OpponentSnapshot
   };
 }
 
-type CommitOptions = {
-  /** Multiplier on the resulting delta (disconnect forfeits count half). */
-  scale?: number;
-  /**
-   * Overrides the row's own `outcome`. The inline realtime path passes this so
-   * the forfeit sign is right even when the `outcome` column is not enabled yet.
-   */
-  outcome?: MatchOutcome;
-};
-
 async function commitProcessedGame(
   profile: Profile,
   game: RankedGame,
   opponent: OpponentSnapshot,
   processedAt: string,
-  options: CommitOptions = {},
 ): Promise<{
   profile: Profile;
   newRating: number;
@@ -162,6 +153,9 @@ async function commitProcessedGame(
   delta: number;
   applied: boolean;
 }> {
+  const context = readRankedRatingContext(game.rating_context);
+  if (context && game.outcome !== context.outcome) throw new Error('Ranked rating outcome/context mismatch');
+  const authoritativeOpponent = context?.opponent ?? opponent;
   let currentProfile = profile;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const result = computeGlicko2(
@@ -173,22 +167,18 @@ async function commitProcessedGame(
       },
       [
         {
-          opponent,
+          opponent: authoritativeOpponent,
           result: {
             score: game.player_score,
             opponentScore: game.opponent_score,
-            outcome: options.outcome ?? game.outcome ?? undefined,
+            outcome: context?.outcome ?? game.outcome ?? undefined,
           },
         },
       ],
     );
 
     const newGamesPlayed = currentProfile.ranked_games_played + 1;
-    const { scale } = options;
-    let delta = result.newRating - currentProfile.glicko_rating;
-    if (scale != null && Number.isFinite(scale)) {
-      delta = delta * scale;
-    }
+    const delta = (result.newRating - currentProfile.glicko_rating) * rankedRatingWeight(context);
     const adjustedNewRating = currentProfile.glicko_rating + delta;
     const newPeakRating = Math.max(currentProfile.peak_rating || 0, adjustedNewRating);
 
@@ -196,6 +186,7 @@ async function commitProcessedGame(
       await supabaseFetch('/rest/v1/rpc/commit_glicko_game_update', {
         method: 'POST',
         body: JSON.stringify({
+          p_rating_context: context,
           p_profile_id: currentProfile.id,
           p_glicko_rating: adjustedNewRating,
           p_glicko_rd: result.newRD,
@@ -304,7 +295,7 @@ export async function processRatingPeriod(
 
   // Cache successful AND failed lookups within a page. A missing opponent
   // must not make 100 identical network requests or abort unrelated games.
-  const opponentIds = [...new Set(games.filter((game) => game && typeof game.opponent_id === 'string').map((game) => game.opponent_id))];
+  const opponentIds = [...new Set(games.filter((game) => game && game.rating_context == null && typeof game.opponent_id === 'string').map((game) => game.opponent_id))];
   // Keep the existing per-user snapshot semantics: all opponents are sampled
   // before committing any game for this user.
   const snapshots = await Promise.allSettled(opponentIds.map(getOpponentSnapshot));
@@ -319,9 +310,11 @@ export async function processRatingPeriod(
         || !Number.isFinite(game.player_score) || !Number.isFinite(game.opponent_score)) {
         throw new Error('Malformed pending ranked game');
       }
-      const snapshot = opponentSnapshots.get(game.opponent_id)!;
-      if (snapshot.status === 'rejected') throw snapshot.reason;
-      const opponent = snapshot.value;
+      const context = readRankedRatingContext(game.rating_context);
+      const snapshot = opponentSnapshots.get(game.opponent_id);
+      if (snapshot?.status === 'rejected') throw snapshot.reason;
+      const opponent = context?.opponent ?? (snapshot?.status === 'fulfilled' ? snapshot.value : undefined);
+      if (!opponent) throw new Error('Missing ranked opponent snapshot');
       const processed = await commitProcessedGame(profile, game, opponent, new Date().toISOString());
       profile = processed.profile;
       newRating = processed.newRating;
@@ -353,14 +346,7 @@ export async function processRealtimeMultiplayerGame(params: {
   playerBProfile: Profile;
   playerAGame: RankedGame;
   playerBGame: RankedGame;
-  ratingScale?: number;
-  /**
-   * Authoritative results for a match the scoreboard does not decide. Forfeits
-   * pass these so the player who quit is scored as the loser whatever the
-   * points said when they left. Omit for a match played to its conclusion.
-   */
-  playerAOutcome?: MatchOutcome;
-  playerBOutcome?: MatchOutcome;
+
 }) {
   const processedAt = new Date().toISOString();
 
@@ -373,7 +359,6 @@ export async function processRealtimeMultiplayerGame(params: {
         rd: params.playerBProfile.glicko_rd,
       },
       processedAt,
-      { scale: params.ratingScale, outcome: params.playerAOutcome },
     ),
     commitProcessedGame(
       params.playerBProfile,
@@ -383,7 +368,6 @@ export async function processRealtimeMultiplayerGame(params: {
         rd: params.playerAProfile.glicko_rd,
       },
       processedAt,
-      { scale: params.ratingScale, outcome: params.playerBOutcome },
     ),
   ]);
 

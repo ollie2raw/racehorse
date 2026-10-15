@@ -6,6 +6,7 @@ import {
   type RoomPlayer,
 } from '../multiplayer/roomSession';
 import {
+  getFritzConfig,
   FRITZ_ELITE_ID,
   FRITZ_GRANDMASTER_ID,
   FRITZ_MASTER_ID,
@@ -235,6 +236,9 @@ export async function recordPendingFritzDisconnectLoss(
     playerScore: verifiedScores.youScore,
     opponentScore: verifiedScores.botScore,
     gameType,
+    ratingTreatment: 'standard',
+    opponentRating: getFritzConfig(fritzId).rating,
+    opponentRd: getFritzConfig(fritzId).rd,
     ratingBefore: profile.glicko_rating ?? 0,
     rdBefore: profile.glicko_rd ?? 0,
     playedAt: new Date().toISOString(),

@@ -302,6 +302,7 @@ async function applyActiveMatchForfeitOnce(
       if (profileA && profileB) {
         const sourceMatchId = room.matchId ?? `forfeit-${room.code}-${Date.now()}`;
 
+        const ratingTreatment = forfeitReason === 'disconnect_timeout' ? 'disconnect_forfeit' : 'standard';
         const [insertA, insertB] = await Promise.all([
           insertRankedGameIdempotent({
             playerId: a.userId,
@@ -312,6 +313,9 @@ async function applyActiveMatchForfeitOnce(
             ratingBefore: profileA.glicko_rating ?? 0,
             rdBefore: profileA.glicko_rd ?? 0,
             playedAt: nowIso,
+            ratingTreatment,
+            opponentRating: profileB.glicko_rating,
+            opponentRd: profileB.glicko_rd,
             outcome: outcomeA,
             source: { sourceType: 'live_room', sourceMatchId },
           }),
@@ -324,21 +328,20 @@ async function applyActiveMatchForfeitOnce(
             ratingBefore: profileB.glicko_rating ?? 0,
             rdBefore: profileB.glicko_rd ?? 0,
             playedAt: nowIso,
+            ratingTreatment,
+            opponentRating: profileA.glicko_rating ?? NaN,
+            opponentRd: profileA.glicko_rd ?? NaN,
             outcome: outcomeB,
             source: { sourceType: 'live_room', sourceMatchId },
           }),
         ]);
 
         if (insertA.isNew && insertB.isNew && insertA.game && insertB.game) {
-          const ratingScale = forfeitReason === 'disconnect_timeout' ? 0.5 : 1.0;
           ratingResult = await processRealtimeMultiplayerGame({
             playerAProfile: profileA as Profile,
             playerBProfile: profileB as Profile,
             playerAGame: insertA.game,
             playerBGame: insertB.game,
-            ratingScale,
-            playerAOutcome: outcomeA,
-            playerBOutcome: outcomeB,
           });
 
           log.info(
@@ -347,7 +350,7 @@ async function applyActiveMatchForfeitOnce(
               loserId: abandoningPlayer.userId,
               winnerId: winnerUserId,
               forfeitReason,
-              ratingScale,
+              ratingTreatment,
               outcomeA,
               outcomeB,
               deltaA: ratingResult.playerA.delta,

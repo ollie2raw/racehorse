@@ -54,7 +54,7 @@ describe('completeGhostGame — non-Fritz applyGlicko gating', () => {
         return jsonResponse([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200 }]);
       }
       if (url.includes('/rest/v1/ranked_games') && method === 'POST') {
-        return jsonResponse([{ id: 'rg-1', player_id: USER_ID }]);
+        return jsonResponse([{ id: 'rg-1', ...JSON.parse(String(init?.body)) }]);
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
@@ -243,7 +243,7 @@ describe('completeGhostGame — Fritz branch ranked_games idempotency (RK-2, HAR
       }
       if (url.includes('/rest/v1/ranked_games') && method === 'POST') {
         rankedGamesCalls.push({ path: url, body: JSON.parse(String(init?.body)) });
-        return jsonResponse(rankedGamesResponse);
+        return jsonResponse(rankedGamesResponse.map((row) => ({ ...(row as object), ...JSON.parse(String(init?.body)) })));
       }
       if (url.includes('/rest/v1/ranked_games') && method === 'GET') {
         // processRatingPeriod's getPendingGames sweep. Only a genuinely new

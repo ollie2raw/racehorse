@@ -1,6 +1,6 @@
 import { childLogger } from '../logger';
 import { supabaseFetch } from '../supabaseUtils';
-import { FRITZ_ELITE_ID, isFritzId } from '../ranking/glicko2';
+import { FRITZ_ELITE_ID, isFritzId, getFritzConfig } from '../ranking/glicko2';
 import { processRatingPeriod } from '../ranking/periodService';
 import { trackDeferredRatingWork } from '../ranking/ratingCutoverGate';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
@@ -1081,6 +1081,9 @@ export async function completeGhostGame(params: {
         playerScore: Math.round(params.finalScore),
         opponentScore: Math.round(params.opponentScore),
         gameType: 'fritz',
+        ratingTreatment: 'standard',
+        opponentRating: getFritzConfig(fritzId).rating,
+        opponentRd: getFritzConfig(fritzId).rd,
         playedAt: now,
         ratingBefore: rankingProfile.glicko_rating,
         rdBefore: rankingProfile.glicko_rd,

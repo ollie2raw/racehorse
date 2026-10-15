@@ -7,6 +7,7 @@ import {
   setLiveRoomPersistenceShuttingDown,
 } from './roomLivePersistence';
 import { processRealtimeMultiplayerGame } from '../ranking/periodService';
+import { buildRankedGameInsertPayload } from '../ranking/rankedGamePayload';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
 import { resetRatingCutoverGateForTests, setLegacyRatingWritersEnforcedForTests } from '../ranking/ratingCutoverGate';
@@ -23,9 +24,9 @@ vi.mock('../ranking/periodService', () => ({
 }));
 
 vi.mock('../ranking/insertRankedGameIdempotent', () => ({
-  insertRankedGameIdempotent: vi.fn(async () => ({
+  insertRankedGameIdempotent: vi.fn(async (input) => ({
     isNew: true,
-    game: { id: 'game-123' },
+    game: { id: 'game-123', ...buildRankedGameInsertPayload(input) },
   })),
 }));
 
@@ -199,7 +200,7 @@ describe('applyActiveMatchForfeit', () => {
 
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
-        ratingScale: 1.0,
+        playerAGame: expect.objectContaining({ rating_context: expect.objectContaining({ treatment: 'standard' }) }),
       })
     );
     expect(insertRankedGameIdempotent).toHaveBeenCalledTimes(2);
@@ -246,7 +247,7 @@ describe('applyActiveMatchForfeit', () => {
 
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
-        ratingScale: 0.5,
+        playerAGame: expect.objectContaining({ rating_context: expect.objectContaining({ treatment: 'disconnect_forfeit', outcome: 'loss' }) }),
       })
     );
   });
@@ -593,8 +594,8 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
 
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
-        playerAOutcome: 'loss',
-        playerBOutcome: 'win',
+        playerAGame: expect.objectContaining({ outcome: 'loss', rating_context: expect.objectContaining({ outcome: 'loss' }) }),
+        playerBGame: expect.objectContaining({ outcome: 'win', rating_context: expect.objectContaining({ outcome: 'win' }) }),
       }),
     );
   });
@@ -626,9 +627,8 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
 
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
-        ratingScale: 0.5,
-        playerAOutcome: 'loss',
-        playerBOutcome: 'win',
+        playerAGame: expect.objectContaining({ outcome: 'loss', rating_context: expect.objectContaining({ treatment: 'disconnect_forfeit', outcome: 'loss' }) }),
+        playerBGame: expect.objectContaining({ outcome: 'win', rating_context: expect.objectContaining({ outcome: 'win' }) }),
       }),
     );
   });
@@ -665,8 +665,8 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     // Seat A is p1 (the stayer) — playerA is the seat, not the abandoner.
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
-        playerAOutcome: 'win',
-        playerBOutcome: 'loss',
+        playerAGame: expect.objectContaining({ outcome: 'win' }),
+        playerBGame: expect.objectContaining({ outcome: 'loss' }),
       }),
     );
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
