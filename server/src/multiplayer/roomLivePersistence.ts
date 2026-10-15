@@ -20,6 +20,7 @@ import { childLogger } from '../logger';
 import { clearAlert, shouldSendAlert } from '../scheduledTournament/tournamentAlerts';
 import { applyLiveSessionRow } from './applyLiveSessionRoom';
 import { roomKind } from './roomKind';
+import { isForfeitReason, roomOwesTerminalCompletion, type ForfeitReason } from './terminalCompletion';
 
 const log = childLogger('room-live-persistence');
 import {
@@ -56,6 +57,13 @@ export type LiveRosterEntry = {
   username: string;
 };
 
+export type CompletionRecoveryState = {
+  attempts: number;
+  lastAttemptAt: string;
+  lastError: string;
+  quarantinedAt?: string;
+};
+
 export type PersistedRoomShell = {
   config: Partial<Config>;
   asyncStateVersion: number;
@@ -74,6 +82,15 @@ export type PersistedRoomShell = {
   abandonedByUserId?: string | null;
   abandonedWinnerUserId?: string | null;
   abandonedReason?: 'forfeit' | 'abandon';
+  abandonedForfeitReason?: ForfeitReason;
+  /**
+   * Terminal completion (match record / ranked rows) is owed and not yet logged.
+   * Written on every snapshot; the restart sweep keys on it. Absent on rows written
+   * by older servers (the sweep also recognizes unlogged `game_over` rows).
+   */
+  completionPending?: boolean;
+  /** Restart-sweep bookkeeping; a quarantined row is excluded and never auto-deleted. */
+  completionRecovery?: CompletionRecoveryState;
   scheduledTournamentBotTier?: 'standard' | 'elite' | 'master';
   /** Durable game:action receipts for restart-safe idempotency replay. */
   actionReceipts?: PersistedGameActionReceipt[];
@@ -350,10 +367,23 @@ export function serializeRoomShell(
       ? { abandonedWinnerUserId: room.abandonedWinnerUserId }
       : {}),
     ...(room.abandonedReason ? { abandonedReason: room.abandonedReason } : {}),
+    ...(room.abandonedForfeitReason ? { abandonedForfeitReason: room.abandonedForfeitReason } : {}),
     ...(room.scheduledTournamentBotTier
       ? { scheduledTournamentBotTier: room.scheduledTournamentBotTier }
       : {}),
     ...(actionReceipts.length > 0 ? { actionReceipts } : {}),
+  };
+}
+
+function parseCompletionRecovery(raw: unknown): CompletionRecoveryState | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.attempts !== 'number' || !Number.isFinite(value.attempts)) return null;
+  return {
+    attempts: value.attempts,
+    lastAttemptAt: typeof value.lastAttemptAt === 'string' ? value.lastAttemptAt : '',
+    lastError: typeof value.lastError === 'string' ? value.lastError : '',
+    ...(typeof value.quarantinedAt === 'string' ? { quarantinedAt: value.quarantinedAt } : {}),
   };
 }
 
@@ -400,6 +430,15 @@ export function parseRoomShell(raw: unknown): PersistedRoomShell {
       : {}),
     ...(shell.abandonedReason === 'forfeit' || shell.abandonedReason === 'abandon'
       ? { abandonedReason: shell.abandonedReason }
+      : {}),
+    ...(isForfeitReason(shell.abandonedForfeitReason)
+      ? { abandonedForfeitReason: shell.abandonedForfeitReason }
+      : {}),
+    ...(typeof shell.completionPending === 'boolean'
+      ? { completionPending: shell.completionPending }
+      : {}),
+    ...(parseCompletionRecovery(shell.completionRecovery)
+      ? { completionRecovery: parseCompletionRecovery(shell.completionRecovery)! }
       : {}),
     ...(shell.scheduledTournamentBotTier === 'standard' ||
     shell.scheduledTournamentBotTier === 'elite' ||
@@ -463,6 +502,9 @@ export function buildLiveSessionRow(
     room_shell: {
       ...serializeRoomShell(room, { omitGhostMoveLogs: options.omitLogs }),
       durabilityCommit: { ...commitFence },
+      // Terminal and owing completion => this row IS the replay source. Derived on
+      // every snapshot so a restart sees the intent without any in-memory state.
+      completionPending: roomOwesTerminalCompletion(room, roster),
     },
     engine_seat_ids: [...room.players],
     roster: roster.map((entry) => ({ ...entry })),
@@ -1080,6 +1122,16 @@ export async function finalizeAndDeleteLiveRoomSession(
 
   const result = await persistLiveSessionRowNow(row);
   if (!result.ok) return;
+
+  // A terminal room that still owes its completion keeps its row: it is the only durable
+  // replay source (restart-time sweep). Only a logged completion makes the row disposable.
+  if (row.room_shell.completionPending === true) {
+    log.info(
+      { roomCode: room.code, matchId: room.matchId, status: terminalStatus },
+      'terminal live session retained: completion not yet logged',
+    );
+    return;
+  }
 
   if (guard && !guard.shouldFinalize()) {
     await guard.restoreLiveSession();

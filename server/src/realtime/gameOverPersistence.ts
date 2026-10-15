@@ -47,6 +47,8 @@ import {
   type GameOverPersistOutcome,
 } from '../multiplayer/gameOverPersistPolicy';
 import type { Room } from '../rooms';
+import { markTerminalCompletionLogged } from '../multiplayer/terminalCompletionStore';
+import { isTournamentLikeRoom } from '../multiplayer/terminalCompletion';
 
 const log = childLogger('realtime:game-over');
 
@@ -170,7 +172,7 @@ function evaluateHumanMoveLogVerification(
   return { eligible: true };
 }
 
-async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Promise<void> {
+async function persistGameOverOnce(io: Server | null, input: GameOverPersistInput): Promise<void> {
   const { room, a, b, scoreA, scoreB, winnerSeatId } = input;
   const winnerUserId =
     winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
@@ -189,12 +191,16 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
   // scores go with their ids so the engine can put them in the row's
   // player1/player2 order: room seats are in join order, not row order.
   const tournamentRoom = Boolean(room.scheduledTournamentMatchId) || isTournamentRoomCode(room.code);
+  if (tournamentRoom && !io) {
+    // Terminal-completion replay never owns tournament results (tournaments stay OFF).
+    throw new Error('tournament_replay_unsupported');
+  }
   const tournamentPlayerId = (seat: typeof a): string | null =>
     seat.userId ?? (tournamentRoom && seat.id.startsWith('bot:fritz:') ? seat.id : null);
   const tournamentWinnerId =
     winnerSeatId === a.id ? tournamentPlayerId(a) : winnerSeatId === b.id ? tournamentPlayerId(b) : null;
   if (tournamentWinnerId) {
-    const applied = await applyTournamentGameOverFromRoom(io, room, {
+    const applied = await applyTournamentGameOverFromRoom(io!, room, {
       winnerUserId: tournamentWinnerId,
       player1Score: scoreA,
       player2Score: scoreB,
@@ -245,10 +251,10 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
   return withRatingCompletion('game_over_persist', () => persistRatedGameOverOnce(io, input));
 }
 
-async function persistRatedGameOverOnce(io: Server, input: GameOverPersistInput): Promise<void> {
+async function persistRatedGameOverOnce(_io: Server | null, input: GameOverPersistInput): Promise<void> {
   const { room, sourceMatchId, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
 
-  if (getPendingFritzMatchContext(room)) {
+  if (getPendingFritzMatchContext(room, input.replayRoster)) {
     await resolvePendingFritzMatch(room.code);
   }
 
@@ -273,7 +279,7 @@ async function persistRatedGameOverOnce(io: Server, input: GameOverPersistInput)
     pointDiff: Math.abs(scoreA - scoreB),
   });
 
-  const fritzActivityCtx = getPendingFritzMatchContext(room);
+  const fritzActivityCtx = getPendingFritzMatchContext(room, input.replayRoster);
   const winnerRoster = winnerSeatId === aId ? a : b;
   const loserRoster = winnerSeatId === aId ? b : a;
   const activityDisplayName = (p: typeof a) =>
@@ -562,7 +568,7 @@ function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string
 export const CUTOVER_GATE_WAIT_CEILING_MS = 120_000;
 export const CUTOVER_GATE_POLL_MS = 2_000;
 
-async function persistGameOverWaitingForCutoverGate(io: Server, input: GameOverPersistInput): Promise<void> {
+async function persistGameOverWaitingForCutoverGate(io: Server | null, input: GameOverPersistInput): Promise<void> {
   const startedAt = Date.now();
   for (;;) {
     try {
@@ -575,6 +581,16 @@ async function persistGameOverWaitingForCutoverGate(io: Server, input: GameOverP
       await sleep(CUTOVER_GATE_POLL_MS);
     }
   }
+}
+
+/**
+ * Restart-time replay of a terminal room's completion (no live `io`, no in-memory room).
+ * Same pipeline, same idempotency keys (sourceMatchId = room.matchId) as the foreground
+ * scheduler; it does NOT wait on the rating cutover gate — a closed gate rejects the
+ * unit untouched (isRatingCutoverQuiescedError) and the sweep simply retries later.
+ */
+export async function replayGameOverCompletion(input: GameOverPersistInput): Promise<void> {
+  await persistGameOverOnce(null, input);
 }
 
 /**
@@ -596,6 +612,13 @@ export function createGameOverPersistScheduler(io: Server) {
         try {
           await persistGameOverWaitingForCutoverGate(io, input);
           markGameOverPersistSucceeded(room);
+          // Make "logged" durable so a later restart does not replay a finished completion.
+          // Best effort: a missed write only means an idempotent replay.
+          if (!isTournamentLikeRoom(room)) {
+            await markTerminalCompletionLogged(room.code, sourceMatchId).catch((err) =>
+              log.warn({ err, roomCode: room.code, sourceMatchId }, 'terminal completion marker not written'),
+            );
+          }
           emitMpAuthorityFunnel('private_game_over_persist_succeeded', {
             roomCode: room.code,
             sequence: room.state?.sequence ?? null,
