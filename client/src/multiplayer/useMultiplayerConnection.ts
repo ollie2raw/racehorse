@@ -31,6 +31,7 @@ import {
 import {
   createLifecycleHiddenTracker,
   evaluateLifecycleResumeResync,
+  LIFECYCLE_HEARTBEAT_MS,
 } from './multiplayerLifecycleRecovery';
 import {
   recordJoinLatency,
@@ -300,8 +301,13 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('pageshow', onPageShow);
+    // Native WKWebView: JS is suspended while hidden and the hide event may only arrive at resume, so also measure
+    // suspension as a gap in this heartbeat (see LIFECYCLE_SUSPEND_GAP_MS).
+    hiddenTracker.markAlive(Date.now());
+    const heartbeat = window.setInterval(() => hiddenTracker.markAlive(Date.now()), LIFECYCLE_HEARTBEAT_MS);
 
     return () => {
+      window.clearInterval(heartbeat);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('pageshow', onPageShow);

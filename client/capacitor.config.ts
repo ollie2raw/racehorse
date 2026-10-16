@@ -5,6 +5,10 @@ const config: CapacitorConfig = {
   appName: 'Racehorse Dominoes',
   webDir: 'dist',
   backgroundColor: '#0A0E17',
+  // The native bridge otherwise prints every plugin call and its returned payload to stdout, including release builds
+  // (verified on a Release simulator build). For the Preferences plugin that payload is the stored session
+  // (access + refresh token), so nothing may be logged.
+  loggingBehavior: 'none',
   ios: {
     backgroundColor: '#0A0E17',
     // Native scrolling stays ON: with it off, touch scrolling inside the page
