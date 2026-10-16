@@ -174,7 +174,14 @@ describe('BotMatchScreen: terminal outcome after an embedded forced draw (human 
   ] as const;
 
   it.each(cases)('$name: result surface only after the draws and the pass', async ({ options, expectScores }) => {
-    const { frames } = await playOut(options as EmbeddedChainFixtureOptions);
+    const { frames: allFrames } = await playOut(options as EmbeddedChainFixtureOptions);
+    // The fixture is deterministic for the FIRST hand only: once the result surface is dismissed the next hand is
+    // dealt from an unseeded shuffle, and Fritz may legitimately draw again inside the 17.5s simulated window. The
+    // draw/result ordering is a property of the fixture hand, so it is asserted on the frames up to that new deal
+    // (frames from the new deal on are only used for the "dealt after the result" check at the end).
+    const nextHand = firstIndex(allFrames, (f) => f.rack === 7 && f.boneyard === 14);
+    expect(nextHand).toBeGreaterThan(0);
+    const frames = allFrames.slice(0, nextHand);
     const fritzDrawFrames = frames.filter((f) => f.fritzSideActive && f.label === 'Fritz is drawing…');
     expect(fritzDrawFrames.length).toBeGreaterThanOrEqual(2);
     const lastDraw = frames.lastIndexOf(fritzDrawFrames[fritzDrawFrames.length - 1]!);
@@ -203,7 +210,6 @@ describe('BotMatchScreen: terminal outcome after an embedded forced draw (human 
     const [bot, you] = settled.scores.split('/').map(Number) as [number, number];
     expect(expectScores(bot, you)).toBe(true);
     // the next hand is dealt only after the result surface (fresh 7/14 deal)
-    const nextHand = firstIndex(frames, (f) => f.rack === 7 && f.boneyard === 14);
     expect(nextHand).toBeGreaterThan(terminal);
     // single release into the human's turn before the result
     const releases = frames
