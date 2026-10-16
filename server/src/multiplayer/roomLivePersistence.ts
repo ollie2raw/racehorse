@@ -219,7 +219,7 @@ export function configureLiveRoomPersistence(options: {
 }): void {
   rosterResolver = options.resolveRoster;
   // Allocate the epoch at BOOT, not at the first write: epoch order must be process-boot order.
-  void ensureWriterEpoch();
+  void startWriterEpochInit();
 }
 
 function resolveRosterForPersist(room: Room): LiveRosterEntry[] {
@@ -444,47 +444,56 @@ function normalizeRosterEntry(raw: unknown): LiveRosterEntry | null {
 // ---------------------------------------------------------------------------------------------------------------
 // Writer epoch (database fence: 2026-10-16_room_live_session_generation_fence.sql). The ONLY change relative to the canonical
 // BRIDGE 3ccd6ff8: allocate a boot-ordered epoch and stamp it on every room snapshot. Without the migration the RPC is
-// absent, the epoch stays unset (= legacy 0) and persistence behaves exactly as before.
+// absent, the boot allocation fails, and the process is fixed at legacy epoch 0 for its lifetime: persistence behaves exactly
+// as before (apply the migration BEFORE deploying; a process that booted without it must be restarted to obtain an epoch).
 // ---------------------------------------------------------------------------------------------------------------
+/**
+ * A process's writer-order identity is FIXED FOR ITS LIFETIME. It is decided exactly once, by the boot initialization that
+ * configureLiveRoomPersistence() starts: a positive epoch from next_room_writer_epoch(), or, if that single boot attempt fails,
+ * legacy epoch 0. Nothing changes it afterwards, so a process that has persisted as epoch 0 can never later turn into a positive
+ * (newer) epoch and outrank a process that booted after it. A restart allocates again. null = the initialization is still running.
+ */
 let writerEpoch: number | null = null;
-let writerEpochRetryAtMs = 0;
-let writerEpochInFlight: Promise<void> | null = null;
-const WRITER_EPOCH_RETRY_MS = 5_000;
+let writerEpochInit: Promise<void> | null = null;
 
-/** True only when a persist must first wait for an epoch fetch: steady state adds NO async gap before the snapshot is built. */
+/**
+ * True only while the boot initialization is RUNNING: a persist waits for it, so nothing is ever written under a provisional identity.
+ * A persist never starts an allocation itself: only configureLiveRoomPersistence() (boot) can, which is what keeps the identity boot-fixed.
+ */
 function writerEpochWouldBlock(): boolean {
-  return writerEpoch === null && (writerEpochInFlight !== null || Date.now() >= writerEpochRetryAtMs);
+  return writerEpoch === null && writerEpochInit !== null;
 }
 
-/** Resolves once this process's writer epoch allocation (started at boot) has settled, successfully or not. */
-export async function settleLiveRoomWriterEpoch(): Promise<void> {
-  await writerEpochInFlight;
-}
-
-/** Test seam: model a booted process whose writer epoch is already known (or one that never obtained it). */
+/** Test seam: model a booted process whose identity is already fixed (null = it never obtained one, i.e. frozen at legacy 0). */
 export function setLiveRoomWriterEpochForTests(epoch: number | null): void {
-  writerEpoch = epoch;
-  writerEpochRetryAtMs = epoch === null ? Number.MAX_SAFE_INTEGER : 0;
-  writerEpochInFlight = null;
+  writerEpoch = epoch ?? 0;
+  writerEpochInit = Promise.resolve();
 }
 
-async function ensureWriterEpoch(): Promise<void> {
-  if (writerEpoch !== null || Date.now() < writerEpochRetryAtMs) return;
-  if (!writerEpochInFlight) {
-    writerEpochInFlight = (async () => {
-      try {
-        const value = await supabaseFetch<unknown>('/rest/v1/rpc/next_room_writer_epoch', { method: 'POST', body: '{}' });
-        const epoch = typeof value === 'string' ? Number(value) : value;
-        if (typeof epoch === 'number' && Number.isFinite(epoch) && epoch > 0) writerEpoch = epoch;
-        else writerEpochRetryAtMs = Date.now() + WRITER_EPOCH_RETRY_MS;
-      } catch {
-        writerEpochRetryAtMs = Date.now() + WRITER_EPOCH_RETRY_MS;
-      } finally {
-        writerEpochInFlight = null;
-      }
-    })();
+/** Resolves once this process's writer-order identity has been fixed (boot initialization finished), successfully or as legacy 0. */
+export async function settleLiveRoomWriterEpoch(): Promise<void> {
+  await writerEpochInit;
+}
+
+async function allocateWriterEpochOnce(): Promise<void> {
+  try {
+    const value = await supabaseFetch<unknown>('/rest/v1/rpc/next_room_writer_epoch', { method: 'POST', body: '{}' });
+    const epoch = typeof value === 'string' ? Number(value) : value;
+    if (typeof epoch === 'number' && Number.isFinite(epoch) && epoch > 0) {
+      writerEpoch = epoch;
+      return;
+    }
+  } catch {
+    /* fall through: fixed at legacy 0 below */
   }
-  await writerEpochInFlight;
+  writerEpoch = 0;
+  log.error('writer epoch could not be allocated at boot: this process persists rooms as legacy epoch 0 for its whole lifetime (restart it to obtain an epoch)');
+}
+
+/** Starts (once) the boot initialization that fixes this process's writer-order identity. Every later call returns the same promise. */
+function startWriterEpochInit(): Promise<void> {
+  writerEpochInit ??= allocateWriterEpochOnce();
+  return writerEpochInit;
 }
 
 export function buildLiveSessionRow(
@@ -516,7 +525,7 @@ export function buildLiveSessionRow(
     room_shell: {
       ...serializeRoomShell(room, { omitGhostMoveLogs: options.omitLogs }),
       durabilityCommit: { ...commitFence },
-      ...(writerEpoch === null ? {} : { writerEpoch }),
+      ...(writerEpoch ? { writerEpoch } : {}),
     },
     engine_seat_ids: [...room.players],
     roster: roster.map((entry) => ({ ...entry })),
@@ -902,7 +911,7 @@ async function persistLiveSessionForRoom(
   if (refusesLiveSessionOverwrite(room)) {
     return { ok: false, status: 'failed', error: 'live_session_overwrite_refused' };
   }
-  if (writerEpochWouldBlock()) await ensureWriterEpoch();
+  if (writerEpochWouldBlock()) await writerEpochInit;
   if (!isLiveSessionLogEntriesEnabled() || Date.now() < logEntriesUnavailableUntilMs || liveSessionsTableAvailable === false) {
     persistedLogLengthsByRoomCode.delete(roomCode);
     return persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
@@ -1084,7 +1093,7 @@ export async function finalizeAndDeleteLiveRoomSession(
 
   const terminalStatus: RoomLiveSessionStatus =
     archiveStatus === 'completed' ? 'game_over' : 'abandoned';
-  if (writerEpochWouldBlock()) await ensureWriterEpoch();
+  if (writerEpochWouldBlock()) await writerEpochInit;
   const row = buildLiveSessionRow(room, resolveRosterForPersist(room));
   row.status = terminalStatus;
 
@@ -1424,6 +1433,5 @@ export function resetLiveRoomPersistenceForTests(): void {
   knownPersistedSessionByRoomCode.clear();
   logEntriesUnavailableUntilMs = 0;
   writerEpoch = null;
-  writerEpochRetryAtMs = 0;
-  writerEpochInFlight = null;
+  writerEpochInit = null;
 }
