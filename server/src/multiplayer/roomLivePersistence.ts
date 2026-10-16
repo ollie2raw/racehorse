@@ -219,6 +219,7 @@ export function configureLiveRoomPersistence(options: {
 }): void {
   rosterResolver = options.resolveRoster;
   // Allocate the epoch at BOOT, not at the first write: epoch order must be process-boot order.
+  writerEpochBootAtMs = Date.now();
   void ensureWriterEpoch();
 }
 
@@ -450,10 +451,29 @@ let writerEpoch: number | null = null;
 let writerEpochRetryAtMs = 0;
 let writerEpochInFlight: Promise<void> | null = null;
 const WRITER_EPOCH_RETRY_MS = 5_000;
+/**
+ * Epoch order must be process-BOOT order. A process whose boot allocation failed and succeeded hours later would hold an epoch
+ * NEWER than a process that booted (and allocated) in between, and would win ties against it. So a failed allocation is retried
+ * only inside this window after boot (it absorbs a PostgREST schema-cache lag right after the migration); past it the process stays
+ * epoch-less (legacy 0) until restart, which the database fences against any epoch-bearing writer (fail closed).
+ */
+const WRITER_EPOCH_BOOT_WINDOW_MS = 60_000;
+let writerEpochBootAtMs: number | null = null;
+let writerEpochWindowLogged = false;
+
+function writerEpochAllocationClosed(): boolean {
+  if (writerEpoch !== null || writerEpochBootAtMs === null) return false;
+  if (Date.now() - writerEpochBootAtMs <= WRITER_EPOCH_BOOT_WINDOW_MS) return false;
+  if (!writerEpochWindowLogged) {
+    writerEpochWindowLogged = true;
+    log.error('writer epoch not obtained within the boot window: room snapshots persist as legacy epoch 0 until this process restarts');
+  }
+  return true;
+}
 
 /** True only when a persist must first wait for an epoch fetch: steady state adds NO async gap before the snapshot is built. */
 function writerEpochWouldBlock(): boolean {
-  return writerEpoch === null && (writerEpochInFlight !== null || Date.now() >= writerEpochRetryAtMs);
+  return writerEpoch === null && !writerEpochAllocationClosed() && (writerEpochInFlight !== null || Date.now() >= writerEpochRetryAtMs);
 }
 
 /** Resolves once this process's writer epoch allocation (started at boot) has settled, successfully or not. */
@@ -469,7 +489,7 @@ export function setLiveRoomWriterEpochForTests(epoch: number | null): void {
 }
 
 async function ensureWriterEpoch(): Promise<void> {
-  if (writerEpoch !== null || Date.now() < writerEpochRetryAtMs) return;
+  if (writerEpoch !== null || Date.now() < writerEpochRetryAtMs || writerEpochAllocationClosed()) return;
   if (!writerEpochInFlight) {
     writerEpochInFlight = (async () => {
       try {
@@ -1426,4 +1446,6 @@ export function resetLiveRoomPersistenceForTests(): void {
   writerEpoch = null;
   writerEpochRetryAtMs = 0;
   writerEpochInFlight = null;
+  writerEpochBootAtMs = null;
+  writerEpochWindowLogged = false;
 }

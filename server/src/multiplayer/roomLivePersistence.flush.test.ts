@@ -314,6 +314,51 @@ describe('BRIDGE writer epoch (the only change relative to 3ccd6ff8)', () => {
     expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(2);
   });
 
+  it('a boot allocation that fails is still retried inside the boot window (schema-cache lag right after the migration)', async () => {
+    let healthy = false;
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      record(path, init);
+      if (path.includes('/rpc/next_room_writer_epoch')) {
+        if (!healthy) throw new Error('Supabase request failed: 404 {"code":"PGRST202"}');
+        return 63 as never;
+      }
+      return undefined as never;
+    });
+    configureLiveRoomPersistence({ resolveRoster: () => roster });
+    await settleLiveRoomWriterEpoch();
+    await persistLiveRoomSessionNow(mkRoom({ code: 'WIN1' }), roster);
+    expect(shellOfFirstPost()).not.toHaveProperty('writerEpoch');
+    healthy = true;
+    await vi.advanceTimersByTimeAsync(6_000);
+    calls.length = 0;
+    await persistLiveRoomSessionNow(mkRoom({ code: 'WIN1' }), roster);
+    expect(shellOfFirstPost()?.writerEpoch).toBe(63);
+  });
+
+  it('after the boot window a process that never obtained an epoch NEVER takes a late one: it would outrank processes that booted since', async () => {
+    let healthy = false;
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      record(path, init);
+      if (path.includes('/rpc/next_room_writer_epoch')) {
+        if (!healthy) throw new Error('boom');
+        return 99 as never;
+      }
+      return undefined as never;
+    });
+    configureLiveRoomPersistence({ resolveRoster: () => roster });
+    await settleLiveRoomWriterEpoch();
+    await vi.advanceTimersByTimeAsync(61_000);
+    healthy = true;                                   // the RPC works again, but the window is over
+    calls.length = 0;
+    for (let i = 0; i < 3; i += 1) {
+      await persistLiveRoomSessionNow(mkRoom({ code: 'LATE1' }), roster);
+      await vi.advanceTimersByTimeAsync(6_000);
+    }
+    expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(0);
+    expect(shellOfFirstPost()).toBeTruthy();
+    expect(shellOfFirstPost()).not.toHaveProperty('writerEpoch');   // legacy 0, never a guessed positive epoch
+  });
+
   it('adds no asynchronous gap before the snapshot is built once the epoch is known', async () => {
     setLiveRoomWriterEpochForTests(9);
     vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => { record(path, init); return undefined as never; });
