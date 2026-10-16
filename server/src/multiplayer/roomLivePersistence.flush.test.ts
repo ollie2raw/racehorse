@@ -10,6 +10,9 @@ import {
   persistLiveRoomSessionNow,
   resetLiveRoomPersistenceForTests,
   schedulePersistLiveRoomSession,
+  setLiveRoomWriterEpochForTests,
+  settleLiveRoomWriterEpoch,
+  configureLiveRoomPersistence,
 } from './roomLivePersistence';
 
 const t = (low: number, high: number) => ({ low: Math.min(low, high), high: Math.max(low, high) });
@@ -109,6 +112,8 @@ describe('roomLivePersistence flush', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     resetLiveRoomPersistenceForTests();
+    // A booted process already holds its writer epoch (allocated when persistence is configured).
+    setLiveRoomWriterEpochForTests(7);
     persistenceStore.liveSessions.clear();
     persistenceStore.persistCalls = 0;
     persistenceStore.persistedSequences = [];
@@ -268,5 +273,55 @@ describe('roomLivePersistence flush', () => {
     expect(persistenceStore.persistCalls).toBe(2);
     expect(persistenceStore.liveSessions.get('EVENT1')?.last_event_sequence).toBe(1);
     expect(getLiveRoomDurabilityState(room).status).toBe('healthy');
+  });
+});
+
+describe('BRIDGE writer epoch (the only change relative to 3ccd6ff8)', () => {
+  type Call = { path: string; method?: string; body?: unknown };
+  let calls: Call[];
+  const record = (path: string, init?: RequestInit) => { calls.push({ path, method: init?.method, body: init?.body ? JSON.parse(String(init.body)) : undefined }); };
+  const shellOfFirstPost = () => (calls.find((c) => c.path.includes('/room_live_sessions') && c.method === 'POST')?.body as Array<{ room_shell: Record<string, unknown> }> | undefined)?.[0]?.room_shell;
+
+  beforeEach(() => { vi.useFakeTimers(); resetLiveRoomPersistenceForTests(); calls = []; vi.mocked(supabaseFetch).mockReset(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('allocates the epoch once at boot (configureLiveRoomPersistence) and stamps every snapshot', async () => {
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      record(path, init);
+      return (path.includes('/rpc/next_room_writer_epoch') ? 41 : undefined) as never;
+    });
+    configureLiveRoomPersistence({ resolveRoster: () => roster });
+    await settleLiveRoomWriterEpoch();
+    expect(await persistLiveRoomSessionNow(mkRoom({ code: 'EPOCH1' }), roster)).toBe(true);
+    expect(await persistLiveRoomSessionNow(mkRoom({ code: 'EPOCH1' }), roster)).toBe(true);
+    expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(1);
+    expect(shellOfFirstPost()?.writerEpoch).toBe(41);
+  });
+
+  it('a schema without the epoch RPC behaves exactly like canonical BRIDGE: no epoch in the shell, writes succeed, allocation retried later', async () => {
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      record(path, init);
+      if (path.includes('/rpc/next_room_writer_epoch')) throw new Error('Supabase request failed: 404 {"code":"PGRST202"}');
+      return undefined as never;
+    });
+    expect(await persistLiveRoomSessionNow(mkRoom({ code: 'LEGACY1' }), roster)).toBe(true);
+    expect(shellOfFirstPost()).toBeTruthy();
+    expect(shellOfFirstPost()).not.toHaveProperty('writerEpoch');
+    await persistLiveRoomSessionNow(mkRoom({ code: 'LEGACY1' }), roster);
+    expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(1);   // not hammered inside the retry window
+    await vi.advanceTimersByTimeAsync(6_000);
+    await persistLiveRoomSessionNow(mkRoom({ code: 'LEGACY1' }), roster);
+    expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(2);
+  });
+
+  it('adds no asynchronous gap before the snapshot is built once the epoch is known', async () => {
+    setLiveRoomWriterEpochForTests(9);
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => { record(path, init); return undefined as never; });
+    const room = mkRoom({ code: 'GAP1' });
+    const pending = persistLiveRoomSessionNow(room, roster);
+    room.state = { ...room.state!, sequence: 99 } as typeof room.state;
+    await pending;
+    const row = (calls.find((c) => c.method === 'POST')?.body as Array<{ game_state_sequence: number }>)[0]!;
+    expect(row.game_state_sequence).toBe(14);
   });
 });
