@@ -152,6 +152,9 @@ function resolveBlockedHand(state: GameState): GameState {
       handOver: true,
       gameOver: winnerId !== null,
       winnerId,
+      // The blocking pass is a state transition like any other; the 'lowestPips' branch below bumps the
+      // sequence and so must this one, or clients that order updates by sequence drop the hand-over.
+      sequence: state.sequence + 1,
     };
   }
 
