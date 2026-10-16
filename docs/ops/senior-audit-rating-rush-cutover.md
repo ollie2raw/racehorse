@@ -156,6 +156,13 @@ fences must therefore exist **before** BRIDGE′ boots, not after. Serving artif
    Confirm: `select tgname from pg_trigger where tgname like 'room_live_sessions_%' and not tgisinternal;` lists
    `room_live_sessions_monotonic_fence`, `room_live_sessions_generation_guard`, `room_live_sessions_retire_generation`, and
    `select public.next_room_writer_epoch()` (service role) returns a number.
+> **ROLLBACK RULE (read before step 2, it applies from the first room BRIDGE′ writes).** Once BRIDGE′ or NEW has written epoch-bearing room
+> state, a rollback may target **BRIDGE′ `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697` or a later forward fix only**. It must **never** target plain
+> production `3a65ab1c` or stock BRIDGE `3ccd6ff8`: they write room epoch 0, the room fences refuse them on every room BRIDGE′/NEW has written
+> (those rooms go `degraded`; players cannot continue them), and a "one-click rollback to the previous deploy" lands on exactly that artifact.
+> Tested with real processes (production and stock BRIDGE as the rolled-back writer: higher-sequence, equal-sequence, terminal-regression and
+> retired-row writes are all refused, the stored row is untouched). See **Rollback boundaries** and **Emergency rollback**.
+
 2. Configure a valid `ADMIN_SECRET` before deployment. Deploy the exact committed **BRIDGE′** artifact `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697`; do not
    construct or apply a patch. Deploy it as a normal release. **Overlap interval (production and BRIDGE′ both alive):** production
    writes epoch 0, BRIDGE′ writes its boot epoch (> 0) as soon as it persists a room. From BRIDGE′'s first write of a room onward
@@ -310,6 +317,8 @@ Repeat the completion/retry smoke and watch for operational errors.
 
 ## Final production order (summary)
 
+**Rollback rule: after Step -1, BRIDGE′ `deec9f3f` or forward only; never plain production `3a65ab1c` or stock BRIDGE `3ccd6ff8`.**
+
 1. Step -1: gate migration, **room monotonic fence, room generation fence** (production still serving), then deploy BRIDGE′.
 2. Step 0: precheck and record SHAs.
 3. Step 1: `quiesce true`.
@@ -344,14 +353,26 @@ pair no longer exists once Step -1 completes.
 
 ## Rollback boundaries
 
-**Room fences.** Do not roll the server back to plain OLD/production after Step -1: production writes epoch 0 and the room fences refuse it on
-every room BRIDGE′ or NEW has written (its persistence goes `degraded`, deterministic, no retry storm). Roll back to BRIDGE′ or forward.
+> **ROLLBACK RULE.** Once BRIDGE′ or NEW has written epoch-bearing room state, rollback may target **BRIDGE′
+> `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697` or forward only**. **Never** roll back to plain production `3a65ab1c` or to stock BRIDGE `3ccd6ff8`.
+
+**Room fences.** Do not roll the server back to plain OLD/production (or stock BRIDGE) after Step -1: they write epoch 0 and the room fences refuse
+them on every room BRIDGE′ or NEW has written (persistence goes `degraded`, deterministic, one request, no retry storm; the stored room is not
+modified). Rooms neither BRIDGE′ nor NEW ever wrote remain writable, and a brand-new match id is a legitimate new generation by design: the rule
+protects rooms already owned, it is not a barrier to new matches. Roll back to BRIDGE′ or forward.
+
+### Emergency rollback
+
+The Render "Rollback" button (and "redeploy previous deploy") restores the *previous* deploy, which after Step -1 may be production or stock
+BRIDGE. **Do not use it.** Instead redeploy the BRIDGE′ SHA explicitly (`deec9f3fe6b42af87f18b435e5b8c2f27d9c8697`) or ship a forward fix. If a
+rolled-back epoch-0 server is already serving, rooms owned by BRIDGE′/NEW report `degraded` and their players cannot continue them: redeploy
+BRIDGE′ at once (rooms recover from the stored rows; nothing was overwritten).
 
 **Before the Ghost contract (through Step 7).** Server code may be rolled back
 while the expand schema remains, but rolling back does not return to unrestricted
 OLD rating behavior: the Ghost, Rush and ranked fences stay in the database and
-fail the OLD writers closed. Roll back to the exact **BRIDGE** artifact
-BRIDGE′ `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697` (never to plain OLD), leave `quiesce true`, and keep rating-affecting completions failing
+fail the OLD writers closed. Roll back to the exact **BRIDGE′** artifact
+`deec9f3fe6b42af87f18b435e5b8c2f27d9c8697` (never to plain OLD, and never to stock BRIDGE `3ccd6ff8`), leave `quiesce true`, and keep rating-affecting completions failing
 retryably until a corrected NEW build is deployed. Do not turn the fences off to
 make old requests appear successful.
 
