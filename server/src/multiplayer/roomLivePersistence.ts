@@ -502,6 +502,18 @@ export function markLiveRoomSessionRestoreIntent(roomCode: string): void {
   restoreIntentRoomCodes.add(roomCode.trim().toUpperCase());
 }
 
+/** True when a persist must first wait for the epoch: unset, and either a fetch is in flight or the retry window is open. */
+function writerEpochWouldBlock(): boolean {
+  return writerEpoch === null && (writerEpochInFlight !== null || Date.now() >= writerEpochRetryAtMs);
+}
+
+/** Test seam: model a booted process whose writer epoch is already known (or, with null, one that never obtained it). */
+export function setLiveRoomWriterEpochForTests(epoch: number | null): void {
+  writerEpoch = epoch;
+  writerEpochRetryAtMs = epoch === null ? Number.MAX_SAFE_INTEGER : 0;
+  writerEpochInFlight = null;
+}
+
 /** Resolves once this process's writer epoch allocation (started at boot) has settled, successfully or not. */
 export async function settleLiveRoomWriterEpoch(): Promise<void> {
   await writerEpochInFlight;
@@ -920,7 +932,7 @@ export function buildLogEntriesSince(
  * succeed, so this is a terminal 'failed' state for this process, not a 'degraded' retry.
  */
 const FENCED_LIVE_SESSION_WRITE =
-  /room_live_session_(?:stale_write|stale_writer|stale_generation|retired_match|terminal_regression|owes_completion)/;
+  /room_live_session_(?:stale_writer|stale_write|stale_generation|retired_match|terminal_regression|owes_completion)(?![a-z_])/;
 function fencedLiveSessionWrite(error: unknown): Extract<PersistLiveSessionAttemptResult, { ok: false }> | null {
   const message = error instanceof Error ? error.message : String(error);
   const match = FENCED_LIVE_SESSION_WRITE.exec(message);
@@ -999,7 +1011,7 @@ async function persistLiveSessionForRoom(
   if (refusesLiveSessionOverwrite(room)) {
     return { ok: false, status: 'failed', error: 'live_session_overwrite_refused' };
   }
-  await ensureWriterEpoch();
+  if (writerEpochWouldBlock()) await ensureWriterEpoch();
   if (restoreIntentRoomCodes.has(roomCode)) {
     persistedLogLengthsByRoomCode.delete(roomCode);
     const restored = await persistLiveSessionRestoreNow(buildLiveSessionRow(room, roster, commitFence));
@@ -1233,7 +1245,7 @@ export async function finalizeAndDeleteLiveRoomSession(
 
   const terminalStatus: RoomLiveSessionStatus =
     archiveStatus === 'completed' ? 'game_over' : 'abandoned';
-  await ensureWriterEpoch();
+  if (writerEpochWouldBlock()) await ensureWriterEpoch();
   const row = buildLiveSessionRow(room, resolveRosterForPersist(room));
   row.status = terminalStatus;
 
