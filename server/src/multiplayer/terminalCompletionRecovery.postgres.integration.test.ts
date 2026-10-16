@@ -176,8 +176,10 @@ run('terminal completion recovery (real PostgreSQL + PostgREST)', () => {
       const g = await rankedGame();
       const first = await sweep();
       expect(first.outcomes.recovered).toBe(1);
-      // Re-create the pre-marker durable state: terminal row restored with matchLogged=false.
-      localSql(`insert into public.room_live_sessions (room_code,match_id,status,source_type,game_state,game_state_sequence,room_shell,engine_seat_ids,roster,events,participant_user_ids)
+      // Re-create the pre-marker durable state: terminal row restored with matchLogged=false. The sweep retired and deleted the
+      // row, and the database (correctly) refuses to recreate a retired match unless the writer declares restore intent -- the
+      // same intent guard.restoreLiveSession declares. The flag is transaction-local and the match is still the room's newest.
+      localSql(`select set_config('racehorse.room_restore','on',true); insert into public.room_live_sessions (room_code,match_id,status,source_type,game_state,game_state_sequence,room_shell,engine_seat_ids,roster,events,participant_user_ids)
         values ('${g.code}','${g.matchId}','game_over','private',
         '${JSON.stringify((await readStateFromArchive(g.matchId)))}'::jsonb,21,
         '{"matchLogged":false,"completionPending":true,"config":{"winningScore":60},"durabilityCommit":null}'::jsonb,
