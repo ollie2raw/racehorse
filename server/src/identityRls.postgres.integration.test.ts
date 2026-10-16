@@ -360,7 +360,8 @@ d('signup fallback username (real handle_new_user trigger)', () => {
   });
   it('a valid human username is unchanged', () => {
     const id = randomUUID();
-    insertUser(id, '{"username":"Racer_Okay1"}');
-    expect(usernameOf(id)).toBe('racer_okay1');
+    const handle = `racer_${randomUUID().replace(/-/g, '').slice(0, 10)}`;
+    insertUser(id, `{"username":"${handle.toUpperCase()}"}`);
+    expect(usernameOf(id)).toBe(handle);
   });
 });
