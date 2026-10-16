@@ -74,52 +74,66 @@ run('room generation fence (real PostgreSQL)', () => {
     });
   });
 
-  describe('delete / recreate', () => {
-    it('A finishes, its row is retired and deleted, then stale A wakes: A is not recreated', () => {
+  describe('delete / recreate (who the writer is matters: a different process can never recreate a retired match)', () => {
+    it('A finishes on process epoch 5, its row is retired and deleted, then a DIFFERENT process wakes: A is not recreated', () => {
       const code = newCode(); const A = randomUUID();
-      put({ code, match: A, status: 'playing', seq: 10, ev: 12 });
-      put({ code, match: A, status: 'game_over', seq: 21, ev: 30, shell: LOGGED });
+      put({ code, match: A, status: 'playing', seq: 10, ev: 12, epoch: 5 });
+      put({ code, match: A, status: 'game_over', seq: 21, ev: 30, shell: LOGGED, epoch: 5 });
       del(code);
       expect(exists(code)).toBe(false);
-      rejects({ code, match: A, status: 'playing', seq: 10, ev: 12 }, 'room_live_session_retired_match');
-      rejects({ code, match: A, status: 'game_over', seq: 21, ev: 30, shell: LOGGED }, 'room_live_session_retired_match');
+      for (const zombie of [3, undefined, 9]) {      // older process, legacy (epoch-less) process, a newer process that never held the room
+        rejects({ code, match: A, status: 'playing', seq: 10, ev: 12, epoch: zombie }, 'room_live_session_retired_match');
+        rejects({ code, match: A, status: 'game_over', seq: 21, ev: 30, shell: LOGGED, epoch: zombie }, 'room_live_session_retired_match');
+      }
       expect(exists(code)).toBe(false);
     });
 
-    it('A retired, a legitimate new session C takes the room code, then stale A writes: C survives', () => {
-      const code = newCode(); const A = randomUUID(); const C = randomUUID();
-      put({ code, match: A, status: 'game_over', seq: 21, ev: 30, shell: LOGGED });
+    it('the SAME process (equal epoch) may revive its room after the archive deleted the row: a reconnect is not a false terminal loss', () => {
+      const code = newCode(); const A = randomUUID();
+      put({ code, match: A, status: 'abandoned', seq: 7, ev: 8, epoch: 5 });
       del(code);
-      put({ code, match: C, status: 'lobby', seq: 0, ev: 0, state: null });
-      put({ code, match: C, status: 'playing', seq: 4, ev: 5 });
-      const before = snapshot(code);
-      rejects({ code, match: A, status: 'playing', seq: 99, ev: 99 }, 'room_live_session_stale_generation');
-      rejects({ code, match: A, status: 'playing', seq: 99, ev: 99, restore: true }, 'room_live_session_stale_generation');
-      expect(snapshot(code)).toBe(before);
-      // and after C also finishes and is deleted, neither C nor A can come back; D can.
-      put({ code, match: C, status: 'game_over', seq: 8, ev: 9, shell: LOGGED }); del(code);
-      rejects({ code, match: C, status: 'playing', seq: 8, ev: 9 }, 'room_live_session_retired_match');
-      rejects({ code, match: A, status: 'playing', seq: 1, ev: 1, restore: true }, 'room_live_session_stale_generation');
-      const D = randomUUID(); put({ code, match: D, status: 'lobby', seq: 0, ev: 0, state: null });
-      expect(JSON.parse(snapshot(code)).match_id).toBe(D);
+      put({ code, match: A, status: 'playing', seq: 7, ev: 8, epoch: 5 });         // plain upsert, no restore flag needed
+      expect(exists(code)).toBe(true);
+      put({ code, match: A, status: 'playing', seq: 8, ev: 9, epoch: 5 });         // and it is an ordinary live match again
     });
 
-    it('the one legitimate recreation: restore of the NEWEST retired match (guard.restoreLiveSession)', () => {
+    it('legacy writers (epoch 0, production and stock BRIDGE) keep today\'s reconnect behaviour; an epoch writer can never recreate a legacy-retired match', () => {
       const code = newCode(); const A = randomUUID();
       put({ code, match: A, status: 'abandoned', seq: 7, ev: 8 });
       del(code);
-      rejects({ code, match: A, status: 'playing', seq: 7, ev: 8 }, 'room_live_session_retired_match'); // plain upsert (BRIDGE) fails closed
-      put({ code, match: A, status: 'playing', seq: 7, ev: 8, restore: true });
+      rejects({ code, match: A, status: 'playing', seq: 7, ev: 8, epoch: 4 }, 'room_live_session_retired_match');
+      put({ code, match: A, status: 'playing', seq: 7, ev: 8 });                   // legacy 0 == 0: allowed (unfenceable, documented)
       expect(exists(code)).toBe(true);
-      put({ code, match: A, status: 'playing', seq: 8, ev: 9 }); // and it is an ordinary live match again
     });
 
-    it('a restore flag set by one call does not leak into the next call (transaction-local)', () => {
-      const code = newCode(); const A = randomUUID();
-      put({ code, match: A, status: 'abandoned', seq: 7, ev: 8 }); del(code);
-      put({ code, match: A, status: 'playing', seq: 7, ev: 8, restore: true });
+    it('A retired, a legitimate new session C takes the room code, then any stale A writer: C survives', () => {
+      const code = newCode(); const A = randomUUID(); const C = randomUUID();
+      put({ code, match: A, status: 'game_over', seq: 21, ev: 30, shell: LOGGED, epoch: 5 });
       del(code);
-      rejects({ code, match: A, status: 'playing', seq: 7, ev: 8 }, 'room_live_session_retired_match');
+      put({ code, match: C, status: 'lobby', seq: 0, ev: 0, state: null, epoch: 7 });
+      put({ code, match: C, status: 'playing', seq: 4, ev: 5, epoch: 7 });
+      const before = snapshot(code);
+      for (const w of [5, undefined, 9]) {
+        rejects({ code, match: A, status: 'playing', seq: 99, ev: 99, epoch: w }, 'room_live_session_stale_generation');
+        rejects({ code, match: A, status: 'playing', seq: 99, ev: 99, epoch: w, restore: true }, 'room_live_session_stale_generation');
+      }
+      expect(snapshot(code)).toBe(before);
+      // after C also finishes (epoch 7) and is deleted, A is still dead, C only returns for its own process, D can start
+      put({ code, match: C, status: 'game_over', seq: 8, ev: 9, shell: LOGGED, epoch: 7 }); del(code);
+      rejects({ code, match: C, status: 'playing', seq: 8, ev: 9, epoch: 5 }, 'room_live_session_retired_match');
+      rejects({ code, match: A, status: 'playing', seq: 1, ev: 1, epoch: 5, restore: true }, 'room_live_session_stale_generation');
+      const D = randomUUID(); put({ code, match: D, status: 'lobby', seq: 0, ev: 0, state: null, epoch: 7 });
+      expect(JSON.parse(snapshot(code)).match_id).toBe(D);
+    });
+
+    it('explicit restore intent (NEW cleanup guard) recreates the NEWEST retired match even from another process; the flag is transaction-local', () => {
+      const code = newCode(); const A = randomUUID();
+      put({ code, match: A, status: 'abandoned', seq: 7, ev: 8, epoch: 5 }); del(code);
+      rejects({ code, match: A, status: 'playing', seq: 7, ev: 8, epoch: 3 }, 'room_live_session_retired_match');
+      put({ code, match: A, status: 'playing', seq: 7, ev: 8, epoch: 3, restore: true });
+      expect(exists(code)).toBe(true);
+      del(code);                                                                   // now retired by epoch 3
+      rejects({ code, match: A, status: 'playing', seq: 7, ev: 8, epoch: 5 }, 'room_live_session_retired_match');   // the flag did not leak
     });
   });
 
