@@ -12,8 +12,10 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-const DB_URL = 'postgresql://postgres@127.0.0.1:55439/racehorse_identity_audit';
-const enabled = process.env.IDENTITY_AUDIT_TEST_DATABASE_URL === DB_URL;
+// Loopback only, and only the disposable database this suite's setup script builds.
+const DB_URL = process.env.IDENTITY_AUDIT_TEST_DATABASE_URL ?? 'postgresql://postgres@127.0.0.1:55439/racehorse_identity_audit';
+const enabled = /^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/racehorse_identity_audit$/.test(DB_URL)
+  && process.env.IDENTITY_AUDIT_TEST_DATABASE_URL === DB_URL;
 const d = enabled ? describe : describe.skip;
 
 function psqlRaw(script: string): { ok: boolean; out: string; err: string } {
@@ -334,5 +336,31 @@ d('account identity RLS matrix (real schema, real roles)', () => {
       expect(admin(`select has_column_privilege('authenticated','public.profiles','glicko_rating','update')`)).toBe('f');
       expect(admin(`select has_column_privilege('authenticated','public.profiles','username','update')`)).toBe('t');
     });
+  });
+});
+
+d('signup fallback username (real handle_new_user trigger)', () => {
+  const prefix = randomUUID().slice(0, 8);
+  const ids = [1, 2, 3, 4, 5].map((n) => `${prefix}-0000-4000-8000-00000000000${n}`);
+  const insertUser = (id: string, meta: string) =>
+    admin(`insert into auth.users(id,email,raw_user_meta_data) values ('${id}','${id}@racehorse-test.invalid','${meta}'::jsonb)`);
+  const usernameOf = (id: string) => admin(`select username from public.profiles where id='${id}'`);
+
+  it('two users sharing the first 8 hex characters of their id both sign up, each with a distinct full-id fallback', () => {
+    insertUser(ids[0], '{}');
+    insertUser(ids[1], '{}');
+    expect(usernameOf(ids[0])).toBe(`user_${ids[0].replace(/-/g, '')}`);
+    expect(usernameOf(ids[1])).toBe(`user_${ids[1].replace(/-/g, '')}`);
+  });
+  it('reserved, placeholder-namespace and non-object metadata all fall back without failing signup', () => {
+    insertUser(ids[2], '{"username":"admin"}');
+    insertUser(ids[3], `{"username":"user_${prefix}"}`);
+    insertUser(ids[4], '"not-an-object"');
+    for (const id of ids.slice(2)) expect(usernameOf(id)).toBe(`user_${id.replace(/-/g, '')}`);
+  });
+  it('a valid human username is unchanged', () => {
+    const id = randomUUID();
+    insertUser(id, '{"username":"Racer_Okay1"}');
+    expect(usernameOf(id)).toBe('racer_okay1');
   });
 });

@@ -12,10 +12,14 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { startLocalPostgrestGateway, type LocalPostgrestGateway } from '../test/support/localPostgrestGateway';
 
-const DB_URL = 'postgresql://postgres@127.0.0.1:55439/racehorse_terminal_r1';
-const REST_URL = 'http://127.0.0.1:55440';
+// Loopback only, and only the disposable database the setup script builds.
+const DB_URL = process.env.TERMINAL_R1_TEST_DATABASE_URL ?? 'postgresql://postgres@127.0.0.1:55439/racehorse_terminal_r1';
+const REST_URL = process.env.TERMINAL_R1_POSTGREST_URL ?? 'http://127.0.0.1:55440';
 const enabled =
-  process.env.TERMINAL_R1_TEST_DATABASE_URL === DB_URL && process.env.TERMINAL_R1_POSTGREST_URL === REST_URL;
+  /^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/racehorse_terminal_r1$/.test(DB_URL) &&
+  /^http:\/\/127\.0\.0\.1:\d+$/.test(REST_URL) &&
+  process.env.TERMINAL_R1_TEST_DATABASE_URL === DB_URL &&
+  process.env.TERMINAL_R1_POSTGREST_URL === REST_URL;
 
 const holder = vi.hoisted(() => ({ url: 'http://127.0.0.1:1' }));
 vi.mock('./config', async () => {

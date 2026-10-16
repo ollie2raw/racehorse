@@ -20,7 +20,7 @@ VITE_ADMIN_EMAIL=you@example.com
 ```
 
 9. Start the client normally (`npm run dev` in `client/`).
-10. In `supabase/daily_puzzle.sql`, replace `admin@example.com` with the same email as `VITE_ADMIN_EMAIL` before running it.
+10. `supabase/daily_puzzle.sql` defines no client write policies: `daily_puzzles` is published only by the server (service role). Do not add email-claim admin policies.
 
 ## Social greenfield baseline
 
