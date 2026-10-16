@@ -58,6 +58,8 @@ ap "$M/2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql"
 ap "$M/2026-10-13_ranked_rating_claim.sql"
 ap "$M/2026-10-15_ranked_rating_context.sql"
 ap "$M/2026-10-15_ghost_precontract_deferral.sql"
+ap "$M/2026-10-16_room_live_session_monotonic_fence.sql"
+ap "$M/2026-10-16_ranked_applied_state_monotonic.sql"
 if [ "$SCHEMA" = "post-contract" ]; then
   ap "$M/2026-10-13_puzzle_rush_assignment_contract.sql"
   ap "$M/2026-10-13_ghost_user_match_uniqueness.sql"

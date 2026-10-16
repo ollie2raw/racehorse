@@ -762,6 +762,11 @@ async function persistLiveSessionRowNow(
     rememberWrittenSession(row);
     return { ok: true };
   } catch (error) {
+    const fenced = fencedLiveSessionWrite(error);
+    if (fenced) {
+      log.error({ roomCode: row.room_code, error: fenced.error }, 'room_live_sessions write refused by the database fence');
+      return fenced;
+    }
     if (isMissingRoomLiveSessionsTable(error)) {
       liveSessionsTableAvailable = false;
       log.warn('room_live_sessions table missing; skipping live persist');
@@ -856,6 +861,19 @@ export function buildLogEntriesSince(
   return { entries, confirmed: confirmedLogsForRoom(room) };
 }
 
+/**
+ * The database fence (2026-10-16_room_live_session_monotonic_fence.sql) refused this snapshot: the
+ * stored room is newer, terminal, or owes its completion. Retrying the same snapshot can never
+ * succeed, so this is a terminal 'failed' state for this process, not a 'degraded' retry.
+ */
+const FENCED_LIVE_SESSION_WRITE =
+  /room_live_session_(?:stale_write|terminal_regression|owes_completion)/;
+function fencedLiveSessionWrite(error: unknown): Extract<PersistLiveSessionAttemptResult, { ok: false }> | null {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = FENCED_LIVE_SESSION_WRITE.exec(message);
+  return match ? { ok: false, status: 'failed', error: match[0] } : null;
+}
+
 function isMissingPersistFunction(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes('PGRST202') || message.includes('persist_room_live_session');
@@ -878,6 +896,11 @@ async function persistLiveSessionEntriesNow(
     liveSessionsTableAvailable = true;
     return { ok: true };
   } catch (error) {
+    const fenced = fencedLiveSessionWrite(error);
+    if (fenced) {
+      log.error({ roomCode: row.room_code, error: fenced.error }, 'room_live_sessions write refused by the database fence');
+      return fenced;
+    }
     if (isMissingPersistFunction(error)) return 'function_missing';
     const errorMessage = error instanceof Error ? error.message : String(error);
     log.warn({ roomCode: row.room_code, error: errorMessage }, 'room_live_sessions entries persist failed');
