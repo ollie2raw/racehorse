@@ -182,6 +182,9 @@ Apply each with `psql -X -v ON_ERROR_STOP=1 "$DATABASE_URL" -f <file>` in this o
 5. `supabase/migrations/2026-10-15_ranked_rating_context.sql` — **depends on step 4**, including its receipt key/index and CAS RPC. Adds immutable owner/opponent inputs, serializes new ranked-game admission, and fences decay against pending snapshots. Apply before NEW; this is not a contract migration.
 6. `supabase/migrations/2026-10-15_ghost_precontract_deferral.sql` — **depends on the Ghost expand (step 1)**. Additive: creates `ghost_deferred_completions` and replaces `complete_ghost_rating_v2` so that, while the legacy global `ghost_games_match_id_unique` still exists, the SECOND human account of one match is durably deferred (typed `deferred_legacy_match_uniqueness`) instead of failing the whole multiplayer completion. BRIDGE never calls this RPC and its fenced writers are unchanged. Apply before NEW.
 
+7. `supabase/migrations/2026-10-16_room_live_session_monotonic_fence.sql` — independent of the gate and of steps 1-6. Additive, no table rewrite: one `BEFORE UPDATE` trigger on `room_live_sessions` that makes durable room state monotonic for **every** writer (the PostgREST `merge-duplicates` upsert BRIDGE uses, `persist_room_live_session`, and the recovery PATCH). A snapshot older than the stored `(game_state_sequence, last_event_sequence)` is rejected with `room_live_session_stale_write`; a terminal room (`game_over`/`abandoned`) can never become `playing`/`lobby` again (`room_live_session_terminal_regression`); `matchLogged` never regresses, `completionPending` clears only together with `matchLogged`, and `completionRecovery` survives writers that omit it; a different match cannot replace a terminal row that still owes its completion (`room_live_session_owes_completion`). Equal sequence is accepted (idempotent replay, response-loss retry, terminal bookkeeping). This is what protects a room against the OLD instance during Render's zero-downtime replacement. BRIDGE needs no change (verified: BRIDGE `3ccd6ff8` multiplayer and ranked restart chaos pass with it installed).
+8. `supabase/migrations/2026-10-16_ranked_applied_state_monotonic.sql` — **depends on step 5** only in that it assumes `ranked_games` exists. Adds `ranked_games_applied_fields_coupled` (`NOT VALID`: `rating_after`, `rd_after`, `delta` are all NULL = pending, or all set = applied; never scanned, never rewritten) and a trigger that rejects `applied -> pending`. It prints `ranked_games rows with half-set applied fields (left as-is, not validated): N`. **Read N before applying in production.** Legacy half-set rows are left untouched but cannot be updated again unless the update sets all three fields; they are still readable and deletable, and a pending-shaped one is still completed by `commit_glicko_game_update`.
+
 The BRIDGE process is still serving but fenced for vulnerable rating work; Rush
 old report/result writes fail closed as before.
 
@@ -191,7 +194,7 @@ must contain the complete corrected v1 owner/opponent shape. The intermediate
 unshipped opponent-only v1 shape is unsupported. Old RPC callers process NULL
 rows but are rejected for new context rows. NEW on a pre-context schema can
 boot/liveness may pass, but ranked scans/inserts fail closed; liveness is not
-proof of schema readiness. Do not deploy NEW before all six expansion steps.
+proof of schema readiness. Do not deploy NEW before all eight expansion steps.
 The context migration is reapplicable; its historical CHECK validation runs
 after committing the expansion DDL, under the weaker validation lock. Schedule
 normal migration lock management and stop if any statement fails.

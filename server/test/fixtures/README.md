@@ -65,6 +65,14 @@ faults around real commits: lost-before-commit, committed-response-lost, hold-th
 `chaos:multiplayer-restart` and `chaos:ranked-restart` scripts run unmodified against
 `scripts/localChaosGateway.ts` (set `SUPABASE_URL` to its printed URL and both keys to its printed JWT).
 
+### Durable-state monotonicity (room fence + ranked applied state)
+`src/multiplayer/durableStateMonotonicity.postgres.integration.test.ts` (same env as step 3) exercises
+`2026-10-16_room_live_session_monotonic_fence.sql` and `2026-10-16_ranked_applied_state_monotonic.sql`
+(both are applied by `setupTerminalCompletionTestDb.sh`) through the RPC, the PostgREST merge-duplicates upsert and raw SQL.
+`server/scripts/roomStateMonotonicityRace.ts [iterations]` is the two-**process** race: an OLD instance, a NEW instance
+and a restart sweep, each a separate OS process running the real persistence/recovery code, in four timing modes. It
+asserts the stale writer is rejected, the terminal row is intact, and the sweep completes it exactly once.
+
 ### Pre-/post-contract schema (Ghost mixed-version gate)
 `scripts/setupTerminalCompletionTestDb.sh` builds the database in the exact cutover order and takes
 `TERMINAL_TEST_SCHEMA=pre-contract` (default: what is live when NEW deploys, legacy `ghost_games_match_id_unique` present,

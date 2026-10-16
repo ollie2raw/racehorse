@@ -85,12 +85,22 @@ describe.skipIf(!enabled)('ranked context real Postgres/PostgREST crash matrix',
   });
 
   it('migration preserves and recovers a pre-expansion historical row at full weight', async () => {
-    sql("delete from rating_periods where ranked_game_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; update ranked_games set rating_after=null,rd_after=null,delta=null where id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; update profiles set glicko_rating=1500,glicko_rd=200,glicko_vol=0.06,ranked_games_played=30 where id='11111111-1111-4111-8111-111111111111'");
-    expect(sql("select rating_context is null from ranked_games where id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'")).toBe('t');
+    // A genuinely pending, NULL-context row as the pre-expansion writer left it. (It is built by insertion, not by
+    // reverting an applied game: applied -> pending is forbidden by 2026-10-16_ranked_applied_state_monotonic.sql.)
+    const owner = randomUUID(); cohort.push(owner);
+    const game = randomUUID();
+    sql(`insert into auth.users values ('${owner}');
+      insert into profiles(id,username,glicko_rating,glicko_rd,glicko_vol,ranked_games_played,peak_rating) values ('${owner}','hist${owner.replaceAll('-', '').slice(0, 12)}',1500,200,0.06,30,1600)
+        on conflict(id) do update set glicko_rating=1500,glicko_rd=200,glicko_vol=0.06,ranked_games_played=30,peak_rating=1600;
+      insert into ranked_games(id,player_id,opponent_id,player_score,opponent_score,game_type,rating_before,rd_before,played_at,source_type,source_match_id)
+        values ('${game}','${owner}','${FRITZ_ELITE_ID}',60,20,'fritz',1500,200,now(),'local_fritz_abandon','historical-${game}')`);
+    expect(sql(`select rating_context is null and rating_after is null from ranked_games where id='${game}'`)).toBe('t');
     const expected = computeGlicko2({ rating: 1500, rd: 200, vol: 0.06, gamesPlayed: 30 },
       [{ opponent: getFritzConfig(FRITZ_ELITE_ID), result: { score: 60, opponentScore: 20 } }]);
     expect((await processAllPendingRatingGames()).processed).toBe(1);
-    expect(Number(sql("select rating_after from ranked_games where id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'"))).toBeCloseTo(expected.newRating, 10);
+    expect(Number(sql(`select rating_after from ranked_games where id='${game}'`))).toBeCloseTo(expected.newRating, 10);
+    // and the applied historical row can no longer be reverted to a poison-looking pending row
+    expect(() => sql(`update ranked_games set rating_after=null,rd_after=null,delta=null where id='${game}'`)).toThrow(/ranked_applied_state_monotonic/);
   });
 
   it.each([['normal', 'standard', false], ['manual forfeit', 'standard', true], ['disconnect', 'disconnect_forfeit', true]] as const)
