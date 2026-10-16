@@ -566,7 +566,7 @@ function useAuthInternal() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       subscription.unsubscribe();
     };
-  }, [hydrateProfile]);
+  }, [hydrateProfile, setUser]);
 
   const signUp = useCallback(
     async (email: string, password: string, username?: string): Promise<AuthResult> => {
@@ -762,7 +762,7 @@ function useAuthInternal() {
     }
 
     return { error: errorMessage };
-  }, []);
+  }, [setUser]);
 
   const updateUsername = useCallback(
     async (username: string): Promise<AuthResult> => {
