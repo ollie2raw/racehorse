@@ -144,6 +144,7 @@ async function validateTokenUpstream(token: string, key: string): Promise<string
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      // eslint-disable-next-line no-console -- pre-existing operational warning; supabaseAuth deliberately has no logger dependency
       console.warn('[auth] token validation timed out', { authTimeoutMs });
       return null;
     }
