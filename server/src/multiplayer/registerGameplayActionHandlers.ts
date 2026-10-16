@@ -8,7 +8,13 @@ import {
   readyForNextHand,
   rollbackRoomGameplayCommit,
 } from '../rooms';
-import { normalizeGameActionRequestId, withGameActionIdempotency } from './gameActionIdempotency';
+import {
+  fingerprintGameCommand,
+  lookupGameActionReceipt,
+  normalizeGameActionRequestId,
+  withGameActionIdempotency,
+} from './gameActionIdempotency';
+import { classifyCommandError, isWellFormedGameAction, staleMatchAck } from './commandMatchBinding';
 import { childLogger } from '../logger';
 import { recordOperationalFailure } from '../operationalTelemetry';
 
@@ -66,10 +72,11 @@ export type RegisterGameplayActionHandlersParams = {
 function parseHandReadyArgs(arg2: unknown, arg3: unknown): {
   handNumber: number | undefined;
   requestId: string | null;
+  matchId: unknown;
   cb: AckFn | undefined;
 } {
   if (typeof arg2 === 'function') {
-    return { handNumber: undefined, requestId: null, cb: arg2 as AckFn };
+    return { handNumber: undefined, requestId: null, matchId: undefined, cb: arg2 as AckFn };
   }
   if (arg2 && typeof arg2 === 'object' && !Array.isArray(arg2)) {
     const payload = arg2 as { handNumber?: unknown; requestId?: unknown };
@@ -80,12 +87,14 @@ function parseHandReadyArgs(arg2: unknown, arg3: unknown): {
     return {
       handNumber,
       requestId: normalizeGameActionRequestId(payload.requestId),
+      matchId: (payload as { matchId?: unknown }).matchId,
       cb: typeof arg3 === 'function' ? (arg3 as AckFn) : undefined,
     };
   }
   return {
     handNumber: typeof arg2 === 'number' && Number.isFinite(arg2) ? arg2 : undefined,
     requestId: null,
+    matchId: undefined,
     cb: typeof arg3 === 'function' ? (arg3 as AckFn) : undefined,
   };
 }
@@ -102,30 +111,52 @@ export function registerGameplayActionHandlers(
     log.debug({ socketId: socket.id, roomCode, actionType: action?.type }, 'game:action received');
     try {
       if (!action || typeof action !== 'object' || typeof action.type !== 'string') {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Invalid action payload.' });
+        if (typeof cb === 'function') cb({ ok: false, error: 'Invalid action payload.', code: 'malformed' });
         return;
       }
       if (!['DRAW', 'MOVE', 'PASS'].includes(action.type)) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Unknown action type.' });
+        if (typeof cb === 'function') cb({ ok: false, error: 'Unknown action type.', code: 'malformed' });
+        return;
+      }
+      if (!isWellFormedGameAction(action)) {
+        if (typeof cb === 'function') cb({ ok: false, error: 'Invalid move payload.', code: 'malformed' });
         return;
       }
       const requestId = normalizeGameActionRequestId((action as { requestId?: unknown }).requestId);
       if (!requestId) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Missing action requestId.' });
+        if (typeof cb === 'function') cb({ ok: false, error: 'Missing action requestId.', code: 'malformed' });
         return;
       }
       const existingRoom = getRoom(roomCode);
       const playerSeatId = resolveActorSeatId(roomCode, socket);
       if (!existingRoom.players.includes(playerSeatId)) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Spectators cannot act.' });
+        if (typeof cb === 'function') cb({ ok: false, error: 'Spectators cannot act.', code: 'unauthorized' });
+        return;
+      }
+      const stale = staleMatchAck(existingRoom, (action as { matchId?: unknown }).matchId);
+      if (stale) {
+        if (typeof cb === 'function') cb(stale);
+        return;
+      }
+      // A retry of a command that already applied gets its original result even if the room has
+      // since moved on (game over, next hand, rematch) - and a reused id with a different payload
+      // fails closed - before any current-state check can turn it into a misleading rejection.
+      const priorReceipt = lookupGameActionReceipt(
+        roomCode,
+        playerSeatId,
+        requestId,
+        fingerprintGameCommand('game:action', action),
+      );
+      if (priorReceipt) {
+        if (typeof cb === 'function') cb(priorReceipt.ok ? priorReceipt : { ...priorReceipt, code: 'request_id_conflict' });
         return;
       }
       if (!existingRoom.state) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Game not started.' });
+        if (typeof cb === 'function') cb({ ok: false, error: 'Game not started.', code: 'not_active' });
         return;
       }
       if (existingRoom.state.gameOver) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Game is over.' });
+        if (typeof cb === 'function') cb({ ok: false, error: 'Game is over.', code: 'not_active' });
         return;
       }
       assertRoomDurabilityOperationAllowed(existingRoom, 'gameplay_action');
@@ -238,7 +269,11 @@ export function registerGameplayActionHandlers(
             : undefined;
           return { ok: true, sequence: room.state?.sequence ?? null, forcedDraw: forcedMeta };
         },
-        { deferReceiptPersistUntilDurable: () => persistDurableGate },
+        {
+          deferReceiptPersistUntilDurable: () => persistDurableGate,
+          fingerprint: fingerprintGameCommand('game:action', action),
+          matchId: existingRoom.matchId,
+        },
       );
       if (ack.uncertain) {
         emitMpAuthorityFunnel('private_action_uncertain', {
@@ -269,17 +304,22 @@ export function registerGameplayActionHandlers(
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       log.warn({ err, roomCode, actionType: action?.type }, 'game:action error');
-      if (typeof cb === 'function') cb({ ok: false, error: message });
+      if (typeof cb === 'function') cb({ ok: false, ...classifyCommandError(message) });
     }
   });
 
   socket.on('hand:ready', async (code, arg2?: unknown, arg3?: unknown) => {
     const roomCode = String(code).trim().toUpperCase();
-    const { handNumber, requestId, cb } = parseHandReadyArgs(arg2, arg3);
+    const { handNumber, requestId, matchId: claimedMatchId, cb } = parseHandReadyArgs(arg2, arg3);
     try {
       const room = getRoom(roomCode);
       assertRoomDurabilityOperationAllowed(room, 'new_hand');
       const playerSeatId = resolveActorSeatId(roomCode, socket);
+      const staleHand = staleMatchAck(room, claimedMatchId);
+      if (staleHand) {
+        if (typeof cb === 'function') cb(staleHand);
+        return;
+      }
 
       const execute = async () => {
         try {
@@ -290,8 +330,11 @@ export function registerGameplayActionHandlers(
             broadcastStateUpdate(result.room.code);
             setImmediate(() => handlerDeps.maybeFinalizeTournamentMatch?.(result.room));
           }
+          const stateNow = result.room.state;
           return {
             ok: !result.ignored,
+            // Valid but nothing changed (hand not over / game over): no receipt row for it.
+            noop: !result.started && !result.ignored && (!stateNow || stateNow.gameOver || !stateNow.handOver),
             started: result.started,
             ignored: Boolean(result.ignored),
             handNumber: result.room.state?.handNumber ?? null,
@@ -316,7 +359,10 @@ export function registerGameplayActionHandlers(
       };
 
       const ack = requestId
-        ? await withGameActionIdempotency(roomCode, playerSeatId, requestId, execute)
+        ? await withGameActionIdempotency(roomCode, playerSeatId, requestId, execute, {
+            fingerprint: fingerprintGameCommand('hand:ready', { handNumber }),
+            matchId: room.matchId,
+          })
         : await execute();
 
       if (requestId && ack.uncertain) {

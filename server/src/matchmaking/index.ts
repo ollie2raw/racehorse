@@ -19,6 +19,10 @@ import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
 
 const log = childLogger('matchmaking');
 
+/** A client can put anything in the ack position; only a real function may be called. */
+const callable = (value: unknown): ((resp: unknown) => void) | undefined =>
+  typeof value === 'function' ? (value as (resp: unknown) => void) : undefined;
+
 const MATCH_FOUND_COUNTDOWN_MS = 3000;
 const ONLINE_BROADCAST_INTERVAL_MS = 2000;
 const DEFAULT_RATING = 800;
@@ -126,7 +130,7 @@ export function registerMatchmakingHandlers(
     try {
       const identity = resolveQueueIdentity(socket, payload);
       if (!identity.ok) {
-        ack?.({
+        callable(ack)?.({
           ok: false,
           error: identity.error,
           online: getOnlineCount(io),
@@ -136,7 +140,7 @@ export function registerMatchmakingHandlers(
       }
       // Guard duplicate joins that arrive while fetchPlayerRating is awaited.
       if (pendingJoins.has(identity.userId)) {
-        ack?.({ ok: false, error: 'already_queued', online: getOnlineCount(io), queued: service.size() });
+        callable(ack)?.({ ok: false, error: 'already_queued', online: getOnlineCount(io), queued: service.size() });
         return;
       }
       pendingJoins.add(identity.userId);
@@ -156,7 +160,7 @@ export function registerMatchmakingHandlers(
       // queued at all (nothing to deadlock or retry in a loop); the client
       // shows a generic try-again and the player can search again.
       if (blockedUserIds === null) {
-        ack?.({ ok: false, error: 'queue_unavailable', online: getOnlineCount(io), queued: service.size() });
+        callable(ack)?.({ ok: false, error: 'queue_unavailable', online: getOnlineCount(io), queued: service.size() });
         return;
       }
       const result = service.join({
@@ -175,7 +179,7 @@ export function registerMatchmakingHandlers(
             socketId: socket.id,
           }, '[debug] queue:join rejected');
         }
-        ack?.({
+        callable(ack)?.({
           ok: false,
           error: result.reason,
           online: getOnlineCount(io),
@@ -194,7 +198,7 @@ export function registerMatchmakingHandlers(
           online: getOnlineCount(io),
         }, '[debug] queue:join accepted');
       }
-      ack?.({
+      callable(ack)?.({
         ok: true,
         rating,
         queueSize: service.size(),
@@ -212,7 +216,7 @@ export function registerMatchmakingHandlers(
       io.emit('queue:online', { online: getOnlineCount(io), queued: service.size() });
     } catch (err) {
       log.warn({ err: err instanceof Error ? err.message : err }, 'queue:join failed');
-      ack?.({
+      callable(ack)?.({
         ok: false,
         error: 'internal',
         online: getOnlineCount(io),
@@ -226,16 +230,16 @@ export function registerMatchmakingHandlers(
     if (removed) {
       io.emit('queue:online', { online: getOnlineCount(io), queued: service.size() });
     }
-    ack?.({ ok: removed });
+    callable(ack)?.({ ok: removed });
   });
 
   socket.on('queue:status', (_payload: unknown, ack?: (resp: unknown) => void) => {
     const status = service.getStatus(socket.id);
-    ack?.({ ok: true, status });
+    callable(ack)?.({ ok: true, status });
   });
 
   socket.on('queue:online', (_payload: unknown, ack?: (resp: unknown) => void) => {
-    ack?.({ ok: true, online: getOnlineCount(io), queued: service.size() });
+    callable(ack)?.({ ok: true, online: getOnlineCount(io), queued: service.size() });
   });
 
   socket.on('disconnect', () => {

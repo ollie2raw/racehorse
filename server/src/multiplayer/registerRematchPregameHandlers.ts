@@ -19,7 +19,7 @@ import {
 import { comparePregameDrawTiles } from './preGameDraw';
 import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 import { isAnyTournamentRoom } from './roomKind';
-import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
+import { staleMatchAck } from './commandMatchBinding';
 import { MATCH_RESULT_RETRYING_MESSAGE, MATCH_RESULT_STILL_SAVING_MESSAGE } from './gameOverPersistPolicy';
 
 export type RegisterRematchPregameHandlersParams = {
@@ -33,10 +33,15 @@ export function registerRematchPregameHandlers(
 ): void {
   const { handlerDeps } = params;
 
-  socket.on('game:rematch', async (code: unknown, cb?: AckFn) => {
+  socket.on('game:rematch', async (code: unknown, arg2?: unknown, arg3?: unknown) => {
     const roomCode = String(code ?? '').trim().toUpperCase();
+    const cb = (typeof arg2 === 'function' ? arg2 : typeof arg3 === 'function' ? arg3 : undefined) as AckFn | undefined;
+    const claimedMatchId =
+      arg2 && typeof arg2 === 'object' && !Array.isArray(arg2) ? (arg2 as { matchId?: unknown }).matchId : undefined;
     try {
       const room = getRoom(roomCode);
+      const staleRematch = staleMatchAck(room, claimedMatchId);
+      if (staleRematch) return cb?.(staleRematch);
       assertRoomDurabilityOperationAllowed(room, 'rematch');
 
       // Both tournament systems: a rematch would start a fresh game in a room
@@ -149,7 +154,8 @@ export function registerRematchPregameHandlers(
       io.to(roomAfterRematch.code).emit('game:rematch:started', { roomCode: roomAfterRematch.code });
       broadcastStateUpdate(roomAfterRematch.code);
       emitRematchStatus(roomAfterRematch.code);
-      clearGameActionIdempotencyForRoom(roomAfterRematch.code);
+      // Receipts are deliberately NOT cleared here: a request id from the finished game must keep
+      // resolving to its original result (TTL-bounded) instead of executing in the new game.
       emitMpAuthorityFunnel('private_rematch_started', {
         roomCode: roomAfterRematch.code,
         seatId: playerSeatId,
