@@ -17,11 +17,16 @@
 -- (a rematch / new session advances it; no writer cooperation is needed, so BRIDGE advances it too).
 --   * A write for match M whose generation is LOWER than the room's newest generation is refused
 --     (room_live_session_stale_generation), whatever state the newer match is in.
---   * A deleted live row retires its match (AFTER DELETE). A write that would recreate a retired match is
---     refused (room_live_session_retired_match) unless it comes from persist_room_live_session(..., p_restore
---     => true) -- the one legitimate recreation, guard.restoreLiveSession (a player reconnected while the
---     archive deleted the row) -- AND the match is still the room's newest generation. A restore of an
---     older generation is refused.
+--   * A deleted live row retires its match (AFTER DELETE) and records the writer epoch of the snapshot it deleted
+--     (retired_writer_epoch). A write that would recreate a retired match is refused (room_live_session_retired_match)
+--     unless it comes from THE SAME WRITER PROCESS that last wrote the row (equal writer epoch) -- the legitimate
+--     recreation: a reconnect revives the room in the process that owns it while the archive was deleting the row --
+--     or from persist_room_live_session(..., p_restore => true) (NEW's explicit restore). In both cases the match must
+--     still be the room's newest generation; an older generation is refused. A DIFFERENT process (a stale zombie, a
+--     newer process that never held the room) can never recreate it.
+--     Legacy writers (production 3a65ab1c, stock BRIDGE) all have epoch 0, so legacy-vs-legacy recreation is allowed:
+--     that is exactly today's behaviour and the only way their reconnect-during-archive keeps working. It is closed
+--     for any pair that includes a writer with an epoch (BRIDGE-with-epoch, NEW).
 --   * A brand-new match id is a legitimate new generation. A new session using a retired room code
 --     therefore survives; the old match is stale from then on.
 --   BRIDGE's plain upserts cannot restore: in that one rare race the write fails closed. Documented.
@@ -64,9 +69,11 @@ create table if not exists public.room_live_session_generations (
   room_code text not null,
   generation bigint not null check (generation >= 1),
   retired_at timestamptz null,
+  retired_writer_epoch numeric not null default 0,
   created_at timestamptz not null default now(),
   unique (room_code, generation)
 );
+alter table public.room_live_session_generations add column if not exists retired_writer_epoch numeric not null default 0;
 alter table public.room_live_session_generations enable row level security;
 revoke all on public.room_live_session_generations from public, anon, authenticated;
 grant select on public.room_live_session_generations to service_role;
@@ -100,9 +107,9 @@ begin
         new.room_code, new.match_id, g.generation, newest using errcode = 'P0001';
     end if;
     if g.retired_at is not null then
-      if not restoring then
-        raise exception 'room_live_session_retired_match: room % match % was retired', new.room_code, new.match_id
-          using errcode = 'P0001';
+      if not restoring and public.room_live_session_writer_epoch(new.room_shell) is distinct from g.retired_writer_epoch then
+        raise exception 'room_live_session_retired_match: room % match % was retired by writer epoch %, incoming %', new.room_code, new.match_id,
+          g.retired_writer_epoch, public.room_live_session_writer_epoch(new.room_shell) using errcode = 'P0001';
       end if;
       update public.room_live_session_generations set retired_at = null where match_id = new.match_id;
     end if;
@@ -121,7 +128,10 @@ create trigger room_live_sessions_generation_guard before insert or update on pu
 create or replace function public.retire_room_live_session_generation()
 returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
 begin
-  update public.room_live_session_generations set retired_at = coalesce(retired_at, now()) where match_id = old.match_id;
+  update public.room_live_session_generations
+     set retired_at = coalesce(retired_at, now()),
+         retired_writer_epoch = public.room_live_session_writer_epoch(old.room_shell)
+   where match_id = old.match_id;
   return old;
 end $$;
 revoke execute on function public.retire_room_live_session_generation() from public, anon, authenticated;
