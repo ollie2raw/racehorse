@@ -30,9 +30,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { tsxLoaderUrl } from './tsxLoader';
 
-const DB_URL = 'postgresql://postgres@127.0.0.1:55439/racehorse_terminal_r1';
-const REST_URL = 'http://127.0.0.1:55440';
-if (process.env.TERMINAL_R1_TEST_DATABASE_URL !== DB_URL || process.env.TERMINAL_R1_POSTGREST_URL !== REST_URL) {
+// Owned loopback fixture only: any loopback port, but exactly the disposable database name the setup script builds.
+const DB_URL = process.env.TERMINAL_R1_TEST_DATABASE_URL ?? 'postgresql://postgres@127.0.0.1:55439/racehorse_terminal_r1';
+const REST_URL = process.env.TERMINAL_R1_POSTGREST_URL ?? 'http://127.0.0.1:55440';
+if (
+  !/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/racehorse_terminal_r1$/.test(DB_URL) ||
+  !/^http:\/\/127\.0\.0\.1:\d+$/.test(REST_URL) ||
+  process.env.TERMINAL_R1_TEST_DATABASE_URL !== DB_URL ||
+  process.env.TERMINAL_R1_POSTGREST_URL !== REST_URL
+) {
   throw new Error('Refusing to run: exact owned loopback test database/PostgREST not configured');
 }
 const arg = (name: string): string | undefined => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
