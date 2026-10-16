@@ -3735,9 +3735,15 @@
   /* Home is one fixed screen in the app: no scroll area. The card row is the
      flexible region and shrinks to make everything fit. */
   .rh-native .today-home .home-main {
-    gap: 8px;
-    padding: var(--rh-native-nav-h) 0 max(var(--rh-safe-bottom), 10px);
+    gap: 6px;
+    /* The legal footer below <main> already pads for the home indicator; padding it here too
+       counted the inset twice and squeezed the daily cards until PLAY was clipped. */
+    padding: var(--rh-native-nav-h) 0 0;
     overflow: hidden;
+  }
+
+  .rh-native .today-home .home-legal-footer {
+    padding-top: 2px;
   }
 
   .rh-native .today-home .home-heading {
@@ -3768,11 +3774,11 @@
   }
 
   .rh-native .today-home .home-daily-grid > section {
-    padding: 14px 18px 14px;
+    padding: 10px 18px;
   }
 
   .rh-native .today-home .home-card-content h2 {
-    font-size: 34px;
+    font-size: 30px;
     letter-spacing: -0.05em;
   }
 
@@ -3783,7 +3789,13 @@
   }
 
   .rh-native .today-home .home-daily-grid .home-card-status-wrap {
-    margin-top: 8px;
+    margin-top: 6px;
+  }
+
+  /* On a short landscape screen the card cannot hold the blurb AND the Play button; the button
+     is the one that matters (the card itself is not tappable), so the blurb yields. */
+  .rh-native .today-home .home-daily-grid .home-card-description {
+    display: none;
   }
 
   /* ── Live-site visual language ─────────────────────────────────────
