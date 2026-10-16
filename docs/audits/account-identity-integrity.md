@@ -113,15 +113,13 @@ duplicated. Intent recorded: guests have no durable state.
 
 ## Deferred (not fixed here)
 
-* A2 — recovery-hash login CSRF / session fixation (`auth/recoveryHash.ts`): implicit-flow
-  `#access_token=…&type=recovery` is applied with `setSession` without confirmation. Real fix = PKCE
-  (`exchangeCodeForSession`), an auth-policy change out of this pass's scope.
+* ~~A2 — recovery-hash login CSRF / session fixation~~ — resolved in the independent review (see Reviewer addendum R3).
 * A2 — `POST /api/stats/record-match` accepts solo (`loser = null`) `online` claims unverified → self-inflated
   leaderboard wins. Integrity of one's own record, not cross-account.
 * A2 — unauthenticated `GET /api/ghost/profile/:userId` and `/profile-by-username/:username` expose composite logs
   (looks intentional for "play a friend's Ghost"; needs product confirmation) and create a `ghost_profiles` row on GET.
 * A2 — unauthenticated tournament bracket exposes `room_code`; joining is participant-gated (`authorizeMatchParticipant`).
-* A2 — implicit-flow tokens for non-recovery types left in the URL; no Sentry URL scrubber.
+* ~~A2 — implicit-flow tokens for non-recovery types left in the URL; no Sentry URL scrubber~~ — resolved in review (R4).
 * A3 — un-namespaced local progress (journey/learn/learning/analysis/review snapshots), guest-seat capabilities never
   pruned, raw PostgREST error text returned to clients, `mp-stats` ops info, Supabase `TRUNCATE` default grants
   (not reachable through PostgREST), native `signOut` timeout fallback, `rh:session` cache race on logout.
@@ -131,7 +129,51 @@ duplicated. Intent recorded: guests have no durable state.
 ## Reproducing
 
 ```
-PGHOST=127.0.0.1 PGPORT=55439 PGUSER=postgres server/scripts/setupIdentityAuditDb.sh racehorse_identity_audit
+# any free loopback port; LC_ALL=C so migrations apply in the same byte order Postgres/CI use
+LC_ALL=C PGHOST=127.0.0.1 PGPORT=55439 PGUSER=postgres server/scripts/setupIdentityAuditDb.sh racehorse_identity_audit
 IDENTITY_AUDIT_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/racehorse_identity_audit \
-  npx vitest run src/identityRls.postgres.integration.test.ts   # 204 tests
+  npx vitest run src/identityRls.postgres.integration.test.ts   # 207 tests
 ```
+
+## Reviewer addendum (independent review + integration gate)
+
+Reviewed `ab43d156..5c7e2b7a`, reproduced against the pre-fix schema/code, then fixed what the audit's own fixes missed.
+
+* **R1 — friends RLS (A1, confirmed, fix verified).** Pre-fix, as role `authenticated`, the recipient's
+  `update friends set user_id=<victim>, status='accepted'` returned `UPDATE 1` and exposed the victim's `activity_feed` row;
+  `id`/`created_at` were also writable. After `2026-10-16_account_identity_rls_hardening.sql` every such update is
+  `permission denied`; accept/block (status), reject/cancel (delete) still work; the migration is idempotent and was applied
+  as an upgrade over a pre-fix database. Mutation-verified: restoring the broad `UPDATE` grant fails the suite.
+* **R2 — logout socket authority.** The audit's server drop was correct but (a) an in-flight verification of the old token
+  completing *after* the sign-out identify re-installed A, and (b) a verification *outage* (thrown fetch error) during A -> B kept
+  A on the socket. Fixed: newest identify wins per socket; a thrown verification for a different claimed principal drops the
+  held identity. A same-principal token rotation during an outage keeps the account (its own session) and recovers on the next
+  identify. A 401/timeout resolves to null and downgrades. Tests: `presenceIdentityTransitions.test.ts` (fails against the audit's handler).
+* **R3 — recovery link fixation (A2, resolved).** Impact: the victim's browser becomes signed in as the *attacker's* account
+  (login CSRF); it persists across refresh (supabase-js persists the session); anything the victim then creates (games,
+  friend requests, Daily Fritz attempts) belongs to the attacker's account and is visible to them. It is **not** takeover of the
+  victim's own account. The new-password form could not distinguish a legitimate link (an attacker's own link is a legitimate
+  token). Fix (no new crypto, no auth-policy change): the fragment tokens are verified with the auth server (`getUser(jwt)`,
+  no session change); the link is adopted silently only if *this browser* requested a reset for that exact email in the last
+  hour; otherwise the verified email is shown and the user must confirm. Cross-device recovery still works with one extra tap.
+  PKCE (`flowType: 'pkce'` + `exchangeCodeForSession`) remains the architecturally cleaner fix but also requires same-browser
+  completion for *every* flow (signup confirm, magic link), changes the callback URL shape, and must be validated against the
+  hosted project and the native deep links: an owner decision, not a blocker now.
+* **R4 — tokens in the URL.** `detectSessionInUrl` is off and only `type=recovery` is consumed, so a non-recovery
+  `#access_token&refresh_token` fragment was a live credential sitting in the address bar/history entry that nothing used.
+  It is now stripped at bootstrap (and token query params), and Sentry (`beforeSend`) and PostHog (`sanitize_properties`) redact it.
+* **R5 — account switch.** The audit's cleanup ran in a `useEffect`: the first render/child effects with B active still read A's
+  room code, Fritz ids and Daily Fritz checkpoints, A's profile stayed on screen until B's hydration finished, and a late
+  `refreshProfile(A)` could repopulate A. Cleanup now runs inside `setUser`, the profile resets on principal change, and
+  profile writes are dropped for a non-current principal. `accountSwitch.integration.test.tsx` drives the real `AuthProvider`.
+* **R6 — signup fallback collision (confirmed).** Two auth users sharing the first 8 hex chars of their id made the second
+  signup fail on `profiles_username_key`. Fallback is now `user_` + all 32 hex chars (`2026-10-16_signup_fallback_username_full_uuid.sql`,
+  also `schema.sql`); existing profiles are unchanged; human username rules are unchanged.
+* **R7 — e2e shim.** Requires explicit `E2E_AUTH_SHIM=1` (set only by `client/playwright.config.ts`), refused on hosted runtimes
+  and whenever any production Supabase var is present, **even with** `RACEHORSE_ALLOW_PRODUCTION_SUPABASE`.
+* **R8 — per-viewer cache.** `private` alone does not stop the *browser* cache answering account B with account A's cached
+  response inside `max-age`; `setPrivateShortCache` now also sends `Vary: Authorization` (leaderboard, Daily Fritz today, stats).
+
+Migrations to apply (manually, no CI runner): `2026-10-16_account_identity_rls_hardening.sql`, then
+`2026-10-16_signup_fallback_username_full_uuid.sql`. Both are idempotent.
+
