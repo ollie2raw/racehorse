@@ -48,8 +48,8 @@
 -- The columns are NOT NULL, but BEFORE triggers run before NOT NULL is enforced, so every component is
 -- coalesced; a writer cannot bypass the fence by supplying NULL or a lying column.
 --
--- Apply AFTER 2026-10-16_room_live_session_monotonic_fence.sql, with the other expand migrations, while the
--- serving artifact is BRIDGE 3ccd6ff8 (quiesced) -- see docs/ops/senior-audit-rating-rush-cutover.md.
+-- Apply AFTER 2026-10-16_room_live_session_monotonic_fence.sql, in Step -1, while production is still serving and
+-- BEFORE BRIDGE' is deployed -- see docs/ops/senior-audit-rating-rush-cutover.md.
 begin;
 set local lock_timeout = '5s';
 

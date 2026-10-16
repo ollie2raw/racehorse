@@ -104,6 +104,9 @@ behavior changed. All original historical migrations then applied successfully.
 
 ## R1: corrected BRIDGE admission
 
+> **Historical record.** `3ccd6ff8` is no longer the deployment BRIDGE: it was superseded by BRIDGE′
+> (`release/rating-cutover-bridge-prime`); the cutover runbook and `docs/ops/backend-runtime-canonical-artifacts.md` are authoritative.
+
 Historical `e3517fb0da9644ccede64697309d7af8d9ffb8ee` is superseded and must not be
 deployed. Isolated `fix/rating-cutover-bridge-quiescence` is based exactly on it,
 with corrected artifact **`3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353`**. No candidate
@@ -243,8 +246,11 @@ Final validation (2026-10-15 UTC):
 
 ## Final production sequence (documentation only; not executed in production)
 
+> **Historical record; superseded by the cutover runbook** (`docs/ops/senior-audit-rating-rush-cutover.md`), which
+> adds the Step -1 room fences, the identity migrations and BRIDGE′ in place of step 2 below.
+
 1. Apply `2026-10-13_rating_cutover_gate.sql`.
-2. Deploy corrected BRIDGE `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353`.
+2. Deploy corrected BRIDGE `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353` (historical; now BRIDGE′ in the runbook).
 3. Verify admin authentication, health/readiness and exact release.
 4. Quiesce admission.
 5. Prove all rating producers drained: two ready reads ≥30s apart, same bootId.

@@ -3,7 +3,7 @@
  * different server artifacts running as separate OS processes:
  *
  *   --old=<worktree root>   the process that owns the room first (e.g. production 3a65ab1c)
- *   --new=<worktree root>   the process that starts later and takes the database over (e.g. BRIDGE 3ccd6ff8)
+ *   --new=<worktree root>   the process that starts later and takes the database over (e.g. BRIDGE′ or NEW)
  *
  * Boot order is OLD then NEW, exactly like a Render replacement. Each scenario drives both processes at the same room code
  * and reports whether the STALE (OLD) writer's data LANDED in the database. Scenarios:

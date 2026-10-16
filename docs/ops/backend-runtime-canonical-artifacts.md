@@ -3,7 +3,8 @@
 | Role | Canonical source / reviewed artifact |
 |---|---|
 | NEW candidate | Current remote `feat/app-store-candidate` HEAD after the final runtime gate; resolve and record its exact SHA in deployment preflight. Validated runtime code is `cba5667564c956c1f269a492e06ad107ce3af2f3`; the final documentation-only descendant contains the gate report. |
-| Corrected BRIDGE | `release/rating-cutover-bridge` at **`3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353`** |
+| BRIDGE′ (BRIDGE Prime; the only BRIDGE to deploy) | `release/rating-cutover-bridge-prime` at **`7f5003404e6e87f06b8d4028130fb213340a77be`** |
+| Historical BRIDGE (superseded; never deploy, never roll back to) | `release/rating-cutover-bridge` at `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353` |
 | Production reference | `main` / `3a65ab1c37f098aa94c306c755eca8fbbc65aee2`; not changed or deployed by this gate |
 
 Do not use candidate `74ad0fec46dc6b79c7c1689f95b16ce93b7e4a67` as the launch

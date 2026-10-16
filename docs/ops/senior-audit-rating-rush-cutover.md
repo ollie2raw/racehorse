@@ -6,22 +6,28 @@ verified at each step. Do not use the disposable PostgreSQL test fixture on
 production. Keep the Ghost and Rush expand migrations together before the
 new binary; keep both contract migrations until the old binary is gone.
 
-Three server builds appear below. Keep them straight:
+The server builds below are the ones that matter. Keep them straight:
 
 * **OLD** — the server currently in production (the base of this remediation,
   `main` at the commit you record in preflight).
-* **BRIDGE** — the exact runtime-validated committed artifact
-  `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353` on
-  `release/rating-cutover-bridge` (OLD plus the quiescence gate). It is the
-  only build that can *stop* the OLD rating writers and *prove* they are idle.
-  The OLD binary cannot be told to stop; that is why a bridge deploy comes first.
-* **BRIDGE′ (what is actually deployed in Step -1)** — `review/bridge-writer-epoch` at
-  `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697`: canonical BRIDGE `3ccd6ff8` plus ONE change, a boot-ordered **writer epoch** on room snapshots
-  (`server/src/multiplayer/roomLivePersistence.ts`, +61 lines, nothing deleted; no gate, rating, Ghost or Rush code is touched).
-  Why it exists: production `3a65ab1c` and BRIDGE `3ccd6ff8` run **byte-identical room persistence** and both write with the implicit
-  writer epoch 0, so during the Render production -> BRIDGE replacement the database cannot order an equal-sequence tie between
+* **BRIDGE (historical, superseded as a deployment artifact)** — `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353` on
+  `release/rating-cutover-bridge` (OLD plus the quiescence gate). It is the base BRIDGE′ was built from and the origin of the gate
+  semantics. **Never deploy it and never roll back to it** (see the rollback rule): it writes room epoch 0.
+  The OLD binary cannot be told to stop; that is why a bridge deploy comes first, and that bridge is BRIDGE′ below.
+* **BRIDGE′ ("BRIDGE Prime"; what is actually deployed in Step -1)** — `release/rating-cutover-bridge-prime` at
+  `7f5003404e6e87f06b8d4028130fb213340a77be`: historical BRIDGE `3ccd6ff8` plus exactly three commits, confined to `server/src/multiplayer/roomLivePersistence.ts`
+  and tests: a **writer epoch** on room snapshots, and the rule that a process's writer-order identity is **fixed for its lifetime**
+  (no gate, rating, Ghost or Rush code is touched).
+  Why it exists: production `3a65ab1c` and historical BRIDGE `3ccd6ff8` run **byte-identical room persistence** and both write with the
+  implicit writer epoch 0, so during the Render production -> BRIDGE replacement the database cannot order an equal-sequence tie between
   them (reproduced with real processes: `server/scripts/roomOverlapRace.ts`, production vs stock BRIDGE: the older process wins
   the tie, and a legacy pair can also recreate a retired match). BRIDGE′ makes the new process distinguishable.
+  **Writer-epoch lifetime model.** Persistence boot initialization (`configureLiveRoomPersistence`, before the server listens) makes ONE
+  allocation attempt of `next_room_writer_epoch()`. Success freezes that positive epoch for the life of the process; failure freezes the
+  process at legacy epoch 0 for its whole life and logs `writer epoch could not be allocated at boot` once. Nothing ever changes it later
+  (no lazy or timed retry), so an older process can never turn into a *newer* epoch and beat a process that booted after it. Recovery
+  from a failed allocation is a **restart** (which allocates anew). Apply the Step -1 migrations *before* deploying BRIDGE′; a BRIDGE′
+  that booted without them must be restarted after they are applied.
   Gate semantics are exactly those of `3ccd6ff8`. **Do not deploy `3ccd6ff8` itself.**
 * **NEW** — `feat/app-store-candidate` after the backend-runtime gate integration.
   The former candidate `74ad0fec46dc6b79c7c1689f95b16ce93b7e4a67` is superseded;
@@ -30,13 +36,13 @@ Three server builds appear below. Keep them straight:
   It writes ratings through atomic database
   functions, so it counts the gate's state but is never blocked by it.
 
-Historical BRIDGEs `d8198d98` and `e3517fb0da9644ccede64697309d7af8d9ffb8ee`
+Historical BRIDGEs `d8198d98`, `e3517fb0da9644ccede64697309d7af8d9ffb8ee` and (as a deployment artifact) `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353`
 are superseded. The latter reported drained while scheduled ranking catch-up
-could still commit. **Do not deploy either historical artifact.** The corrected
-artifact above gates boot/periodic/weekly catch-up, admin ranking processing and
+could still commit. **Do not deploy any historical artifact.** The corrected
+artifact above (BRIDGE′) gates boot/periodic/weekly catch-up, admin ranking processing and
 authenticated Fritz disconnect handling with the existing admission primitive.
 The disconnect unit begins before its pending-match mutation. No candidate
-features or full reliability branch were merged into BRIDGE.
+features or full reliability branch were merged into BRIDGE or BRIDGE′.
 
 ## Why the expand steps fence old writes
 
@@ -136,7 +142,7 @@ quiesce() { curl -fsS -X POST -H "x-admin-secret: $ADMIN_SECRET" -H 'content-typ
 Do not schedule this across a Sunday 00:00 UTC weekly maintenance run. That is
 a secondary precaution only; the gate, not the calendar, is the invariant.
 
-### Step -1 — Install the gate AND the room fences, then deploy BRIDGE′ (once, before the cutover window)
+### Step -1 — Install the gate, the room fences AND the identity migrations, then deploy BRIDGE′ (once, before the cutover window)
 
 The production -> BRIDGE′ replacement is itself a Render process overlap (old and new instance reach the same database). The room
 fences must therefore exist **before** BRIDGE′ boots, not after. Serving artifact while these migrations are applied: production
@@ -153,24 +159,37 @@ fences must therefore exist **before** BRIDGE′ boots, not after. Serving artif
       (deleted) match can be recreated only by the process that wrote it last (so a reconnect that revives a room the archive just
       deleted still works, and a zombie can never recreate it); `next_room_writer_epoch()` and the writer-epoch rule (a lower epoch
       is refused even at an equal sequence).
+   4. `supabase/migrations/2026-10-16_account_identity_rls_hardening.sql` — **independent of the rating cutover and of the room fences**
+      (apply after them so every pre-deploy migration is in one reviewed block). Idempotent, additive/revoking only, compatible with
+      production `3a65ab1c`, BRIDGE′ and NEW (the client only ever updates `friends.status`; nothing writes `daily_puzzles` as a user).
+      It replaces the table-level `UPDATE` grant on `public.friends` with `UPDATE (status)` (a request recipient could otherwise re-point
+      the row at an arbitrary account and read that account's activity feed), revokes `anon` privileges on `friends`, and drops the
+      `daily_puzzles` write policies keyed on the JWT email claim. Confirm:
+      `select string_agg(column_name, ',') from information_schema.column_privileges where table_name='friends' and grantee='authenticated' and privilege_type='UPDATE';` returns exactly `status`,
+      and `select count(*) from pg_policies where tablename='daily_puzzles' and cmd <> 'SELECT';` returns `0`.
+   5. `supabase/migrations/2026-10-16_signup_fallback_username_full_uuid.sql` — replaces `handle_new_user()` (create or replace; idempotent) so the
+      signup fallback username is `user_` plus the full 32-hex user id (two ids sharing the first 8 hex characters could previously make the
+      second signup fail on `profiles_username_key`). Existing profiles are unchanged. Confirm:
+      `select pg_get_functiondef('public.handle_new_user()'::regprocedure) like '%replace(new.id::text, ''-'', '''')%';` returns `t`.
    Confirm: `select tgname from pg_trigger where tgname like 'room_live_sessions_%' and not tgisinternal;` lists
    `room_live_sessions_monotonic_fence`, `room_live_sessions_generation_guard`, `room_live_sessions_retire_generation`, and
    `select public.next_room_writer_epoch()` (service role) returns a number.
-> **ROLLBACK RULE (read before step 2, it applies from the first room BRIDGE′ writes).** Once BRIDGE′ or NEW has written epoch-bearing room
-> state, a rollback may target **BRIDGE′ `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697` or a later forward fix only**. It must **never** target plain
-> production `3a65ab1c` or stock BRIDGE `3ccd6ff8`: they write room epoch 0, the room fences refuse them on every room BRIDGE′/NEW has written
+> **ROLLBACK RULE (read before step 2, it applies from the first room BRIDGE′ writes).** After BRIDGE′ has written epoch-bearing room state,
+> **rollback to `3a65ab1c` (production) or `3ccd6ff8` (historical BRIDGE) is forbidden. Rollback is BRIDGE′ `7f5003404e6e87f06b8d4028130fb213340a77be` or forward only.** They
+> must never be targeted: they write room epoch 0, the room fences refuse them on every room BRIDGE′/NEW has written
 > (those rooms go `degraded`; players cannot continue them), and a "one-click rollback to the previous deploy" lands on exactly that artifact.
 > Tested with real processes (production and stock BRIDGE as the rolled-back writer: higher-sequence, equal-sequence, terminal-regression and
 > retired-row writes are all refused, the stored row is untouched). See **Rollback boundaries** and **Emergency rollback**.
 
-2. Configure a valid `ADMIN_SECRET` before deployment. Deploy the exact committed **BRIDGE′** artifact `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697`; do not
+2. Configure a valid `ADMIN_SECRET` before deployment. Deploy the exact committed **BRIDGE′** artifact `7f5003404e6e87f06b8d4028130fb213340a77be`; do not
    construct or apply a patch. Deploy it as a normal release. **Overlap interval (production and BRIDGE′ both alive):** production
    writes epoch 0, BRIDGE′ writes its boot epoch (> 0) as soon as it persists a room. From BRIDGE′'s first write of a room onward
    the database refuses production's lower-sequence, equal-sequence, terminal-regression, cross-match and recreate writes for that
    room (production's room goes `degraded`; its players reconnect to BRIDGE′). Before BRIDGE′ writes a room, production is still its
    legitimate owner and its writes are accepted; a room BRIDGE′ hydrates from a stale row fails closed on its first stale write.
 3. Confirm `status` returns `enforcement: "legacy_writers"`, `quiesced: false`,
-   `newUnsafeOperationsCanStart: true`, the expected `release`, and that BRIDGE′ obtained an epoch:
+   `newUnsafeOperationsCanStart: true`, the expected `release`, and that BRIDGE′ obtained an epoch (its logs must NOT contain
+   `writer epoch could not be allocated at boot`; if they do, BRIDGE′ is frozen at legacy epoch 0: **restart it** before Step 0):
    `select count(*) filter (where room_shell ? 'writerEpoch') from public.room_live_sessions;` is > 0 once any room has been written
    after the deploy (zero rooms is also fine; check again after the first room).
 
@@ -181,7 +200,7 @@ Confirm and record each:
 * exactly one Render server instance (dashboard, or `curl -s -H "Authorization: Bearer $RENDER_API_KEY" https://api.render.com/v1/services/$SERVICE_ID`, `numInstances == 1`);
 * server health (`/health`) and DB health (`/ready`) are green;
 * no deployment or migration currently running;
-* OLD SHA, BRIDGE′ SHA (`deec9f3fe6b42af87f18b435e5b8c2f27d9c8697`), NEW SHA (`git rev-parse` of each) written down; rollback SHA = the BRIDGE′ SHA (never `3ccd6ff8` and never plain OLD once Step -1 is done: OLD writes epoch 0 and the room fences refuse it on any room BRIDGE′ or NEW has written);
+* OLD SHA, BRIDGE′ SHA (`7f5003404e6e87f06b8d4028130fb213340a77be`), NEW SHA (`git rev-parse` of each) written down; rollback SHA = the BRIDGE′ SHA (never `3ccd6ff8` and never plain OLD once Step -1 is done: OLD writes epoch 0 and the room fences refuse it on any room BRIDGE′ or NEW has written);
 * the migration files below have been read and the DB backup/recovery point exists;
 * `status.decayInFlight == false` and the next scheduled decay (Sunday 00:00 UTC) is not within the window;
 * record read-only counts: open unassigned Rush runs; legacy Ghost rows with `rating_applied_at is null`.
@@ -317,25 +336,31 @@ Repeat the completion/retry smoke and watch for operational errors.
 
 ## Final production order (summary)
 
-**Rollback rule: after Step -1, BRIDGE′ `deec9f3f` or forward only; never plain production `3a65ab1c` or stock BRIDGE `3ccd6ff8`.**
+**Rollback rule: after BRIDGE′ has written epoch-bearing room state, rollback to `3a65ab1c` or `3ccd6ff8` is forbidden. Rollback is BRIDGE′ (`7f5003404e6e87f06b8d4028130fb213340a77be`) or forward only.**
 
-1. Step -1: gate migration, **room monotonic fence, room generation fence** (production still serving), then deploy BRIDGE′.
-2. Step 0: precheck and record SHAs.
-3. Step 1: `quiesce true`.
-4. Step 2: two `readyForExpand: true` reads, 30 s apart, same `bootId`.
-5. Step 3: Ghost expand, reconciliation, Rush expand, ranked claim, **ranked context**, Ghost deferral, then **ranked preflight (`GO`) and ranked applied-state** (exactly in that order).
-6. Step 4: deploy NEW and run the smoke (BRIDGE′ -> NEW overlap: both writers have boot-ordered epochs, so BRIDGE′ cannot win a tie against NEW).
-7. Step 5: confirm BRIDGE is gone, then `quiesce false`.
-8. Step 6: observe.
-9. Step 7: reconciliation query returns zero rows.
-10. Step 8: Rush contract, then Ghost contract, then drain deferred Ghost seats to zero.
+1. Step -1, while current production is serving: rating gate migration, **room monotonic fence, room generation fence**, then the **identity
+   migrations** (RLS hardening, signup fallback).
+2. Step -1 (cont.): deploy BRIDGE′ `7f5003404e6e87f06b8d4028130fb213340a77be`.
+3. Step 0: precheck and record SHAs.
+4. Step 1: `quiesce true`.
+5. Step 2: two `readyForExpand: true` reads, 30 s apart, same `bootId`.
+6. Step 3 (1-6): Ghost expand, reconciliation, Rush expand, ranked claim, **ranked context**, Ghost deferral.
+7. Step 3 (7a): ranked half-set preflight must print `GO`.
+8. Step 3 (7b): ranked applied-state migration.
+9. Step 4: deploy NEW.
+10. Step 4: smoke (BRIDGE′ -> NEW overlap: both writers have lifetime-fixed, boot-ordered identities, so BRIDGE′ cannot win a tie against NEW).
+11. Step 5: confirm BRIDGE′ is stopped.
+12. Step 5: `quiesce false` (resume).
+13. Steps 6-7: observe; reconciliation query returns zero rows.
+14. Step 8: Rush contract, then Ghost contract.
+15. Step 8.3: drain deferred Ghost work to zero after the Ghost contract.
 
 ## Room-writer overlap timeline (no unfenced interval)
 
 | Interval | Writers alive | Migrations in force | Epoch | Older writer can overwrite newer room state? |
 |---|---|---|---|---|
 | before Step -1.2 | production | gate, room monotonic + generation | production = 0 | n/a (one process) |
-| **production -> BRIDGE′ overlap** | production (0) + BRIDGE′ (boot epoch) | gate, room monotonic + generation | BRIDGE′ > 0 | **No**: lower, equal, terminal, cross-match, recreate all refused once BRIDGE′ has written the room |
+| **production -> BRIDGE′ overlap** | production (0) + BRIDGE′ (epoch fixed at boot) | gate, room monotonic + generation | BRIDGE′ > 0 (0 only if its boot allocation failed: logged once, restart it) | **No**: lower, equal, terminal, cross-match, recreate all refused once BRIDGE′ has written the room |
 | BRIDGE′ steady state (Steps 0-3) | BRIDGE′ | + Ghost/Rush/ranked expands, ranked applied-state (7) | BRIDGE′ > 0 | n/a (one process); its own redeploy overlap is fenced (BRIDGE′ -> BRIDGE′ tested) |
 | **BRIDGE′ -> NEW overlap (Step 4)** | BRIDGE′ + NEW | all expands | NEW epoch > BRIDGE′ epoch (boot order) | **No** |
 | NEW steady state (Steps 5+) | NEW | all expands, later contracts | NEW > 0 | n/a; NEW -> NEW overlaps fenced |
@@ -354,7 +379,7 @@ pair no longer exists once Step -1 completes.
 ## Rollback boundaries
 
 > **ROLLBACK RULE.** Once BRIDGE′ or NEW has written epoch-bearing room state, rollback may target **BRIDGE′
-> `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697` or forward only**. **Never** roll back to plain production `3a65ab1c` or to stock BRIDGE `3ccd6ff8`.
+> `7f5003404e6e87f06b8d4028130fb213340a77be` or forward only**. **Never** roll back to plain production `3a65ab1c` or to stock BRIDGE `3ccd6ff8`.
 
 **Room fences.** Do not roll the server back to plain OLD/production (or stock BRIDGE) after Step -1: they write epoch 0 and the room fences refuse
 them on every room BRIDGE′ or NEW has written (persistence goes `degraded`, deterministic, one request, no retry storm; the stored room is not
@@ -364,7 +389,7 @@ protects rooms already owned, it is not a barrier to new matches. Roll back to B
 ### Emergency rollback
 
 The Render "Rollback" button (and "redeploy previous deploy") restores the *previous* deploy, which after Step -1 may be production or stock
-BRIDGE. **Do not use it.** Instead redeploy the BRIDGE′ SHA explicitly (`deec9f3fe6b42af87f18b435e5b8c2f27d9c8697`) or ship a forward fix. If a
+BRIDGE. **Do not use it.** Instead redeploy the BRIDGE′ SHA explicitly (`7f5003404e6e87f06b8d4028130fb213340a77be`) or ship a forward fix. If a
 rolled-back epoch-0 server is already serving, rooms owned by BRIDGE′/NEW report `degraded` and their players cannot continue them: redeploy
 BRIDGE′ at once (rooms recover from the stored rows; nothing was overwritten).
 
@@ -372,7 +397,7 @@ BRIDGE′ at once (rooms recover from the stored rows; nothing was overwritten).
 while the expand schema remains, but rolling back does not return to unrestricted
 OLD rating behavior: the Ghost, Rush and ranked fences stay in the database and
 fail the OLD writers closed. Roll back to the exact **BRIDGE′** artifact
-`deec9f3fe6b42af87f18b435e5b8c2f27d9c8697` (never to plain OLD, and never to stock BRIDGE `3ccd6ff8`), leave `quiesce true`, and keep rating-affecting completions failing
+`7f5003404e6e87f06b8d4028130fb213340a77be` (never to plain OLD, and never to stock BRIDGE `3ccd6ff8`), leave `quiesce true`, and keep rating-affecting completions failing
 retryably until a corrected NEW build is deployed. Do not turn the fences off to
 make old requests appear successful.
 
