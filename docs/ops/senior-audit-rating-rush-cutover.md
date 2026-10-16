@@ -15,6 +15,14 @@ Three server builds appear below. Keep them straight:
   `release/rating-cutover-bridge` (OLD plus the quiescence gate). It is the
   only build that can *stop* the OLD rating writers and *prove* they are idle.
   The OLD binary cannot be told to stop; that is why a bridge deploy comes first.
+* **BRIDGE′ (what is actually deployed in Step -1)** — `review/bridge-writer-epoch` at
+  `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697`: canonical BRIDGE `3ccd6ff8` plus ONE change, a boot-ordered **writer epoch** on room snapshots
+  (`server/src/multiplayer/roomLivePersistence.ts`, +61 lines, nothing deleted; no gate, rating, Ghost or Rush code is touched).
+  Why it exists: production `3a65ab1c` and BRIDGE `3ccd6ff8` run **byte-identical room persistence** and both write with the implicit
+  writer epoch 0, so during the Render production -> BRIDGE replacement the database cannot order an equal-sequence tie between
+  them (reproduced with real processes: `server/scripts/roomOverlapRace.ts`, production vs stock BRIDGE: the older process wins
+  the tie, and a legacy pair can also recreate a retired match). BRIDGE′ makes the new process distinguishable.
+  Gate semantics are exactly those of `3ccd6ff8`. **Do not deploy `3ccd6ff8` itself.**
 * **NEW** — `feat/app-store-candidate` after the backend-runtime gate integration.
   The former candidate `74ad0fec46dc6b79c7c1689f95b16ce93b7e4a67` is superseded;
   resolve and record the current remote branch SHA, rather than reuse that old artifact.
@@ -128,17 +136,36 @@ quiesce() { curl -fsS -X POST -H "x-admin-secret: $ADMIN_SECRET" -H 'content-typ
 Do not schedule this across a Sunday 00:00 UTC weekly maintenance run. That is
 a secondary precaution only; the gate, not the calendar, is the invariant.
 
-### Step -1 — Install the gate (once, before the cutover window)
+### Step -1 — Install the gate AND the room fences, then deploy BRIDGE′ (once, before the cutover window)
 
-1. Apply `supabase/migrations/2026-10-13_rating_cutover_gate.sql` (additive;
-   safe for OLD; a single table).
-2. Configure a valid `ADMIN_SECRET` before deployment. Deploy the exact committed
-   BRIDGE artifact `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353`; do not construct or
-   apply a patch. Its gate migration is self-contained in that commit. Deploy it
-   as a normal release. This deploy is the same
-   exposure as any ordinary deploy because no expand migration exists yet.
+The production -> BRIDGE′ replacement is itself a Render process overlap (old and new instance reach the same database). The room
+fences must therefore exist **before** BRIDGE′ boots, not after. Serving artifact while these migrations are applied: production
+`3a65ab1c` (verified compatible: real production processes pass multiplayer and ranked restart chaos against this schema).
+
+1. Apply, in this order, each with `psql -X -v ON_ERROR_STOP=1 "$DATABASE_URL" -f <file>` (all additive, no table rewrite,
+   safe for OLD):
+   1. `supabase/migrations/2026-10-13_rating_cutover_gate.sql` (a single table).
+   2. `supabase/migrations/2026-10-16_room_live_session_monotonic_fence.sql` — within one match, a snapshot older than the stored
+      `(game_state_sequence, last_event_sequence)` is refused; a terminal room never becomes active again; `matchLogged`,
+      `completionPending`, `completionRecovery` are monotonic; a different match cannot replace a terminal row that owes completion.
+   3. `supabase/migrations/2026-10-16_room_live_session_generation_fence.sql` — **depends on 2** (replaces its trigger function).
+      Durable room-code generation history: a write for an older match is refused whatever state the newer match is in; a retired
+      (deleted) match can be recreated only by the process that wrote it last (so a reconnect that revives a room the archive just
+      deleted still works, and a zombie can never recreate it); `next_room_writer_epoch()` and the writer-epoch rule (a lower epoch
+      is refused even at an equal sequence).
+   Confirm: `select tgname from pg_trigger where tgname like 'room_live_sessions_%' and not tgisinternal;` lists
+   `room_live_sessions_monotonic_fence`, `room_live_sessions_generation_guard`, `room_live_sessions_retire_generation`, and
+   `select public.next_room_writer_epoch()` (service role) returns a number.
+2. Configure a valid `ADMIN_SECRET` before deployment. Deploy the exact committed **BRIDGE′** artifact `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697`; do not
+   construct or apply a patch. Deploy it as a normal release. **Overlap interval (production and BRIDGE′ both alive):** production
+   writes epoch 0, BRIDGE′ writes its boot epoch (> 0) as soon as it persists a room. From BRIDGE′'s first write of a room onward
+   the database refuses production's lower-sequence, equal-sequence, terminal-regression, cross-match and recreate writes for that
+   room (production's room goes `degraded`; its players reconnect to BRIDGE′). Before BRIDGE′ writes a room, production is still its
+   legitimate owner and its writes are accepted; a room BRIDGE′ hydrates from a stale row fails closed on its first stale write.
 3. Confirm `status` returns `enforcement: "legacy_writers"`, `quiesced: false`,
-   `newUnsafeOperationsCanStart: true`, and the expected `release`.
+   `newUnsafeOperationsCanStart: true`, the expected `release`, and that BRIDGE′ obtained an epoch:
+   `select count(*) filter (where room_shell ? 'writerEpoch') from public.room_live_sessions;` is > 0 once any room has been written
+   after the deploy (zero rooms is also fine; check again after the first room).
 
 ### Step 0 — Precheck
 
@@ -147,7 +174,7 @@ Confirm and record each:
 * exactly one Render server instance (dashboard, or `curl -s -H "Authorization: Bearer $RENDER_API_KEY" https://api.render.com/v1/services/$SERVICE_ID`, `numInstances == 1`);
 * server health (`/health`) and DB health (`/ready`) are green;
 * no deployment or migration currently running;
-* OLD SHA, BRIDGE SHA, NEW SHA (`git rev-parse` of each) written down; rollback SHA = `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353`;
+* OLD SHA, BRIDGE′ SHA (`deec9f3fe6b42af87f18b435e5b8c2f27d9c8697`), NEW SHA (`git rev-parse` of each) written down; rollback SHA = the BRIDGE′ SHA (never `3ccd6ff8` and never plain OLD once Step -1 is done: OLD writes epoch 0 and the room fences refuse it on any room BRIDGE′ or NEW has written);
 * the migration files below have been read and the DB backup/recovery point exists;
 * `status.decayInFlight == false` and the next scheduled decay (Sunday 00:00 UTC) is not within the window;
 * record read-only counts: open unassigned Rush runs; legacy Ghost rows with `rating_applied_at is null`.
@@ -182,11 +209,11 @@ Apply each with `psql -X -v ON_ERROR_STOP=1 "$DATABASE_URL" -f <file>` in this o
 5. `supabase/migrations/2026-10-15_ranked_rating_context.sql` — **depends on step 4**, including its receipt key/index and CAS RPC. Adds immutable owner/opponent inputs, serializes new ranked-game admission, and fences decay against pending snapshots. Apply before NEW; this is not a contract migration.
 6. `supabase/migrations/2026-10-15_ghost_precontract_deferral.sql` — **depends on the Ghost expand (step 1)**. Additive: creates `ghost_deferred_completions` and replaces `complete_ghost_rating_v2` so that, while the legacy global `ghost_games_match_id_unique` still exists, the SECOND human account of one match is durably deferred (typed `deferred_legacy_match_uniqueness`) instead of failing the whole multiplayer completion. BRIDGE never calls this RPC and its fenced writers are unchanged. Apply before NEW.
 
-7. `supabase/migrations/2026-10-16_room_live_session_monotonic_fence.sql` — independent of the gate and of steps 1-6. Additive, no table rewrite: one `BEFORE UPDATE` trigger on `room_live_sessions`. Within one match a snapshot older than the stored `(game_state_sequence, last_event_sequence)` is rejected (`room_live_session_stale_write`), a terminal room (`game_over`/`abandoned`) can never become `playing`/`lobby` again (`room_live_session_terminal_regression`), `matchLogged` never regresses, `completionPending` clears only together with `matchLogged`, `completionRecovery` survives writers that omit it, and a different match cannot replace a terminal row that still owes its completion (`room_live_session_owes_completion`).
-8. `supabase/migrations/2026-10-16_room_live_session_generation_fence.sql` — **depends on step 7** (it replaces that trigger function in place). Adds the durable room-code generation history (`room_live_session_generations`, which outlives the deletable live row), refuses any write of an older match once the room has advanced (`room_live_session_stale_generation`, whatever state the newer match is in), refuses recreating a retired match (`room_live_session_retired_match`) except through `persist_room_live_session(..., p_restore => true)` for the room's newest match, and adds the boot-ordered writer epoch (`next_room_writer_epoch()`, `room_shell.writerEpoch`; a lower epoch is refused even at an equal sequence: `room_live_session_stale_writer`). BRIDGE needs no change: its plain upserts advance generations like any writer; its one unrecoverable case (a reconnect restoring a row the archive just deleted) fails closed.
-9. `supabase/migrations/2026-10-16_ranked_applied_state_monotonic.sql` — **LAST expand step; gated by a read-only preflight.** Run `psql -X -v ON_ERROR_STOP=1 "$DATABASE_URL" -f scripts/sql/ranked-applied-state-preflight.sql` immediately before it, after the Step 2 drain: `GO` (zero half-set `ranked_games` rows) -> apply; `STOP` -> do not apply, reconcile each listed row deliberately (the report says whether the catch-up sweep selects it and whether it blocks its owner as a predecessor), re-run until `GO`. The migration itself refuses to run while half-set rows exist. It adds the `NOT VALID` coupling CHECK `ranked_games_applied_fields_coupled` and a trigger that makes applied results immutable (`ranked_applied_state_monotonic`).
+7. `supabase/migrations/2026-10-16_ranked_applied_state_monotonic.sql` — **LAST expand step; gated by a read-only preflight.** Run `psql -X -v ON_ERROR_STOP=1 "$DATABASE_URL" -f scripts/sql/ranked-applied-state-preflight.sql` immediately before it, after the Step 2 drain: `GO` (zero half-set `ranked_games` rows) -> apply; `STOP` -> do not apply, reconcile each listed row deliberately (the report says whether the catch-up sweep selects it and whether it blocks its owner as a predecessor), re-run until `GO`. The migration itself refuses to run while half-set rows exist. It adds the `NOT VALID` coupling CHECK `ranked_games_applied_fields_coupled` and a trigger that makes applied results immutable (`ranked_applied_state_monotonic`).
 
-**Why exactly here.** The serving artifact is BRIDGE `3ccd6ff8` with `quiesce true` (drain confirmed twice, same `bootId`), after expand items 1-6 and **before Step 4**: the BRIDGE -> NEW replacement is the Render overlap the fence exists for, and the migrations must be live before NEW starts writing. They do not need the gate closed (verified), but being inside the drained window means no completion is in flight when the ranked preflight runs. They are NOT applied earlier, while production `3a65ab1c` is still serving, because the only cutover-time room overlap that needs them is the BRIDGE -> NEW one; they are verified compatible with `3a65ab1c` anyway should an operator need to apply them sooner. Do not apply them after Step 4: NEW would run unfenced.
+**Placement of the room fences.** They are NOT part of this step: they were installed in Step -1, before BRIDGE′ booted, so there is no
+interval in which an older room writer can win. Only the ranked applied-state migration (7) is applied here, as the last expand step,
+immediately after the Step 2 drain, because its half-set preflight is only meaningful when no writer is in flight.
 
 The BRIDGE process is still serving but fenced for vulnerable rating work; Rush
 old report/result writes fail closed as before.
@@ -197,7 +224,7 @@ must contain the complete corrected v1 owner/opponent shape. The intermediate
 unshipped opponent-only v1 shape is unsupported. Old RPC callers process NULL
 rows but are rejected for new context rows. NEW on a pre-context schema can
 boot/liveness may pass, but ranked scans/inserts fail closed; liveness is not
-proof of schema readiness. Do not deploy NEW before all nine expansion steps.
+proof of schema readiness. Do not deploy NEW before all seven expansion steps (and before the three Step -1 migrations).
 The context migration is reapplicable; its historical CHECK validation runs
 after committing the expansion DDL, under the weaker validation lock. Schedule
 normal migration lock management and stop if any statement fails.
@@ -283,16 +310,31 @@ Repeat the completion/retry smoke and watch for operational errors.
 
 ## Final production order (summary)
 
-1. Step -1: gate migration; deploy BRIDGE.
+1. Step -1: gate migration, **room monotonic fence, room generation fence** (production still serving), then deploy BRIDGE′.
 2. Step 0: precheck and record SHAs.
 3. Step 1: `quiesce true`.
 4. Step 2: two `readyForExpand: true` reads, 30 s apart, same `bootId`.
-5. Step 3: Ghost expand, reconciliation, Rush expand, ranked claim, **ranked context**, Ghost deferral, **room monotonic fence, room generation fence, ranked preflight (`GO`) then ranked applied-state** (exactly in that order).
-6. Step 4: deploy NEW and run the smoke.
+5. Step 3: Ghost expand, reconciliation, Rush expand, ranked claim, **ranked context**, Ghost deferral, then **ranked preflight (`GO`) and ranked applied-state** (exactly in that order).
+6. Step 4: deploy NEW and run the smoke (BRIDGE′ -> NEW overlap: both writers have boot-ordered epochs, so BRIDGE′ cannot win a tie against NEW).
 7. Step 5: confirm BRIDGE is gone, then `quiesce false`.
 8. Step 6: observe.
 9. Step 7: reconciliation query returns zero rows.
 10. Step 8: Rush contract, then Ghost contract, then drain deferred Ghost seats to zero.
+
+## Room-writer overlap timeline (no unfenced interval)
+
+| Interval | Writers alive | Migrations in force | Epoch | Older writer can overwrite newer room state? |
+|---|---|---|---|---|
+| before Step -1.2 | production | gate, room monotonic + generation | production = 0 | n/a (one process) |
+| **production -> BRIDGE′ overlap** | production (0) + BRIDGE′ (boot epoch) | gate, room monotonic + generation | BRIDGE′ > 0 | **No**: lower, equal, terminal, cross-match, recreate all refused once BRIDGE′ has written the room |
+| BRIDGE′ steady state (Steps 0-3) | BRIDGE′ | + Ghost/Rush/ranked expands, ranked applied-state (7) | BRIDGE′ > 0 | n/a (one process); its own redeploy overlap is fenced (BRIDGE′ -> BRIDGE′ tested) |
+| **BRIDGE′ -> NEW overlap (Step 4)** | BRIDGE′ + NEW | all expands | NEW epoch > BRIDGE′ epoch (boot order) | **No** |
+| NEW steady state (Steps 5+) | NEW | all expands, later contracts | NEW > 0 | n/a; NEW -> NEW overlaps fenced |
+
+Writer epochs are authoritative from the moment BRIDGE′ writes a room: a snapshot with a lower epoch is refused even at an equal or higher
+sequence. Quiescence (Step 1) is independent of the room fences. BRIDGE stops at Step 5; NEW starts at Step 4. Residual (documented, cannot
+be closed without changing production itself): two **legacy epoch-0** writers (production next to production) cannot be ordered on ties; that
+pair no longer exists once Step -1 completes.
 
 ## Restart reasoning
 
@@ -302,11 +344,14 @@ Repeat the completion/retry smoke and watch for operational errors.
 
 ## Rollback boundaries
 
+**Room fences.** Do not roll the server back to plain OLD/production after Step -1: production writes epoch 0 and the room fences refuse it on
+every room BRIDGE′ or NEW has written (its persistence goes `degraded`, deterministic, no retry storm). Roll back to BRIDGE′ or forward.
+
 **Before the Ghost contract (through Step 7).** Server code may be rolled back
 while the expand schema remains, but rolling back does not return to unrestricted
 OLD rating behavior: the Ghost, Rush and ranked fences stay in the database and
 fail the OLD writers closed. Roll back to the exact **BRIDGE** artifact
-`3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353` (never to plain OLD), leave `quiesce true`, and keep rating-affecting completions failing
+BRIDGE′ `deec9f3fe6b42af87f18b435e5b8c2f27d9c8697` (never to plain OLD), leave `quiesce true`, and keep rating-affecting completions failing
 retryably until a corrected NEW build is deployed. Do not turn the fences off to
 make old requests appear successful.
 
