@@ -18,6 +18,9 @@ ap() {
 }
 ap "$ROOT/server/test/fixtures/terminalCompletionBase.sql"
 ap "$ROOT/supabase/schema.sql"
+# TERMINAL_TEST_OMIT="<substring>,..." skips the matching 2026-10-16 durable-state migrations (mixed-version tests: a schema that
+# predates them, or has only the first fence).
+apm() { local b; b="$(basename "$1")"; local o; for o in $(echo "${TERMINAL_TEST_OMIT:-}" | tr "," " "); do case "$b" in *"$o"*) echo "omitting $b"; return 0;; esac; done; ap "$1"; }
 for f in \
   "$M/2026-05-12_bot_match_pending_greenfield_baseline.sql" \
   "$M/2026-05-13_matchmaking.sql" \
@@ -45,7 +48,15 @@ for f in \
   "$M/2026-09-01_apply_room_command_receipts_and_mp_authority_events.sql" \
   "$M/2026-10-12_user_reports_and_blocks.sql" \
   "$M/2026-10-13_rating_cutover_gate.sql"; do ap "$f"; done
-psql -X -q -d "$DB" -c "update public.rating_cutover_gate set quiesced=true, quiesced_at=now() where id"  # expand migrations require a closed gate
+# TERMINAL_TEST_STAGE selects WHICH point of the cutover the database is built at (default: full = everything NEW sees):
+#   pre-expand : BRIDGE/OLD era -- gate table installed and OPEN, no Ghost/Rush/ranked expand; only the three 2026-10-16
+#                durable-state migrations on top. This is the schema an OLD or BRIDGE server must run against.
+#   step3      : the exact state in which the durable-state migrations are applied in production -- expand items 1-6
+#                done, gate CLOSED (quiesced) and left closed, BRIDGE still serving, no contract.
+#   full       : everything NEW sees (the original behaviour).
+STAGE="${TERMINAL_TEST_STAGE:-full}"
+case "$STAGE" in pre-expand|step3|full) ;; *) echo "TERMINAL_TEST_STAGE must be pre-expand|step3|full" >&2; exit 2;; esac
+[ "$STAGE" = pre-expand ] || psql -X -q -d "$DB" -c "update public.rating_cutover_gate set quiesced=true, quiesced_at=now() where id"  # expand migrations require a closed gate
 # Canonical cutover order (docs/ops/senior-audit-rating-rush-cutover.md): Ghost expand, Ghost
 # reconciliation, Rush expand, ranked claim, ranked rating context. TERMINAL_TEST_SCHEMA selects
 # the schema NEW sees: "pre-contract" (default; exactly what is live when NEW is deployed, BEFORE
@@ -54,25 +65,27 @@ SCHEMA="${TERMINAL_TEST_SCHEMA:-pre-contract}"
 case "$SCHEMA" in pre-contract|post-contract) ;; *) echo "TERMINAL_TEST_SCHEMA must be pre-contract|post-contract" >&2; exit 2;; esac
 ap "$ROOT/supabase/ghost.sql"
 ap "$ROOT/supabase/verified_matches.sql"
-ap "$M/2026-10-13_ghost_rating_idempotent_completion.sql"
-ap "$M/2026-10-13_ghost_cutover_reconciliation.sql"
 ap "$M/2026-08-20_puzzle_rush.sql"
 ap "$M/2026-08-20_puzzle_rush_daily_official.sql"
-ap "$M/2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql"
-ap "$M/2026-10-13_ranked_rating_claim.sql"
-ap "$M/2026-10-15_ranked_rating_context.sql"
-ap "$M/2026-10-15_ghost_precontract_deferral.sql"
-ap "$M/2026-10-16_room_live_session_monotonic_fence.sql"
-ap "$M/2026-10-16_room_live_session_generation_fence.sql"
-ap "$M/2026-10-16_ranked_applied_state_monotonic.sql"
-if [ "$SCHEMA" = "post-contract" ]; then
+if [ "$STAGE" != pre-expand ]; then
+  ap "$M/2026-10-13_ghost_rating_idempotent_completion.sql"
+  ap "$M/2026-10-13_ghost_cutover_reconciliation.sql"
+  ap "$M/2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql"
+  ap "$M/2026-10-13_ranked_rating_claim.sql"
+  ap "$M/2026-10-15_ranked_rating_context.sql"
+  ap "$M/2026-10-15_ghost_precontract_deferral.sql"
+fi
+apm "$M/2026-10-16_room_live_session_monotonic_fence.sql"
+apm "$M/2026-10-16_room_live_session_generation_fence.sql"
+apm "$M/2026-10-16_ranked_applied_state_monotonic.sql"
+if [ "$SCHEMA" = "post-contract" ] && [ "$STAGE" = full ]; then
   ap "$M/2026-10-13_puzzle_rush_assignment_contract.sql"
   ap "$M/2026-10-13_ghost_user_match_uniqueness.sql"
 fi
-psql -X -q -d "$DB" -c "update public.rating_cutover_gate set quiesced=false where id"
+[ "$STAGE" = step3 ] || psql -X -q -d "$DB" -c "update public.rating_cutover_gate set quiesced=false where id"
 psql -X -q -d "$DB" -c "grant usage on schema public to service_role, anon, authenticated" \
   -c "grant all on all tables in schema public to service_role" \
   -c "grant all on all sequences in schema public to service_role" \
   -c "grant execute on all functions in schema public to service_role" \
   -c "notify pgrst, 'reload schema'"
-echo "database $DB ready ($SCHEMA)"
+echo "database $DB ready ($SCHEMA, stage $STAGE)"

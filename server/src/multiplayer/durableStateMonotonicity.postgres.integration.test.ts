@@ -6,7 +6,8 @@
  * Covers supabase/migrations/2026-10-16_room_live_session_monotonic_fence.sql and
  * 2026-10-16_ranked_applied_state_monotonic.sql. Every assertion is made by the database itself.
  */
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { startLocalPostgrestGateway, type LocalPostgrestGateway } from '../../test/support/localPostgrestGateway';
@@ -235,9 +236,14 @@ run('ranked_games applied-state monotonicity (real PostgreSQL)', () => {
         values ('${legacy}','${q}','${o}',1,2,'multiplayer',1500,350,1480,'${randomUUID()}');
       alter table public.ranked_games add constraint ranked_games_applied_fields_coupled check (
         (rating_after is null and rd_after is null and delta is null) or (rating_after is not null and rd_after is not null and delta is not null)) not valid; commit`);
-    expect(localSql(`select rating_after from public.ranked_games where id='${legacy}'`)).toBe('1480');
-    expect(localSql(`select convalidated from pg_constraint where conname='ranked_games_applied_fields_coupled'`)).toBe('f');
-    expect(() => localSql(`update public.ranked_games set rating_after = null where id='${legacy}'`)).toThrow(/ranked_applied_state_monotonic/);
+    try {
+      expect(localSql(`select rating_after from public.ranked_games where id='${legacy}'`)).toBe('1480');
+      expect(localSql(`select convalidated from pg_constraint where conname='ranked_games_applied_fields_coupled'`)).toBe('f');
+      expect(() => localSql(`update public.ranked_games set rating_after = null where id='${legacy}'`)).toThrow(/ranked_applied_state_monotonic/);
+    } finally {
+      // never leave a half-set row behind: the migration refuses to run while one exists
+      localSql(`delete from public.ranked_games where id='${legacy}'`);
+    }
   });
 
   it('two concurrent sessions committing the same pending game: exactly one applies', async () => {
@@ -251,5 +257,136 @@ run('ranked_games applied-state monotonicity (real PostgreSQL)', () => {
     expect(a.err + b.err).toContain('ranked_already_processed');
     expect(localSql(`select count(*) from public.rating_periods where ranked_game_id='${g}'`)).toBe('1');
     expect(localSql(`select ranked_games_played from public.profiles where id='${p}'`)).toBe('1');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Adversarial ranked state model + rollout gate (2026-10-16_ranked_applied_state_monotonic.sql)
+// ---------------------------------------------------------------------------------------------------------------
+const REPO = join(__dirname, '..', '..', '..');
+const MIGRATION = join(REPO, 'supabase', 'migrations', '2026-10-16_ranked_applied_state_monotonic.sql');
+const PREFLIGHT = join(REPO, 'scripts', 'sql', 'ranked-applied-state-preflight.sql');
+function psqlFile(file: string, env: Record<string, string> = {}): { ok: boolean; out: string } {
+  try {
+    const out = execFileSync(process.env.PSQL_BIN || 'psql', ['-X', '-v', 'ON_ERROR_STOP=1', TERMINAL_DB_URL, '-f', file], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env },
+    });
+    return { ok: true, out };
+  } catch (error) {
+    const e = error as { stdout?: string; stderr?: string };
+    return { ok: false, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+  }
+}
+const insertHalfSet = (player: string, opp: string, cols: { rating_after?: number; rd_after?: number; delta?: number }): string => {
+  const id = randomUUID();
+  const names = Object.keys(cols); const vals = Object.values(cols);
+  localSql(`begin; alter table public.ranked_games drop constraint ranked_games_applied_fields_coupled;
+    insert into public.ranked_games(id,player_id,opponent_id,player_score,opponent_score,game_type,rating_before,rd_before,source_type,source_match_id${names.map((n) => `,${n}`).join('')})
+      values ('${id}','${player}','${opp}',1,2,'multiplayer',800,350,'live_room','legacy-${id}'${vals.map((v) => `,${v}`).join('')});
+    alter table public.ranked_games add constraint ranked_games_applied_fields_coupled check (
+      (rating_after is null and rd_after is null and delta is null) or (rating_after is not null and rd_after is not null and delta is not null)) not valid; commit`);
+  return id;
+};
+
+run('ranked applied-state model, adversarial (real PostgreSQL)', () => {
+  const insertWith = (p: string, o: string, cols: string) => {
+    const names = cols ? cols.split(',').map((c) => c.split('=')[0]) : []; const vals = cols ? cols.split(',').map((c) => c.split('=')[1]) : [];
+    return `insert into public.ranked_games(player_id,opponent_id,player_score,opponent_score,game_type,rating_before,rd_before,source_match_id${names.map((n) => `,${n}`).join('')})
+      values ('${p}','${o}',1,2,'multiplayer',800,350,'${randomUUID()}'${vals.map((v) => `,${v}`).join('')})`;
+  };
+  it('exactly two of the eight applied-field combinations can be written: all NULL (pending) and all set (applied)', () => {
+    const p = seedPlayer(); const o = seedPlayer();
+    const combos: Array<[string, boolean]> = [
+      ['', true], ['rating_after=810,rd_after=300,delta=10', true],
+      ['rating_after=810', false], ['rd_after=300', false], ['delta=10', false],
+      ['rating_after=810,rd_after=300', false], ['rating_after=810,delta=10', false], ['rd_after=300,delta=10', false],
+    ];
+    for (const [cols, ok] of combos) {
+      const sql = insertWith(p, o, cols);
+      // all-set insert is legal data-wise; keep the owner unblocked by using a fresh owner per attempt
+      if (ok) expect(() => localSql(sql.replace(`'${p}'`, `'${seedPlayer()}'`))).not.toThrow();
+      else expect(() => localSql(sql)).toThrow('ranked_games_applied_fields_coupled');
+    }
+  });
+
+  it('applied results are immutable: cleared, changed, partially changed, multi-column and upsert attempts all fail', () => {
+    const p = seedPlayer(); const o = seedPlayer(); const g = pendingGame(p, o);
+    localSql(commit(p, g));
+    const applied = game(g);
+    const attempts = [
+      'rating_after = 999', 'rd_after = 1', 'delta = 0', 'rating_after = 1, rd_after = 2, delta = 3',
+      'rating_after = null', 'rd_after = null', 'delta = null',
+      'rating_after = null, rd_after = null, delta = null',
+      'rating_after = 999, delta = null',                       // multi-column: change one, clear another
+      'player_score = 0, rating_after = rating_after + 1',      // unrelated column alongside
+    ];
+    for (const set of attempts) expect(() => localSql(`update public.ranked_games set ${set} where id='${g}'`), set).toThrow(/ranked_applied_state_monotonic|ranked_rating_context_immutable/);
+    // upsert DO UPDATE is a BEFORE UPDATE too
+    expect(() => localSql(`insert into public.ranked_games(id,player_id,opponent_id,player_score,opponent_score,game_type,rating_before,rd_before,source_match_id,rating_after,rd_after,delta)
+      select id,player_id,opponent_id,player_score,opponent_score,game_type,rating_before,rd_before,source_match_id,1,1,1 from public.ranked_games where id='${g}'
+      on conflict (player_id,source_match_id) do update set rating_after=null,rd_after=null,delta=null`)).toThrow(/ranked_applied_state_monotonic|ranked_games_applied_fields_coupled/);
+    expect(game(g)).toBe(applied);
+    // a write that changes nothing is allowed
+    localSql(`update public.ranked_games set rating_after = rating_after, rd_after = rd_after, delta = delta where id='${g}'`);
+  });
+
+  it('the real RPC still drives pending -> applied for a context row and for a historical NULL-context row', () => {
+    const p = seedPlayer(); const o = seedPlayer();
+    const legacy = pendingGame(p, o, null); localSql(commit(p, legacy, false));
+    expect(game(legacy)).toBe('830|300|30');
+    const q = seedPlayer(); const withCtx = pendingGame(q, o); localSql(commit(q, withCtx));
+    expect(game(withCtx)).toBe('830|300|30');
+    expect(() => localSql(commit(q, withCtx))).toThrow('ranked_already_processed');
+  });
+
+  describe('legacy half-set rows: rollout gate and read-only preflight', () => {
+    it('preflight prints GO when no half-set row exists', () => {
+      const r = psqlFile(PREFLIGHT);
+      expect(r.ok).toBe(true);
+      expect(r.out).toMatch(/\bGO\b/);
+      expect(r.out).not.toMatch(/STOP/);
+    });
+
+    it('preflight prints STOP and classifies each row; the migration refuses until reconciled; override is explicit', () => {
+      const p = seedPlayer(); const o = seedPlayer(); const q = seedPlayer();
+      const pendingShaped = insertHalfSet(p, o, { rd_after: 300, delta: 5 });      // rating_after NULL: selected by catch-up, blocks owner
+      const appliedShaped = insertHalfSet(q, o, { rating_after: 810 });            // rating_after set: inert, frozen by the CHECK
+      try {
+        const report = psqlFile(PREFLIGHT);
+        expect(report.ok).toBe(true);
+        expect(report.out).toMatch(/STOP/);
+        expect(report.out).toContain(pendingShaped); expect(report.out).toContain(appliedShaped);
+        // pending-shaped: selected + blocking (t,t); applied-shaped: neither (f,f)
+        expect(report.out).toMatch(new RegExp(`${pendingShaped}[^\\n]*pending_shaped\\s*\\|\\s*t\\s*\\|\\s*t`));
+        expect(report.out).toMatch(new RegExp(`${appliedShaped}[^\\n]*applied_shaped\\s*\\|\\s*f\\s*\\|\\s*f`));
+        // the preflight is read-only: it changed nothing
+        expect(localSql(`select count(*) from public.ranked_games where id in ('${pendingShaped}','${appliedShaped}')`)).toBe('2');
+        // the pending-shaped row really is a poison predecessor today
+        expect(() => pendingGame(p, o)).toThrow('ranked_predecessor_pending');
+
+        const refused = psqlFile(MIGRATION);
+        expect(refused.ok).toBe(false);
+        expect(refused.out).toContain('ranked_applied_state_half_set_rows');
+        const acknowledged = psqlFile(MIGRATION, { PGOPTIONS: '-c racehorse.accept_half_set_ranked_rows=on' });
+        expect(acknowledged.ok).toBe(true);
+      } finally {
+        localSql(`delete from public.ranked_games where id in ('${pendingShaped}','${appliedShaped}')`);
+      }
+      expect(psqlFile(PREFLIGHT).out).toMatch(/\bGO\b/);
+      expect(psqlFile(MIGRATION).ok).toBe(true);   // re-runnable once reconciled
+    });
+
+    it('a deliberately reconciled legacy row can be completed in ONE statement and then satisfies the CHECK', () => {
+      const p = seedPlayer(); const o = seedPlayer();
+      const row = insertHalfSet(p, o, { rating_after: 810 });
+      try {
+        expect(() => localSql(`update public.ranked_games set rd_after = 300 where id='${row}'`)).toThrow('ranked_games_applied_fields_coupled');
+        localSql(`update public.ranked_games set rd_after = 300, delta = 10 where id='${row}'`);
+        expect(game(row)).toBe('810|300|10');
+        expect(() => localSql(`update public.ranked_games set rating_after = null where id='${row}'`)).toThrow('ranked_applied_state_monotonic');
+      } finally {
+        localSql(`delete from public.ranked_games where id='${row}'`);
+      }
+    });
   });
 });
