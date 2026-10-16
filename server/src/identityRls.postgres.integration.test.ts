@@ -279,11 +279,17 @@ d('account identity RLS matrix (real schema, real roles)', () => {
       const nonTrigger = rows.filter((r) => !r.split('|')[1]!.startsWith('trigger')).map((r) => r.split('|')[0]!);
       expect(nonTrigger).toEqual([
         'ensure_tournament_seed_window()',
+        // durable-state fences (2026-10-16): pure helpers over the JSON they are handed, used inside the room fence triggers
+        'room_live_session_effective_sequence(seq integer, state jsonb)',
+        'room_live_session_writer_epoch(shell jsonb)',
         'seed_future_tournaments(days_ahead integer)',
         'username_policy_violation(candidate text)',
         'valid_ranked_rating_context(c jsonb)',
       ]);
       for (const sig of nonTrigger) expect(sig).not.toMatch(/user_id|player_id|owner_id|profile_id|p_user|uuid/);
+      // the two fence helpers stay side-effect-free: IMMUTABLE and not SECURITY DEFINER (so they can read nothing but their argument)
+      expect(admin(`select string_agg(proname || ':' || provolatile::text || ':' || prosecdef::text, ',' order by proname) from pg_proc where pronamespace = 'public'::regnamespace and proname in ('room_live_session_effective_sequence','room_live_session_writer_epoch')`))
+        .toBe('room_live_session_effective_sequence:i:false,room_live_session_writer_epoch:i:false');
       // trigger functions cannot be invoked as RPC, but they must not be SECURITY DEFINER-callable with arguments
       for (const r of rows.filter((x) => x.split('|')[1]!.startsWith('trigger'))) expect(r.split('|')[0]).toMatch(/\(\)$/);
     });

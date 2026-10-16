@@ -4,16 +4,17 @@
 # The checked-in Supabase auth shim supplies platform primitives only.
 from pathlib import Path
 import subprocess,json,os
-root=Path(__file__).resolve().parents[2]; pg=os.environ.get('PSQL_BIN','/opt/homebrew/opt/postgresql@16/bin/psql')
+import tempfile
+root=Path(__file__).resolve().parents[2]; pg=os.environ.get('PSQL_BIN','psql'); port=os.environ.get('PGPORT','55439')
 suffix=str(os.getpid())
 fresh='racehorse_runtime_fresh_'+suffix
 upgrade='racehorse_runtime_upgrade_'+suffix
-db='postgresql://postgres@127.0.0.1:55439/'+fresh
-log=open('/private/tmp/runtime-r1-fresh-chain-'+suffix+'.log','w')
+db='postgresql://postgres@127.0.0.1:'+port+'/'+fresh
+log=open(os.path.join(tempfile.gettempdir(),'runtime-r1-fresh-chain-'+suffix+'.log'),'w')
 def sql(q): subprocess.run([pg,'-X','-v','ON_ERROR_STOP=1',db,'-c',q],stdout=log,stderr=log,check=True)
 def apply(p):
  print(str(p),flush=True);log.write('\nAPPLY '+str(p)+'\n');log.flush();subprocess.run([pg,'-X','-v','ON_ERROR_STOP=1',db,'-f',str(root/p)],stdout=log,stderr=log,check=True)
-subprocess.run([pg,'-X','-v','ON_ERROR_STOP=1','postgresql://postgres@127.0.0.1:55439/postgres','-c','create database '+fresh],stdout=log,stderr=log,check=True)
+subprocess.run([pg,'-X','-v','ON_ERROR_STOP=1','postgresql://postgres@127.0.0.1:'+port+'/postgres','-c','create database '+fresh],stdout=log,stderr=log,check=True)
 apply(Path('scripts/tournament-db-verify/shim.sql'))
 sql("create function auth.jwt() returns jsonb language sql stable as $$$$ select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$$$".replace('$$$$','$$'))
 sql("alter table auth.users add column raw_user_meta_data jsonb default '{}';")
@@ -30,11 +31,13 @@ files=[p for p in files if p.name not in daily_order]
 files[pos:pos]=[root/'supabase/migrations'/name for name in daily_order]
 for p in files: apply(p.relative_to(root))
 print('HISTORICAL CHAIN PASS',flush=True)
-subprocess.run([pg,'-X','-v','ON_ERROR_STOP=1','postgresql://postgres@127.0.0.1:55439/postgres','-c','create database '+upgrade+' template '+fresh],stdout=log,stderr=log,check=True)
-# Future expand/contract order, never lexical ordering of the same-date migrations.
-for n in ['2026-10-13_rating_cutover_gate.sql','2026-10-13_ghost_rating_idempotent_completion.sql','2026-10-13_ghost_cutover_reconciliation.sql','2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql','2026-10-13_ranked_rating_claim.sql','2026-10-15_ranked_rating_context.sql','2026-10-15_ghost_precontract_deferral.sql','2026-10-16_room_live_session_monotonic_fence.sql','2026-10-16_room_live_session_generation_fence.sql','2026-10-16_ranked_applied_state_monotonic.sql','2026-10-13_puzzle_rush_assignment_contract.sql','2026-10-13_ghost_user_match_uniqueness.sql']:
+subprocess.run([pg,'-X','-v','ON_ERROR_STOP=1','postgresql://postgres@127.0.0.1:'+port+'/postgres','-c','create database '+upgrade+' template '+fresh],stdout=log,stderr=log,check=True)
+# Future expand/contract order = the runbook's order (never lexical ordering of the same-date migrations):
+# Step -1 (gate, room fences, identity), Step 3 expands with the ranked applied-state migration LAST, then the Step 8 contracts.
+future=['2026-10-13_rating_cutover_gate.sql','2026-10-16_room_live_session_monotonic_fence.sql','2026-10-16_room_live_session_generation_fence.sql','2026-10-16_account_identity_rls_hardening.sql','2026-10-16_signup_fallback_username_full_uuid.sql','2026-10-13_ghost_rating_idempotent_completion.sql','2026-10-13_ghost_cutover_reconciliation.sql','2026-10-13_puzzle_rush_assignment_and_atomic_completion.sql','2026-10-13_ranked_rating_claim.sql','2026-10-15_ranked_rating_context.sql','2026-10-15_ghost_precontract_deferral.sql','2026-10-16_ranked_applied_state_monotonic.sql','2026-10-13_puzzle_rush_assignment_contract.sql','2026-10-13_ghost_user_match_uniqueness.sql']
+for n in future:
  if n=='2026-10-13_ghost_rating_idempotent_completion.sql':sql("update rating_cutover_gate set quiesced=true,quiesced_at=now(),enabled_boot_id='local-migration-fixture' where id")
  apply(Path('supabase/migrations')/n)
 print('FRESH FULL CHAIN PASS',flush=True)
 
-print(json.dumps({'freshDatabase':fresh,'historicalUpgradeDatabase':upgrade,'historicalMigrations':len(files),'pendingMigrations':12,'result':'PASS'}),flush=True)
+print(json.dumps({'freshDatabase':fresh,'historicalUpgradeDatabase':upgrade,'historicalMigrations':len(files),'pendingMigrations':len(future),'result':'PASS'}),flush=True)

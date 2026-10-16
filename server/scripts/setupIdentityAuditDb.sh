@@ -21,7 +21,14 @@ for f in friends daily_puzzle daily_puzzle_v2 daily_puzzle_ladder_v1 daily_fritz
 ap "$M/2026-05-14_scheduled_tournaments.sql"
 ap "$M/2026-10-13_rating_cutover_gate.sql"
 psql -X -q -d "$DB" -c "update public.rating_cutover_gate set quiesced=true, quiesced_at=now() where id"
-for f in "$M"/*.sql; do ap "$f"; done
+# Lexical order is NOT dependency order for 2026-10-16: the generation fence replaces the monotonic fence's trigger function and
+# aborts if applied first ('generation' sorts before 'monotonic'). Apply it immediately after the monotonic fence.
+GEN="$M/2026-10-16_room_live_session_generation_fence.sql"
+for f in "$M"/*.sql; do
+  [ "$f" = "$GEN" ] && continue
+  ap "$f"
+  [ "$f" = "$M/2026-10-16_room_live_session_monotonic_fence.sql" ] && ap "$GEN"
+done
 psql -X -q -d "$DB" -c "update public.rating_cutover_gate set quiesced=false where id"
 psql -X -q -d "$DB" -c "grant usage on schema public to service_role, anon, authenticated" \
   -c "grant all on all tables in schema public to service_role" \
