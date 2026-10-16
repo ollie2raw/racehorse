@@ -7,6 +7,7 @@ import type { LegalMode } from './legal/legalModes';
 const AuthModal = React.lazy(() => import('./auth/AuthModal'));
 const UsernameModal = React.lazy(() => import('./auth/UsernameModal'));
 const ChangePasswordModal = React.lazy(() => import('./auth/ChangePasswordModal'));
+const RecoveryConfirmModal = React.lazy(() => import('./auth/RecoveryConfirmModal'));
 
 export type AuthModalsLayerProps = {
   authModalOpen: boolean;
@@ -76,6 +77,7 @@ export function AuthModalsLayer({
         onUpdatePassword={onUpdatePassword}
         onClose={onPasswordRecoveryClose}
       />
+      <RecoveryConfirmModal />
       <UsernameModal
         open={usernameModalOpen}
         currentUsername={currentUsername}

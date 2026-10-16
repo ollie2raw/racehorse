@@ -9,7 +9,7 @@ import { clearCachedSession, setCachedSession } from './sessionToken';
 import { clearAccountBoundLocalState } from './accountBoundLocalState';
 import { getAuthEmailRedirectTo } from './authRedirect';
 import { evaluateAuthTimeoutSessionFallback, AUTH_TIMEOUT_FALLBACK_ERROR } from './authTimeoutSessionFallback';
-import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
+import { PASSWORD_RECOVERY_PENDING_KEY, rememberPasswordResetRequest } from './recoveryHash';
 import { readE2eDevAuth, readMobileVisualIdentity } from './e2eDevAuth';
 import { EMAIL_CHANGE_PENDING_MESSAGE, resolveEmailChange } from './emailChange';
 import { ANONYMOUS_PLAYER_NAME } from '../identity/publicPlayerName';
@@ -406,6 +406,8 @@ function useAuthInternal() {
       }
 
       setUser(sessionUser);
+      // A recovery session adopted after mount (confirmed link) arrives as SIGNED_IN with the marker already set.
+      if (event === 'SIGNED_IN' && hasPasswordRecoveryPendingMarker()) setPasswordRecoveryPending(true);
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecoveryPending(true);
         try {
@@ -830,6 +832,7 @@ function useAuthInternal() {
         AUTH_REQUEST_TIMEOUT_MS,
       );
       if (error) return { error: formatAuthErrorMessage(error) };
+      rememberPasswordResetRequest(normalizedEmail);
       return { error: null, message: passwordResetSentMessage(Capacitor.isNativePlatform()) };
     } catch (err) {
       return {

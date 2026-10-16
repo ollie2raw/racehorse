@@ -13,6 +13,7 @@
  * and in any local build without the env var.
  */
 import { Capacitor } from '@capacitor/core';
+import { redactAuthUrlsInProperties } from './redactAuthUrl';
 
 export type AnalyticsMode =
   | 'daily_fritz'
@@ -110,6 +111,8 @@ async function loadTransport(): Promise<AnalyticsTransport | null> {
       capture_performance: false,
       capture_heatmaps: false,
       disable_surveys: true,
+      // Auth callbacks carry live tokens in the URL fragment; never let them ride along as $current_url.
+      sanitize_properties: (properties) => redactAuthUrlsInProperties(properties as Record<string, unknown>) as typeof properties,
     });
     // A super property: sent with every event, so web and App Store players
     // can be told apart without touching any event or call site.
