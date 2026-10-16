@@ -85,6 +85,13 @@ export type PersistedRoomShell = {
   logStorage?: 'entries';
   eventCount?: number;
   ghostMoveLogCounts?: Record<string, number>;
+  /**
+   * Unique, increasing id of the server process that wrote this snapshot (next_room_writer_epoch(), allocated at boot).
+   * supabase/migrations/2026-10-16_room_live_session_generation_fence.sql refuses a snapshot whose epoch is lower than the
+   * stored one, so the previous (epoch-less, = 0) production process can no longer win an equal-sequence tie against this
+   * process during a Render replacement. Absent = 0.
+   */
+  writerEpoch?: number;
 };
 
 export type RoomLiveSessionRow = {
@@ -211,6 +218,8 @@ export function configureLiveRoomPersistence(options: {
   resolveRoster: (roomCode: string) => LiveRosterEntry[];
 }): void {
   rosterResolver = options.resolveRoster;
+  // Allocate the epoch at BOOT, not at the first write: epoch order must be process-boot order.
+  void ensureWriterEpoch();
 }
 
 function resolveRosterForPersist(room: Room): LiveRosterEntry[] {
@@ -432,6 +441,52 @@ function normalizeRosterEntry(raw: unknown): LiveRosterEntry | null {
   };
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Writer epoch (database fence: 2026-10-16_room_live_session_generation_fence.sql). The ONLY change relative to the canonical
+// BRIDGE 3ccd6ff8: allocate a boot-ordered epoch and stamp it on every room snapshot. Without the migration the RPC is
+// absent, the epoch stays unset (= legacy 0) and persistence behaves exactly as before.
+// ---------------------------------------------------------------------------------------------------------------
+let writerEpoch: number | null = null;
+let writerEpochRetryAtMs = 0;
+let writerEpochInFlight: Promise<void> | null = null;
+const WRITER_EPOCH_RETRY_MS = 5_000;
+
+/** True only when a persist must first wait for an epoch fetch: steady state adds NO async gap before the snapshot is built. */
+function writerEpochWouldBlock(): boolean {
+  return writerEpoch === null && (writerEpochInFlight !== null || Date.now() >= writerEpochRetryAtMs);
+}
+
+/** Resolves once this process's writer epoch allocation (started at boot) has settled, successfully or not. */
+export async function settleLiveRoomWriterEpoch(): Promise<void> {
+  await writerEpochInFlight;
+}
+
+/** Test seam: model a booted process whose writer epoch is already known (or one that never obtained it). */
+export function setLiveRoomWriterEpochForTests(epoch: number | null): void {
+  writerEpoch = epoch;
+  writerEpochRetryAtMs = epoch === null ? Number.MAX_SAFE_INTEGER : 0;
+  writerEpochInFlight = null;
+}
+
+async function ensureWriterEpoch(): Promise<void> {
+  if (writerEpoch !== null || Date.now() < writerEpochRetryAtMs) return;
+  if (!writerEpochInFlight) {
+    writerEpochInFlight = (async () => {
+      try {
+        const value = await supabaseFetch<unknown>('/rest/v1/rpc/next_room_writer_epoch', { method: 'POST', body: '{}' });
+        const epoch = typeof value === 'string' ? Number(value) : value;
+        if (typeof epoch === 'number' && Number.isFinite(epoch) && epoch > 0) writerEpoch = epoch;
+        else writerEpochRetryAtMs = Date.now() + WRITER_EPOCH_RETRY_MS;
+      } catch {
+        writerEpochRetryAtMs = Date.now() + WRITER_EPOCH_RETRY_MS;
+      } finally {
+        writerEpochInFlight = null;
+      }
+    })();
+  }
+  await writerEpochInFlight;
+}
+
 export function buildLiveSessionRow(
   room: Room,
   roster: LiveRosterEntry[],
@@ -461,6 +516,7 @@ export function buildLiveSessionRow(
     room_shell: {
       ...serializeRoomShell(room, { omitGhostMoveLogs: options.omitLogs }),
       durabilityCommit: { ...commitFence },
+      ...(writerEpoch === null ? {} : { writerEpoch }),
     },
     engine_seat_ids: [...room.players],
     roster: roster.map((entry) => ({ ...entry })),
@@ -846,6 +902,7 @@ async function persistLiveSessionForRoom(
   if (refusesLiveSessionOverwrite(room)) {
     return { ok: false, status: 'failed', error: 'live_session_overwrite_refused' };
   }
+  if (writerEpochWouldBlock()) await ensureWriterEpoch();
   if (!isLiveSessionLogEntriesEnabled() || Date.now() < logEntriesUnavailableUntilMs || liveSessionsTableAvailable === false) {
     persistedLogLengthsByRoomCode.delete(roomCode);
     return persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
@@ -1027,6 +1084,7 @@ export async function finalizeAndDeleteLiveRoomSession(
 
   const terminalStatus: RoomLiveSessionStatus =
     archiveStatus === 'completed' ? 'game_over' : 'abandoned';
+  if (writerEpochWouldBlock()) await ensureWriterEpoch();
   const row = buildLiveSessionRow(room, resolveRosterForPersist(room));
   row.status = terminalStatus;
 
@@ -1365,4 +1423,7 @@ export function resetLiveRoomPersistenceForTests(): void {
   persistedLogLengthsByRoomCode.clear();
   knownPersistedSessionByRoomCode.clear();
   logEntriesUnavailableUntilMs = 0;
+  writerEpoch = null;
+  writerEpochRetryAtMs = 0;
+  writerEpochInFlight = null;
 }

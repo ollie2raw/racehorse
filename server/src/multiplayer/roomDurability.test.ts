@@ -12,6 +12,7 @@ import {
   isLiveRoomDurablyRecoverable,
   persistLiveRoomSessionNow,
   resetLiveRoomPersistenceForTests,
+  setLiveRoomWriterEpochForTests,
   schedulePersistLiveRoomSession,
   type LiveRosterEntry,
 } from './roomLivePersistence';
@@ -113,6 +114,8 @@ const roster: LiveRosterEntry[] = [
 describe('room durability contract', () => {
   beforeEach(() => {
     resetLiveRoomPersistenceForTests();
+    // A booted process already holds its writer epoch (allocated at boot); the scripted outcomes describe the snapshot write itself.
+    setLiveRoomWriterEpochForTests(7);
     persistPlan.outcomes = [];
   });
 
