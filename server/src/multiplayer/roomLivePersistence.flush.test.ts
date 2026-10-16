@@ -343,21 +343,71 @@ describe('roomLivePersistence database-fence client behaviour', () => {
     expect(persistedShell()?.writerEpoch).toBe(41);
   });
 
-  it('a schema without next_room_writer_epoch() persists with no epoch (legacy 0) and retries the allocation later', async () => {
+  it('a failed boot allocation fixes the process at legacy epoch 0 for its whole lifetime: it never turns into a later, positive epoch', async () => {
+    let rpcHealthy = false;
     vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
       record(path, init);
-      if (path.includes('/rpc/next_room_writer_epoch')) throw new Error('Supabase request failed: 404 {"code":"PGRST202"}');
+      if (path.includes('/rpc/next_room_writer_epoch')) {
+        if (!rpcHealthy) throw new Error('Supabase request failed: 404 {"code":"PGRST202"}');
+        return 99 as never;
+      }
       return undefined as never;
     });
+    configureLiveRoomPersistence({ resolveRoster: () => roster });          // boot: the single allocation attempt fails
+    await settleLiveRoomWriterEpoch();
     expect(await persistLiveRoomSessionNow(mkRoom({ code: 'LEGACY1' }), roster)).toBe(true);
     expect(persistedShell()).toBeTruthy();
     expect(persistedShell()).not.toHaveProperty('writerEpoch');
-    // within the retry window the allocation is not hammered
-    await persistLiveRoomSessionNow(mkRoom({ code: 'LEGACY1' }), roster);
+    rpcHealthy = true;                                                       // the database recovers...
+    for (let minute = 0; minute < 15; minute += 1) {                         // ...and far longer than any former window passes
+      await vi.advanceTimersByTimeAsync(60_000);
+      await persistLiveRoomSessionNow(mkRoom({ code: 'LEGACY1' }), roster);
+    }
+    expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(1);   // no retry, no storm
+    const posts = calls.filter((c) => c.path.includes('/room_live_sessions') && c.method === 'POST');
+    expect(posts.length).toBeGreaterThan(1);
+    for (const post of posts) expect((post.body as unknown as Array<{ room_shell: Record<string, unknown> }>)[0]!.room_shell).not.toHaveProperty('writerEpoch');
+  });
+
+  it('a successful boot allocation is the identity for the whole lifetime: every snapshot carries it and the RPC is never called again', async () => {
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      record(path, init);
+      return (path.includes('/rpc/next_room_writer_epoch') ? 55 : undefined) as never;
+    });
+    configureLiveRoomPersistence({ resolveRoster: () => roster });
+    await settleLiveRoomWriterEpoch();
+    for (let i = 0; i < 5; i += 1) {
+      await persistLiveRoomSessionNow(mkRoom({ code: `LIFE${i}` }), roster);
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+    }
     expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(6_000);
-    await persistLiveRoomSessionNow(mkRoom({ code: 'LEGACY1' }), roster);
-    expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(2);
+    const posts = calls.filter((c) => c.path.includes('/room_live_sessions') && c.method === 'POST');
+    expect(posts).toHaveLength(5);
+    for (const post of posts) expect((post.body as unknown as Array<{ room_shell: Record<string, unknown> }>)[0]!.room_shell.writerEpoch).toBe(55);
+  });
+
+  it('a persist issued while the boot allocation is still running waits for it: nothing is ever written under a provisional identity', async () => {
+    let release!: (epoch: number) => void;
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      record(path, init);
+      if (path.includes('/rpc/next_room_writer_epoch')) return new Promise<number>((resolve) => { release = resolve; }) as never;
+      return undefined as never;
+    });
+    configureLiveRoomPersistence({ resolveRoster: () => roster });
+    const pending = persistLiveRoomSessionNow(mkRoom({ code: 'WAIT1' }), roster);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls.some((c) => c.path.includes('/room_live_sessions'))).toBe(false);      // not written yet
+    release(77);
+    await pending;
+    expect(persistedShell()?.writerEpoch).toBe(77);
+  });
+
+  it('a persist never starts an allocation itself: only the boot configure can fix the identity', async () => {
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => { record(path, init); return 12 as never; });
+    await persistLiveRoomSessionNow(mkRoom({ code: 'NOBOOT1' }), roster);
+    await persistLiveRoomSessionNow(mkRoom({ code: 'NOBOOT1' }), roster);
+    expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(0);
+    expect(persistedShell()).not.toHaveProperty('writerEpoch');
   });
 
   it('adds no asynchronous gap before the snapshot is built once the epoch is known (snapshot stays at its fence)', async () => {
