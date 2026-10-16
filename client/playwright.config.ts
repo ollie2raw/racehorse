@@ -259,6 +259,8 @@ export default defineConfig({
             // Unlock winningScore=5 so rematch/leave protocol proof can finish in E2E.
             MP_PRIVATE_CERT_MODE: '1',
             E2E_INSPECT: '1',
+            // Explicit opt-in for the `Bearer e2e-daily-fritz` identity shim (refused on hosted runtimes and production Supabase).
+            E2E_AUTH_SHIM: '1',
             DAILY_FRITZ_MEMORY_STORE: '1',
             DAILY_FRITZ_TEST_FIXTURES_ENABLED: 'true',
             NODE_ENV: process.env.NODE_ENV === 'production' ? 'development' : (process.env.NODE_ENV ?? 'development'),

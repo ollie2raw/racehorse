@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import type express from 'express';
 import { config } from '../../config';
-import { findProductionSupabaseVars, isHostedProduction, productionSupabaseAllowed } from '../env/productionSupabaseGuard';
+import { findProductionSupabaseVars, isHostedProduction } from '../env/productionSupabaseGuard';
 
 const authenticatedUserIdCache = new Map<string, { userId: string | null; expiresAt: number }>();
 /**
@@ -62,14 +62,21 @@ export function authenticatedUserIdCacheSize(): number {
   return authenticatedUserIdCache.size;
 }
 
+/** Explicit per-process opt-in for the e2e identity shim; set only by the owned e2e harness (client/playwright.config.ts). */
+export const E2E_AUTH_SHIM_ENV = 'E2E_AUTH_SHIM';
+
 /**
- * The local e2e identity shim (`Bearer e2e-daily-fritz` + `x-e2e-daily-fritz-user`) authenticates as ANY uuid, so it
- * must fail closed: never on a hosted deployment (Render/Vercel, even with NODE_ENV unset), and never when the server
- * is wired to the production Supabase project unless that was an explicit opt-in.
+ * The e2e identity shim (`Bearer e2e-daily-fritz` + `x-e2e-daily-fritz-user`) authenticates as ANY uuid, so it fails
+ * closed. All of these must hold: an explicit `E2E_AUTH_SHIM=1` opt-in; not a hosted runtime (NODE_ENV=production, or
+ * Render/Vercel even with NODE_ENV unset or wrong); and no production Supabase project anywhere in the environment —
+ * deliberately NOT overridable by RACEHORSE_ALLOW_PRODUCTION_SUPABASE, which exists for throwaway-user scripts and must
+ * never also mean "anyone may impersonate any user".
  */
 export function isE2eAuthBypassAllowed(env: Record<string, string | undefined> = process.env): boolean {
-  if (env.NODE_ENV === 'production' || isHostedProduction(env)) return false;
-  if (findProductionSupabaseVars(env).length > 0 && !productionSupabaseAllowed(env, [])) return false;
+  const optIn = env[E2E_AUTH_SHIM_ENV]?.trim().toLowerCase();
+  if (optIn !== '1' && optIn !== 'true') return false;
+  if (isHostedProduction(env)) return false;
+  if (findProductionSupabaseVars(env).length > 0) return false;
   return true;
 }
 

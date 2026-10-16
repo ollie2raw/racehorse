@@ -120,6 +120,7 @@ permanent by nature. Not rollout flags; no remove-when.
 `DAILY_FRITZ_MEMORY_STORE` (hard-guarded `NODE_ENV !== 'production'`),
 `DAILY_FRITZ_TEST_FIXTURES_ENABLED` (same guard), `MP_PRIVATE_CERT_MODE`,
 `MATCHMAKING_DEV_MODE`, `E2E_DAILY_FRITZ_USER_ID`, `E2E_INSPECT`,
+`E2E_AUTH_SHIM` (explicit opt-in for the `Bearer e2e-daily-fritz` impersonation shim; refused on Render/Vercel/`NODE_ENV=production` and whenever any production Supabase var is present, even with `RACEHORSE_ALLOW_PRODUCTION_SUPABASE`; set only by `client/playwright.config.ts`),
 `ENABLE_QA_TOURNAMENT_SEED`, `QA_ALLOW_NONLOCAL_STAGING`, `QA_TOURNAMENT_USER_ID`.
 Test scaffolding. Out of scope for the rollout-flag convention.
 
