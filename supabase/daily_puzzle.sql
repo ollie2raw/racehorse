@@ -27,28 +27,12 @@ create policy "daily_puzzles_select_all"
   to anon, authenticated
   using (true);
 
--- Write allowed for authenticated admin email only (service role bypasses RLS)
+-- No client write policies (2026-10-16_account_identity_rls_hardening.sql): publishing is service-role only.
 drop policy if exists "daily_puzzles_insert_admin" on public.daily_puzzles;
-create policy "daily_puzzles_insert_admin"
-  on public.daily_puzzles
-  for insert
-  to authenticated
-  with check ((auth.jwt() ->> 'email') = 'admin@example.com');
 
 drop policy if exists "daily_puzzles_update_admin" on public.daily_puzzles;
-create policy "daily_puzzles_update_admin"
-  on public.daily_puzzles
-  for update
-  to authenticated
-  using ((auth.jwt() ->> 'email') = 'admin@example.com')
-  with check ((auth.jwt() ->> 'email') = 'admin@example.com');
 
 drop policy if exists "daily_puzzles_delete_admin" on public.daily_puzzles;
-create policy "daily_puzzles_delete_admin"
-  on public.daily_puzzles
-  for delete
-  to authenticated
-  using ((auth.jwt() ->> 'email') = 'admin@example.com');
 
 -- Example insert (replace with your real puzzle JSON)
 -- insert into public.daily_puzzles (puzzle_date, title, starting_board, starting_hand, max_moves, target_score)

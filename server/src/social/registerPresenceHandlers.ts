@@ -80,7 +80,18 @@ export function registerPresenceHandlers(
       socket.data.identifyPending = new Promise<void>((resolve) => { identified = resolve; });
       try {
         const { username, userId } = await deps.resolveSocketIdentity(payload ?? {});
-        if (!userId) return cb?.({ ok: false });
+        if (!userId) {
+          // A failed or downgraded identify (sign-out, expired/revoked token, guest) must not leave the socket
+          // acting as the previous account: drop the verified identity, then report the failure.
+          const previous = deps.normalizeUserId(socket.data?.userId);
+          if (previous) {
+            const wentOffline = removeSocketPresence();
+            delete socket.data.userId;
+            delete socket.data.username;
+            if (wentOffline && deps.isUuidLike(previous)) emitPresenceUpdateToFriends(deps, previous, 'offline');
+          }
+          return cb?.({ ok: false });
+        }
         // Re-identify is routine: it fires on every reconnect and on every
         // access-token rotation. Only announce a transition the friends list
         // has not already been told about.

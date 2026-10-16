@@ -134,4 +134,23 @@ describe('GET /api/ranking/history/:userId', () => {
     expect(response.status).toBe(401);
     expect(harness.supabaseFetch).not.toHaveBeenCalled();
   });
+
+  it("forbids reading another registered player's ranked history (IDOR) without touching the database", async () => {
+    const harness = makeHarness();
+
+    const response = await harness.request(route, OTHER_ID);
+
+    expect(response.status).toBe(403);
+    expect(harness.supabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("serves the caller's own history", async () => {
+    const harness = makeHarness();
+    harness.supabaseFetch.mockResolvedValueOnce([{ id: USER_ID, glicko_rating: 1600 }]).mockResolvedValueOnce([]);
+
+    const response = await harness.request(route, USER_ID);
+
+    expect(response.status).toBe(200);
+    expect(response.body.currentRating).toBe(1600);
+  });
 });

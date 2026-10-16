@@ -6,7 +6,7 @@ import {
 import { isAdminSecret } from '../../platform/auth/adminSecret';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
 import { supabaseFetch } from '../../supabaseUtils';
-import { setPublicShortCache } from './cacheControl';
+import { setPrivateShortCache } from './cacheControl';
 import {
   getVerifiedSinglePlayerMatch,
   persistVerifiedSinglePlayerMatch,
@@ -194,7 +194,8 @@ export function registerDailyFritzAdminRoutes(app: Application): void {
       return;
     }
     const leaderboard = await buildDailyFritzLeaderboard(runDate);
-    setPublicShortCache(res, 60, 300);
+    // Carries the per-viewer is_current_user flag: must never sit in a shared cache keyed only by URL.
+    setPrivateShortCache(res, 60);
     res.json({
       ok: true,
       run_date: runDate,

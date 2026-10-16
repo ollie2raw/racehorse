@@ -1,11 +1,12 @@
 import { identifyUser, resetAnalytics } from '../lib/analytics';
 import { isUsernamePolicyDbError, usernamePolicyMessage, usernamePolicyViolation } from './usernamePolicy';
-import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { formatAuthErrorMessage, passwordResetSentMessage } from './authErrors';
 import { clearCachedSession, setCachedSession } from './sessionToken';
+import { clearAccountBoundLocalState } from './accountBoundLocalState';
 import { getAuthEmailRedirectTo } from './authRedirect';
 import { evaluateAuthTimeoutSessionFallback, AUTH_TIMEOUT_FALLBACK_ERROR } from './authTimeoutSessionFallback';
 import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
@@ -217,6 +218,15 @@ function useAuthInternal() {
   const [loading, setLoading] = useState(true);
   const [justVerified, setJustVerified] = useState(false);
   const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(false);
+
+  // Principal change (sign-out, session expiry/revocation, A -> B): drop state bound to the previous account.
+  const principalIdRef = useRef<string | null>(null);
+  const principalId = user?.id ?? null;
+  useEffect(() => {
+    const previous = principalIdRef.current;
+    principalIdRef.current = principalId;
+    if (previous && previous !== principalId) clearAccountBoundLocalState(previous, principalId);
+  }, [principalId]);
 
   const fallbackProfile = useCallback((sessionUser: User): UserProfile => fallbackProfileFor(sessionUser), []);
 
