@@ -29,7 +29,7 @@ function makeHarness(overrides: Partial<RankingRouteDeps> = {}) {
   };
   registerRankingRoutes(app as unknown as Application, deps);
 
-  async function request(route: string, userId: string) {
+  async function request(route: string, userId: string, extra: Record<string, unknown> = {}) {
     const handler = routes.get(`GET ${route}`);
     if (!handler) throw new Error(`Missing route GET ${route}`);
     let status = 200;
@@ -40,7 +40,7 @@ function makeHarness(overrides: Partial<RankingRouteDeps> = {}) {
       setHeader() { return res; },
       set() { return res; },
     };
-    await handler({ headers: {}, params: { userId }, query: {}, body: {} }, res);
+    await handler({ headers: {}, params: { userId }, query: {}, body: {}, ...extra }, res);
     return { status, body: payload as Record<string, unknown> };
   }
 
@@ -152,5 +152,41 @@ describe('GET /api/ranking/history/:userId', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.currentRating).toBe(1600);
+  });
+
+  it('A reads A, B reads B, A cannot read B and B cannot read A (token identity decides, path id must match)', async () => {
+    for (const [self, other] of [[USER_ID, OTHER_ID], [OTHER_ID, USER_ID]]) {
+      const own = makeHarness();
+      own.getAuthenticatedUserId.mockResolvedValue(self);
+      own.supabaseFetch.mockResolvedValueOnce([{ id: self, glicko_rating: 1500 }]).mockResolvedValueOnce([]);
+      expect((await own.request(route, self)).status).toBe(200);
+
+      const cross = makeHarness();
+      cross.getAuthenticatedUserId.mockResolvedValue(self);
+      const denied = await cross.request(route, other);
+      expect(denied.status).toBe(403);
+      expect(cross.supabaseFetch).not.toHaveBeenCalled();
+      // non-leaky: identical shape whether or not the other player exists, and no data fields
+      expect(denied.body).toEqual({ error: 'Forbidden' });
+    }
+  });
+
+  it('anonymous callers get 401 with no data for any registered id', async () => {
+    for (const id of [USER_ID, OTHER_ID]) {
+      const harness = makeHarness();
+      harness.getAuthenticatedUserId.mockResolvedValue(null);
+      const response = await harness.request(route, id);
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Unauthorized' });
+      expect(harness.supabaseFetch).not.toHaveBeenCalled();
+    }
+  });
+
+  it('a userId supplied in the query or body cannot override the token identity', async () => {
+    const harness = makeHarness();
+    harness.getAuthenticatedUserId.mockResolvedValue(USER_ID);
+    const response = await harness.request(route, OTHER_ID, { query: { userId: USER_ID }, body: { userId: USER_ID, user_id: USER_ID } });
+    expect(response.status).toBe(403);
+    expect(harness.supabaseFetch).not.toHaveBeenCalled();
   });
 });
