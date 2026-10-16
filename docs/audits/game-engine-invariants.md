@@ -26,9 +26,24 @@ randomly submitted in either orientation.
 
 ## Finding
 E1: `resolveBlockedHand` under `blockedHandRule: 'noScore'` ended the hand without advancing `state.sequence` (the `lowestPips` branch
-does). Clients order state updates by sequence, so the hand-over update was indistinguishable from the previous one. Fixed
-(`sequence + 1`); reproducer in `engineRegressions.test.ts`.
+does), so the blocking pass produced a state indistinguishable by sequence from the one before it. The client watermark accepts an
+equal sequence, so this was not a dropped update there; the consumers that key on strict advancement (command envelopes
+`sequence === state.sequence`, change detection, durability/receipt ordering) saw no transition. Fixed with exactly one increment
+(`lowestPips` unchanged); the harness asserts "the blocking pass advances the sequence by exactly 1" for both rules.
 
 ## Mutation sanity
 Three deliberately broken engines (doubles lose the extra turn, open double counted once, a dead tile made drawable) are each caught by
 the first generated game.
+
+## Final review additions
+* The oracle imports nothing (no production module). The harness imports the engine only as the subject under test, the repo's PRNG/shuffle
+  to build decks, and `DEFAULT_CONFIG` (pinned to literals in `engineRegressions.test.ts`). Shared conventions are documented in the oracle:
+  the opening tile's `low` pip is the left port, and hub ids are assigned in placement order.
+* Oracle sanity: ten mutants (pass offered/accepted with a play, wrong player keeps the turn, double score, tile left in hand, wrong
+  branch exposed end metadata, wrong blocked-hand winner, terminal moves offered, passes not reset, go-out bonus lost, plus the three
+  earlier ones) are each caught. The branch-tip mutant was NOT caught until arm/hub metadata (`openEnd`, `openEndIsDouble`,
+  `isCrossed`, `leftEndIsDouble`/`rightEndIsDouble`) was compared against the oracle.
+* Opening-tile orientation is a pure mirror image (test `opening-tile orientation is a pure mirror image`): same scores, hands,
+  boneyard, turn flow and sequence, mirrored legal moves, open ends and mainline order; a reversed double is the identical board.
+* Daily Fritz verifier transcript normalization / omitted-draw reconstruction / Fritz policy replay are a separate subsystem pass; the
+  engine's own correctness does not depend on them (they call `applyMove`/`drawOne`/`canDraw`, which this suite constrains).

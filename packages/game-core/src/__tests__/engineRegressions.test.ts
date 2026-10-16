@@ -34,7 +34,14 @@ describe('engine regressions found by the property suite', () => {
       expect(getLegalMoves(before, 'B')).toEqual([{ type: 'pass' }]);
       const after = applyMove(before, 'B', { type: 'pass' }).state;
       expect(after.handOver).toBe(true);
-      expect(after.sequence).toBeGreaterThan(before.sequence);
+      expect(after.sequence).toBe(before.sequence + 1); // exactly one increment, same contract for both rules
     }
+  });
+
+  it('the rule constants the oracle suite relies on are pinned to literals (the oracle must not inherit a wrong default)', () => {
+    expect(DEFAULT_CONFIG).toMatchObject({
+      maxPips: 6, tilesPerPlayer: 7, deadTileCount: 2, scoringMultiple: 5,
+      blockedHandRule: 'lowestPips', endHandBonus: 'sumOpponentPenalties', winningScore: 60,
+    });
   });
 });

@@ -70,6 +70,19 @@ export class OBoard {
     return out;
   }
 
+  /** Hub ids that are currently crossed (offer arms). */
+  crossedHubIds(): Set<number> {
+    return new Set(this.crossedHubs().map((h) => h.id));
+  }
+
+  /** Exposed pip at the tip of an arm, or null if the arm is empty. */
+  armTip(hubId: number, arm: number): { pip: number; double: boolean } | null {
+    const lane = this.arms.get(`${hubId}:${arm}`);
+    if (!lane || lane.length === 0) return null;
+    const last = lane[lane.length - 1]!;
+    return { pip: last.tip, double: oIsDouble(last.tile) };
+  }
+
   /** Every place a tile may currently be attached, with the pip it must match. */
   ports(): Port[] {
     if (this.main.length === 0) return [];

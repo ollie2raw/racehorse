@@ -151,9 +151,27 @@ export function compareStates(ctx: string, s: GameState, o: OGame, full: number)
     const ports = o.board.ports().map((p) => `${p.position}=${p.pip}`).sort();
     const eng = getOpenEnds(s.board).map((e) => `${e.position}=${e.matchValue}`).sort();
     if (JSON.stringify(ports) !== JSON.stringify(eng)) fail(ctx, `open ends differ: oracle ${ports} engine ${eng}`);
+    // arm / hub metadata that other layers (UI, analyzer, persistence) read must match the oracle too
+    const crossed = o.board.crossedHubIds();
+    s.board.hubDoubles.forEach((hub, idx) => {
+      const id = hub.hubId ?? idx;
+      if (hub.isCrossed !== crossed.has(id)) fail(ctx, `hub ${id} isCrossed metadata ${hub.isCrossed}, oracle ${crossed.has(id)}`);
+      [0, 1].forEach((arm) => {
+        const engineArm = hub.branches[arm];
+        const tip = o.board.armTip(id, arm);
+        if (!engineArm || engineArm.tiles.length === 0) {
+          if (tip) fail(ctx, `hub ${id} arm ${arm}: oracle has tiles, engine arm is empty`);
+          return;
+        }
+        if (!tip) fail(ctx, `hub ${id} arm ${arm}: engine has tiles, oracle arm is empty`);
+        if (engineArm.openEnd !== tip.pip) fail(ctx, `hub ${id} arm ${arm} openEnd metadata ${engineArm.openEnd}, oracle ${tip.pip}`);
+        if (engineArm.openEndIsDouble !== tip.double) fail(ctx, `hub ${id} arm ${arm} openEndIsDouble metadata ${engineArm.openEndIsDouble}, oracle ${tip.double}`);
+      });
+    });
     if (ml.length >= 2) {
       const oracleL = o.board.ports().find((p) => p.position === 'left')!.pip;
       const oracleR = o.board.ports().find((p) => p.position === 'right')!.pip;
+      if (s.board.leftEndIsDouble !== oIsDouble(o.board.main[0]!.tile) || s.board.rightEndIsDouble !== oIsDouble(o.board.main[o.board.main.length - 1]!.tile)) fail(ctx, 'leftEndIsDouble/rightEndIsDouble metadata differs from the oracle');
       if (s.board.leftEnd !== oracleL || s.board.rightEnd !== oracleR) fail(ctx, `leftEnd/rightEnd metadata ${s.board.leftEnd}/${s.board.rightEnd} vs oracle ${oracleL}/${oracleR}`);
     }
   } else if (o.board.main.length > 0) fail(ctx, 'engine has no board but oracle does');
@@ -325,6 +343,7 @@ export function playGame(seed: string, variant: Variant, policy: Policy, opts: {
     deepFreeze(state);
     compareStates(ctxOf(), state, oracle, full);
     for (const id of state.playerIds) if (state.players[id]!.score < prevScores[id]!) fail(ctxOf(), `score of ${id} decreased`);
+    if (action.kind === 'pass' && ev.handEnd === 'blocked' && state.sequence !== before.sequence + 1) fail(ctxOf(), `the blocking pass must advance the sequence by exactly 1 (${before.sequence} -> ${state.sequence})`);
     if (state.sequence <= before.sequence) fail(ctxOf(), `sequence did not advance (${before.sequence} -> ${state.sequence}) after ${action.kind}`);
     // award-once: scores change only by what the oracle awarded this action
     const awarded = (ev.playScore ?? 0) + (ev.endBonus ?? 0);
