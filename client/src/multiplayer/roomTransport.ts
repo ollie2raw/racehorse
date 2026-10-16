@@ -65,9 +65,36 @@ export type PrivateRoomCreateSettings = {
 export type RoomAbandonPayload = {
   roomCode: string;
   tournamentMatchId: string | null;
+  /** Room generation this resignation was composed for (server refuses it if the room moved on). */
+  matchId?: string | null;
 };
 
 export type GameActionPayload = RoomGameActionPayload;
+
+/**
+ * A gameplay command bound to the match (room generation) it was composed for. `matchId` is separate
+ * from `requestId`: the request id makes a retry idempotent, the match id stops a command composed for
+ * game A from being judged by game B's legality after a rematch.
+ */
+export type MatchBoundGameActionPayload = GameActionPayload & { matchId?: string | null };
+
+// The authoritative current match id already lives in the room session (`roomMatchIdRef`, fed by the
+// server's eventMeta and reset per joined room). The transport reads that same ref; it never keeps
+// or invents a match identity of its own.
+let matchIdReader: () => string | null = () => null;
+
+export function setRoomMatchIdReader(reader: () => string | null): void {
+  matchIdReader = reader;
+}
+
+export function currentRoomMatchId(): string | null {
+  try {
+    const value = matchIdReader();
+    return typeof value === 'string' && value ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 export type TournamentAttachPayload = {
   matchId: string;
@@ -197,7 +224,8 @@ export function emitRoomAbandonMatch(
   socket: SocketEmitter,
   payload: RoomAbandonPayload,
 ): Promise<RoomAckResponse> {
-  return emitWithAck<RoomAckResponse>(socket, 'room:abandon_match', payload);
+  const matchId = 'matchId' in payload ? payload.matchId : currentRoomMatchId();
+  return emitWithAck<RoomAckResponse>(socket, 'room:abandon_match', matchId ? { ...payload, matchId } : { ...payload, matchId: undefined });
 }
 
 export function emitGameStart(socket: SocketEmitter, roomCode: string): Promise<RoomAckResponse> {
@@ -209,9 +237,12 @@ export function emitGameStart(socket: SocketEmitter, roomCode: string): Promise<
 export function emitGameAction(
   socket: SocketEmitter,
   roomCode: string,
-  action: GameActionPayload,
+  action: MatchBoundGameActionPayload,
 ): Promise<RoomAckResponse> {
-  return emitWithAck<RoomAckResponse>(socket, 'game:action', roomCode, action);
+  // Commands are bound when CREATED (see gameplayActionIdentity). A payload that carries the key at all
+  // (even null) keeps exactly what it was created with, so a retry never picks up a later match id.
+  const matchId = 'matchId' in action ? action.matchId : currentRoomMatchId();
+  return emitWithAck<RoomAckResponse>(socket, 'game:action', roomCode, matchId ? { ...action, matchId } : { ...action, matchId: undefined });
 }
 
 export function emitHandReady(
@@ -222,6 +253,7 @@ export function emitHandReady(
   return emitWithAck<RoomAckResponse>(socket, 'hand:ready', roomCode, {
     handNumber,
     requestId: createRoomCommandRequestId('hand-ready'),
+    matchId: currentRoomMatchId() ?? undefined,
   });
 }
 
@@ -230,7 +262,9 @@ export function emitGameRematch(
   roomCode: string,
   onAck: (resp: GameRematchAck) => void,
 ): void {
-  socket.emit('game:rematch', roomCode, onAck);
+  const matchId = currentRoomMatchId();
+  if (matchId) socket.emit('game:rematch', roomCode, { matchId }, onAck);
+  else socket.emit('game:rematch', roomCode, onAck);
 }
 
 export function emitTournamentAttachAssignedMatch(

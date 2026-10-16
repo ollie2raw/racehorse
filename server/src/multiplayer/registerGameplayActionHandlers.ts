@@ -133,11 +133,6 @@ export function registerGameplayActionHandlers(
         if (typeof cb === 'function') cb({ ok: false, error: 'Spectators cannot act.', code: 'unauthorized' });
         return;
       }
-      const stale = staleMatchAck(existingRoom, (action as { matchId?: unknown }).matchId);
-      if (stale) {
-        if (typeof cb === 'function') cb(stale);
-        return;
-      }
       // A retry of a command that already applied gets its original result even if the room has
       // since moved on (game over, next hand, rematch) - and a reused id with a different payload
       // fails closed - before any current-state check can turn it into a misleading rejection.
@@ -149,6 +144,14 @@ export function registerGameplayActionHandlers(
       );
       if (priorReceipt) {
         if (typeof cb === 'function') cb(priorReceipt.ok ? priorReceipt : { ...priorReceipt, code: 'request_id_conflict' });
+        return;
+      }
+      // Generation binding comes AFTER the receipt lookup on purpose: a retry of a command that already
+      // applied in the previous match must keep resolving to its original result, while a command that
+      // never applied and was composed for another match is refused here before it can touch this one.
+      const stale = staleMatchAck(existingRoom, (action as { matchId?: unknown }).matchId);
+      if (stale) {
+        if (typeof cb === 'function') cb(stale);
         return;
       }
       if (!existingRoom.state) {
@@ -315,7 +318,10 @@ export function registerGameplayActionHandlers(
       const room = getRoom(roomCode);
       assertRoomDurabilityOperationAllowed(room, 'new_hand');
       const playerSeatId = resolveActorSeatId(roomCode, socket);
-      const staleHand = staleMatchAck(room, claimedMatchId);
+      const handReceipt = requestId
+        ? lookupGameActionReceipt(roomCode, playerSeatId, requestId, fingerprintGameCommand('hand:ready', { handNumber }))
+        : null;
+      const staleHand = handReceipt ? null : staleMatchAck(room, claimedMatchId);
       if (staleHand) {
         if (typeof cb === 'function') cb(staleHand);
         return;

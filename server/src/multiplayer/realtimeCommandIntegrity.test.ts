@@ -258,4 +258,46 @@ describe('realtime command integrity (handlers)', () => {
     expect(allowed).toHaveBeenCalledWith(expect.objectContaining({ ok: true, winnerId: 'guest-2' }));
     expect(forfeit).toHaveBeenCalledTimes(1);
   });
+
+  it('response-loss retry across a rematch: same id + same payload + game-A matchId returns the original result; changed payload conflicts; a never-applied A command is stale', async () => {
+    const { room, s1 } = setup('CI11');
+    const actSpy = stubActCommit(room);
+    const matchA = room.matchId;
+    await s1.handlers.get('game:action')!('CI11', { ...move('a-final'), matchId: matchA }, vi.fn()); // committed; ack "lost"
+    room.matchId = 'match-B';
+    room.state = state();
+    const before = JSON.stringify(room.state);
+    const retry = vi.fn(); const changed = vi.fn(); const neverApplied = vi.fn(); const fresh = vi.fn();
+    await s1.handlers.get('game:action')!('CI11', { ...move('a-final'), matchId: matchA }, retry);
+    await s1.handlers.get('game:action')!('CI11', { type: 'PASS', requestId: 'a-final', matchId: matchA }, changed);
+    await s1.handlers.get('game:action')!('CI11', { ...move('a-delayed'), matchId: matchA }, neverApplied);
+    expect(retry).toHaveBeenCalledWith(expect.objectContaining({ ok: true, duplicate: true, sequence: 6 }));
+    expect(changed).toHaveBeenCalledWith(expect.objectContaining({ ok: false, error: 'request_id_conflict' }));
+    expect(neverApplied).toHaveBeenCalledWith(expect.objectContaining({ ok: false, error: 'stale_match', matchId: 'match-B' }));
+    expect(JSON.stringify(room.state)).toBe(before);
+    expect(actSpy).toHaveBeenCalledTimes(1);
+    // the equivalent NEW command bound to game B is judged by B's legality
+    await s1.handlers.get('game:action')!('CI11', { ...move('b-new'), matchId: 'match-B' }, fresh);
+    expect(fresh).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+    expect(actSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('rollout switch: COMMAND_MATCH_ID_REQUIRED=true makes unbound match-scoped commands fail closed; default accepts legacy clients', async () => {
+    const { room, s1 } = setup('CI12');
+    const actSpy = stubActCommit(room);
+    const legacy = vi.fn();
+    await s1.handlers.get('game:action')!('CI12', move('legacy-1'), legacy);
+    expect(legacy).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+    process.env.COMMAND_MATCH_ID_REQUIRED = 'true';
+    try {
+      const unbound = vi.fn(); const bound = vi.fn();
+      await s1.handlers.get('game:action')!('CI12', move('legacy-2'), unbound);
+      await s1.handlers.get('game:action')!('CI12', { ...move('bound-1'), matchId: room.matchId }, bound);
+      expect(unbound).toHaveBeenCalledWith(expect.objectContaining({ ok: false, error: 'match_id_required' }));
+      expect(bound).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+      expect(actSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      delete process.env.COMMAND_MATCH_ID_REQUIRED;
+    }
+  });
 });

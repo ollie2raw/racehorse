@@ -340,7 +340,7 @@ async function playToGameOver(r: { host: Client; guest: Client; roomCode: string
     if (ref.handOver) { await step(r.roomCode, r.host, r.guest); continue; }
     const cur = [r.host, r.guest].find((c) => c.seatId === ref.playerIds[ref.currentPlayerIndex]);
     if (!cur || (cur.latest?.state?.sequence ?? -1) < ref.sequence) { await sleep(80); continue; }
-    const action = nextAction(cur) as Record<string, unknown>;
+    const action: Record<string, unknown> = { ...(nextAction(cur) as Record<string, unknown>), matchId: matchIdOf(r.roomCode) };
     const resp = await emitAck(cur.socket, 'game:action', r.roomCode, action).catch(() => ({ ok: false }));
     if (resp?.ok) sent.push({ client: cur, action, requestId: String(action.requestId) });
     await waitFor(() => { const s = refState(r.host, r.guest); return Boolean(s && (s.sequence !== ref.sequence || s.gameOver || s.handOver)); }, 5000);
@@ -352,6 +352,10 @@ const matchIdOf = (code: string) => sql(`select match_id from public.room_live_s
 async function groupRematch() {
   const r = await startRoom();
   const sent: Sent[] = [];
+  const matchA0 = matchIdOf(r.roomCode);
+  // A command legal in game A, created now but delivered only after game B is running
+  const delayedClient = turnClient(r)!;
+  const delayedAction: Record<string, unknown> = { ...(moveFor(delayedClient) ?? { type: 'DRAW' }), requestId: `delayed-${randomUUID()}`, matchId: matchA0 };
   const over = await playToGameOver(r, sent);
   check(over, 'rematch.setup.game-over-reached');
   if (!over) return r;
@@ -373,6 +377,36 @@ async function groupRematch() {
   check(matchA !== matchB && Boolean(rm2.ok), 'rematch.new-match-id-issued', JSON.stringify({ rm1, rm1dup, rm2 }));
   const gameB = refState(r.host, r.guest);
   check(Boolean(gameB && !gameB.gameOver), 'rematch.game-b-running');
+  // ── cross-generation: delayed game-A commands delivered while game B is running ──
+  const bState = () => sql(`select game_state::text from public.room_live_sessions where room_code='${r.roomCode}'`);
+  await sleep(1200);
+  const bBefore = bState();
+  const bSeqBefore = roomSeq(r);
+  const dAct = await emitAck(delayedClient.socket, 'game:action', r.roomCode, delayedAction);
+  check(dAct.ok === false && dAct.error === 'stale_match', 'generation.delayed-game-a-action-refused-stale_match', JSON.stringify(dAct));
+  const dHand = await emitAck(delayedClient.socket, 'hand:ready', r.roomCode, { handNumber: 1, requestId: `delayed-${randomUUID()}`, matchId: matchA0 });
+  check(dHand.ok === false && dHand.error === 'stale_match', 'generation.delayed-game-a-hand-ready-refused-stale_match', JSON.stringify(dHand));
+  const dReMatch = await emitAck(delayedClient.socket, 'game:rematch', r.roomCode, { matchId: matchA0 });
+  check(dReMatch.ok === false && dReMatch.error === 'stale_match', 'generation.delayed-game-a-rematch-refused-stale_match', JSON.stringify(dReMatch));
+  const dAbandon = await emitAck(delayedClient.socket, 'room:abandon_match', { roomCode: r.roomCode, matchId: matchA0 });
+  check(dAbandon.ok === false && dAbandon.error === 'stale_match', 'generation.delayed-game-a-abandon-refused-stale_match', JSON.stringify(dAbandon));
+  await sleep(600);
+  check(bState() === bBefore && roomSeq(r) === bSeqBefore && sql(`select status from public.room_live_sessions where room_code='${r.roomCode}'`) === 'playing', 'generation.game-b-state-byte-identical-after-delayed-a-commands', `seq ${bSeqBefore}->${roomSeq(r)}`);
+  // response-loss retry: the FINAL move of game A (committed, its response "lost") retried with A's id + A's match id
+  const retrySame = await emitAck(last.client.socket, 'game:action', r.roomCode, last.action);
+  check(retrySame.ok === true && retrySame.duplicate === true, 'generation.retry-same-request-id-and-a-match-id-returns-original-duplicate', JSON.stringify(retrySame));
+  const retryAltered = await emitAck(last.client.socket, 'game:action', r.roomCode, { type: 'PASS', requestId: last.requestId, matchId: matchA0 });
+  check(retryAltered.ok === false && retryAltered.error === 'request_id_conflict', 'generation.retry-same-id-changed-payload-is-request_id_conflict', JSON.stringify(retryAltered));
+  await sleep(300);
+  check(bState() === bBefore, 'generation.game-b-unchanged-after-response-loss-retries');
+  // the equivalent NEW command bound to game B is judged by game B legality, not refused as stale
+  const bMatch = matchIdOf(r.roomCode);
+  const curB = turnClient({ host: r.host, guest: r.guest });
+  const newCmdClient = curB ?? null;
+  if (newCmdClient) {
+    const ackNew = await emitAck(newCmdClient.socket, 'game:action', r.roomCode, { ...(moveFor(curB!) ?? { type: 'DRAW' }), requestId: `fresh-${randomUUID()}`, matchId: bMatch });
+    check(ackNew.error !== 'stale_match' && ackNew.ok === true, 'generation.new-command-bound-to-game-b-applies-by-b-legality', JSON.stringify(ackNew));
+  }
   // wait until the sender of the old final move is on turn in game B (or play the other side forward)
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline && turnClient(r) !== last.client) {
@@ -406,8 +440,17 @@ async function groupRematch() {
   check(lateRematch.ok === false && lateRematch.error === 'stale_match', 'rematch.late-rematch-bound-to-previous-match-refused', JSON.stringify(lateRematch));
   const lateHand = await emitAck(last.client.socket, 'hand:ready', r.roomCode, { handNumber: 1, requestId: `probe-${randomUUID()}`, matchId: matchA });
   check(lateHand.ok === false && lateHand.error === 'stale_match', 'rematch.late-hand-ready-bound-to-previous-match-refused', JSON.stringify(lateHand));
+  // a replacement socket for the same seat retries the old command with its old bindings, then issues a new one for B
+  const lastUser = last.client === r.host ? r.hu : r.gu;
+  const replacement = await makeClient(lastUser);
+  const rj = await emitAck(replacement.socket, 'room:join', r.roomCode, replacement.identity);
+  replacement.seatId = (rj.you as string) ?? null;
+  const retryViaReplacement = await emitAck(replacement.socket, 'game:action', r.roomCode, last.action);
+  check(retryViaReplacement.ok === true && retryViaReplacement.duplicate === true, 'generation.replacement-socket-retry-of-old-command-is-duplicate', JSON.stringify(retryViaReplacement));
+  const replacementOldCmdNewBinding = await emitAck(replacement.socket, 'game:action', r.roomCode, { ...last.action, matchId: bMatch, type: 'PASS' });
+  check(replacementOldCmdNewBinding.ok === false && replacementOldCmdNewBinding.error === 'request_id_conflict', 'generation.old-command-cannot-be-rebound-to-new-match-on-reconnect', JSON.stringify(replacementOldCmdNewBinding));
   // an unbound legacy abandon still resigns the CURRENT game (entitled user action)
-  const unbound = await emitAck(last.client.socket, 'room:abandon_match', { roomCode: r.roomCode });
+  const unbound = await emitAck(replacement.socket, 'room:abandon_match', { roomCode: r.roomCode });
   notes.unboundAbandonIntoGameB = unbound;
   return r;
 }

@@ -49,7 +49,7 @@ import { useRegisterTournamentSocketHandlers } from './tournament/useRegisterTou
 import { useSocialInviteState } from './multiplayer/useSocialInviteState';
 import type { MatchFoundPayload } from './matchmaking/types';
 import type { RoomAckResponse } from './multiplayer/roomTransport';
-import { emitWithAck } from './multiplayer/roomTransport';
+import { emitWithAck, setRoomMatchIdReader } from './multiplayer/roomTransport';
 import type { RoomEventMeta } from './multiplayer/protocol/roomProtocol';
 import {
   LAST_ROOM_STORAGE_KEY,
@@ -243,6 +243,8 @@ export default function App() {
   const rejoinInFlightRef = useRef(false);
   const maxSequenceRef = useRef<number>(-1);
   const roomMatchIdRef = useRef<string | null>(null);
+  // Commands are bound to the match the room session currently reports (same ref, no second identity).
+  useEffect(() => { setRoomMatchIdReader(() => roomMatchIdRef.current); }, []);
   const maxEventSequenceRef = useRef<number>(-1);
 
   useEffect(() => {

@@ -181,6 +181,12 @@ describe('gameActionIdempotency', () => {
       expect(fingerprintGameCommand('hand:ready', { handNumber: 1 })).not.toBe(fingerprintGameCommand('hand:ready', { handNumber: 2 }));
     });
 
+    it('the legacy `end` alias is fingerprinted with the engine\'s precedence', () => {
+      const viaEnd = (end: string) => fingerprintGameCommand('game:action', { type: 'MOVE', move: { tile: { high: 6, low: 5 }, end } });
+      expect(viaEnd('left')).not.toBe(viaEnd('right'));
+      expect(viaEnd('left')).toBe(fingerprintGameCommand('game:action', { type: 'MOVE', move: { tile: { high: 6, low: 5 }, position: 'left' } }));
+    });
+
     it('same id + same payload replays the original result; same id + different payload fails closed without executing', async () => {
       let runs = 0;
       const exec = async () => { runs += 1; return { ok: true, sequence: 7 }; };

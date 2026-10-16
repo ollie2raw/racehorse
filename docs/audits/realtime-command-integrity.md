@@ -86,7 +86,32 @@ match is refused with `stale_match` before any state is touched. Clients do not 
 
 ## Deferred
 
-* R2: clients do not yet send `matchId`; until they do, a fresh (new request id) command or an unbound abandon composed in game A and delivered after a rematch started is judged only by current-state legality (it is the seat owner's own command). Plumbing: attach `matchId` from the client's `roomMatchIdRef` in `roomTransport` emitters.
 * R3: other handlers still call `cb?.()` on a non-function cb argument; asynchronous ones are caught by `trackSocketHandlers` (logged), none crash.
 * R3: a terminal move whose synchronous persist fails is rolled back; an abandon that arrived in that window is answered `match_completed` and not applied.
 * R3: `room:spectate` accepts a guest label as "authenticated".
+
+## Match-generation binding (closed in the follow-up pass)
+
+Client -> server path. The authoritative current match id is `roomMatchIdRef` (fed by the server's `eventMeta.matchId` on the
+join ack and every state update, reset per joined room). `App.tsx` registers a reader over that SAME ref with
+`roomTransport.setRoomMatchIdReader`; the transport keeps no identity of its own.
+* `game:action` (play/draw/pass): the match id is captured when the logical command is CREATED
+  (`resolveLogicalActionRequestId` -> `LogicalGameplayAction.matchId`) and every emission of that command sends it. A retry
+  reuses the stored id even after the session already reports game B; it is only "not a retry" if the session positively reports
+  a different match. A payload that carries the key (even `null`) is never re-stamped at emit time.
+* `hand:ready`, `game:rematch` (`(code, {matchId}, ack)`), `room:abandon_match` (`matchId` in the payload): stamped from the
+  current match at the user action. When unknown the legacy wire shapes are sent unchanged.
+* Server: `staleMatchAck` compares to `room.matchId`; request-id idempotency stays separate and is consulted FIRST for
+  `game:action`/`hand:ready`, so a legitimate response-loss retry of a game-A command (same id, same payload, game-A match id)
+  still returns its original result after game B started, a changed payload is `request_id_conflict`, and a never-applied game-A
+  command is `stale_match`.
+
+Compatibility window: a missing `matchId` is still accepted by default because already-deployed web/PWA/iOS builds do not send it
+yet; a PRESENT id is always compared, so every updated client is protected immediately. After the supported-client floor includes
+this release, set `COMMAND_MATCH_ID_REQUIRED=true` to fail closed (`match_id_required`) for unbound match-scoped commands.
+
+Review of `fe48fee..c779b74` (regressions only), fixed: the internal-detail filter matched `econn` inside `reconnect_unavailable`
+(a legitimate rejection became `internal_error`); durability rejections (`room_degraded`, `*_blocked`, `reconnect_unavailable`)
+are now `not_active`; the fingerprint ignored the legacy `end` alias that the engine honours. Checked and acceptable: guest abandon
+now needs seat-socket ownership (a hydrated-but-not-rejoined guest must rejoin first), receipts retained across rematch cannot
+collide with a new game because the client no longer reuses a logical request id across matches and ids are random per command.

@@ -2,7 +2,7 @@ import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction 
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move } from '../../../types';
 import { mpPerfBeginAction, mpPerfMarkAck } from '../../../multiplayer/mpPerf';
-import { emitGameAction } from '../../../multiplayer/roomTransport';
+import { currentRoomMatchId, emitGameAction } from '../../../multiplayer/roomTransport';
 import type { MoveEntry } from '../../../game/moveLogger';
 import {
   buildLogicalActionSignature,
@@ -95,6 +95,7 @@ export function usePassAction(params: UsePassActionParams): () => Promise<void> 
       baselineSequence,
       handNumber,
       signature,
+      matchId: currentRoomMatchId(),
     });
     logicalGameplayActionRef.current = logicalAction;
     const requestId = logicalAction.requestId;
@@ -105,7 +106,7 @@ export function usePassAction(params: UsePassActionParams): () => Promise<void> 
     const optimistic = applyOptimisticPass?.(requestId) ?? null;
 
     try {
-      const resp = await emitGameAction(socket, joinedRoom, { type: 'PASS', requestId });
+      const resp = await emitGameAction(socket, joinedRoom, { type: 'PASS', requestId, matchId: logicalAction.matchId });
       mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
       if (!resp?.ok) {
         optimistic?.rollback();

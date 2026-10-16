@@ -68,7 +68,8 @@ export function fingerprintGameCommand(kind: string, payload: unknown): string {
     typeof p.type === 'string' ? p.type : null,
     typeof tile.high === 'number' ? tile.high : null,
     typeof tile.low === 'number' ? tile.low : null,
-    typeof move.position === 'string' ? move.position : null,
+    // Same precedence the engine uses (position, else the legacy `end` alias).
+    typeof move.position === 'string' ? move.position : typeof move.end === 'string' ? move.end : null,
     typeof p.handNumber === 'number' ? p.handNumber : null,
   ]);
   return createHash('sha256').update(canonical).digest('base64url').slice(0, 22);

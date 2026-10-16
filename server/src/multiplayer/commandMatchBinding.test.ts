@@ -55,6 +55,9 @@ describe('classifyCommandError', () => {
     expect(classifyCommandError('Game is over. Only rematch or leave is accepted.').code).toBe('not_active');
     expect(classifyCommandError('match_abandoned').code).toBe('not_active');
     expect(classifyCommandError("It's not your turn.").code).toBe('illegal');
+    for (const token of ['room_degraded', 'room_persistence_failed', 'new_hand_blocked', 'rematch_blocked', 'reconnect_unavailable']) {
+      expect(classifyCommandError(token)).toEqual({ code: 'not_active', error: token });
+    }
   });
   it('never forwards infrastructure detail', () => {
     for (const leak of [

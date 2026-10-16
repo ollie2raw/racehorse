@@ -8,8 +8,21 @@ export const STALE_MATCH_ERROR = 'stale_match';
  * (rematch / replacement session) the command is refused instead of landing in the new game.
  * Absent or non-string values keep the legacy behavior (state legality + seat ownership only).
  */
+export const MATCH_ID_REQUIRED_ERROR = 'match_id_required';
+
+/**
+ * Rollout switch. Off (default) = a missing `matchId` is accepted so already-deployed clients keep
+ * working; once every supported client binds its commands, set COMMAND_MATCH_ID_REQUIRED=true and
+ * unbound match-scoped commands fail closed. A PRESENT matchId is always compared.
+ */
+function matchIdRequired(): boolean {
+  return process.env.COMMAND_MATCH_ID_REQUIRED === 'true';
+}
+
 export function staleMatchAck(room: Pick<Room, 'matchId'>, claimed: unknown): { ok: false; error: string; stale: true; matchId: string } | null {
-  if (typeof claimed !== 'string' || !claimed) return null;
+  if (typeof claimed !== 'string' || !claimed) {
+    return matchIdRequired() ? { ok: false, error: MATCH_ID_REQUIRED_ERROR, stale: true, matchId: room.matchId } : null;
+  }
   if (claimed === room.matchId) return null;
   return { ok: false, error: STALE_MATCH_ERROR, stale: true, matchId: room.matchId };
 }
@@ -23,7 +36,7 @@ export type CommandRejectionCode =
   | 'illegal'
   | 'internal_error';
 
-const INTERNAL_DETAIL = /(supabase|postgres|postgrest|fetch failed|econn|etimedout|\bat\s+\S+\s+\(|node_modules|\/home\/|\.ts:\d+|room_live_sessions|jwt)/i;
+const INTERNAL_DETAIL = /(supabase|postgres|postgrest|fetch failed|\becONN|\betimedout|\bat\s+\S+\s+\(|node_modules|\/home\/|\.ts:\d+|room_live_sessions|jwt)/i;
 
 /**
  * Machine-readable category for a rejected gameplay command, so a client can reconcile (reload on
@@ -34,7 +47,7 @@ export function classifyCommandError(message: string): { code: CommandRejectionC
   if (INTERNAL_DETAIL.test(message)) return { code: 'internal_error', error: 'Action failed. Please retry.' };
   const m = message.toLowerCase();
   if (/spectator|seat not found|not in room|player not in/.test(m)) return { code: 'unauthorized', error: message };
-  if (/room not found|game not started|game is over|match_abandoned|match_completed|tournament_forfeit|waiting for next hand|hand is over|persistence_failed|paused/.test(m)) {
+  if (/room not found|game not started|game is over|match_abandoned|match_completed|tournament_forfeit|waiting for next hand|hand is over|persistence_failed|room_degraded|reconnect_unavailable|_blocked|paused/.test(m)) {
     return { code: 'not_active', error: message };
   }
   if (/invalid|unknown action|missing action|malformed/.test(m)) return { code: 'malformed', error: message };
