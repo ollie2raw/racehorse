@@ -456,7 +456,14 @@ export function PrivateMatchLobbyControlPanel({
                   placeholder="ROOM CODE"
                   value={roomCode}
                   onChange={(e) => onRoomCodeChange(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && pendingLobbyAction !== 'create' && pendingLobbyAction !== 'join') onJoinRoom();
+                  }}
                   maxLength={6}
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="go"
                   disabled={pendingLobbyAction === 'create' || pendingLobbyAction === 'join'}
                 />
                 <button

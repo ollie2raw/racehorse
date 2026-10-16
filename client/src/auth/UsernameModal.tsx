@@ -122,6 +122,10 @@ export default function UsernameModal({
             placeholder="racehorse_ace"
             disabled={saving || signingOut}
             autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="done"
             className="auth-modal-input"
           />
         </label>
