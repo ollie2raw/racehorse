@@ -10,7 +10,11 @@ import {
   getLiveRoomDurabilityState,
   persistLiveRoomSessionNow,
   resetLiveRoomPersistenceForTests,
+  markLiveRoomSessionRestoreIntent,
   schedulePersistLiveRoomSession,
+  setLiveRoomWriterEpochForTests,
+  settleLiveRoomWriterEpoch,
+  configureLiveRoomPersistence,
 } from './roomLivePersistence';
 
 const t = (low: number, high: number) => ({ low: Math.min(low, high), high: Math.max(low, high) });
@@ -110,6 +114,9 @@ describe('roomLivePersistence flush', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     resetLiveRoomPersistenceForTests();
+    // A booted process already holds its writer epoch (allocated when persistence is configured); these tests are about the
+    // steady-state persist sequence, so the boot-time epoch request is not part of the mocked call order.
+    setLiveRoomWriterEpochForTests(7);
     persistenceStore.liveSessions.clear();
     persistenceStore.persistCalls = 0;
     persistenceStore.persistedSequences = [];
@@ -301,5 +308,108 @@ describe('roomLivePersistence flush', () => {
     expect(persistenceStore.persistCalls).toBe(2);
     expect(persistenceStore.liveSessions.get('EVENT1')?.last_event_sequence).toBe(1);
     expect(getLiveRoomDurabilityState(room).status).toBe('healthy');
+  });
+});
+
+describe('roomLivePersistence database-fence client behaviour', () => {
+  type Call = { path: string; method?: string; body?: Record<string, unknown> };
+  let calls: Call[];
+  const parse = (init?: RequestInit) => (init?.body ? JSON.parse(String(init.body)) : undefined);
+  const record = (path: string, init?: RequestInit) => { calls.push({ path, method: init?.method, body: parse(init) }); };
+  const persistedShell = (): Record<string, unknown> | undefined => {
+    const post = calls.find((c) => c.path.includes('/room_live_sessions') && c.method === 'POST');
+    return ((post?.body as unknown as Array<{ room_shell: Record<string, unknown> }> | undefined)?.[0]?.room_shell);
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetLiveRoomPersistenceForTests();
+    calls = [];
+    vi.mocked(supabaseFetch).mockReset();
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('allocates the writer epoch at boot (configureLiveRoomPersistence), once, and stamps it on every snapshot', async () => {
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      record(path, init);
+      if (path.includes('/rpc/next_room_writer_epoch')) return 41 as never;
+      return undefined as never;
+    });
+    configureLiveRoomPersistence({ resolveRoster: () => roster });
+    await settleLiveRoomWriterEpoch();
+    expect(await persistLiveRoomSessionNow(mkRoom({ code: 'EPOCH1' }), roster)).toBe(true);
+    expect(await persistLiveRoomSessionNow(mkRoom({ code: 'EPOCH1' }), roster)).toBe(true);
+    expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(1);
+    expect(persistedShell()?.writerEpoch).toBe(41);
+  });
+
+  it('a schema without next_room_writer_epoch() persists with no epoch (legacy 0) and retries the allocation later', async () => {
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      record(path, init);
+      if (path.includes('/rpc/next_room_writer_epoch')) throw new Error('Supabase request failed: 404 {"code":"PGRST202"}');
+      return undefined as never;
+    });
+    expect(await persistLiveRoomSessionNow(mkRoom({ code: 'LEGACY1' }), roster)).toBe(true);
+    expect(persistedShell()).toBeTruthy();
+    expect(persistedShell()).not.toHaveProperty('writerEpoch');
+    // within the retry window the allocation is not hammered
+    await persistLiveRoomSessionNow(mkRoom({ code: 'LEGACY1' }), roster);
+    expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(6_000);
+    await persistLiveRoomSessionNow(mkRoom({ code: 'LEGACY1' }), roster);
+    expect(calls.filter((c) => c.path.includes('next_room_writer_epoch'))).toHaveLength(2);
+  });
+
+  it('adds no asynchronous gap before the snapshot is built once the epoch is known (snapshot stays at its fence)', async () => {
+    setLiveRoomWriterEpochForTests(9);
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => { record(path, init); return undefined as never; });
+    const room = mkRoom({ code: 'GAP1' });
+    const pending = persistLiveRoomSessionNow(room, roster);
+    room.state = { ...room.state!, sequence: 99 } as typeof room.state;   // mutated in the same tick, after the call
+    await pending;
+    const row = (calls.find((c) => c.method === 'POST')?.body as unknown as Array<{ game_state_sequence: number }>)[0]!;
+    expect(row.game_state_sequence).toBe(14);
+  });
+
+  it.each([
+    ['room_live_session_stale_write'], ['room_live_session_stale_writer'], ['room_live_session_stale_generation'],
+    ['room_live_session_retired_match'], ['room_live_session_terminal_regression'], ['room_live_session_owes_completion'],
+  ])('a database fence refusal (%s) is a terminal FAILED durability state, not a retried degraded one', async (code) => {
+    setLiveRoomWriterEpochForTests(9);
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      record(path, init);
+      throw new Error(`Supabase request failed: 400 {"code":"P0001","message":"${code}: room X"}`);
+    });
+    const room = mkRoom({ code: 'FENCE1' });
+    expect(await persistLiveRoomSessionNow(room, roster)).toBe(false);
+    expect(getLiveRoomDurabilityState(room).status).toBe('failed');
+    expect(String(getLiveRoomDurabilityState(room).lastError)).toBe(code);
+    expect(calls.filter((c) => c.path.includes('/room_live_sessions'))).toHaveLength(1);   // no retry storm
+  });
+
+  it('restore intent re-creates the row through the RPC with p_restore=true and is consumed on success', async () => {
+    setLiveRoomWriterEpochForTests(9);
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => { record(path, init); return undefined as never; });
+    const room = mkRoom({ code: 'RESTORE1' });
+    markLiveRoomSessionRestoreIntent('restore1');
+    expect(await persistLiveRoomSessionNow(room, roster)).toBe(true);
+    const rpc = calls.find((c) => c.path.includes('/rpc/persist_room_live_session'));
+    expect(rpc?.body).toMatchObject({ p_restore: true, p_entries: [] });
+    expect((rpc?.body as { p_session: { room_shell: { writerEpoch: number } } }).p_session.room_shell.writerEpoch).toBe(9);
+    calls = [];
+    expect(await persistLiveRoomSessionNow(mkRoom({ code: 'RESTORE1' }), roster)).toBe(true);   // intent consumed: ordinary write
+    expect(calls.some((c) => c.path.includes('/rpc/persist_room_live_session'))).toBe(false);
+  });
+
+  it('restore intent against a schema that predates p_restore falls back to the ordinary row write', async () => {
+    setLiveRoomWriterEpochForTests(9);
+    vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      record(path, init);
+      if (path.includes('/rpc/persist_room_live_session')) throw new Error('Supabase request failed: 404 {"code":"PGRST202"}');
+      return undefined as never;
+    });
+    markLiveRoomSessionRestoreIntent('RESTORE2');
+    expect(await persistLiveRoomSessionNow(mkRoom({ code: 'RESTORE2' }), roster)).toBe(true);
+    expect(calls.some((c) => c.path.includes('/room_live_sessions') && c.method === 'POST')).toBe(true);
   });
 });
