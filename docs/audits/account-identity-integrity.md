@@ -176,4 +176,3 @@ Reviewed `ab43d156..5c7e2b7a`, reproduced against the pre-fix schema/code, then 
 
 Migrations to apply (manually, no CI runner): `2026-10-16_account_identity_rls_hardening.sql`, then
 `2026-10-16_signup_fallback_username_full_uuid.sql`. Both are idempotent.
-
