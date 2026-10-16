@@ -642,7 +642,16 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     if (!socket?.connected) return;
 
     const userId = scope.auth.authUserRef.current?.id;
-    if (!userId) return;
+    if (!userId) {
+      // Signed out (or the session expired/was revoked in another tab) while connected: the server still holds this
+      // socket as the previous account. Downgrade it so it stops acting, and appearing online, as that account.
+      if (prev.split('|')[0]) {
+        void scope.config
+          .emitWithAck<RoomAckResponse>(socket, 'presence:identify', { userId: null, username: 'Guest', authToken: null })
+          .catch(() => {});
+      }
+      return;
+    }
 
     const username = publicPlayerName(scope.auth.authProfileRef.current?.username);
 

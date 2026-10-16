@@ -82,3 +82,18 @@ describe('getAuthenticatedUserIdFromToken', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe('e2e identity shim fails closed', () => {
+  it('is allowed only on a non-hosted, non-production-Supabase process', async () => {
+    const { isE2eAuthBypassAllowed } = await import('./supabaseAuth');
+    expect(isE2eAuthBypassAllowed({ NODE_ENV: 'test' })).toBe(true);
+    expect(isE2eAuthBypassAllowed({})).toBe(true);
+    expect(isE2eAuthBypassAllowed({ NODE_ENV: 'production' })).toBe(false);
+    expect(isE2eAuthBypassAllowed({ RENDER: 'true' })).toBe(false); // staging with NODE_ENV unset
+    expect(isE2eAuthBypassAllowed({ NODE_ENV: 'staging', VERCEL: '1' })).toBe(false);
+    expect(isE2eAuthBypassAllowed({ SUPABASE_URL: 'https://fisfadjqllojdzibcdfx.supabase.co' })).toBe(false);
+    expect(
+      isE2eAuthBypassAllowed({ SUPABASE_URL: 'https://fisfadjqllojdzibcdfx.supabase.co', RACEHORSE_ALLOW_PRODUCTION_SUPABASE: '1' }),
+    ).toBe(true);
+  });
+});

@@ -2,6 +2,24 @@ import type { Router } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
 import { getFriendIds, requireAuth } from './socialAuth';
 
+// The public response includes only fields used to describe the result.
+// In particular, internal match IDs and future metadata stay private.
+const PUBLIC_FEED_METADATA_KEYS = [
+  'opponent_username', 'mode', 'score', 'opponent_score', 'fritz_tier',
+  'skunk', 'skunk_by', 'forfeit', 'streak', 'source', 'result',
+  'game_number', 'player_score', 'fritz_score', 'placement',
+  'tournament_name', 'player_count', 'players', 'rating_change',
+  'tiles', 'hand_size', 'tile_count',
+];
+
+function publicFeedMetadata(metadata: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  return Object.fromEntries(
+    PUBLIC_FEED_METADATA_KEYS
+      .filter((key) => Object.prototype.hasOwnProperty.call(metadata ?? {}, key))
+      .map((key) => [key, (metadata as Record<string, unknown>)[key]]),
+  );
+}
+
 export function registerSocialFeedRoutes(socialRouter: Router): void {
   socialRouter.get('/feed/global', async (_req, res) => {
     try {
@@ -22,15 +40,6 @@ export function registerSocialFeedRoutes(socialRouter: Router): void {
         : [];
       const usernames = new Map(profiles.map((profile) => [profile.id, profile.username]));
 
-      // The public response includes only fields used to describe the result.
-      // In particular, internal match IDs and future metadata stay private.
-      const publicMetadataKeys = [
-        'opponent_username', 'mode', 'score', 'opponent_score', 'fritz_tier',
-        'skunk', 'skunk_by', 'forfeit', 'streak', 'source', 'result',
-        'game_number', 'player_score', 'fritz_score', 'placement',
-        'tournament_name', 'player_count', 'players', 'rating_change',
-        'tiles', 'hand_size', 'tile_count',
-      ];
       res.setHeader('Cache-Control', 'public, max-age=15');
       res.json({
         ok: true,
@@ -40,11 +49,7 @@ export function registerSocialFeedRoutes(socialRouter: Router): void {
           type: row.type,
           created_at: row.created_at,
           username: usernames.get(row.user_id) ?? 'player',
-          metadata: Object.fromEntries(
-            publicMetadataKeys
-              .filter((key) => Object.prototype.hasOwnProperty.call(row.metadata ?? {}, key))
-              .map((key) => [key, row.metadata[key]]),
-          ),
+          metadata: publicFeedMetadata(row.metadata),
         })),
       });
     } catch (err) {
@@ -78,7 +83,11 @@ export function registerSocialFeedRoutes(socialRouter: Router): void {
 
       res.json({
         ok: true,
-        feed: rows.map((r) => ({ ...r, username: usernameMap.get(r.user_id) ?? 'player' })),
+        feed: rows.map((r) => ({
+          ...r,
+          metadata: r.user_id === userId ? r.metadata : publicFeedMetadata(r.metadata),
+          username: usernameMap.get(r.user_id) ?? 'player',
+        })),
       });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Feed unavailable.' });
@@ -102,7 +111,14 @@ export function registerSocialFeedRoutes(socialRouter: Router): void {
         `/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,username&limit=1`,
       );
       const username = profileRows?.[0]?.username ?? 'player';
-      res.json({ ok: true, feed: rows.map((r) => ({ ...r, username })) });
+      res.json({
+        ok: true,
+        feed: rows.map((r) => ({
+          ...r,
+          metadata: r.user_id === requestorId ? r.metadata : publicFeedMetadata(r.metadata),
+          username,
+        })),
+      });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Activity unavailable.' });
     }

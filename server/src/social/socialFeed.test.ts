@@ -56,3 +56,29 @@ describe('public global activity feed', () => {
     });
   });
 });
+
+describe('per-user feed routes keep internal ids private to non-owners', () => {
+  const rowFor = (userId: string) => ({
+    id: 'a1', user_id: userId, type: 'win', created_at: '2026-10-08T00:00:00.000Z',
+    metadata: { mode: 'bot', score: 20, source_match_id: 'private-match-id' },
+  });
+  const run = async (path: string, params: Record<string, string>) => {
+    const res = { body: null as unknown, json(v: unknown) { this.body = v; return this; } };
+    await routes.get(path)!({ params }, res);
+    return res.body as { feed: Array<{ metadata: Record<string, unknown> }> };
+  };
+
+  it("/feed/user/:userId strips internal metadata from another player's rows", async () => {
+    mockAuth.mockResolvedValue('viewer');
+    mockFetch.mockResolvedValueOnce([rowFor('target')]).mockResolvedValueOnce([{ id: 'target', username: 'ada' }]);
+    const body = await run('/feed/user/:userId', { userId: 'target' });
+    expect(body.feed[0]!.metadata).toEqual({ mode: 'bot', score: 20 });
+  });
+
+  it('/feed/user/:userId leaves the viewer\'s own rows intact', async () => {
+    mockAuth.mockResolvedValue('viewer');
+    mockFetch.mockResolvedValueOnce([rowFor('viewer')]).mockResolvedValueOnce([{ id: 'viewer', username: 'me' }]);
+    const body = await run('/feed/user/:userId', { userId: 'viewer' });
+    expect(body.feed[0]!.metadata).toHaveProperty('source_match_id');
+  });
+});

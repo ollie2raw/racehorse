@@ -123,6 +123,11 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
+      // Full per-game history (opponent ids, scores, rating deltas) is the caller's own durable record.
+      if (authenticatedUserId !== userId) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
       const profileData = await supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
       const profile = profileData?.[0];
       if (!profile) {

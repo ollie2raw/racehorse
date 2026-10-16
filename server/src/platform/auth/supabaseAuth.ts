@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import type express from 'express';
 import { config } from '../../config';
+import { findProductionSupabaseVars, isHostedProduction, productionSupabaseAllowed } from '../env/productionSupabaseGuard';
 
 const authenticatedUserIdCache = new Map<string, { userId: string | null; expiresAt: number }>();
 /**
@@ -61,11 +62,22 @@ export function authenticatedUserIdCacheSize(): number {
   return authenticatedUserIdCache.size;
 }
 
+/**
+ * The local e2e identity shim (`Bearer e2e-daily-fritz` + `x-e2e-daily-fritz-user`) authenticates as ANY uuid, so it
+ * must fail closed: never on a hosted deployment (Render/Vercel, even with NODE_ENV unset), and never when the server
+ * is wired to the production Supabase project unless that was an explicit opt-in.
+ */
+export function isE2eAuthBypassAllowed(env: Record<string, string | undefined> = process.env): boolean {
+  if (env.NODE_ENV === 'production' || isHostedProduction(env)) return false;
+  if (findProductionSupabaseVars(env).length > 0 && !productionSupabaseAllowed(env, [])) return false;
+  return true;
+}
+
 export async function getAuthenticatedUserId(req: express.Request): Promise<string | null> {
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   const token = match?.[1]?.trim();
-  if (process.env.NODE_ENV !== 'production' && token === 'e2e-daily-fritz') {
+  if (token === 'e2e-daily-fritz' && isE2eAuthBypassAllowed()) {
     const headerUser = req.headers['x-e2e-daily-fritz-user'];
     const fromHeader = typeof headerUser === 'string' ? headerUser.trim() : '';
     if (fromHeader) return fromHeader;

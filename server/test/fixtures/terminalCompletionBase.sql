@@ -10,6 +10,14 @@ grant anon, authenticated, service_role to local_authenticator;
 create extension if not exists pgcrypto;
 create schema if not exists auth;
 create table auth.users (id uuid primary key default gen_random_uuid(), email text, raw_user_meta_data jsonb default '{}'::jsonb);
-create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+-- Reads the verified subject exactly like Supabase's auth.uid(): PostgREST (and the identity RLS suite) set the
+-- request.jwt.claims GUC; no claim -> NULL, so anon and service-role sessions have no uid.
+create or replace function auth.uid() returns uuid language sql stable as $$
+  select nullif(coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''), (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')), '')::uuid
+$$;
 create or replace function auth.role() returns text language sql stable as $$ select 'service_role'::text $$;
 create schema if not exists extensions;
+-- Supabase gives anon/authenticated/service_role ALL on every table/sequence/function created in public by default;
+-- RLS and the migrations' explicit REVOKEs are then the only barrier. Mirror that so the suite tests the real posture.
+alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges for role postgres in schema public grant all on sequences to anon, authenticated, service_role;
