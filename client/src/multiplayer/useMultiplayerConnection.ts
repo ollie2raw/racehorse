@@ -50,6 +50,7 @@ import {
   isCurrentRoomOperation,
 } from './roomOperationEpoch';
 import { publicPlayerName } from '../identity/publicPlayerName';
+import { presenceIdentifyForAuthChange } from './presenceIdentifyOnAuthChange';
 
 type SocketWithPing = Socket & { __mpPingTimer?: ReturnType<typeof setInterval> };
 
@@ -641,25 +642,17 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     const socket = scope.socket.socketRef?.current;
     if (!socket?.connected) return;
 
-    const userId = scope.auth.authUserRef.current?.id;
-    if (!userId) {
-      // Signed out (or the session expired/was revoked in another tab) while connected: the server still holds this
-      // socket as the previous account. Downgrade it so it stops acting, and appearing online, as that account.
-      if (prev.split('|')[0]) {
-        void scope.config
-          .emitWithAck<RoomAckResponse>(socket, 'presence:identify', { userId: null, username: 'Guest', authToken: null })
-          .catch(() => {});
-      }
-      return;
-    }
-
-    const username = publicPlayerName(scope.auth.authProfileRef.current?.username);
-
-    void scope.config.emitWithAck<RoomAckResponse>(socket, 'presence:identify', {
-      userId,
-      username,
+    // Signed out (or expired/revoked in another tab) while connected downgrades the socket to a guest identify, so it
+    // stops acting, and appearing online, as the previous account.
+    const identifyPayload = presenceIdentifyForAuthChange({
+      previousFingerprint: prev,
+      userId: scope.auth.authUserRef.current?.id ?? null,
+      username: publicPlayerName(scope.auth.authProfileRef.current?.username),
       authToken: scope.auth.authAccessTokenRef.current,
-    }).catch((error) => {
+    });
+    if (!identifyPayload) return;
+
+    void scope.config.emitWithAck<RoomAckResponse>(socket, 'presence:identify', identifyPayload).catch((error) => {
       if (import.meta.env.DEV) {
         logger.operational('presence', 're-identify on auth change failed', {
           error: error instanceof Error ? error.message : error,
