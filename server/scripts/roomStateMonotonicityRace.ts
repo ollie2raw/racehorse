@@ -194,7 +194,7 @@ async function generationPhase(A: Proc, B: Proc, R: Proc, rounds: number, mk: ()
       check(`${tag} A's stale write refused`, fenced(stale, /stale_generation|stale_writer/), stale);
       check(`${tag} room still B, byte-identical`, rowOf(code) === before && matchOf(code) === matchB);
       if (st !== 'terminal-logged') {
-        await B.call({ op: 'advance', seq: st === 'lobby' ? 1 : 4 });
+        if (st !== 'lobby') await B.call({ op: 'advance', seq: 4 }); // a lobby has no game state to advance: B simply re-persists unchanged
         check(`${tag} B keeps playing after A's refused write`, (await B.call({ op: 'persist' })).ok === true && matchOf(code) === matchB);
       }
     } else if (scenario === 'delete-recreate') {
