@@ -28,6 +28,7 @@ import { serverNow } from '../scheduledTournament/serverNow';
 import {
   configureLiveRoomPersistence,
   schedulePersistLiveRoomSessionForRoom,
+  markLiveRoomSessionRestoreIntent,
   flushScheduledLiveRoomPersistence,
   type RoomArchiveGuard,
 } from './roomLivePersistence';
@@ -327,6 +328,8 @@ export function scheduleRoomCleanup(roomCode: string): void {
         restoreLiveSession: async () => {
           let latest: Room;
           try { latest = getRoom(roomCode); } catch { return; }
+          // The archive just deleted the row: this snapshot legitimately re-creates the room's newest match.
+          markLiveRoomSessionRestoreIntent(roomCode);
           schedulePersistLiveRoomSessionForRoom(latest);
           await flushScheduledLiveRoomPersistence(roomCode);
         },

@@ -13,6 +13,7 @@ import {
   configureLiveRoomPersistence,
   persistLiveRoomSessionNow,
   resetLiveRoomPersistenceForTests,
+  settleLiveRoomWriterEpoch,
 } from './roomLivePersistence';
 import type { ForfeitReason } from './terminalCompletion';
 
@@ -191,5 +192,8 @@ async function seed(options: SeedOptions): Promise<SeededSession> {
   deleteRoom(code);
   resetLiveRoomPersistenceForTests();
   configureRosterResolver();
+  // The "restarted process" allocates its writer epoch at boot (one real request). Let it land now so a test that counts
+  // gateway requests after gateway.reset() measures only what it intends to.
+  await settleLiveRoomWriterEpoch();
   return { code, matchId: room.matchId, seatA, seatB, roster };
 }

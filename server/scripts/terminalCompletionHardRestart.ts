@@ -31,6 +31,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { io, type Socket } from 'socket.io-client';
 import { startLocalPostgrestGateway, type LocalPostgrestGateway } from '../test/support/localPostgrestGateway';
+import { tsxLoaderUrl } from './tsxLoader';
 
 const DB_URL = 'postgresql://postgres@127.0.0.1:55439/racehorse_terminal_r1';
 const REST_URL = 'http://127.0.0.1:55440';
@@ -98,7 +99,7 @@ async function spawnServer(extraEnv: Record<string, string> = {}): Promise<Child
   serverGeneration += 1;
   const child = spawn(
     process.execPath,
-    ['--import', 'file:///home/user/racehorse/node_modules/tsx/dist/loader.mjs', join(serverRoot, 'src/index.ts')],
+    ['--import', tsxLoaderUrl(), join(serverRoot, 'src/index.ts')],
     {
       cwd,
       env: {

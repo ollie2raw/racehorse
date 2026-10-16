@@ -20,7 +20,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { tsxLoaderUrl } from './tsxLoader';
 
 const DB_URL = 'postgresql://postgres@127.0.0.1:55439/racehorse_terminal_r1';
 const REST_URL = 'http://127.0.0.1:55440';
@@ -36,9 +36,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ------------------------------------------------------------------------------------------------ child roles
 type Cmd =
-  | { op: 'build'; code: string; matchId: string; a: string; b: string; userA: string; userB: string; kind: 'older' | 'terminal'; seq: number }
+  | { op: 'build'; code: string; matchId: string; a: string; b: string; userA: string; userB: string; kind: 'older' | 'terminal' | 'lobby' | 'handover'; seq: number; logged?: boolean }
   | { op: 'advance'; seq: number }
   | { op: 'persist' }
+  | { op: 'archiveRestore'; archiveStatus: 'completed' | 'abandoned' }
   | { op: 'recover' };
 
 async function childMain(): Promise<void> {
@@ -62,9 +63,10 @@ async function childMain(): Promise<void> {
         room.players = [cmd.a, cmd.b];
         room.eventLogVersion = 1;
         room.eventSequence = cmd.seq + 9;
-        room.state = kit.mkTerminalGameState(cmd.a, cmd.b, { a: cmd.kind === 'terminal' ? 60 : 20, b: 42 }, cmd.kind === 'terminal'
-          ? { sequence: cmd.seq } : { gameOver: false, handOver: false, winnerId: null, sequence: cmd.seq });
-        room.matchLogged = false;
+        room.state = cmd.kind === 'lobby' ? null : kit.mkTerminalGameState(cmd.a, cmd.b, { a: cmd.kind === 'terminal' ? 60 : 20, b: 42 }, cmd.kind === 'terminal'
+          ? { sequence: cmd.seq }
+          : { gameOver: false, handOver: cmd.kind === 'handover', winnerId: null, sequence: cmd.seq });
+        room.matchLogged = cmd.logged === true;
         room.leadTracker = { aId: cmd.a, bId: cmd.b, maxLeadA: 7, maxLeadB: 3 };
         const players = [
           { id: cmd.a, socketId: '', username: 'Alice', userId: cmd.userA },
@@ -84,6 +86,20 @@ async function childMain(): Promise<void> {
       if (cmd.op === 'persist') {
         const ok = await persistence.persistLiveRoomSessionNow(room!, roster);
         return reply({ ok, durability: room!.durability.status, error: room!.durability.lastError });
+      }
+      if (cmd.op === 'archiveRestore') {
+        // The production cleanup flow with a reconnect landing while the DELETE is in flight (roomSession.scheduleRoomCleanup).
+        let checks = 0;
+        const code = room!.code;
+        await persistence.finalizeAndDeleteLiveRoomSession(room!, cmd.archiveStatus, {
+          shouldFinalize: () => { checks += 1; return checks <= 2; },
+          restoreLiveSession: async () => {
+            persistence.markLiveRoomSessionRestoreIntent(code);
+            persistence.schedulePersistLiveRoomSessionForRoom(room!);
+            await persistence.flushScheduledLiveRoomPersistence(code);
+          },
+        });
+        return reply({ ok: true, durability: room!.durability.status, error: room!.durability.lastError });
       }
       if (cmd.op === 'recover') {
         const result = await recovery.recoverStrandedTerminalCompletions({ now: Date.now() + 60_000, minAgeMs: 0 });
@@ -109,7 +125,7 @@ function sql(query: string): string {
 type Proc = { name: string; child: ChildProcess; call<T = any>(cmd: Cmd): Promise<T> };
 let proc_id = 0;
 async function startProc(name: string, gatewayUrl: string, cwd: string): Promise<Proc> {
-  const loader = pathToFileURL(join(__dirname, '..', '..', 'node_modules', 'tsx', 'dist', 'loader.mjs')).href;
+  const loader = tsxLoaderUrl();
   const child = fork(__filename, ['child'], {
     cwd,
     execArgv: ['--import', loader],
@@ -136,12 +152,96 @@ async function startProc(name: string, gatewayUrl: string, cwd: string): Promise
 const failures: string[] = [];
 const check = (label: string, ok: boolean, detail?: unknown) => { if (!ok) failures.push(`${label}${detail === undefined ? '' : ` :: ${JSON.stringify(detail)}`}`); };
 
+function mkAccount(): string {
+  const id = randomUUID();
+  sql(`insert into auth.users(id,email,raw_user_meta_data) values ('${id}','${id}@racehorse-test.invalid','{"username":"r${id.replace(/-/g, '').slice(0, 9)}"}')`);
+  sql(`update public.profiles set glicko_rating=1500, glicko_rd=200, glicko_vol=0.06, ranked_games_played=30, provisional=false, peak_rating=1500 where id='${id}'`);
+  return id;
+}
+const rowOf = (code: string) => sql(`select coalesce((select row_to_json(r)::text from (select room_code, match_id, status, game_state_sequence, last_event_sequence, game_state, room_shell from public.room_live_sessions where room_code='${code}') r),'NO_ROW')`);
+const matchOf = (code: string) => sql(`select coalesce((select match_id::text from public.room_live_sessions where room_code='${code}'),'NO_ROW')`);
+
+/**
+ * GENERATION PHASE. Old instance A holds match A of room R; the room advances (new instance B writes match B in every
+ * state), is retired and deleted, or restored; A then wakes and persists. A must never modify or recreate R.
+ */
+async function generationPhase(A: Proc, B: Proc, R: Proc, rounds: number, mk: () => string): Promise<void> {
+  void R;
+  const tally: Record<string, number> = {};
+  const fenced = (r: { ok: boolean; durability: string; error: string | null }, pattern: RegExp) => r.ok === false && r.durability === 'failed' && pattern.test(r.error ?? '');
+  const states = ['lobby', 'playing', 'hand-over', 'terminal-logged'] as const;
+  for (let i = 0; i < rounds * 3; i += 1) {
+    const scenario = (['cross-match', 'delete-recreate', 'restore'] as const)[i % 3]!;
+    tally[scenario] = (tally[scenario] ?? 0) + 1;
+    const [userA, userB] = [mk(), mk()];
+    const code = `GR${String(i).padStart(3, '0')}${randomUUID().slice(0, 2).toUpperCase()}`;
+    const matchA = randomUUID(); const matchB = randomUUID();
+    const seatA = `seat-a-${code}`; const seatB = `seat-b-${code}`;
+    const base = { code, a: seatA, b: seatB, userA, userB };
+    const tag = `[gen ${i} ${scenario}]`;
+    await A.call({ op: 'build', ...base, matchId: matchA, kind: 'older', seq: 10 });
+    check(`${tag} A persist`, (await A.call({ op: 'persist' })).ok === true);
+
+    if (scenario === 'cross-match') {
+      const st = states[Math.floor(i / 3) % states.length]!;
+      tally[`cross-match:${st}`] = (tally[`cross-match:${st}`] ?? 0) + 1;
+      const kind = st === 'lobby' ? 'lobby' : st === 'playing' ? 'older' : st === 'hand-over' ? 'handover' : 'terminal';
+      await B.call({ op: 'build', ...base, matchId: matchB, kind, seq: st === 'lobby' ? 0 : st === 'terminal-logged' ? 21 : 3, logged: st === 'terminal-logged' });
+      check(`${tag} B advances the room to match B (${st})`, (await B.call({ op: 'persist' })).ok === true);
+      const before = rowOf(code);
+      await A.call({ op: 'advance', seq: 11 });
+      const stale = await A.call({ op: 'persist' });
+      check(`${tag} A's stale write refused`, fenced(stale, /stale_generation|stale_writer/), stale);
+      check(`${tag} room still B, byte-identical`, rowOf(code) === before && matchOf(code) === matchB);
+      if (st !== 'terminal-logged') {
+        await B.call({ op: 'advance', seq: st === 'lobby' ? 1 : 4 });
+        check(`${tag} B keeps playing after A's refused write`, (await B.call({ op: 'persist' })).ok === true && matchOf(code) === matchB);
+      }
+    } else if (scenario === 'delete-recreate') {
+      // A's match finishes on the NEW instance, completion is logged and the archive retires + deletes the live row.
+      await B.call({ op: 'build', ...base, matchId: matchA, kind: 'terminal', seq: 21, logged: true });
+      check(`${tag} B persists A's match terminal+logged`, (await B.call({ op: 'persist' })).ok === true);
+      sql(`delete from public.room_live_sessions where room_code='${code}'`);
+      check(`${tag} row retired and gone`, matchOf(code) === 'NO_ROW');
+      await A.call({ op: 'advance', seq: 11 });
+      const wake = await A.call({ op: 'persist' });
+      check(`${tag} A wakes: match A is NOT recreated`, fenced(wake, /retired_match|stale_writer/) && matchOf(code) === 'NO_ROW', wake);
+      // A legitimate new session takes the code and must survive any further stale write of A.
+      const matchC = randomUUID();
+      await B.call({ op: 'build', ...base, matchId: matchC, kind: 'lobby', seq: 0 });
+      check(`${tag} new session C persists`, (await B.call({ op: 'persist' })).ok === true && matchOf(code) === matchC);
+      const before = rowOf(code);
+      await A.call({ op: 'advance', seq: 12 });
+      const again = await A.call({ op: 'persist' });
+      check(`${tag} A after C exists: refused, C survives`, fenced(again, /stale_generation|stale_writer|retired_match/) && rowOf(code) === before, again);
+    } else {
+      // restore: the cleanup flow's reconnect-during-delete must still work on the NEW instance...
+      await B.call({ op: 'build', ...base, matchId: matchA, kind: 'terminal', seq: 21, logged: true });
+      check(`${tag} B persists terminal+logged`, (await B.call({ op: 'persist' })).ok === true);
+      const restored = await B.call({ op: 'archiveRestore', archiveStatus: 'completed' });
+      check(`${tag} archive+reconnect restores the newest match`, matchOf(code) === matchA && restored.durability !== 'failed', { restored, row: matchOf(code) });
+      // ...but an older generation can never be restored over a newer one.
+      sql(`delete from public.room_live_sessions where room_code='${code}'`);
+      const matchD = randomUUID();
+      await B.call({ op: 'build', ...base, matchId: matchD, kind: 'lobby', seq: 0 });
+      check(`${tag} new session D`, (await B.call({ op: 'persist' })).ok === true);
+      await A.call({ op: 'build', ...base, matchId: matchA, kind: 'terminal', seq: 21, logged: true });
+      const staleRestore = await A.call({ op: 'archiveRestore', archiveStatus: 'completed' });
+      check(`${tag} A cannot restore itself over D`, matchOf(code) === matchD, { staleRestore, row: matchOf(code) });
+    }
+  }
+  process.stdout.write(`\ngeneration phase: ${JSON.stringify(tally)}\n`);
+}
+
 async function parentMain(): Promise<void> {
   const iterations = Number(process.argv[2] ?? 40);
   const { startLocalPostgrestGateway } = await import('../test/support/localPostgrestGateway');
   const gateway = await startLocalPostgrestGateway({ upstream: REST_URL });
   const cwd = mkdtempSync(join(tmpdir(), 'rh-state-race-'));
-  const [A, B, R] = await Promise.all([startProc('OLD(A)', gateway.url, cwd), startProc('NEW(B)', gateway.url, cwd), startProc('SWEEP(R)', gateway.url, cwd)]);
+  // Boot order IS epoch order (the writer epoch is allocated when persistence is configured at boot): old, then new, then the sweep.
+  const A = await startProc('OLD(A)', gateway.url, cwd);
+  const B = await startProc('NEW(B)', gateway.url, cwd);
+  const R = await startProc('SWEEP(R)', gateway.url, cwd);
   const modes = ['stale-after', 'concurrent', 'zombie-higher-sequence', 'reverse-timing'] as const;
   const tally: Record<string, { runs: number; staleRejected: number; staleAccepted: number }> = {};
   sql('truncate public.room_live_sessions, public.room_match_logs, public.ranked_games, public.rating_periods, public.matches, public.activity_feed cascade');
@@ -222,6 +322,8 @@ async function parentMain(): Promise<void> {
     check(`${tag} second sweep is a no-op`, (second.outcomes?.recovered ?? 0) === 0, second);
     check(`${tag} no duplicate effects`, Number(sql(`select count(*) from public.ranked_games where source_match_id='${matchId}'`)) === 2);
   }
+
+  await generationPhase(A, B, R, Math.max(8, Math.floor(iterations / 5)), mkAccount);
 
   for (const p of [A, B, R]) p.child.kill('SIGKILL');
   await gateway.close();

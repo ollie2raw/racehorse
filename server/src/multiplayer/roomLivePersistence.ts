@@ -104,6 +104,12 @@ export type PersistedRoomShell = {
   logStorage?: 'entries';
   eventCount?: number;
   ghostMoveLogCounts?: Record<string, number>;
+  /**
+   * Unique, increasing id of the server process that wrote this snapshot (next_room_writer_epoch()). The database
+   * refuses a snapshot whose epoch is lower than the stored one, so an older process cannot overwrite a newer one
+   * even at an equal sequence tuple (2026-10-16_room_live_session_generation_fence.sql). Absent on legacy rows = 0.
+   */
+  writerEpoch?: number;
 };
 
 export type RoomLiveSessionRow = {
@@ -230,6 +236,9 @@ export function configureLiveRoomPersistence(options: {
   resolveRoster: (roomCode: string) => LiveRosterEntry[];
 }): void {
   rosterResolver = options.resolveRoster;
+  // Production wires persistence once at boot. Allocate the writer epoch NOW, not at the first write: epoch order must be
+  // process-boot order, or an old process that happens to persist for the first time late would outrank a newer one.
+  void ensureWriterEpoch();
 }
 
 function resolveRosterForPersist(room: Room): LiveRosterEntry[] {
@@ -478,6 +487,49 @@ function normalizeRosterEntry(raw: unknown): LiveRosterEntry | null {
   };
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Writer epoch + restore intent (database fence: 2026-10-16_room_live_session_generation_fence.sql)
+// ---------------------------------------------------------------------------------------------------------------
+let writerEpoch: number | null = null;
+let writerEpochRetryAtMs = 0;
+let writerEpochInFlight: Promise<void> | null = null;
+const WRITER_EPOCH_RETRY_MS = 5_000;
+/** Rooms whose next snapshot is guard.restoreLiveSession: it may recreate the room's newest retired match. */
+const restoreIntentRoomCodes = new Set<string>();
+
+/** Declare that the next snapshot of this room re-creates a row the archive just deleted (reconnect during cleanup). */
+export function markLiveRoomSessionRestoreIntent(roomCode: string): void {
+  restoreIntentRoomCodes.add(roomCode.trim().toUpperCase());
+}
+
+/** Resolves once this process's writer epoch allocation (started at boot) has settled, successfully or not. */
+export async function settleLiveRoomWriterEpoch(): Promise<void> {
+  await writerEpochInFlight;
+}
+
+/**
+ * Allocate this process's writer epoch once. A schema without next_room_writer_epoch() (migration not applied yet)
+ * leaves the epoch unset (= legacy 0) and is retried later; it never blocks a persist.
+ */
+async function ensureWriterEpoch(): Promise<void> {
+  if (writerEpoch !== null || Date.now() < writerEpochRetryAtMs) return;
+  if (!writerEpochInFlight) {
+    writerEpochInFlight = (async () => {
+      try {
+        const value = await supabaseFetch<unknown>('/rest/v1/rpc/next_room_writer_epoch', { method: 'POST', body: '{}' });
+        const epoch = typeof value === 'string' ? Number(value) : value;
+        if (typeof epoch === 'number' && Number.isFinite(epoch) && epoch > 0) writerEpoch = epoch;
+        else writerEpochRetryAtMs = Date.now() + WRITER_EPOCH_RETRY_MS;
+      } catch {
+        writerEpochRetryAtMs = Date.now() + WRITER_EPOCH_RETRY_MS;
+      } finally {
+        writerEpochInFlight = null;
+      }
+    })();
+  }
+  await writerEpochInFlight;
+}
+
 export function buildLiveSessionRow(
   room: Room,
   roster: LiveRosterEntry[],
@@ -510,6 +562,7 @@ export function buildLiveSessionRow(
       // Terminal and owing completion => this row IS the replay source. Derived on
       // every snapshot so a restart sees the intent without any in-memory state.
       completionPending: roomOwesTerminalCompletion(room, roster),
+      ...(writerEpoch === null ? {} : { writerEpoch }),
     },
     engine_seat_ids: [...room.players],
     roster: roster.map((entry) => ({ ...entry })),
@@ -867,7 +920,7 @@ export function buildLogEntriesSince(
  * succeed, so this is a terminal 'failed' state for this process, not a 'degraded' retry.
  */
 const FENCED_LIVE_SESSION_WRITE =
-  /room_live_session_(?:stale_write|terminal_regression|owes_completion)/;
+  /room_live_session_(?:stale_write|stale_writer|stale_generation|retired_match|terminal_regression|owes_completion)/;
 function fencedLiveSessionWrite(error: unknown): Extract<PersistLiveSessionAttemptResult, { ok: false }> | null {
   const message = error instanceof Error ? error.message : String(error);
   const match = FENCED_LIVE_SESSION_WRITE.exec(message);
@@ -908,6 +961,34 @@ async function persistLiveSessionEntriesNow(
   }
 }
 
+/**
+ * guard.restoreLiveSession: re-create the row the archive just deleted, through the RPC that declares restore intent.
+ * The database still refuses it unless this match is the room's NEWEST generation. A schema that predates the
+ * `p_restore` argument falls back to the ordinary row write (it has no retirement to restore from).
+ */
+async function persistLiveSessionRestoreNow(row: RoomLiveSessionRow): Promise<PersistLiveSessionAttemptResult> {
+  try {
+    await supabaseFetch('/rest/v1/rpc/persist_room_live_session', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ p_session: toUpsertPayload(row), p_entries: [], p_restore: true }),
+    });
+    liveSessionsTableAvailable = true;
+    rememberWrittenSession(row);
+    return { ok: true };
+  } catch (error) {
+    const fenced = fencedLiveSessionWrite(error);
+    if (fenced) {
+      log.error({ roomCode: row.room_code, error: fenced.error }, 'room_live_sessions restore refused by the database fence');
+      return fenced;
+    }
+    if (isMissingPersistFunction(error)) return persistLiveSessionRowNow(row);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    log.warn({ roomCode: row.room_code, error: errorMessage }, 'room_live_sessions restore persist failed');
+    return { ok: false, status: 'degraded', error: errorMessage };
+  }
+}
+
 /** One durable write for `room` at `commitFence`, in whichever mode is on. */
 async function persistLiveSessionForRoom(
   room: Room,
@@ -917,6 +998,13 @@ async function persistLiveSessionForRoom(
   const roomCode = room.code.trim().toUpperCase();
   if (refusesLiveSessionOverwrite(room)) {
     return { ok: false, status: 'failed', error: 'live_session_overwrite_refused' };
+  }
+  await ensureWriterEpoch();
+  if (restoreIntentRoomCodes.has(roomCode)) {
+    persistedLogLengthsByRoomCode.delete(roomCode);
+    const restored = await persistLiveSessionRestoreNow(buildLiveSessionRow(room, roster, commitFence));
+    if (restored.ok) restoreIntentRoomCodes.delete(roomCode);
+    return restored;
   }
   if (!isLiveSessionLogEntriesEnabled() || Date.now() < logEntriesUnavailableUntilMs || liveSessionsTableAvailable === false) {
     persistedLogLengthsByRoomCode.delete(roomCode);
@@ -1145,6 +1233,7 @@ export async function finalizeAndDeleteLiveRoomSession(
 
   const terminalStatus: RoomLiveSessionStatus =
     archiveStatus === 'completed' ? 'game_over' : 'abandoned';
+  await ensureWriterEpoch();
   const row = buildLiveSessionRow(room, resolveRosterForPersist(room));
   row.status = terminalStatus;
 
@@ -1510,4 +1599,8 @@ export function resetLiveRoomPersistenceForTests(): void {
   persistedLogLengthsByRoomCode.clear();
   knownPersistedSessionByRoomCode.clear();
   logEntriesUnavailableUntilMs = 0;
+  writerEpoch = null;
+  writerEpochRetryAtMs = 0;
+  writerEpochInFlight = null;
+  restoreIntentRoomCodes.clear();
 }
