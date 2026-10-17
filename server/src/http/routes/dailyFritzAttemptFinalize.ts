@@ -47,6 +47,9 @@ export function applyDailyFritzAttemptFinalization(
   if (!setResult?.setWinner) return null;
 
   const ledger = readAuthorityLedger(attempt.result);
+  // The rejection evidence is the durable fact the streak and leaderboard predicates read. The result below is rebuilt
+  // from the set outcome, so carry it forward explicitly: dropping it turned a rejected run into a streak-eligible one.
+  const unverifiedHands = Array.isArray(attempt.result?.unverified_hands) ? attempt.result.unverified_hands : null;
   // A run that advanced any hand without a receipt stays unranked, even if
   // every other game produced a complete authority record.
   const isVerified = getDailyFritzVerificationStatus(attempt.result) !== 'rejected'
@@ -76,6 +79,7 @@ export function applyDailyFritzAttemptFinalization(
   attempt.result = {
     ...setResult,
     authority: ledger,
+    ...(unverifiedHands ? { unverified_hands: unverifiedHands } : {}),
     verification_status: completionVerificationStatus,
     verification_protocol_version: DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION,
     run_date: runDate,

@@ -174,6 +174,15 @@ export function requiresVerifiedDailyFritzEvidence(result: Record<string, unknow
 }
 
 /**
+ * True when the attempt was started under the verifier protocol, i.e. its evidence is expected, whatever its status is now.
+ * An evidence-free advance on such an attempt is an unverified advance; on a pre-protocol attempt it is just a legacy finish.
+ */
+export function isDailyFritzVerifierProtocolAttempt(result: Record<string, unknown> | null): boolean {
+  const protocol = Number(result?.verification_protocol_version);
+  return protocol === 1 || protocol === DAILY_FRITZ_VERIFICATION_PROTOCOL_VERSION;
+}
+
+/**
  * Merges set-result scores onto the attempt result without dropping verifier pinning.
  * Previous bug: spreading setResult alone wiped verification_protocol_version mid-set,
  * which reopened legacy score-only next-hand submissions.
@@ -188,10 +197,14 @@ export function buildRecordedDailyFritzAttemptResult(input: {
   const previous = input.previousResult ?? {};
   const authority = readAuthorityLedger(previous);
   if (!input.hasTranscript) {
+    // A transcript-less record carries no new evidence, so it must not erase the old: a hand that already advanced
+    // without a receipt keeps its `unverified_hands` and its sticky `rejected` status (streak/leaderboard read them).
+    const priorRejection = Array.isArray(previous.unverified_hands) ? { unverified_hands: previous.unverified_hands } : {};
     return {
       ...input.setResult as Record<string, unknown>,
       authority,
-      verification_status: 'legacy_unverified',
+      ...priorRejection,
+      verification_status: getDailyFritzVerificationStatus(previous) === 'rejected' ? 'rejected' : 'legacy_unverified',
     };
   }
   const previousStatus = getDailyFritzVerificationStatus(previous);
