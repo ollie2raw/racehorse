@@ -1,8 +1,8 @@
-# Backend runtime canonical artifacts — 2026-10-15
+# Backend runtime canonical artifacts — 2026-10-15 (candidate pin updated 2026-10-16)
 
 | Role | Canonical source / reviewed artifact |
 |---|---|
-| NEW candidate | Current remote `feat/app-store-candidate` HEAD after the final runtime gate; resolve and record its exact SHA in deployment preflight. Validated runtime code is `cba5667564c956c1f269a492e06ad107ce3af2f3`; the final documentation-only descendant contains the gate report. |
+| NEW candidate | `feat/app-store-candidate`. **Last reviewed release candidate: `4e670955326ce811161516e1806706b69f421f5b`.** Any descendant after it is limited to test/CI-contract and documentation changes (the server-suite environment fix); at deployment preflight resolve the branch HEAD, record its exact SHA, and confirm the diff from `4e670955326ce811161516e1806706b69f421f5b` to that HEAD touches no runtime source. |
 | BRIDGE′ (BRIDGE Prime; the only BRIDGE to deploy) | `release/rating-cutover-bridge-prime` at **`7f5003404e6e87f06b8d4028130fb213340a77be`** |
 | Historical BRIDGE (superseded; never deploy, never roll back to) | `release/rating-cutover-bridge` at `3ccd6ff8c73c5cfd0efb24dde83d62cca82f7353` |
 | Production reference | `main` / `3a65ab1c37f098aa94c306c755eca8fbbc65aee2`; not changed or deployed by this gate |

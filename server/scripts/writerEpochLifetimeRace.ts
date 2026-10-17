@@ -25,9 +25,14 @@ if (!/^postgresql:\/\/postgres@127\.0\.0\.1:\d+\/racehorse_terminal_r1$/.test(DB
   throw new Error('Refusing to run: exact owned loopback test database/PostgREST not configured');
 }
 const arg = (name: string): string | undefined => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
-const aRoot = arg('a');
-const bRoot = arg('b');
-if (!aRoot || !bRoot) throw new Error('--a=<artifact root> and --b=<artifact root> are required');
+// Returns the narrowed pair: a module-level `if (!a) throw` does not narrow inside the hoisted main() below (tsc: string | undefined).
+function requireRoots(): [string, string] {
+  const a = arg('a');
+  const b = arg('b');
+  if (!a || !b) throw new Error('--a=<artifact root> and --b=<artifact root> are required');
+  return [a, b];
+}
+const [aRoot, bRoot] = requireRoots();
 const waitMs = Number(arg('wait') ?? 70_000);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');

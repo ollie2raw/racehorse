@@ -1,5 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleFenceRequest, jsonResponse, newFenceStore } from '../../test/support/cutoverFenceStub';
+// The fence is exercised through a stubbed fetch, but supabaseFetch still needs a non-empty URL and key to build the request.
+// Inert placeholders are enough (nothing leaves the process); declared here so the test never depends on an ambient server/.env.
+// Must run before the config module is first imported (hoisted), like ratingCutoverGate.test.ts.
+const restoreInertEnv = vi.hoisted(() => {
+  const set: string[] = [];
+  for (const [key, value] of [['SUPABASE_URL', 'http://127.0.0.1:54321'], ['SUPABASE_SERVICE_KEY', 'inert-test-service-key']] as const) {
+    if (!process.env[key]) { process.env[key] = value; set.push(key); }
+  }
+  // Remove only what this file added, so it cannot mask a different test that wrongly relies on ambient env.
+  return () => { for (const key of set) delete process.env[key]; };
+});
 const { work } = vi.hoisted(() => ({ work: vi.fn() }));
 vi.mock('./periodService', () => ({ processAllPendingRatingGames: work, decayInactivePlayers: vi.fn() }));
 vi.mock('node-cron', () => ({ default: { schedule: vi.fn() } }));
@@ -52,3 +63,4 @@ describe('exact scheduled catch-up admission and drain', () => {
     expect((await gate.getRatingCutoverStatus()).readyForExpand).toBe(true);
   });
 });
+afterAll(restoreInertEnv);

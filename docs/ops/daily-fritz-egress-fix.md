@@ -1,5 +1,8 @@
 # Daily Fritz recovery egress fix
 
+> **Historical record.** The SHAs below are the states verified when this fix was written, not the current release artifacts. The
+> current candidate and BRIDGE′ pins are in [backend-runtime-canonical-artifacts.md](backend-runtime-canonical-artifacts.md).
+
 Source states verified after fetching origin:
 
 - Candidate: `71eaf3d3920cce610e8e448fc59962b96cd82496` (`origin/feat/app-store-candidate`).

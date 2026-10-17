@@ -308,6 +308,15 @@ jobs:
       - name: Client build
         env:
           VITE_APP_VERSION: ${{ github.sha }}
+          # The client build script runs scripts/legalReleaseGuard.mjs, which refuses any unresolved legal value. This job only validates
+          # the build pipeline (lazy boundaries, bundle size), so it supplies INERT, obviously non-release values: not secrets, and never
+          # shipped. A real release build (Vercel production, or the iOS build script) must provide the real VITE_LEGAL_* values and
+          # still fails closed without them.
+          VITE_LEGAL_LEGAL_ENTITY_NAME: CI Validation Only
+          VITE_LEGAL_SUPPORT_EMAIL: support@ci-validation.invalid
+          VITE_LEGAL_MINIMUM_AGE: '13'
+          VITE_LEGAL_POLICY_EFFECTIVE_DATE: '2026-01-01'
+          VITE_LEGAL_POSTHOG_LOCATION: discarded
         run: npm run build --prefix client
 
       - name: Bot match lazy-load boundaries

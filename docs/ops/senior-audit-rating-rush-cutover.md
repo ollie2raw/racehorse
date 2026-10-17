@@ -32,7 +32,9 @@ The server builds below are the ones that matter. Keep them straight:
 * **NEW** — `feat/app-store-candidate` after the backend-runtime gate integration.
   The former candidate `74ad0fec46dc6b79c7c1689f95b16ce93b7e4a67` is superseded;
   resolve and record the current remote branch SHA, rather than reuse that old artifact.
-  Validated runtime remediation code is `cba5667564c956c1f269a492e06ad107ce3af2f3`.
+  Last reviewed release candidate: `4e670955326ce811161516e1806706b69f421f5b` (it contains the validated runtime remediation
+  `cba5667564c956c1f269a492e06ad107ce3af2f3`, the final backend hardening and the iOS release gates). Descendants after it are limited to
+  test/CI-contract and documentation changes; confirm by diffing `4e670955326ce811161516e1806706b69f421f5b` against the branch HEAD at preflight.
   It writes ratings through atomic database
   functions, so it counts the gate's state but is never blocked by it.
 
