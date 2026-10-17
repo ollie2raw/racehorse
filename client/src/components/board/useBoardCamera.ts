@@ -56,6 +56,8 @@ export interface UseBoardCameraParams {
   staticSpineAnchor?: number;
   /** Changes whenever the board should snap the camera back to origin (new hand / game-over). */
   resetSignature: string;
+  /** Owned by Board.tsx (useBoardContainerHeight) so routing can measure the same element. */
+  containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export interface UseBoardCameraResult {
@@ -81,8 +83,8 @@ export function useBoardCamera({
   staticFitMainline,
   staticSpineAnchor,
   resetSignature,
+  containerRef,
 }: UseBoardCameraParams): UseBoardCameraResult {
-  const containerRef = useRef<HTMLDivElement>(null);
   const fitRetryRafRef = useRef<number | null>(null);
   const manualCameraRef = useRef(false);
   const manualCameraUntilRef = useRef(0);
@@ -226,7 +228,7 @@ export function useBoardCamera({
       const nextCamera = { x: 0, y: cameraY, scale: nextScale };
       setCamera((prev) => (cameraStatesEqual(prev, nextCamera) ? prev : nextCamera));
     }
-  }, [layout, containFullBoard, resolvedFitMode, boardTileCount, staticView, unitToPixels, minCameraScale, staticFitMainline, staticSpineAnchor, setCamera]);
+  }, [containerRef, layout, containFullBoard, resolvedFitMode, boardTileCount, staticView, unitToPixels, minCameraScale, staticFitMainline, staticSpineAnchor, setCamera]);
 
   useEffect(() => {
     fitCameraToContainerRef.current = fitCameraToContainer;
@@ -282,6 +284,7 @@ export function useBoardCamera({
       }
     };
   }, [
+    containerRef,
     fitCameraToContainer,
     containFullBoard,
     layout,

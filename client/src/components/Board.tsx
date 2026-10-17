@@ -15,6 +15,7 @@ import { useRenderProfiler } from '../debug/renderProfiler';
 import { recordDailyFritzBoardMetric, traceDailyFritzBoardEvent } from './boardDiagnostics';
 import { useBoardRenderLayout } from './board/useBoardRenderLayout';
 import { useBoardCamera } from './board/useBoardCamera';
+import { useBoardContainerHeight } from './board/useBoardContainerHeight';
 import { useBoardPointerControls } from './board/useBoardPointerControls';
 import { useShortBoardViewport } from './board/useShortBoardViewport';
 
@@ -105,6 +106,10 @@ function BoardComponent(
   const showTargetDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOARD_TARGET_DEBUG') === '1';
 
+  // Measured here (not in the camera hook) so routing sees the container in the
+  // first committed render: the layout is computed before the camera runs.
+  const { containerRef, containerHeight } = useBoardContainerHeight(!staticView);
+
   const { boardTileCount, layout, placementZones, glowLayout, resetSignature } = useBoardRenderLayout({
     board,
     legalMoves,
@@ -116,13 +121,13 @@ function BoardComponent(
     staticView,
     profileDailyFritz,
     cameraScale: camera.scale,
+    containerHeight,
   });
 
   // Convert layout units to pixels
   const unitToPixels = tileSize;
 
   const {
-    containerRef,
     viewportSize,
     manualCameraRef,
     markManualCamera,
@@ -140,6 +145,7 @@ function BoardComponent(
     staticFitMainline,
     staticSpineAnchor,
     resetSignature,
+    containerRef,
   });
 
   // Calculate board center offset
@@ -214,6 +220,7 @@ function BoardComponent(
           return (
             <div
               key={lt.key}
+              data-layout-key={lt.key}
               className={`board-tile-wrapper ${
                 lastPlayedTile != null && tileEquals(lt.tile, lastPlayedTile) ? 'is-last-played' : ''
               }`.trim()}

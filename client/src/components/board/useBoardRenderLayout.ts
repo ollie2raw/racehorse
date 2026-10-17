@@ -16,6 +16,7 @@ import {
   traceDailyFritzBoardEvent,
 } from '../boardDiagnostics';
 import { computeBoardLayout, type BoardLayout, type BoardLayoutOptions } from './boardLayout';
+import { resolveVerticalArmExtent } from './boardRouting';
 import { useShortBoardViewport } from './useShortBoardViewport';
 
 /** Vertical arms bend after this many tiles on a short (phone-landscape) board. */
@@ -33,6 +34,8 @@ export interface UseBoardRenderLayoutParams {
   profileDailyFritz: boolean;
   /** Read only for debug tracing (not a dependency) — matches the original's parity. */
   cameraScale: number;
+  /** Bucketed board-container height in px (0/omitted until measured); drives viewport-aware arm routing. */
+  containerHeight?: number;
 }
 
 export interface UseBoardRenderLayoutResult {
@@ -58,14 +61,18 @@ export function useBoardRenderLayout({
   staticView,
   profileDailyFritz,
   cameraScale,
+  containerHeight = 0,
 }: UseBoardRenderLayoutParams): UseBoardRenderLayoutResult {
   // Static views (lessons, diagrams, review snapshots) keep their authored
-  // straight-arm geometry; only the live board bends on a short viewport.
+  // straight-arm geometry; every live board bends — by tile count on a short
+  // (phone-landscape) viewport, by measured reach everywhere else.
   const shortViewport = useShortBoardViewport();
-  const layoutOptions: BoardLayoutOptions = useMemo(
-    () => (shortViewport && !staticView ? { maxVerticalArmTiles: SHORT_BOARD_MAX_VERTICAL_ARM_TILES } : {}),
-    [shortViewport, staticView],
-  );
+  const layoutOptions: BoardLayoutOptions = useMemo(() => {
+    if (staticView) return {};
+    if (shortViewport) return { maxVerticalArmTiles: SHORT_BOARD_MAX_VERTICAL_ARM_TILES };
+    const maxVerticalArmExtent = resolveVerticalArmExtent(containerHeight);
+    return maxVerticalArmExtent === undefined ? {} : { maxVerticalArmExtent };
+  }, [shortViewport, staticView, containerHeight]);
   const boardTileCount = board
     ? board.mainLine.length +
       board.hubDoubles.reduce(
