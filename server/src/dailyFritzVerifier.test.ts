@@ -422,10 +422,32 @@ describe('Daily Fritz server replay verifier', () => {
       deadTiles: [],
       currentPlayerIndex: 1,
     };
-    // Policy chooses branch-0-0; transcript logged the equal-score sibling arm.
-    const verified = verify(transcript([
+    // Policy chooses branch-0-0; the historical (policy v2) transcript logged the equal-score sibling arm.
+    const sibling = transcript([
       { sequence: 0, actor: 'fritz', kind: 'play', tile: { low: 1, high: 5 }, position: 'branch-0-1' },
-    ]), initial);
+    ]);
+    const verified = verify({ ...sibling, fritzPolicyVersion: 2 }, initial);
     expect(verified.terminalState.handOver).toBe(true);
+  });
+
+  it('rejects that same sibling arm under the current policy v3: the official selection is exact, not "any top score"', () => {
+    let board = simulatePlacement(null, { low: 5, high: 5 }, 'left');
+    board = simulatePlacement(board, { low: 3, high: 5 }, 'right');
+    board = simulatePlacement(board, { low: 2, high: 5 }, 'left');
+    const initial: GameState = {
+      ...state('bot'),
+      board,
+      handOpen: true,
+      players: {
+        player: { id: 'player', hand: [{ low: 0, high: 0 }], score: 0 },
+        fritz: { id: 'fritz', hand: [{ low: 1, high: 5 }], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+      currentPlayerIndex: 1,
+    };
+    expect(() => verify(transcript([
+      { sequence: 0, actor: 'fritz', kind: 'play', tile: { low: 1, high: 5 }, position: 'branch-0-1' },
+    ]), initial)).toThrow(/does not match the official policy/);
   });
 });

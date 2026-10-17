@@ -12,6 +12,7 @@ import {
   isOptimalOfficialFritzPlayForVersion,
   isSupportedDailyFritzAuthorityStateDigestVersion,
   parseDailyFritzTranscript,
+  tileEquals,
   type DailyFritzTranscript,
   type FritzDecision,
   type FritzPolicyVersion,
@@ -160,7 +161,13 @@ function sameDecision(
 ): boolean {
   if (action.kind !== decision.kind) return false;
   if (action.kind !== 'play' || decision.kind !== 'play') return true;
-  // Accept any top-score official play so historical RNG / sibling-arm ties still verify.
+  // Policy v3 is a pure function of the authoritative state (integer score, code-unit tie-break, canonical empty-arm
+  // collapse), so a recorded Fritz play must BE the official selection. Accepting any top-score play here let a client
+  // choose among tied official plays offline and submit whichever branch suited the player (measured: ~1 non-equivalent tie
+  // per hand, a different final score in ~20% of forks, a different winner in some), all of which verified.
+  if (policyVersion >= 3) return tileEquals(action.tile, decision.tile) && action.position === decision.position;
+  // v1 (seeded-RNG ties) and v2 (locale-dependent tie-break) evidence cannot be re-derived exactly, so any top-score
+  // official play stays acceptable for those historical versions only.
   return isOptimalOfficialFritzPlayForVersion({
     version: policyVersion,
     state,
@@ -223,7 +230,7 @@ function applyOmittedOfficialFritzTurn(
   transcriptSequence: number,
   policyVersion: FritzPolicyVersion,
   tier: DailyFritzTier,
-): GameState {
+): { state: GameState; recoveredPlay: boolean } {
   const current = applyOmittedMandatoryDraws(state, 'fritz', transcriptSequence);
   const decision = chooseOfficialFritzDecisionForVersion({
     version: policyVersion,
@@ -241,7 +248,7 @@ function applyOmittedOfficialFritzTurn(
       }
     : { sequence: transcriptSequence, actor: 'fritz', kind: decision.kind };
   try {
-    return applyGameCommand(current, toCommand(current, action)).state;
+    return { state: applyGameCommand(current, toCommand(current, action)).state, recoveredPlay: action.kind === 'play' };
   } catch (error) {
     throw new DailyFritzVerificationError(
       `The official Fritz recovery action could not be applied before transcript action ${transcriptSequence}: ${error instanceof Error ? error.message : 'illegal action.'}`,
@@ -330,12 +337,17 @@ export function verifyDailyFritzHand(input: {
       && action.actor === 'player'
       && expectedActor === 'fritz'
     ) {
-      state = applyOmittedOfficialFritzTurn(
+      const recovered = applyOmittedOfficialFritzTurn(
         state,
         action.sequence,
         transcript.fritzPolicyVersion,
         input.fritzTier,
       );
+      state = recovered.state;
+      // The command that precedes this player action is now Fritz's recovered one, not the player's earlier play.
+      // Leaving `lastPlayActor` stale made a following player draw look like an obsolete post-play chain draw and
+      // rejected a valid transcript (post_play_recovery_draw) in exactly the case this recovery exists for.
+      lastPlayActor = recovered.recoveredPlay ? 'fritz' : null;
       if (state.handOver || state.gameOver) {
         throw new DailyFritzVerificationError('Transcript contains an action after hand completion.', 'post_terminal_action');
       }
