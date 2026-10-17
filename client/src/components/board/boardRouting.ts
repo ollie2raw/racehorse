@@ -31,7 +31,7 @@ import type { BoardState } from '../../types';
 import type { BoardLayout, BoardLayoutBend, BoardLayoutTile } from './boardLayoutTypes';
 
 /** Smallest comfortable on-screen size of one layout unit (a domino is 2 x 1 units). */
-export const COMFORT_UNIT_PX = 26;
+export const COMFORT_UNIT_PX = 21;
 /** Share of the container height the camera fits a tall layout into (matches useBoardCamera). */
 export const CAMERA_FILL = 0.92;
 /** Vertical padding boardLayout.ts adds above and below the tiles. */

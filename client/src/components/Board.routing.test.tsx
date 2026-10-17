@@ -80,10 +80,10 @@ describe('Board routing integration', () => {
     const { container } = renderBoard();
     const xs = armXs(tileXs(container), 0);
     expect(xs).toHaveLength(9);
-    // 756px container -> reach limit 10.5 units: four tiles straight (same x), then the run moves right.
-    expect(new Set(xs.slice(0, 4)).size).toBe(1);
-    expect(xs[4]).toBeGreaterThan(xs[3]);
-    expect(xs[8]).toBeGreaterThan(xs[4]);
+    // 756px container -> reach limit 13.6 units: five tiles straight (same x), then the run moves right.
+    expect(new Set(xs.slice(0, 5)).size).toBe(1);
+    expect(xs[5]).toBeGreaterThan(xs[4]);
+    expect(xs[8]).toBeGreaterThan(xs[5]);
   });
 
   it('keeps the same arm straight while the container is unmeasured', () => {

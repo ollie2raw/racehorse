@@ -33,18 +33,22 @@ test.describe('laptop 1512x982 (the reported screenshot class)', () => {
   });
 });
 
-test.describe('laptop 1440x900', () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+test.describe('small laptop 1280x720: a double near the threshold (an ordinary tile turns at index 3 here)', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
 
   test('a double exactly at the turn is laid across the arm and the turn is deferred', async ({ page }) => {
     await openRoutingHarness(page, 'custom=1&up=9&upDouble=3');
-    await shoot(page, 'laptop-1440x900-double-at-threshold-deferred');
+    await shoot(page, 'laptop-1280x720-double-at-threshold-deferred');
   });
 
   test('a double just before the threshold', async ({ page }) => {
     await openRoutingHarness(page, 'custom=1&up=9&upDouble=2');
-    await shoot(page, 'laptop-1440x900-double-before-threshold');
+    await shoot(page, 'laptop-1280x720-double-before-threshold');
   });
+});
+
+test.describe('laptop 1440x900', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
 
   test('long chains above and below at once', async ({ page }) => {
     await openRoutingHarness(page, 'fixture=longBoth');

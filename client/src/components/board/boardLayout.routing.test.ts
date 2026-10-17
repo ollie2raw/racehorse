@@ -343,8 +343,8 @@ describe('safe-bounds model', () => {
   });
 
   it('keeps short and medium chains straight on laptop-class and desktop containers', () => {
-    // 3 tiles per arm: 1440x900 viewport (674px board container) and 1512x982 (756px).
-    for (const containerHeight of [674, 756]) {
+    // 3 tiles per arm: 1280x720 (508px board container), 1440x900 (674px) and 1512x982 (756px).
+    for (const containerHeight of [508, 674, 756]) {
       const layout = computeBoardLayout(FIXTURES.mediumBoth(), [], ext(resolveVerticalArmExtent(containerHeight)!));
       expect(layout.bends, `${containerHeight}px`).toEqual([]);
     }
