@@ -28,7 +28,6 @@
     { "method": "GET", "path": "/api/social/friends/with-presence", "status": 200, "body": { "ok": true, "friends": [] } },
     { "method": "GET", "path": "/api/social/feed", "status": 200, "body": { "ok": true, "feed": [] } },
     { "method": "GET", "path": "/api/social/rivals", "status": 200, "body": { "ok": true, "rivals": [] } },
-    { "method": "GET", "path": "/api/ranking/profile/e2e-mobile-user", "status": 200, "body": { "ok": true, "glicko_rating": 1428, "glicko_rd": 68, "provisional": false, "ranked_games_played": 40, "peak_rating": 1480, "rank": 142, "currentWinStreak": 2 } },
     { "method": "GET", "path": "/api/ranking/history/e2e-mobile-user", "status": 200, "body": { "games": [], "currentRating": 1428, "peakRating": 1480, "provisional": false, "rd": 68 } },
     { "method": "GET", "path": "/api/ghost/profile/e2e-mobile-user", "status": 200, "body": { "ok": true, "summary": { "ghostRating": 800, "gamesPlayed": 0, "avgScore": null, "recentScores": [], "paddingGames": 0, "compositeLog": null, "styleProfile": null } } }
   ]

@@ -68,7 +68,8 @@ describe('App Store submission assets and native security wiring', () => {
     );
   });
 
-  it('the home-screen display name has exactly one source the owner edits (Info.plist), and is not silently renamed', () => {
-    expect(plist).toMatch(/<key>CFBundleDisplayName<\/key>\s*<string>[^<]+<\/string>/);
+  it('the home-screen label is the short "Racehorse" (the product name "Racehorse Dominoes" truncated as "RacehorseDomi…"); the bundle ID is untouched', () => {
+    expect(plist).toMatch(/<key>CFBundleDisplayName<\/key>\s*<string>Racehorse<\/string>/);
+    expect(pbxproj).toContain('PRODUCT_BUNDLE_IDENTIFIER = com.racehorse.dominoes;');
   });
 });

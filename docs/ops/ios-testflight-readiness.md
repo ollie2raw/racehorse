@@ -43,22 +43,27 @@ Three `PrivacyInfo.xcprivacy`, all valid, no duplicates: app, `Capacitor.framewo
 
 ## Display name and icon: where the owner acts
 
-- **Display name (owner decision, not changed):** `client/ios/App/App/Info.plist` → `CFBundleDisplayName` (currently "Racehorse Dominoes", which truncates as "RacehorseDomi…"). Optionally keep `appName` in `client/capacitor.config.ts` in sync (Capacitor copies it to `capacitor.config.json`; it does not set the home-screen label).
+- **Display name (set):** `client/ios/App/App/Info.plist` → `CFBundleDisplayName` is `Racehorse` (the home-screen label only; "Racehorse Dominoes" truncated as "RacehorseDomi…"). The product / App Store name stays "Racehorse Dominoes" (`appName`, bundle ID, legal pages and in-app titles are unchanged). Verified on a Release simulator build: the label shows in full. Pinned by `scripts/iosProjectSettings.test.ts`.
 - **Icon (owner artwork, not invented):** the catalog is a single universal 1024×1024 slot; Xcode derives every other size. Replace `client/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` with a 1024×1024, opaque (no alpha), sRGB PNG. No generator command is needed. `scripts/iosProjectSettings.test.ts` now fails if the replacement is not 1024×1024 or has an alpha channel/`tRNS` chunk, so it cannot reach App Store Connect wrong. The current file is the stock Capacitor icon. Launch screen is a solid-navy storyboard.
 
-## Owner blockers (nothing in code can resolve these)
+## Owner blockers (external / manual only)
 
 1. Apple Developer team + signing + App Store Connect access.
-2. Production `VITE_LEGAL_*` values for `npm run build:ios` (validation here used stand-ins, never committed).
-3. Owner-provided icon artwork (above).
-4. Final home-screen display name (above).
-5. App Store privacy questionnaire (PostHog anonymous ID, coarse-location setting).
-6. Physical-device TestFlight QA: background/foreground during a live match, keyboard in landscape, real network loss, login/relaunch with a real account.
+2. Owner-provided icon artwork (above).
+3. App Store privacy questionnaire (PostHog anonymous ID, coarse-location setting).
+4. Physical-device TestFlight QA: background/foreground during a live match, keyboard in landscape, real network loss, login/relaunch with a real account.
+
+## Visual-project baseline closure
+
+`chromium-mobile-visual` (non-CI): the five failures left after the footer fix were each decided on the evidence, not snapshot-approved blindly.
+- **`/api/ranking/profile` ×2 (stale spec):** 82418678 deliberately made `fetchRankingProfile` skip non-UUID ids (guests, bots, the e2e principal) because the server answered 400. The request was *not* reintroduced; the spec now asserts the call is not made and the unreachable fixture response was removed (an accidental call now surfaces as an unexpected API call).
+- **Approved Home 844×390 ×2 (baselines refreshed):** both differences are intentional and post-date the 2026-09-27 baseline: the solid-gold Fritz CTA / outline-cyan Puzzle CTA (#330, design-handoff spec, commented in `RacehorseHomeArt.css`) and the Tournament "SOON" badge (#327). Layout geometry was already identical.
+- **Single Player nav colour (open, product decision):** the spec expects gold, but #313 (2026-09-28) deliberately made the Single Player hub tab purple, its section colour, two days after the gold assertion. AGENTS.md still lists Single Player as gold. Not changed here.
 
 ## Deferred / not caused by this pass
 
-- Five specs in the non-CI `chromium-mobile-visual` project still fail and are unrelated to the footer or safe area: two approved 844×390 Home screenshot baselines (PLAY-button fill and the Tourney "SOON" tab badge post-date the baselines; geometry now matches), two `deterministic home/*` specs that expect a `/api/ranking/profile` call the app no longer makes, and one nav assertion expecting a gold Single Player tab (renders purple). Re-approving baselines is a design call.
-- The live multiplayer e2e (`multiplayer-in-match-reconnect`) needs real Supabase credentials and is not a CI gate; not runnable in a credential-less worktree.
+- The live multiplayer e2e (`multiplayer-in-match-reconnect`) needs real Supabase credentials and is not a CI gate.
+- Server tests: the 5 ranking-cutover tests need `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` set (inert values suffice, e.g. `http://127.0.0.1:54321`); `ci.yml`'s server step sets neither, so confirm CI sets them or those tests fail there.
 - I3 Daily Fritz server checkpoint is not flushed on `pagehide`; dev diagnostic localStorage toggles remain reachable; "Daily Puzzles" title overlaps its art at 844pt.
 
 ## Store technical settings observed
