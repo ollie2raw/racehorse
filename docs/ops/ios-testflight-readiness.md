@@ -58,7 +58,7 @@ Three `PrivacyInfo.xcprivacy`, all valid, no duplicates: app, `Capacitor.framewo
 `chromium-mobile-visual` (non-CI): the five failures left after the footer fix were each decided on the evidence, not snapshot-approved blindly.
 - **`/api/ranking/profile` ×2 (stale spec):** 82418678 deliberately made `fetchRankingProfile` skip non-UUID ids (guests, bots, the e2e principal) because the server answered 400. The request was *not* reintroduced; the spec now asserts the call is not made and the unreachable fixture response was removed (an accidental call now surfaces as an unexpected API call).
 - **Approved Home 844×390 ×2 (baselines refreshed):** both differences are intentional and post-date the 2026-09-27 baseline: the solid-gold Fritz CTA / outline-cyan Puzzle CTA (#330, design-handoff spec, commented in `RacehorseHomeArt.css`) and the Tournament "SOON" badge (#327). Layout geometry was already identical.
-- **Single Player nav colour (open, product decision):** the spec expects gold, but #313 (2026-09-28) deliberately made the Single Player hub tab purple, its section colour, two days after the gold assertion. AGENTS.md still lists Single Player as gold. Not changed here.
+- **Single Player nav colour (resolved: purple):** the spec expected gold, but #313 (2026-09-28) deliberately made the Single Player hub tab purple (`#9B6CFF`), its section colour, two days after the gold assertion was written. Product decision: purple is intended. The spec assertion and the AGENTS.md mode-colour line were updated; no nav colour was changed (Daily Fritz stays gold, Puzzle Rush blue).
 
 ## Deferred / not caused by this pass
 

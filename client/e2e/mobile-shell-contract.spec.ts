@@ -238,7 +238,8 @@ test('wide desktop keeps the horizontal selected area and hides bottom tabs', as
   await expect(page.locator('.rh-nav-center-desktop')).toBeVisible();
   await expect(page.locator('.rh-nav-center-desktop [aria-current="page"]')).toHaveText('Single Player');
   await expect(page.locator('.rh-bottom-tab-bar')).toBeHidden();
-  await expect(page.locator('.rh-nav-center-desktop [aria-current="page"]')).toHaveCSS('color', 'rgb(231, 182, 74)');
+  // The Single Player hub tab is purple, its section colour (#9B6CFF, #313); gold belongs to Daily Fritz.
+  await expect(page.locator('.rh-nav-center-desktop [aria-current="page"]')).toHaveCSS('color', 'rgb(155, 108, 255)');
 });
 
 test('signed-out Hub renders account access without empty stats', async ({ page }) => {

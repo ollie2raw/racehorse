@@ -42,7 +42,8 @@ Some legacy CSS/classes may still include “walnut” in the name. Treat those 
 - Matte solid surfaces—not gradients. Use crisp borders, subtle shadows, and restrained accent colors. Avoid gradients across the app; they feel less premium and less aligned with the Play vs Fritz identity.
 - Realistic ivory domino tiles with restrained shadows.
 - Mode color identities:
-  - Daily Fritz / Single Player = brass/gold
+  - Daily Fritz = brass/gold
+  - Single Player (hub tab and section accent) = purple (`#9B6CFF`), decided in #313; Daily Fritz stays gold within it
   - Daily Puzzle / Multiplayer = electric blue
   - Learn = green/cyan
   - Tournament = amber/orange
