@@ -9,7 +9,8 @@ import { describe, expect, it } from 'vitest';
 // non-literal dynamic import that tsc does not try to resolve.
 const nodeFs = 'node:fs';
 const { readFileSync } = (await import(/* @vite-ignore */ nodeFs)) as { readFileSync: (path: string, enc: 'utf8') => string };
-const css = readFileSync('src/styles/native-landscape.css', 'utf8') // vitest runs from client/;
+const css = readFileSync('src/styles/native-landscape.css', 'utf8'); // vitest runs from client/
+const webHomeCss = readFileSync('src/screens/RacehorseHomeArt.css', 'utf8');;
 
 /** Every declaration block for a selector, in source order (later blocks win the cascade). */
 function rules(selector: string): string[] {
@@ -31,5 +32,12 @@ describe('native landscape Home fits one screen', () => {
   it('the card blurb yields to the Play button on not-yet-played cards', () => {
     const blurb = rules('.rh-native .today-home .home-daily-grid .home-card-description').filter((b) => /display:/.test(b));
     expect(blurb[blurb.length - 1]).toContain('display: none');
+  });
+
+  it('web phones held sideways do not spend 61px of the pixel-sized compact Home on the legal footer; native keeps it', () => {
+    const at = webHomeCss.indexOf('html:not(.rh-native) .today-home .home-legal-footer {');
+    expect(at).toBeGreaterThan(-1);
+    expect(webHomeCss.slice(webHomeCss.lastIndexOf('@media', at), at)).toContain('(--short-landscape)');
+    expect(webHomeCss.slice(at, webHomeCss.indexOf('}', at))).toContain('display: none');
   });
 });

@@ -58,6 +58,7 @@
     "@capacitor/core": "^8.5.2",
     "@capacitor/ios": "^8.5.2",
     "@capacitor/preferences": "^8.0.1",
+    "@racehorse/capacitor-keychain-storage": "*",
     "@racehorse/game-core": "*",
     "@racehorse/match-protocol": "*",
     "@racehorse/review-engine": "*",
