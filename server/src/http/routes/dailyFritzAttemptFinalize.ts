@@ -52,7 +52,11 @@ export function applyDailyFritzAttemptFinalization(
   const unverifiedHands = Array.isArray(attempt.result?.unverified_hands) ? attempt.result.unverified_hands : null;
   // A run that advanced any hand without a receipt stays unranked, even if
   // every other game produced a complete authority record.
+  // The ledger of receipt-less hands, not the status label, is the durable fact (the label can lag it: a result written by an
+  // older build carried `unverified_hands` while still reading `in_progress`), so either one disqualifies the run.
+  const advancedWithoutReceipt = unverifiedHands !== null && unverifiedHands.length > 0;
   const isVerified = getDailyFritzVerificationStatus(attempt.result) !== 'rejected'
+    && !advancedWithoutReceipt
     && hasCompleteDailyFritzGameAuthority(attempt.result, setResult);
   const completionVerificationStatus: 'verified' | 'legacy_unverified' = isVerified
     ? 'verified'
