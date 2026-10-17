@@ -10,6 +10,7 @@ Related docs:
 | Doc | For |
 |---|---|
 | [`../ios-release-build.md`](../ios-release-build.md) | `npm run build:ios`, its guards, the privacy manifest |
+| [`apple-handoff.md`](apple-handoff.md) | **Start here (2026-10-16):** measured signing state, facts vs owner decisions, privacy inventory, signed-build plan, physical-iPhone checklist |
 | [`apple-owner-checklist.md`](apple-owner-checklist.md) | Apple Developer + App Store Connect steps (owner only) |
 | [`testflight-candidate.md`](testflight-candidate.md) | Archive → validate → internal TestFlight, once signing exists |
 | [`brand-assets.md`](brand-assets.md) | App icon, splash and favicon generator; master artwork requirements |
@@ -45,7 +46,7 @@ Not required for TestFlight but tracked: self-hosting the two web fonts
 | Setting | Value | Verified in | Status |
 |---|---|---|---|
 | Bundle ID | `com.racehorse.dominoes` | `client/ios/App/App.xcodeproj/project.pbxproj` (`PRODUCT_BUNDLE_IDENTIFIER`, Debug and Release of target App); `client/capacitor.config.ts` `appId` | Verified. Must be registered under Identifiers by the owner |
-| Display name | `Racehorse Dominoes` | `client/ios/App/App/Info.plist` `CFBundleDisplayName`; `capacitor.config.ts` `appName` | Verified |
+| Display name | Store/product name `Racehorse Dominoes`; **home-screen label `Racehorse`** (the long name truncated as "RacehorseDomi…") | Label: `client/ios/App/App/Info.plist` `CFBundleDisplayName`; product name: `capacitor.config.ts` `appName` | Verified 2026-10-16 |
 | Version | `1.0` | `project.pbxproj` `MARKETING_VERSION = 1.0` → `Info.plist` `CFBundleShortVersionString = $(MARKETING_VERSION)` | Verified |
 | Build number | `1` in the project | `project.pbxproj` `CURRENT_PROJECT_VERSION = 1` → `CFBundleVersion` | Verified. **Process:** raise it for every upload (Xcode → target App → General → Build). App Store Connect refuses a build number already used for version 1.0. Suggested: 1, 2, 3 … per upload; never reuse. Commit the bump only if the team wants the number in git (it is not needed for the build) |
 | Devices | iPhone only | `project.pbxproj` `TARGETED_DEVICE_FAMILY = 1` (both configurations); `Info.plist` `LSRequiresIPhoneOS = true` | Verified. No iPad screenshots needed |

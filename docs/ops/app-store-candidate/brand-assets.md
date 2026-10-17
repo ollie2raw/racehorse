@@ -31,9 +31,13 @@ the PNG is an export of it.
 | PNG, square, at least 1024 × 1024, 8-bit RGBA | Scaled to 720 px and centred on a 2732 × 2732 navy canvas |
 | The mark only, **transparent background**, little padding | The script composites it onto #0A0E17; output is opaque |
 
-The launch storyboard shows the 2732 square aspect-filled. In landscape on a
-19.5:9 iPhone only a centred band about 1260 px tall is visible, so the 720 px
-mark always fits.
+**Current state (verified 2026-10-16):** `LaunchScreen.storyboard` is a plain
+navy view (`#0A0E17`) with **no image view**, so `Splash.imageset` is not shown
+today and `--mark` only has an effect if the storyboard is changed to display
+it. If a mark on the launch screen is wanted, that is a deliberate storyboard
+change; if it were added, the 2732 square would be shown aspect-filled, and in
+landscape on a 19.5:9 iPhone only a centred band about 1260 px tall is visible,
+so the 720 px mark would fit.
 
 ## What it writes
 

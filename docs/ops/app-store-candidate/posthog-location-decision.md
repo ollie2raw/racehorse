@@ -7,6 +7,14 @@ from the client IP unless the project discards it. The client sets no IP
 option (`client/src/lib/analytics.ts`: `person_profiles: 'always'`,
 `autocapture: false`), so the PostHog project setting decides.
 
+> **Consistency flag (2026-10-16).** The release build is being configured with
+> `VITE_LEGAL_POSTHOG_LOCATION=discarded`, which makes the privacy page say
+> "PostHog is set to discard IP addresses", yet the manifest above still
+> declares Coarse Location and the PostHog / Sentry project settings are not
+> verifiable from the repo. Until Option B is carried out (below) or the legal
+> value is set to `derived`, those three statements disagree. Resolve this
+> before submitting. See [apple-handoff.md §5](apple-handoff.md).
+
 The rule that never changes: **the privacy manifest, the App Store Connect App
 Privacy answers and the privacy policy must say the same thing, and change
 together.** Never drop the declaration to get a smaller label while the data

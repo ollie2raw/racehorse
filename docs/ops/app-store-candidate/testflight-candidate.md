@@ -24,7 +24,8 @@ project; don't upload around it.
    Must end with `cap sync ios` succeeding. Any guard failure stops the run;
    fix `client/.env.ios`, never the guard. (Details: [`../ios-release-build.md`](../ios-release-build.md).)
 3. **Open Xcode.** `open ios/App/App.xcodeproj`. Wait for Swift packages to
-   resolve (Capacitor 8.5.2, CapacitorPreferences).
+   resolve (Capacitor 8.5.2, CapacitorPreferences, and the in-repo
+   `packages/capacitor-keychain-storage`).
 4. **Set the build number.** Target App → General → Identity: Version `1.0`,
    **Build** = previous uploaded build + 1 (first upload: `1`). Record it.
 5. **Check the scheme.** Product → Scheme → Edit Scheme → Archive → Build
@@ -54,6 +55,10 @@ project; don't upload around it.
 |---|---|---|---|---|---|
 | | | 1.0 ( ) | | | |
 
-Known watch item: `Info.plist` `UIRequiredDeviceCapabilities` is `armv7`
-(Capacitor template). If validation flags it, change it to `arm64` and
-re-archive.
+Former watch item, resolved: `UIRequiredDeviceCapabilities` is now `arm64`
+(pinned by `client/scripts/iosProjectSettings.test.ts`), so Validate should not flag it.
+
+Current facts for this build (2026-10-16, candidate `45947d34`; see [apple-handoff.md](apple-handoff.md)):
+the home-screen label is `Racehorse`; the auth session lives in the Keychain, which only works in a
+**team-signed** build (unsigned/ad-hoc builds get error -34018 and fail closed to signed-out); and
+`npm run build:ios` needs the five `VITE_LEGAL_*` values in addition to `client/.env.ios`.

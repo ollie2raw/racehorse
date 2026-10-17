@@ -41,7 +41,9 @@ submission until triaged.
 | 24 | Share | Daily Fritz / Daily Puzzle share: share sheet or copy works, no dead end | | | |
 | 25 | Links | Privacy, Terms, Support links open (Safari or in-app browser) and load | | | |
 | 26 | Native | No permission prompt appears at any point | | | |
-| 27 | Native | Launch screen is the navy Racehorse splash (no white flash, no Capacitor "X") | | | |
+| 27 | Native | Launch screen is solid navy (no white flash, no Capacitor "X"); a logo mark appears only if the storyboard was changed to show one ([brand-assets.md](brand-assets.md)) | | | |
+| 28 | Home screen | Icon is the final artwork and the label reads `Racehorse` in full (not truncated) | | | |
+| 29 | Account | Force-quit and reopen: still signed in (Keychain session). Then sign out and sign in as a second account: nothing from the first remains | | | |
 
 ## Cold start (Part 16): measure first
 
@@ -63,9 +65,9 @@ Only if row 2 reproducibly shows a blank screen longer than about **5 s**:
    ([native-surface-audit.md §3](native-surface-audit.md#3-font-audit-part-17));
    with `display=swap` they shouldn't block paint, but confirm in the Timeline.
    Self-hosting is the fix if they do.
-4. **Auth restore.** Session restore from `@capacitor/preferences` plus the
-   Supabase token refresh: time from launch to the first authenticated
-   request.
+4. **Auth restore.** Session restore from the Keychain (the in-repo
+   `capacitor-keychain-storage` plugin) plus the Supabase token refresh: time
+   from launch to the first authenticated request.
 5. **Remote assets.** Home art and any images fetched from the network rather
    than bundled.
 
