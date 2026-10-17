@@ -60,7 +60,9 @@ const armXs = (xs: Map<string, number>, arm: number) =>
     .map(([, x]) => x);
 
 const renderBoard = (props: { staticView?: boolean } = {}) =>
-  render(<Board board={FIXTURES.longUp()} legalMoves={[]} selectedTile={null} tileSize={84} {...props} />);
+  render(
+    <Board board={FIXTURES.longUp()} legalMoves={[]} selectedTile={null} onPositionClick={() => undefined} tileSize={84} {...props} />,
+  );
 
 beforeEach(() => {
   containerHeight = 756;
