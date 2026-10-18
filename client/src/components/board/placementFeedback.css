@@ -1,0 +1,16 @@
+@import '../../ui/motion.css';
+
+/* Camera/position/rotation remain on the original elements. Only local content moves. */
+.board-container .board-tile-wrapper[data-placement-feedback] {
+  animation: none !important;
+}
+.board-container .board-tile-wrapper[data-placement-feedback='arrive'] > .domino-tile {
+  animation: rh-tile-land var(--rh-motion-tile) var(--rh-motion-settle);
+}
+@keyframes rh-tile-land {
+  from { opacity: 0.65; translate: 0 -6px; scale: 1.035; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-container .board-tile-wrapper[data-placement-feedback='arrive'] > .domino-tile { animation: none; }
+}

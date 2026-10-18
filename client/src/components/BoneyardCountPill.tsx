@@ -1,3 +1,4 @@
+import { FeedbackNumber } from './FeedbackNumber';
 import { forwardRef, type CSSProperties, type Ref } from 'react';
 import { BoneyardStackIcon } from './BoneyardStackIcon';
 
@@ -24,7 +25,7 @@ export const BoneyardCountPill = forwardRef(function BoneyardCountPill(
         className="boneyard-icon"
         style={{ width: 21, height: 21, opacity: 0.95, ...iconStyle }}
       />
-      <span className="boneyard-count">{count}</span>
+      <FeedbackNumber value={count} className="boneyard-count" />
       {isLocked ? (
         <span
           className="boneyard-meta"

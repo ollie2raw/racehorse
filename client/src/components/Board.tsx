@@ -6,6 +6,9 @@ import {
   useState,
   type ForwardedRef,
 } from 'react';
+import { useMotionAllowed } from '../ui/motion';
+import { publicTileIdentity, usePlacementFeedback } from './board/usePlacementFeedback';
+import './board/placementFeedback.css';
 import { DominoTile } from './DominoTile';
 import { ZoomInIcon, ZoomOutIcon } from './MatchBoardControlIcons';
 import type { Tile, BoardState, PlacementPosition, Move } from '../types';
@@ -29,6 +32,8 @@ export interface BoardHandle {
 
 interface BoardProps {
   board: BoardState | null;
+  /** Opt in for live incremental commits only; disable during recovery/history. */
+  placementFeedback?: boolean;
   legalMoves: Move[];
   selectedTile: Tile | null;
   handNumber?: number;
@@ -66,6 +71,7 @@ function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean
 function BoardComponent(
   {
     board,
+    placementFeedback = false,
     legalMoves,
     selectedTile,
     handNumber = 0,
@@ -123,6 +129,13 @@ function BoardComponent(
     cameraScale: camera.scale,
     containerHeight,
   });
+
+  const motionAllowed = useMotionAllowed();
+  const arrivingTile = usePlacementFeedback(
+    layout.tiles.flatMap((entry) => entry.tile ? [entry.tile] : []),
+    handNumber,
+    placementFeedback && motionAllowed && !staticView && !handOver && !gameOver,
+  );
 
   // Convert layout units to pixels
   const unitToPixels = tileSize;
@@ -221,6 +234,7 @@ function BoardComponent(
             <div
               key={lt.key}
               data-layout-key={lt.key}
+              data-placement-feedback={arrivingTile === publicTileIdentity(lt.tile) ? 'arrive' : 'none'}
               className={`board-tile-wrapper ${
                 lastPlayedTile != null && tileEquals(lt.tile, lastPlayedTile) ? 'is-last-played' : ''
               }`.trim()}
@@ -384,6 +398,10 @@ function BoardComponent(
 function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
   return (
     prev.board === next.board &&
+    prev.placementFeedback === next.placementFeedback &&
+    prev.handNumber === next.handNumber &&
+    prev.handOver === next.handOver &&
+    prev.gameOver === next.gameOver &&
     prev.legalMoves === next.legalMoves &&
     Boolean(prev.selectedTile && next.selectedTile && tileEquals(prev.selectedTile, next.selectedTile)) &&
     Boolean(prev.lastPlayedTile && next.lastPlayedTile && tileEquals(prev.lastPlayedTile, next.lastPlayedTile)) &&

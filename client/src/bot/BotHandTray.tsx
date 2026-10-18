@@ -60,7 +60,7 @@ export const BotHandTray: React.FC<BotHandTrayProps> = ({
           >
             {normalHandRows.map((row, rowIdx) => (
               <div key={`bot-hand-row-${rowIdx}`} className="hand-row">
-                {row.map((tile, idx) => {
+                {row.map((tile) => {
                   const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
                   const showLegality = handActive && !botTurn && !drawSequenceActive;
                   const { highlight: legalityHighlight, unplayable: isUnplayable } = getHandTileLegality(
@@ -82,7 +82,7 @@ export const BotHandTray: React.FC<BotHandTrayProps> = ({
                   const baseClass = drawPulseIndex === absoluteIdx ? 'new-draw' : '';
                   return (
                     <div
-                      key={`bot-hand-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
+                      key={`bot-hand-${tile.low}-${tile.high}`}
                       className={`guided-tile-wrap${isGuidedMode && playable && guidedPts > 0 ? ' has-badge' : ''}${isRecommendedLessonTile ? ' is-recommended' : ''}`}
                     >
                       {isGuidedMode && playable && guidedPts > 0 && (

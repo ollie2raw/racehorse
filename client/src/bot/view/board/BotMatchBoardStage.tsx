@@ -172,6 +172,7 @@ export function BotMatchBoardStage(props: BotMatchBoardStageProps) {
       >
         <Board
           ref={boardRef}
+          placementFeedback={!viewingHistory && !isLessonLayoutMode}
           showZoomTray={isLessonLayoutMode}
           board={viewingHistory ? displayBoard : match.board}
           legalMoves={
