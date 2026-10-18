@@ -33,8 +33,17 @@ function persistenceShaped<T>(value: T): T {
   return reverse(JSON.parse(JSON.stringify(value))) as T;
 }
 
+/** Production-live shape: the played Tile objects in legalActions ARE the objects in actorHand (shared references). */
+function sharedReferences(s: ReviewPositionSnapshotV2): ReviewPositionSnapshotV2 {
+  const c = structuredClone(s);
+  const held = (t: { low: number; high: number }) => c.preAction.actorHand.find((h) => h.low === t.low && h.high === t.high) ?? t;
+  const legalActions = c.legalActions.map((a) => (a.kind === 'play' ? { ...a, tile: held(a.tile) } : a));
+  const actual = c.actualAction.kind === 'play' ? { ...c.actualAction, tile: held(c.actualAction.tile) } : c.actualAction;
+  return { ...c, legalActions, actualAction: actual } as ReviewPositionSnapshotV2;
+}
+
 const variants = (s: ReviewPositionSnapshotV2): Array<[string, ReviewPositionSnapshotV2]> => [
-  ['live', s],
+  ['live (shared tile references)', sharedReferences(s)],
   ['structuredClone', structuredClone(s)],
   ['json', JSON.parse(JSON.stringify(s)) as ReviewPositionSnapshotV2],
   ['persistence-shaped', persistenceShaped(s)],
@@ -45,12 +54,12 @@ const ck = (a: ReviewAction): string => (a.kind === 'play' ? `play:${Math.min(a.
 
 /** Everything a reader can see of one evaluation: candidate set+values, best set, played, loss, grade. */
 function visible(ev: ReviewEvaluationV1) {
-  const byKey = [...ev.candidates].map((c) => [ck(c.action), c.value.expectedPointDifferential, c.immediatePoints] as const)
+  const byKey = [...ev.candidates].map((c) => [ck(c.action), c.value.expectedPointDifferential, c.immediatePoints, (c as { rawScore?: number }).rawScore ?? null] as const)
     .sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const bestValue = ev.best.value.expectedPointDifferential;
   const bestSet = ev.candidates.filter((c) => c.value.expectedPointDifferential === bestValue).map((c) => ck(c.action)).sort();
   return {
-    source: ev.evidence.source, candidates: byKey, bestSet, played: [ck(ev.played.action), ev.played.value.expectedPointDifferential],
+    source: ev.evidence.source, candidates: byKey, bestSet, best: ck(ev.best.action), diagnostics: [...(ev.diagnostics ?? [])].sort(), played: [ck(ev.played.action), ev.played.value.expectedPointDifferential],
     loss: ev.loss.expectedPointDifferential, grade: computeGameAccuracyModel([ev]).grade,
   };
 }
