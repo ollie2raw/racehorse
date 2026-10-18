@@ -89,7 +89,12 @@ export function accuracyFromEvaluations(
     return { status: 'no-scorable-decisions' };
   }
 
-  const meanLoss = scorableLosses.reduce((sum, loss) => sum + loss, 0) / scorableLosses.length;
+  // Floating-point addition is not associative, and evaluations reach this function in whatever order the batch (client
+  // worker, server completion, persisted artifact) produced them. Summing a canonically sorted copy makes the headline
+  // accuracy a pure function of the SET of decisions, to the last bit, so reconciliation and a grade on a boundary never
+  // depend on arrival order.
+  const canonicalLosses = [...scorableLosses].sort((a, b) => a - b);
+  const meanLoss = canonicalLosses.reduce((sum, loss) => sum + loss, 0) / canonicalLosses.length;
   const accuracy = clamp(100 * Math.exp(-k * meanLoss), 0, 100);
 
   return {

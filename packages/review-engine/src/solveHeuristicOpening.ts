@@ -1,7 +1,6 @@
 import {
   boardTileCount,
   computePlayScore,
-  DEFAULT_CONFIG,
   getOpenEnds,
   simulatePlacement,
   type Tile,
@@ -15,6 +14,7 @@ import {
 } from '@racehorse/game-core/review';
 import type { BoardState, Config } from '@racehorse/game-core/types';
 import { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
+import { resolveReviewConfig } from './reviewRuleset';
 
 export type HandPhase = 'early' | 'mid' | 'late';
 
@@ -360,7 +360,11 @@ function scoreAction(
 
   const boardAfter = simulatePlacement(board, action.tile, action.position);
   const immediateScore = computePlayScore(boardAfter, config);
-  const handAfter = actorHand.filter((t) => t !== action.tile);
+  // Tile IDENTITY, never object identity: a live snapshot shares the Tile object between legalActions and actorHand, a
+  // serialized one (server completion, persistence, reload) does not. `!==` here left the played tile in the hand after any
+  // round trip, skewing every hand-dependent feature and the recommended move.
+  const playedKey = tileKey(action.tile);
+  const handAfter = actorHand.filter((t) => tileKey(t) !== playedKey);
   const endsAfterValues = getOpenEnds(boardAfter).map((e) => e.matchValue);
   const totalTilesAfter = handAfter.length + opponentTileCount;
   const phase = phaseFor(handAfter.length, totalTilesAfter);
@@ -473,7 +477,7 @@ export function solveHeuristicOpening(
     holdWeights.set(tileKey(tile), excludedPips.has(tile.low) || excludedPips.has(tile.high) ? 0.05 : 1.0);
   }
   const missingWeights = computeMissingWeightByPip(snapshot.preAction.knownMissingPipEvidence);
-  const config: Config = { ...DEFAULT_CONFIG, maxPips, winningScore: snapshot.preAction.winningTarget };
+  const config: Config = resolveReviewConfig(snapshot, maxPips);
 
   const scored = snapshot.legalActions.map((action) =>
     scoreAction(snapshot, action, config, unseenPool, holdWeights, missingWeights, maxPips),
@@ -521,7 +525,14 @@ export function solveHeuristicOpening(
   const playedIndex = snapshot.legalActions.findIndex(
     (action) => canonicalActionKey(action) === canonicalActionKey(snapshot.actualAction),
   );
-  const played = playedIndex >= 0 ? candidates[playedIndex] : sortedCandidates[0];
+  // Fail closed like the exact and search paths (evaluateReviewPosition.findPlayedCandidate): a played action that is not
+  // among the legal actions is an inconsistent snapshot, never "the player played the best move".
+  if (playedIndex < 0) {
+    throw new Error(
+      'solveHeuristicOpening: no candidate matches snapshot.actualAction -- the snapshot is inconsistent (played action is not a legal action).',
+    );
+  }
+  const played = candidates[playedIndex];
   const best = sortedCandidates[0];
 
   return {
