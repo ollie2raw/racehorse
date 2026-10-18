@@ -52,6 +52,7 @@ type Spec = {
   up: number; down: number; left: number; right: number;
   handNumber: number; myScore: number; oppScore: number; boneyard: number; openEnds: number;
   isMine: boolean; recovery: boolean; history: boolean; hand: Tile[]; drawPulse: number | null; selected: Tile | null;
+  pulse: boolean; handOver: boolean; gameOver: boolean;
 };
 
 const q = new URLSearchParams(location.search);
@@ -66,6 +67,7 @@ let spec: Spec = {
   up: n('up', 3), down: n('down', 3), left: n('left', 0), right: n('right', 0),
   handNumber: n('hand', 1), myScore: n('score', 15), oppScore: 12, boneyard: n('boneyard', 10), openEnds: 12,
   isMine: true, recovery: false, history: false, hand: FULL_HAND, drawPulse: null, selected: null,
+  pulse: false, handOver: false, gameOver: false,
 };
 const listeners = new Set<() => void>();
 
@@ -104,13 +106,13 @@ function Harness() {
   const [s, setS] = useState(spec);
   useEffect(() => { const l = () => setS(spec); listeners.add(l); return () => { listeners.delete(l); }; }, []);
   const board = boardOf(s);
-  const state = { ...base, board, handNumber: s.handNumber, currentPlayerIndex: s.isMine ? 0 : 1 } as unknown as GameState;
+  const state = { ...base, board, handNumber: s.handNumber, currentPlayerIndex: s.isMine ? 0 : 1, handOver: s.handOver || s.gameOver, gameOver: s.gameOver, winnerId: s.gameOver ? ME : null } as unknown as GameState;
   const props: LiveMatchScreenProps = {
     shell: { visible: true, state, flyingTiles: [], scoreToast: null },
     identity: { you: ME, opponentId: OPP, opponentName: 'Fritz', myName: 'You', players: [{ id: ME, username: 'You', userId: null }, { id: OPP, username: 'Fritz', userId: null }] },
     hud: {
-      myScore: s.myScore, opponentScore: s.oppScore, opponentTileCount: 5, isMyTurn: s.isMine, isHandActive: true,
-      hudScorePulse: {}, hudRightLabel: 'You', hudRightScore: s.myScore, hudRightScorePulse: false,
+      myScore: s.myScore, opponentScore: s.oppScore, opponentTileCount: 5, isMyTurn: s.isMine, isHandActive: !s.handOver && !s.gameOver,
+      hudScorePulse: {}, hudRightLabel: 'You', hudRightScore: s.myScore, hudRightScorePulse: s.pulse,
       boneyardCount: s.boneyard, openEndsSum: s.openEnds, winTarget: 60,
     },
     board: {

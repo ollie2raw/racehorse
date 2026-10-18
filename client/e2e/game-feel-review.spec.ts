@@ -407,3 +407,120 @@ test.describe('phone / desktop parity', () => {
     });
   }
 });
+
+/**
+ * The stored pixel baselines compare whole pages at maxDiffPixelRatio 0.02 (~6.6k px at 844x390), so a ~100x24 px pill glyph is
+ * invisible to them. This is the guard that IS sensitive to the removed turn dot: it asserts structure and geometry.
+ */
+test.describe('turn pill has no dot', () => {
+  for (const vp of [{ width: 844, height: 390 }, { width: 740, height: 360 }, { width: 667, height: 375 }]) {
+    test(`${vp.width}x${vp.height}: text only, no glyph, no pseudo-element, no extra width`, async ({ page }) => {
+      await page.setViewportSize(vp);
+      await open(page, 'up=3&down=3');
+      for (const isMine of [true, false]) {
+        await set(page, { isMine });
+        await page.waitForTimeout(350);
+        const probe = await page.evaluate(() => {
+          const pill = document.querySelector('.rh-turn-status') as HTMLElement;
+          const content = pill.querySelector('.rh-turn-status__content') as HTMLElement;
+          const pseudo = (el: Element, which: '::before' | '::after') => getComputedStyle(el, which).content;
+          const range = document.createRange();
+          range.selectNodeContents(content);
+          return {
+            pillChildren: [...pill.children].map((c) => c.className),
+            contentElementChildren: content.children.length,
+            mark: document.querySelectorAll('.rh-turn-status__mark, [class*="turn-dot"]').length,
+            pseudos: [pill, content].flatMap((el) => [pseudo(el, '::before'), pseudo(el, '::after')]),
+            contentWidth: content.getBoundingClientRect().width,
+            textWidth: range.getBoundingClientRect().width,
+            text: content.textContent,
+          };
+        });
+        expect(probe.pillChildren).toEqual(['rh-turn-status__content']);
+        expect(probe.contentElementChildren).toBe(0);
+        expect(probe.mark).toBe(0);
+        for (const c of probe.pseudos) expect(['none', 'normal', '""']).toContain(c);
+        // "Opponent thinking" is wider than the fixed-width pill on the narrowest phones and clips there (pre-existing, same CSS as
+        // before the slice), so the exact-width proof uses the unclipped "Your move" state.
+        if (isMine) expect(Math.abs(probe.contentWidth - probe.textWidth), 'content wider than its text: something else is in the pill').toBeLessThanOrEqual(1);
+        expect(probe.text).toBe(isMine ? 'Your move' : 'Opponent thinking');
+      }
+    });
+  }
+});
+
+test.describe('terminal score events (hand end, bonus, match win)', () => {
+  const mine = (page: Page) => page.locator('.wl-player-pill.is-you .rh-score-value').first();
+
+  test('ordinary, hand-ending and bonus awards: exact immediately in the semantics, exact visually, one acknowledgement each', async ({ page }) => {
+    await open(page, 'up=3&down=3');
+    const ack0 = await starts(page, 'rh-score-acknowledge');
+    // ordinary score
+    await set(page, { myScore: 17 });
+    await expect(mine(page)).toHaveAccessibleName('17');
+    await expect(mine(page)).toHaveText('17', { timeout: 2000 });
+    expect(await starts(page, 'rh-score-acknowledge')).toBe(ack0 + 1);
+    // hand-ending play (+2) together with the end-of-hand bonus (+10): the hand is over, one combined jump to the authoritative total
+    await set(page, { myScore: 29, handOver: true });
+    await expect(mine(page)).toHaveAccessibleName('29');
+    await expect(mine(page)).toHaveText('29', { timeout: 2000 });
+    expect(await starts(page, 'rh-score-acknowledge')).toBe(ack0 + 2);
+    // an unchanged value re-sent (e.g. a re-render or reconnect snapshot) is silent
+    await set(page, { myScore: 29 });
+    await page.waitForTimeout(500);
+    expect(await starts(page, 'rh-score-acknowledge')).toBe(ack0 + 2);
+    // next hand starts: scores carry over, nothing replays
+    await set(page, { handNumber: 2, handOver: false });
+    await page.waitForTimeout(500);
+    await expect(mine(page)).toHaveAccessibleName('29');
+    expect(await starts(page, 'rh-score-acknowledge')).toBe(ack0 + 2);
+  });
+
+  test('an award to the OPPONENT (a blocked-hand award or Fritz going out) counts and settles exactly too', async ({ page }) => {
+    await open(page, 'up=3&down=3');
+    await set(page, { oppScore: 24, handOver: true });
+    const opp = page.locator('.wl-player-pill:not(.is-you) .rh-score-value').first();
+    await expect(opp).toHaveAccessibleName('24');
+    await expect(opp).toHaveText('24', { timeout: 2000 });
+    await expect(mine(page)).toHaveAccessibleName('15'); // the other card is untouched
+  });
+
+  test('match-winning score: the final value is exact, the count is not cut short by the terminal state', async ({ page }) => {
+    await open(page, 'up=3&down=3');
+    await set(page, { myScore: 68, handOver: true, gameOver: true });
+    // the semantic score is final at once, whatever the visual is doing
+    const card = page.locator('.wl-player-pill.is-you .rh-score-value');
+    if (await card.count()) {
+      await expect(card.first()).toHaveAccessibleName('68');
+      await expect(card.first()).toHaveText('68', { timeout: 2000 });
+      await page.waitForTimeout(800);
+      await expect(card.first()).toHaveText('68'); // still exact after the overlay has had time to appear
+    }
+    expect(await starts(page, 'rh-score-acknowledge')).toBeLessThanOrEqual(1);
+  });
+
+  test('the existing score-card pulse and the digit acknowledgement never run together', async ({ page }) => {
+    await open(page, 'up=3&down=3');
+    const ack0 = await starts(page, 'rh-score-acknowledge');
+    await set(page, { myScore: 17, pulse: true });
+    await page.waitForTimeout(600);
+    expect(await starts(page, 'rh-score-acknowledge')).toBe(ack0); // the pulse owns this acknowledgement
+    const concurrent = await page.evaluate(() => {
+      const pill = document.querySelector('.wl-player-pill.is-you') as HTMLElement;
+      return pill.getAnimations({ subtree: true }).map((a) => (a as CSSAnimation).animationName);
+    });
+    expect(concurrent.filter((n) => n === 'rh-score-acknowledge')).toEqual([]);
+    await expect(mine(page)).toHaveAccessibleName('17');
+  });
+
+  test('reduced motion: every terminal score is exact immediately, with no movement', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await open(page, 'up=3&down=3');
+    await set(page, { myScore: 29, handOver: true });
+    await expect(mine(page)).toHaveText('29'); // no count: immediate
+    await set(page, { myScore: 68, gameOver: true });
+    const card = page.locator('.wl-player-pill.is-you .rh-score-value');
+    if (await card.count()) await expect(card.first()).toHaveText('68');
+    expect(await starts(page, 'rh-score-acknowledge')).toBe(0);
+  });
+});
