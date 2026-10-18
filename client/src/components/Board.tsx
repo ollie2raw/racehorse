@@ -229,6 +229,8 @@ function BoardComponent(
           height: isMobile ? '100%' : viewportSize.height > 0 ? `${viewportSize.height}px` : '100%',
           transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
           transformOrigin: 'center center',
+          // Lets CSS size placement-zone hit slop in screen pixels despite the camera scale.
+          ['--rh-camera-scale' as string]: camera.scale,
         }}
       >
         {layout.tiles.map((lt) => {

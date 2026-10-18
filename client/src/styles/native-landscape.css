@@ -2323,7 +2323,7 @@
   @media (max-width: 700px) {
     .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-turn {
       white-space: normal !important;
-      max-width: 150px !important;
+      max-width: 128px !important;
       height: 36px !important;
       line-height: 1.1 !important;
       text-align: center !important;
@@ -2331,10 +2331,10 @@
     }
   }
 
-  /* 375px-tall iPhones (SE/8 667, X/XS and 12/13 mini 812): the board is only ~195-215px tall, so the vertical rail under the
-     chips (116px) ran past the bottom and cut off the home button. Lay it out as a row in the bottom-right corner instead
-     (28px buttons, ~130x38), clear of the chips and the play area. 390px+ phones keep the vertical rail. */
-  @media (max-height: 380px) {
+  /* Every short-landscape iPhone (667x375 .. 932x430): the board is only ~170-220px tall, and with 28px buttons on a 44px pitch
+     (four buttons, ~170px) a vertical rail under the chips ran 22px past the bottom of the board at 844x390 and cut off the home
+     button. Lay it out as a row in the bottom-right corner instead (~160x36), clear of the chips and the play area. */
+  @media (max-height: 430px) {
     .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls,
     .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls:has(.rr-root),
     .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-controls {
@@ -2342,10 +2342,150 @@
       top: auto !important;
       bottom: 8px !important;
       right: 10px !important;
-      gap: 4px !important;
+      gap: 16px !important;
       padding: 4px 6px !important;
       border-radius: 18px !important;
     }
+  }
+
+  /* A two-row hand leaves a ~177px board on every phone height: the 28px-button rail (four 44px steps, 170px) cannot be a column
+     under the chips there, so it is the same bottom-right row as on 375px-tall phones. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-controls {
+    flex-direction: row !important;
+    top: auto !important;
+    bottom: 8px !important;
+    right: 10px !important;
+    gap: 16px !important;
+    padding: 4px 6px !important;
+    border-radius: 18px !important;
+  }
+
+  /*
+   * 44pt TOUCH TARGETS. Visuals stay compact; each interactive control gets an invisible hit area of >= 44x44pt (a transparent
+   * ::before/::after, which belongs to the control so focus, keyboard and accessibility stay on the real element). Hit areas
+   * never overlap a neighbour: rack rows and control buttons sit on a 44px pitch, and the OPEN chip (not interactive) is moved
+   * clear of the boneyard's extended area so a tap on it cannot draw a tile.
+   */
+
+  /* Rack tiles: 75x36 look, ~75x44 target (5px slop x 0.82 zoom = 4px each side); rows 8px apart so the two rows' targets meet
+     exactly instead of overlapping. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-row .domino-tile::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -4.5px;
+    bottom: -4.5px;
+  }
+
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-container.is-stacked {
+    gap: 8px !important;
+  }
+
+  /* Score cards (buttons): 36px tall -> 44px. They clip their contents, so the slop needs overflow visible. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail button.score-card {
+    overflow: visible !important;
+  }
+
+  /* match-live-theme.css blanks this pseudo with `content: none !important`; the override has to match it. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail button.score-card::after {
+    content: '' !important;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -6px;
+    bottom: -6px;
+  }
+
+  /* Boneyard chip (tap to draw): 24px tall -> 44pt+. The board container clips the slop above the chip (~5px of 12 is lost in the
+     real WKWebView, measured in the simulator), so more goes below; the OPEN chip underneath is 18px clear of the 16px slop. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .boneyard-pill {
+    position: relative !important; /* another rule forces static, which anchored the slop to the whole meta bar (OPEN chip included) */
+  }
+
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .boneyard-pill::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -12px;
+    bottom: -16px;
+  }
+
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-meta-bar,
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-meta-bar {
+    gap: 18px !important;
+  }
+
+  /* Board controls (zoom -/+, mute, leave game): 28px buttons on a 44px pitch (16px gaps), each with a 44x44 hit area. Leave game
+     used to sit 3px from Mute. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls {
+    gap: 16px !important;
+  }
+
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-control-btn,
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-control-btn {
+    position: relative;
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-control-btn::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+
+  /* Move-history scrubber: the chevrons are 44x44 but their boxes are pulled 10px under the (non-interactive) readout, which
+     painted over 2px of them. Keep them on top; the 26px LIVE chip gets invisible slop up to 44pt tall. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-step.rh-btn {
+    position: relative;
+    z-index: 1;
+  }
+
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live.rh-btn {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* 667pt wide: the scrubber (two 44pt chevrons + readout + "● LIVE +N") is 196pt but only 182pt is free between the turn pill and
+     the opponent score card, so while viewing a past move it overlapped both. The chip drops its decorative pulse dot and "+N"
+     count (aria-hidden; the accessible name still says "Back to live, N new moves") and tightens its padding, recovering ~30pt. */
+  @media (max-width: 700px) {
+    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live.rh-btn {
+      margin-left: 2px;
+      padding: 0 8px;
+    }
+
+    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live .rh-scrubber-dot,
+    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live .rh-scrubber-live-count {
+      display: none;
+    }
+  }
+
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live.rh-btn::after {
+    content: '';
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    top: -10px;
+    bottom: -10px;
+  }
+
+  /* Placement zones (tap an open end to place the selected tile): the board scale made them 38-51 x 19-25px. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .placement-zone {
+    position: absolute;
+  }
+
+  /* The board camera scales the zone, so the invisible 44pt box is sized by dividing by that scale. */
+  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .placement-zone::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, calc(44px / var(--rh-camera-scale, 1)));
+    height: max(100%, calc(44px / var(--rh-camera-scale, 1)));
+    transform: translate(-50%, -50%);
   }
 
   /* Hand: 74×38 tiles, 8px apart. */
