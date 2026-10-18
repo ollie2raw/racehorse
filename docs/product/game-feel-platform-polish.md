@@ -221,6 +221,24 @@ performance are design targets, not a measured guarantee from desktop emulation.
   feedback and the existing automatic hand-end panel; no uncaught page errors.
 - Local dependency installation was reused; no manifest/lockfile changes.
 
+## Independent review adjustments (integration pass)
+
+The slice was independently reviewed against the real LiveMatchScreen/Board/CSS (`e2e/game-feel-review.spec.ts`, which counts
+`animationstart` events and inspects `document.getAnimations()`), on desktop and phone/Safari landscape. Changes made:
+
+- **Turn dot removed (rejected).** The leading "steady activity mark" widened the central turn pill, which moved the neighbouring
+  score card 2px at 740/667 wide and grew the label 7px at 844. It added no meaning (identical for both seats; the text and the
+  your-turn/opp-turn treatment already carry ownership). The finite text reveal stays; the earlier "steady ownership marker" wording
+  above describes the original proposal. Evidence screenshots in `game-feel-evidence/` predate this and still show the dot.
+- **`feedbackScope` instead of `handNumber` on the multiplayer Board.** `handNumber` also drives Board's reset/camera signature,
+  and multiplayer never passed it; passing it would have changed multiplayer camera behaviour as a side effect. Placement feedback
+  now takes its own prop (falls back to `handNumber`, so the bot screen, which already passed it, is unchanged).
+- **No new `!important`.** `placementFeedback.css` and the hand-tile transition no longer add `!important` (the repo rule); the
+  existing ones that were only re-valued stay.
+- Left as proposed: finite placement landing on the tile content only, score acknowledgment + exact accessible value, exact
+  open/boneyard readouts, stable bot-hand keys with finite draw emphasis, central motion tokens. Known residual: the older
+  `last-played-neon-glow` on the last-played tile is a pre-existing mount-time effect and was not changed here.
+
 ## Git / canonical / production
 
 Exploration branch starts exactly at the requested candidate. No merge/integration,

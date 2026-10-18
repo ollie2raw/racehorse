@@ -1,19 +1,8 @@
 @import '../ui/motion.css';
 
 .rh-turn-status__content {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+  display: inline-block;
   animation: rh-turn-handoff var(--rh-motion-state) var(--rh-motion-settle);
-}
-
-.rh-turn-status__mark {
-  width: 5px;
-  height: 5px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: currentColor;
 }
 
 @keyframes rh-turn-handoff {

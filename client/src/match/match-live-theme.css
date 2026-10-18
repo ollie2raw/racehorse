@@ -588,7 +588,7 @@
   .wl-hand-area
   .hand-container
   .domino-tile {
-  transition: transform var(--rh-motion-micro) var(--rh-motion-settle), filter var(--rh-motion-micro) var(--rh-motion-settle) !important;
+  transition: transform var(--rh-motion-micro) var(--rh-motion-settle), filter var(--rh-motion-micro) var(--rh-motion-settle);
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)

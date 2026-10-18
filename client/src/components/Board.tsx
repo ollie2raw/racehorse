@@ -34,6 +34,12 @@ interface BoardProps {
   board: BoardState | null;
   /** Opt in for live incremental commits only; disable during recovery/history. */
   placementFeedback?: boolean;
+  /**
+   * Hand identity for placement feedback ONLY (a new hand never animates its first sync as a placement). Kept apart from
+   * `handNumber`, which also drives the board reset/camera signature: a screen that never passed `handNumber` must not
+   * change camera behaviour just to get landing feedback. Falls back to `handNumber`.
+   */
+  feedbackScope?: number;
   legalMoves: Move[];
   selectedTile: Tile | null;
   handNumber?: number;
@@ -72,6 +78,7 @@ function BoardComponent(
   {
     board,
     placementFeedback = false,
+    feedbackScope,
     legalMoves,
     selectedTile,
     handNumber = 0,
@@ -133,7 +140,7 @@ function BoardComponent(
   const motionAllowed = useMotionAllowed();
   const arrivingTile = usePlacementFeedback(
     layout.tiles.flatMap((entry) => entry.tile ? [entry.tile] : []),
-    handNumber,
+    feedbackScope ?? handNumber,
     placementFeedback && motionAllowed && !staticView && !handOver && !gameOver,
   );
 
@@ -399,6 +406,7 @@ function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
   return (
     prev.board === next.board &&
     prev.placementFeedback === next.placementFeedback &&
+    prev.feedbackScope === next.feedbackScope &&
     prev.handNumber === next.handNumber &&
     prev.handOver === next.handOver &&
     prev.gameOver === next.gameOver &&

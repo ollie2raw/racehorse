@@ -2,7 +2,7 @@
 
 /* Camera/position/rotation remain on the original elements. Only local content moves. */
 .board-container .board-tile-wrapper[data-placement-feedback] {
-  animation: none !important;
+  animation: none;
 }
 .board-container .board-tile-wrapper[data-placement-feedback='arrive'] > .domino-tile {
   animation: rh-tile-land var(--rh-motion-tile) var(--rh-motion-settle);

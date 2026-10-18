@@ -961,7 +961,7 @@ export function LiveMatchScreen({
                       ref={boardRef}
                       showZoomTray={false}
                       board={shownBoard}
-                      handNumber={state.handNumber}
+                      feedbackScope={state.handNumber}
                       placementFeedback={!viewingHistory && roomRecoveryState === 'idle' && !opponentDisconnected && isHandActive}
                       legalMoves={shownLegalMoves}
                       selectedTile={shownSelectedTile}
