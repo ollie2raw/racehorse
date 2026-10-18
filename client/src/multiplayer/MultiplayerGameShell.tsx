@@ -33,6 +33,7 @@ import { useRoomSocketSync } from './useRoomSocketSync';
 import { useMultiplayerPresentation } from './useMultiplayerPresentation';
 import { useLiveMatchSession } from '../match/session/useLiveMatchSession';
 import { compactSingleRowLimit } from '../match/compactLandscape';
+import { isNativeShell, measureRack, resolveLandscapeRackHalfWidth } from '../match/rackTileSizing';
 import {
   findPlacedTile,
   getBoardEnds,
@@ -536,6 +537,21 @@ function MultiplayerGameShellComponent({
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, myHand.length);
       const isLandscape = window.innerWidth > window.innerHeight;
+      if (isLandscape) {
+        // Landscape: size from the real tray, gap and zoom (see rackTileSizing.ts), not a fixed cap.
+        const isShortLandscape = window.matchMedia?.('(orientation: landscape) and (max-height: 430px)').matches ?? false;
+        setHandTileSize(
+          resolveLandscapeRackHalfWidth({
+            tileCount,
+            rowLimit: compactSingleRowLimit(window.innerWidth, isShortLandscape) ?? 8,
+            innerWidth: window.innerWidth,
+            isNative: isNativeShell(),
+            ...measureRack(trayCenterRef.current, window.innerWidth - 56),
+            caps: { few: 68, many: 50 },
+          }),
+        );
+        return;
+      }
       const isMobileWidth = window.innerWidth <= 900;
       const forceTwoRows = tileCount > 9;
       const maxTileSize = isLandscape && isMobileWidth ? 42 : tileCount > 9 ? 50 : 68;

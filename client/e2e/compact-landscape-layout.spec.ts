@@ -151,13 +151,7 @@ function assertLayout(m: M, c: Case, label: string) {
     }
   }
 
-  // Production WEB at ~920-960px wide (932x430 is an iPhone Plus in Safari landscape) sizes rack tiles 126x64 and a 7-tile hand
-  // overflows both edges (tile 0 at x=-15 at 932). That is a real, pre-existing web defect, not a harness artifact; the installed
-  // app is fine at 932 (asserted at every native size). It is NOT fixed here, and it is not hidden: compact-touch-targets.spec.ts
-  // carries it as an expected failure (`test.fail`) that goes red the day the web rack is fixed. This spec only skips the rack
-  // containment for that one web case so it keeps guarding everything else at 932.
-  const wideWebRack = !c.native && c.w >= 932;
-  for (const [i, t] of (wideWebRack ? [] : m.tiles).entries()) {
+  for (const [i, t] of m.tiles.entries()) {
     expect(t.l, `${where}: tile ${i} crosses the left edge`).toBeGreaterThanOrEqual(L - 1);
     expect(t.r, `${where}: tile ${i} crosses the right edge`).toBeLessThanOrEqual(R + 1);
     expect(t.b, `${where}: tile ${i} extends below the bottom inset`).toBeLessThanOrEqual(B + 1);

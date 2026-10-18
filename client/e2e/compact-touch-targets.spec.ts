@@ -221,7 +221,7 @@ for (const c of CASES) {
 
 test.describe('real rack flow at 667x375: a 14-tile hand played down, then the next deal', () => {
   test('every count from 14 downward lays out correctly (row split, hit areas, safe area, board) and the new hand resets', async ({ page }) => {
-    test.setTimeout(420_000);
+    test.setTimeout(660_000);
     const c = CASES[0]!;
     await start(page, c, 14);
     const seen = new Map<number, true>();
@@ -230,12 +230,14 @@ test.describe('real rack flow at 667x375: a 14-tile hand played down, then the n
     let scrubberChecked = false;
     const playable = page.locator('.hand-area .domino-tile.highlight:not(.disabled)').first();
     const zone = page.locator('.placement-zone.active').first();
-    const deadline = Date.now() + 360_000;
-    while (Date.now() < deadline && !newHandSeen) {
+    const deadline = Date.now() + 600_000;
+    const allSeen = () => [14, 13, 12, 11, 10, 9, 8, 7].every((k) => seen.has(k));
+    // a hand can end (Fritz out first) before the player reaches 7 tiles: keep playing into the next hands until every count was seen
+    while (Date.now() < deadline && !(newHandSeen && allSeen())) {
       const n = await tileCount(page);
       if (n > 0 && !seen.has(n)) {
         await page.mouse.move(1, 1); await page.waitForTimeout(900); // let the draw/play animation settle
-        await assertRack(page, c, `${n}-tile hand`); seen.set(n, true); console.log(`RACK laid out ${n} tiles at ${Math.round((Date.now() - (deadline - 360_000)) / 1000)}s`);
+        await assertRack(page, c, `${n}-tile hand`); seen.set(n, true); console.log(`RACK laid out ${n} tiles at ${Math.round((Date.now() - (deadline - 600_000)) / 1000)}s`);
         // the move-history scrubber: step back one move (shows the LIVE chip), check its targets, return to live
         const back = page.getByRole('button', { name: 'Previous move' });
         if (!scrubberChecked && (await back.isEnabled({ timeout: 500 }).catch(() => false))) {
@@ -250,7 +252,11 @@ test.describe('real rack flow at 667x375: a 14-tile hand played down, then the n
           await page.waitForTimeout(500);
         }
       }
-      if (n > previous + 4) { newHandSeen = true; await assertRack(page, c, `new hand (${n} tiles)`); break; }
+      if (n > previous + 4) {
+        newHandSeen = true;
+        await page.mouse.move(1, 1); await page.waitForTimeout(900);
+        await assertRack(page, c, `new hand (${n} tiles)`);
+      }
       previous = n;
       if (await page.getByTestId('hand-over-modal').isVisible().catch(() => false)) { await page.waitForTimeout(1500); continue; }
       if ((await playable.count()) > 0) {
@@ -281,8 +287,23 @@ test.describe('real rack flow at 667x375: a draw grows a 7-tile hand and splits 
         await page.waitForTimeout(700);
       }
       const boneyard = page.locator('.boneyard-pill').first();
-      const playable = page.locator('.hand-area .domino-tile.highlight:not(.disabled)').first();
       const zone = page.locator('.placement-zone.active').first();
+      /** The playable tile whose pips have the fewest matches left in the hand, so the new open end is one we cannot answer (a draw). */
+      const pickPlayable = async () => {
+        const info = await page.locator('.hand-row .domino-tile').evaluateAll((els) => els.map((e) => ({
+          label: e.getAttribute('aria-label') ?? '', playable: e.classList.contains('highlight') && !e.classList.contains('disabled'),
+        })));
+        const pips = info.map((t) => (t.label.match(/(\d)-(\d)/) ?? []).slice(1, 3).map(Number));
+        const friends = (i: number, p: number) => pips.reduce((n, pp, j) => n + (j !== i && pp.includes(p) ? 1 : 0), 0);
+        let best = -1; let bestScore = Infinity;
+        info.forEach((t, i) => {
+          const pp = pips[i]!;
+          if (!t.playable || pp.length !== 2) return;
+          const score = Math.min(friends(i, pp[0]!), friends(i, pp[1]!));
+          if (score < bestScore) { bestScore = score; best = i; }
+        });
+        return best;
+      };
       const size = new Set<number>();
       for (let turn = 0; turn < 14; turn += 1) {
         const n = await tileCount(page);
@@ -290,8 +311,9 @@ test.describe('real rack flow at 667x375: a draw grows a 7-tile hand and splits 
           size.add(n);
           if (n > 7) { await assertRack(page, c, `after a draw: ${n} tiles`); observed.push(n); }
         }
-        if ((await playable.count()) > 0) {
-          await playable.click({ force: true, timeout: 4000 }).catch(() => {});
+        const pick = await pickPlayable();
+        if (pick >= 0) {
+          await page.locator('.hand-row .domino-tile').nth(pick).click({ force: true, timeout: 4000 }).catch(() => {});
           if (await zone.isVisible({ timeout: 1500 }).catch(() => false)) await zone.click({ force: true, timeout: 4000 }).catch(() => {});
         } else if (await boneyard.isVisible().catch(() => false)) {
           await boneyard.click({ force: true, timeout: 4000 }).catch(() => {});
@@ -350,13 +372,10 @@ test.describe('text size in the native layout', () => {
   }
 });
 
-test.describe('KNOWN DEFECT (production web, not the native app): the 7-tile rack overflows at ~932px wide', () => {
-  // Found by the compact-landscape gate and previously hidden by a silent skip. Real production-web screen, no harness: at
-  // 920-960px wide (932x430 = iPhone Plus in Safari landscape; also 932x500) the web build sizes tiles 126x64 and a 7-tile hand
-  // runs from x=-15 to x=939 on a 932px viewport. 900px and below (90x46 tiles) and 1024px and above are fine, and the installed
-  // app is fine at every size. Out of scope for the iPhone-only native release; fix = clamp the web rack tile size to the width.
-  // `test.fail` keeps it tracked: this test goes RED the day the rack fits, which is the cue to delete the annotation.
-  test.fail();
+test.describe('web 932px rack containment (regression: a 7-tile hand ran from x=-15 to x=939)', () => {
+  // The web build sized tiles 126x64 at 920-980px wide, so a normal hand overflowed both edges at 932x430 (an iPhone Plus in
+  // Safari landscape). Fixed by sizing from the real tray in rackTileSizing.ts; the full width sweep lives in
+  // web-rack-breakpoint.spec.ts. This positive assertion stays with the touch-target gate.
   test('web 932x430: every tile of a fresh 7-tile hand is inside the viewport', async ({ page }) => {
     test.setTimeout(120_000);
     await start(page, { w: 932, h: 430, insets: NONE }, 7, true, false);
