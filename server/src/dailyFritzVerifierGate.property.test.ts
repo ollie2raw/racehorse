@@ -144,19 +144,22 @@ describe('gate: the Fritz policy version comes from the attempt, never from the 
     expect(checked).toBeGreaterThan(10);
   }, 900_000);
 
-  it('an attempt pinned to v1/v2 (historical, in flight before v3) keeps the historical top-score rule', () => {
-    let accepted = 0;
-    for (let n = 0; n < HANDS && accepted < 12; n += 1) {
+  it('an attempt pinned to v1/v2 (started before v3) can no longer earn verified results, even with matching historical evidence', () => {
+    let refused = 0;
+    for (let n = 0; n < HANDS && refused < 12; n += 1) {
       const spec = ownerSpec(`${NS}:owner-hist`, n);
       for (const f of forksFor(spec, 1)) {
         for (const version of [1, 2] as const) {
           const out = verify(spec, stripDigest(relabel(asRaw(f.transcript), version)), version);
-          if (!out.ok) throw new Error(`${spec.id} v${version}: historical top-score evidence rejected: ${out.code}`);
-          accepted += 1;
+          expect(out.ok, `${spec.id} v${version}: a retired-policy attempt must not verify new evidence`).toBe(false);
+          if (!out.ok) expect(out.code).toBe('fritz_policy_version_mismatch');
+          // the pure verifier keeps the historical rule for already-recorded evidence
+          expect(runVerifier(spec, relabel(asRaw(f.transcript), version)).ok, `${spec.id} v${version}: historical evidence`).toBe(true);
+          refused += 1;
         }
       }
     }
-    expect(accepted).toBeGreaterThan(5);
+    expect(refused).toBeGreaterThan(5);
   }, 900_000);
 
   it('the cross-version pin holds in every direction: a v1/v2-pinned attempt does not accept v3 evidence either', () => {
