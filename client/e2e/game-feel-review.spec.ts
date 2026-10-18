@@ -449,6 +449,47 @@ test.describe('turn pill has no dot', () => {
   }
 });
 
+/**
+ * Narrow-phone fit: the FULL label of both states must sit inside the pill's own box (no clipping, no ellipsis, no spill into a
+ * neighbour). Geometry, not pixels: every text line rect must lie within the pill rect, and the pill must not scroll.
+ * "Opponent thinking" is the longest label and wraps to two lines on the compact HUD; that is allowed, hiding any of it is not.
+ */
+test.describe('turn pill fits its text on narrow phones', () => {
+  for (const vp of [{ width: 844, height: 390 }, { width: 740, height: 360 }, { width: 667, height: 375 }]) {
+    test(`${vp.width}x${vp.height}: both labels are fully inside the pill`, async ({ page }) => {
+      await page.setViewportSize(vp);
+      await open(page, 'up=3&down=3');
+      for (const isMine of [true, false]) {
+        await set(page, { isMine });
+        await page.waitForTimeout(350);
+        const fit = await page.evaluate(() => {
+          const pill = document.querySelector('.rh-turn-status') as HTMLElement;
+          const content = pill.querySelector('.rh-turn-status__content') as HTMLElement;
+          const range = document.createRange();
+          range.selectNodeContents(content);
+          const box = pill.getBoundingClientRect();
+          const cs = getComputedStyle(pill);
+          const lines = [...range.getClientRects()].filter((r) => r.width > 0);
+          const slack = Math.min(...lines.flatMap((r) => [r.left - box.left, box.right - r.right, r.top - box.top, box.bottom - r.bottom]));
+          return {
+            slack, lineCount: new Set(lines.map((r) => Math.round(r.top))).size, textOverflow: cs.textOverflow,
+            scrollsX: pill.scrollWidth > pill.clientWidth + 1, scrollsY: pill.scrollHeight > pill.clientHeight + 1,
+            visibleText: content.textContent, hidden: cs.visibility === 'hidden' || cs.display === 'none',
+          };
+        });
+        const where = `${isMine ? 'Your move' : 'Opponent thinking'} @ ${vp.width}x${vp.height}`;
+        expect(fit.slack, `${where}: text leaves the pill box`).toBeGreaterThanOrEqual(0);
+        expect(fit.scrollsX, `${where}: pill scrolls horizontally`).toBe(false);
+        expect(fit.scrollsY, `${where}: pill scrolls vertically`).toBe(false);
+        expect(fit.textOverflow, `${where}: ellipsis would hide state`).not.toBe('ellipsis');
+        expect(fit.lineCount, `${where}: more than two lines`).toBeLessThanOrEqual(2);
+        expect(fit.visibleText).toBe(isMine ? 'Your move' : 'Opponent thinking');
+        expect(fit.hidden).toBe(false);
+      }
+    });
+  }
+});
+
 test.describe('terminal score events (hand end, bonus, match win)', () => {
   const mine = (page: Page) => page.locator('.wl-player-pill.is-you .rh-score-value').first();
 
