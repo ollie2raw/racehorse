@@ -16,8 +16,11 @@ export type HandScoreBoundary = { start: SeatScores; end: SeatScores | null };
 const DEFAULT_YOU_SEAT = 'you';
 
 function seatScores(snapshot: ReviewPositionSnapshotV2, youActorId: string): SeatScores | null {
-  const { actorId, opponentId } = snapshot.identifiers;
-  const { actor, opponent } = snapshot.preAction.scores;
+  const actorId = snapshot?.identifiers?.actorId;
+  const opponentId = snapshot?.identifiers?.opponentId;
+  const actor = snapshot?.preAction?.scores?.actor;
+  const opponent = snapshot?.preAction?.scores?.opponent;
+  if (typeof actor !== 'number' || typeof opponent !== 'number') return null;
   if (actorId === youActorId) return { you: actor, opponent };
   if (opponentId === youActorId) return { you: opponent, opponent: actor };
   return null;

@@ -10,7 +10,6 @@
  * (C, the legacy analyzer's placement-blind grading, is gated in client/src/analyzer/moveAnalyzer.positionAware.test.ts.)
  * Failures print `<namespace>:<n>@<action index>`.
  */
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { Config } from '@racehorse/game-core';
 import type { ReviewAction, ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
@@ -137,16 +136,18 @@ describe('R1-B: the review plays by the ruleset the game was played under', { ti
   }
 
   it('default-ruleset evaluations are numerically unchanged by the ruleset fix (digest printed for pre/post comparison)', () => {
-    const hash = createHash('sha256');
+    // FNV-1a (64-bit) over the canonical JSON: Node-free, enough to compare a pre-fix run with a post-fix run.
+    let h = 0xcbf29ce484222325n;
+    const mix = (text: string) => { for (let i = 0; i < text.length; i += 1) { h ^= BigInt(text.charCodeAt(i)); h = (h * 0x100000001b3n) & 0xffffffffffffffffn; } };
     let count = 0;
     for (let n = 0; n < 40; n += 1) {
       for (const a of makeGame('gate-r1b-default-digest', n).actions) {
         if (a.snapshot.legalActions.length < 2) continue;
-        hash.update(JSON.stringify(visible(evaluateReviewPosition(a.snapshot, SMALL, 0.02, ZERO_CLOCK))));
+        mix(JSON.stringify(visible(evaluateReviewPosition(a.snapshot, SMALL, 0.02, ZERO_CLOCK))));
         count += 1;
       }
     }
-    console.log(`GATE-DIGEST default-ruleset evaluations=${count} sha256=${hash.digest('hex')}`);
+    console.log(`GATE-DIGEST default-ruleset evaluations=${count} fnv1a64=${h.toString(16)}`);
     expect(count).toBeGreaterThan(500);
   });
 });
