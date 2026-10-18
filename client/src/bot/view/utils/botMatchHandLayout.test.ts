@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Tile } from '../../../types.ts';
 import { computeNormalHandRows } from './botMatchHandLayout.ts';
+import { compactSingleRowLimit } from '../../../match/compactLandscape.ts';
 
 const tiles = (count: number): Tile[] =>
   Array.from({ length: count }, (_, index) => ({ low: index % 7, high: (index + 1) % 7 }));
@@ -50,5 +51,16 @@ describe('computeNormalHandRows', () => {
   it('keeps 9 tiles on one row on a normal viewport', () => {
     const opts = { isLessonLayoutMode: false, lessonHandRowCount: 1, isMobileViewport: false };
     expect(computeNormalHandRows(tiles(9), opts)).toHaveLength(1);
+  });
+
+  it('compact landscape: a measured single-row limit replaces the fixed 8 (667px fits 7 tiles, 740px fits 8)', () => {
+    const base = { isLessonLayoutMode: false, lessonHandRowCount: 1, isMobileViewport: false, isShortLandscape: true };
+    const limit = (width: number) => compactSingleRowLimit(width, true)!;
+    expect(limit(667)).toBe(7);
+    expect(limit(740)).toBe(8);
+    expect(computeNormalHandRows(tiles(7), { ...base, maxSingleRow: limit(667) })).toHaveLength(1);
+    expect(computeNormalHandRows(tiles(8), { ...base, maxSingleRow: limit(667) }).map((r) => r.length)).toEqual([4, 4]);
+    expect(computeNormalHandRows(tiles(8), { ...base, maxSingleRow: limit(740) })).toHaveLength(1);
+    expect(computeNormalHandRows(tiles(9), { ...base, maxSingleRow: limit(740) }).map((r) => r.length)).toEqual([5, 4]);
   });
 });

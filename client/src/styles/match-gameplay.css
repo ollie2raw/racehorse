@@ -162,7 +162,9 @@
   touch-action: manipulation;
 }
 
-@media (max-width: 768px) {
+/* Portrait phones only. Landscape (the only orientation the app ships in) sizes the rack in JS from the real deck width
+   (useMatchPresentation); this rule's 14vw clamp squashed rack tiles to 58x46 at 667-768px wide, unlike every wider size. */
+@media (max-width: 768px) and (orientation: portrait) {
   .mode-live-badge,
   .claude-accordion-home__live {
     display: none !important;

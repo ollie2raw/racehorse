@@ -152,6 +152,9 @@
     min-width: 0;
   }
 
+  /* Portrait phones only. Racehorse ships landscape-only; in landscape at 667-768px wide these two rules made the stage 100dvh
+     tall and the board `height: auto`, collapsing the board to 0px (multiplayer, Daily Fritz, every non-bot match screen). */
+  @media (orientation: portrait) {
   .wl-stage-shell,
   .game-layout,
   .bot-match-layout {
@@ -179,6 +182,7 @@
     max-height: none;
     overflow: hidden;
     position: relative;
+  }
   }
 
   .wl-hand-area,

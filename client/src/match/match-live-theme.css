@@ -1115,3 +1115,35 @@
     animation: none !important;
   }
 }
+
+/*
+ * Compact landscape (iPhone SE/8 at 667, 12 mini at 740-812). The installed app gets its compact HUD from native-landscape.css
+ * (scoped to `.rh-native`); these three values mirror it for a phone browser, bounded below the 844px layout, which is unchanged:
+ * rack tiles 90x46 -> 74x38 (seven 90px tiles overflowed a 647px deck on both sides) and the opponent's tile strip 12x18 so it
+ * no longer runs under the status pill.
+ */
+@media (orientation: landscape) and (max-height: 430px) and (max-width: 843px) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-row .domino-tile {
+    zoom: 0.82;
+  }
+
+  /* !important: the base rack padding/gap are !important (native-landscape.css overrides them the same way). */
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack {
+    height: 32px !important;
+    padding: 0 2px !important;
+    gap: 3px !important;
+  }
+
+  /* Web only (the app's pill stays single-line, see native-landscape.css): cap the status pill so it plus the docked history
+     scrubber fit between the cards. 160px keeps "Fritz is thinking…" on two lines, as at 844. */
+  :root:not(.rh-native) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-center-status .wl-turn-label {
+    max-width: 160px;
+  }
+
+  /* !important only because TileRack sets these sizes inline (native-landscape.css does the same for the same reason). */
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack__tile {
+    width: 12px !important;
+    height: 18px !important;
+    border-radius: 3px;
+  }
+}

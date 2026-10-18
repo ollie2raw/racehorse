@@ -32,6 +32,7 @@ import { isRenderableMultiplayerSnapshot } from './boardSnapshotGuards';
 import { useRoomSocketSync } from './useRoomSocketSync';
 import { useMultiplayerPresentation } from './useMultiplayerPresentation';
 import { useLiveMatchSession } from '../match/session/useLiveMatchSession';
+import { compactSingleRowLimit } from '../match/compactLandscape';
 import {
   findPlacedTile,
   getBoardEnds,
@@ -891,7 +892,11 @@ function MultiplayerGameShellComponent({
   }, [canOpenPostGameReview, multiplayerMoveLog, multiplayerReviewSnapshots, state, you]);
 
   const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;
-  const handCompactStacked = myHand.length > 8;
+  // Compact landscape (667-843px): split as soon as one more tile would not fit one row; 844+ keeps the fixed limit of 8.
+  const compactRowLimit = typeof window !== 'undefined'
+    ? compactSingleRowLimit(window.innerWidth, window.matchMedia?.('(orientation: landscape) and (max-height: 430px)').matches ?? false)
+    : undefined;
+  const handCompactStacked = myHand.length > (compactRowLimit ?? 8);
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
   const myScore = state?.players[you]?.score ?? 0;
   const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;

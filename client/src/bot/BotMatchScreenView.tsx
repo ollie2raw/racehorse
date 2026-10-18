@@ -15,6 +15,7 @@ import { BotMatchScreenShell } from './view/shell/BotMatchScreenShell.tsx';
 import { BotMatchGuidedV2BootErrorView } from './view/states/BotMatchGuidedV2BootErrorView.tsx';
 import { BotMatchMalformedStateView } from './view/states/BotMatchMalformedStateView.tsx';
 import { computeNormalHandRows } from './view/utils/botMatchHandLayout.ts';
+import { compactSingleRowLimit } from '../match/compactLandscape.ts';
 import { selectTurnLabel } from './view/utils/botMatchHudLabels.ts';
 import '../match/match-live.css';
 import './PlayVsFritz.css';
@@ -68,11 +69,15 @@ export function BotMatchScreenView({
     typeof window !== 'undefined' &&
     !!window.matchMedia &&
     window.matchMedia('(orientation: landscape) and (max-height: 430px)').matches;
+  // Compact landscape: the fixed 8-tile limit overflowed a 667px screen, so below 844px split as soon as one more tile would not
+  // fit (see match/compactLandscape.ts); 844+ keeps the existing limit.
+  const maxSingleRow = typeof window !== 'undefined' ? compactSingleRowLimit(window.innerWidth, isShortLandscape) : undefined;
   const normalHandRows = computeNormalHandRows(match.players.you.hand, {
     isLessonLayoutMode: layout.isLessonLayoutMode,
     lessonHandRowCount: hand.lessonHandRowCount,
     isMobileViewport,
     isShortLandscape,
+    maxSingleRow,
   });
   const handCompactStacked = normalHandRows.length > 1;
 

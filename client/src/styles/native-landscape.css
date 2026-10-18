@@ -2317,6 +2317,37 @@
     display: none !important;
   }
 
+  /* 667px wide (iPhone SE/8) only: Fritz's tile strip (up to 9 tiles, 136px) ends at x=255 and the single-line status pill
+     ("FRITZ IS THINKING…", 185px) starts at x=241, so a full strip ran under it. Wrap the pill to two lines inside 150px, as the
+     844px web layout does, at a fixed 36px so its height is the same in every state. 740px+ is unchanged. */
+  @media (max-width: 700px) {
+    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-turn {
+      white-space: normal !important;
+      max-width: 150px !important;
+      height: 36px !important;
+      line-height: 1.1 !important;
+      text-align: center !important;
+      padding: 0 12px 0 calc(12px + 0.18em) !important;
+    }
+  }
+
+  /* 375px-tall iPhones (SE/8 667, X/XS and 12/13 mini 812): the board is only ~195-215px tall, so the vertical rail under the
+     chips (116px) ran past the bottom and cut off the home button. Lay it out as a row in the bottom-right corner instead
+     (28px buttons, ~130x38), clear of the chips and the play area. 390px+ phones keep the vertical rail. */
+  @media (max-height: 380px) {
+    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls,
+    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls:has(.rr-root),
+    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-controls {
+      flex-direction: row !important;
+      top: auto !important;
+      bottom: 8px !important;
+      right: 10px !important;
+      gap: 4px !important;
+      padding: 4px 6px !important;
+      border-radius: 18px !important;
+    }
+  }
+
   /* Hand: 74×38 tiles, 8px apart. */
   .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-row {
     gap: 8px !important;
