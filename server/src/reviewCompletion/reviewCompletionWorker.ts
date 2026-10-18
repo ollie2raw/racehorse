@@ -5,6 +5,7 @@ import {
   InMemoryCheckpointStore,
   jobAuthoritativeComplete,
   runReviewCompletionPass,
+  sanitizeSnapshotForReview,
   reviewCompletionJobBackoffMs,
   REVIEW_COMPLETION_LEASE_MS,
   REVIEW_COMPLETION_SWEEP_INTERVAL_MS,
@@ -102,20 +103,42 @@ export async function enqueueReviewCompletionJob(input: {
   readonly snapshots: readonly ReviewPositionSnapshotV2[];
   readonly expectedDecisionIds: readonly string[];
   readonly captureFailures?: ReviewCompletionJobRecord['captureFailures'];
-  readonly liveResultsByDecisionId?: ReadonlyMap<string, ReviewEvaluationV1>;
 }): Promise<ReviewCompletionJobRecord> {
   const existing = await store.getByGameDigest(input.gameDigest, input.userId);
   if (existing && existing.userId === input.userId) {
     return existing;
   }
+  // Trust boundary: the caller supplies the recorded positions, never the candidate set or the results. The legal set is
+  // re-derived from the recorded state with the engine's own rules, positions that cannot be real decisions become explicit
+  // capture failures, and no client-computed evaluation is accepted (the server evaluates every decision itself).
+  const snapshots: ReviewPositionSnapshotV2[] = [];
+  const captureFailures = [...(input.captureFailures ?? [])];
+  const failed = new Set(captureFailures.map((failure) => failure.decisionId));
+  for (const raw of input.snapshots) {
+    const sanitized = sanitizeSnapshotForReview(raw);
+    if (sanitized.ok) {
+      snapshots.push(sanitized.snapshot);
+      continue;
+    }
+    const decisionId = raw?.identifiers?.decisionId;
+    log.warn({ decisionId, reason: sanitized.reason }, 'review snapshot rejected at the trust boundary');
+    if (typeof decisionId === 'string' && input.expectedDecisionIds.includes(decisionId) && !failed.has(decisionId)) {
+      failed.add(decisionId);
+      captureFailures.push({
+        decisionId,
+        handId: String(raw.identifiers.handId ?? ''),
+        sequence: Number.isFinite(raw.identifiers.actionNumber) ? raw.identifiers.actionNumber : 0,
+        reason: sanitized.reason,
+      });
+    }
+  }
   const job = createReviewCompletionJob({
     gameDigest: input.gameDigest,
     sourceMatchId: input.sourceMatchId,
     userId: input.userId,
-    snapshots: input.snapshots,
+    snapshots,
     expectedDecisionIds: input.expectedDecisionIds,
-    captureFailures: input.captureFailures,
-    liveResultsByDecisionId: input.liveResultsByDecisionId,
+    captureFailures: captureFailures.filter((failure) => !snapshots.some((s) => s.identifiers.decisionId === failure.decisionId)),
   });
   // Durable before acknowledgment.
   await store.put(job);
@@ -368,13 +391,7 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       return;
     }
 
-    const live = new Map<string, ReviewEvaluationV1>();
-    if (Array.isArray(body.evaluations)) {
-      for (const row of body.evaluations as ReviewEvaluationV1[]) {
-        if (row && typeof row.snapshotId === 'string') live.set(row.snapshotId, row);
-      }
-    }
-
+    // `body.evaluations` (client-computed results) is deliberately ignored: only the server's own evaluation is stored.
     try {
       const job = await enqueueReviewCompletionJob({
         userId: authenticatedUserId,
@@ -385,7 +402,6 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
         captureFailures: Array.isArray(body.captureFailures)
           ? body.captureFailures as ReviewCompletionJobRecord['captureFailures']
           : [],
-        liveResultsByDecisionId: live,
       });
       const forced = job.decisions.filter((d) => d.lifecycle === 'FORCED').length;
       const scored = job.decisions.filter((d) => d.lifecycle === 'SCORED').length;

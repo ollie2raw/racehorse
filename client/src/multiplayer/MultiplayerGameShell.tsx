@@ -867,8 +867,19 @@ function MultiplayerGameShellComponent({
 
   const openMultiplayerAnalyzer = useCallback(() => {
     if (!canOpenPostGameReview) return;
+    // Hand verdicts come from the engine scoreboard (the move log omits end-of-hand awards); this does not change grading mode.
+    const opponentSeat = state?.playerIds.find((pid) => pid !== you);
+    const finalScores = state && opponentSeat && state.players[you] && state.players[opponentSeat]
+      ? { you: state.players[you].score, opponent: state.players[opponentSeat].score }
+      : undefined;
     void import('../analyzer/moveAnalyzer').then(({ analyzeMoveLogDeferred, saveGameAnalysis }) => {
-      void analyzeMoveLogDeferred(multiplayerMoveLog, true, { oracleMode: 'tier', tierPlayed: 'standard' }).then(
+      void analyzeMoveLogDeferred(multiplayerMoveLog, true, {
+        oracleMode: 'tier',
+        tierPlayed: 'standard',
+        scoreboardSnapshots: multiplayerReviewSnapshots,
+        youActorId: you,
+        finalScores,
+      }).then(
         (analysis) => {
           setCurrentAnalysis(analysis);
           saveGameAnalysis('multiplayer', analysis);
@@ -877,7 +888,7 @@ function MultiplayerGameShellComponent({
       );
     })
       .catch((error) => reportOptionalChunkFailure('analyzer/moveAnalyzer', error));
-  }, [canOpenPostGameReview, multiplayerMoveLog]);
+  }, [canOpenPostGameReview, multiplayerMoveLog, multiplayerReviewSnapshots, state, you]);
 
   const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;
   const handCompactStacked = myHand.length > 8;

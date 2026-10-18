@@ -102,6 +102,8 @@ export { solveExactEndgame, EXACT_ENDGAME_DEFAULT_WALL_CLOCK_CEILING_MS } from '
 export type { ExactEndgameBudget, ExactEndgameResult } from './solveExactEndgame';
 export { solveMidgameDeterminization } from './solveMidgameDeterminization';
 export type { MidgameConvergence, MidgameDeterminizationResult } from './solveMidgameDeterminization';
+export { deriveLegalActionsFromSnapshot, sanitizeSnapshotForReview } from './deriveReviewLegalActions';
+export type { SanitizedSnapshot } from './deriveReviewLegalActions';
 export { solveHeuristicOpening } from './solveHeuristicOpening';
 export type { HandPhase } from './solveHeuristicOpening';
 export { accuracyFromEvaluations, isScorable, ACCURACY_MODEL_VERSION, UNCALIBRATED_DEFAULT_K } from './reviewAccuracy';

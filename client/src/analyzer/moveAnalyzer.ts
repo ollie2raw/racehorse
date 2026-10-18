@@ -14,6 +14,7 @@ import type {
 } from './analysisTypes';
 import { buildConsequenceChainsForHand } from './consequenceChain';
 import { buildHandVerdict, segmentMoveLogByHand } from './handSegmentation';
+import { applyAuthoritativeScores, authoritativeHandBoundaries, verdictFromScores } from './authoritativeHandScores';
 import { derivePostMoveReviewBoard } from '../modules/replay/reviewBoardState.ts';
 import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { gradeFromAccuracy } from './accuracyGrade';
@@ -163,12 +164,18 @@ function botDifficultyForTier(tier: FritzTier): BotDifficulty {
   return 'master';
 }
 
-function resolveAnalyzeOptions(options?: AnalyzeMoveLogOptions): Required<AnalyzeMoveLogOptions> {
+type ResolvedAnalyzeOptions = Required<Pick<AnalyzeMoveLogOptions, 'oracleMode' | 'tierPlayed' | 'winningScore' | 'reviewSnapshots'>>
+  & Pick<AnalyzeMoveLogOptions, 'finalScores' | 'scoreboardSnapshots' | 'youActorId'>;
+
+function resolveAnalyzeOptions(options?: AnalyzeMoveLogOptions): ResolvedAnalyzeOptions {
   return {
     oracleMode: options?.oracleMode ?? 'tier',
     tierPlayed: options?.tierPlayed ?? 'standard',
     winningScore: options?.winningScore ?? 60,
     reviewSnapshots: options?.reviewSnapshots ?? [],
+    finalScores: options?.finalScores,
+    scoreboardSnapshots: options?.scoreboardSnapshots,
+    youActorId: options?.youActorId,
   };
 }
 
@@ -739,7 +746,7 @@ function analyzeHandMoves(
 function buildGameSummary(
   hands: HandAnalysis[],
   processedEntries: MoveEntry[],
-  options: Required<AnalyzeMoveLogOptions>,
+  options: ResolvedAnalyzeOptions,
 ): GameAnalysis {
   const allMoves = hands.flatMap((hand) => hand.analyzedMoves);
   const verdictByMoveNumber = new Map(allMoves.map((move) => [move.moveNumber, move]));
@@ -811,9 +818,15 @@ export function analyzeMoveLog(
     ? enrichMovesWithFritz(entries, referenceTier, hasV2Snapshots)
     : entries;
 
-  const segments = segmentMoveLogByHand(processedEntries);
-  const hands = segments.map((segment) =>
-    analyzeHandMoves(
+  // Hand scores come from the engine scoreboard wherever it is known (the move log omits the end-of-hand award).
+  const boundaries = authoritativeHandBoundaries(
+    resolved.scoreboardSnapshots ?? resolved.reviewSnapshots,
+    resolved.finalScores,
+    resolved.youActorId,
+  );
+  const segments = applyAuthoritativeScores(segmentMoveLogByHand(processedEntries), boundaries);
+  const hands = segments.map((segment) => {
+    const analysis = analyzeHandMoves(
       segment.entries,
       gradeTier,
       'Fritz',
@@ -821,8 +834,10 @@ export function analyzeMoveLog(
       segment.startingScores,
       segment.endingScores,
       hasV2Snapshots,
-    ),
-  );
+    );
+    const boundary = boundaries.get(segment.handNumber);
+    return boundary?.end ? { ...analysis, verdict: verdictFromScores(boundary.start, boundary.end) } : analysis;
+  });
 
   return buildGameSummary(hands, processedEntries, resolved);
 }
