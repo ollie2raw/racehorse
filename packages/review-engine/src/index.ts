@@ -123,6 +123,8 @@ export type { CalibratedLossBandBoundaries } from './accuracyModelCalibration';
 export { gradeFromAccuracy } from './accuracyGrade';
 export { computeGameAccuracyModel, MINIMUM_COVERAGE_FLOOR } from './gameAccuracyModel';
 export type { GameAccuracyModelResult } from './gameAccuracyModel';
+export { authoritativeMoveQuality } from './authoritativeMoveQuality';
+export type { AuthoritativeMoveQuality } from './authoritativeMoveQuality';
 export {
   serializeReviewCaptureRecordsToJsonl,
   deserializeReviewCaptureRecordsFromJsonl,

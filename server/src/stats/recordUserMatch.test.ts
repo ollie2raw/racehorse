@@ -168,3 +168,41 @@ describe('recordUserMatch — SA-2 (HARDENING_PLAN.md §11.3)', () => {
     expect(insertCall).toBeTruthy();
   });
 });
+
+describe('recordUserMatch — avgMoveQuality is not a client-assertable field', () => {
+  beforeEach(() => {
+    supabaseFetchMock.mockReset();
+  });
+
+  // A match's move quality now comes only from the server's own review-completion job (see authoritativeMoveQuality). The old
+  // record-match body carried a browser-computed number straight into the row: anything in (0, 100] was accepted.
+  const CLAIMS: unknown[] = [99.9, 100, 1, 0, -5, 1000, 'abc', Number.NaN, { evil: true }, [1, 2], true];
+
+  it.each(CLAIMS.map((claim) => [JSON.stringify(claim) ?? String(claim), claim]))(
+    'a client claim of %s neither fails validation nor reaches the validated payload',
+    (_label, claim) => {
+      const input = { ...baseInput(), avgMoveQuality: claim } as Parameters<typeof validateRecordUserMatchInput>[0];
+      const result = validateRecordUserMatchInput(input);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(Object.keys(result.payload)).not.toContain('avg_move_quality');
+        expect(JSON.stringify(result.payload)).not.toContain('avg_move_quality');
+      }
+    },
+  );
+
+  it('the row inserted into matches never carries a quality column, whatever the caller sent', async () => {
+    supabaseFetchMock
+      .mockResolvedValueOnce([]) // not a replay
+      .mockResolvedValueOnce(undefined); // the insert
+    const result = await recordUserMatch({ ...baseInput(), avgMoveQuality: 100 } as Parameters<typeof recordUserMatch>[0]);
+    expect(result.ok).toBe(true);
+    const insertCall = supabaseFetchMock.mock.calls.find(([path]) => String(path) === '/rest/v1/matches');
+    expect(insertCall).toBeTruthy();
+    const body = JSON.parse(String((insertCall![1] as { body: string }).body)) as Record<string, unknown>;
+    expect(Object.keys(body)).not.toContain('avg_move_quality');
+    expect(Object.keys(body).sort()).toEqual([
+      'loser_score', 'loser_user_id', 'metadata', 'mode', 'move_count', 'room_code', 'winner_score', 'winner_user_id',
+    ]);
+  });
+});

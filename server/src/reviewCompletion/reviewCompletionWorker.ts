@@ -1,6 +1,7 @@
 import { processInterval, cancelProcessInterval, trackProcessWork, isProcessClosing, onProcessStop } from '../platform/processLifecycle';
 import type { Application, Request, Response } from 'express';
 import {
+  authoritativeMoveQuality,
   createReviewCompletionJob,
   InMemoryCheckpointStore,
   jobAuthoritativeComplete,
@@ -451,6 +452,8 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
         remaining: job.expectedDecisionIds.length - forced - scored,
       },
       accuracyModelResult: job.accuracyModelResult,
+      // avgMoveQuality (V2): derived here from this server's own evaluations, never from anything the client sent.
+      moveQuality: authoritativeMoveQuality(job),
       decisions: job.decisions.map((d) => ({
         decisionId: d.decisionId,
         positionHash: d.positionHash,
@@ -481,6 +484,7 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       jobId: job.jobId,
       status: job.status,
       complete: jobAuthoritativeComplete(job),
+      moveQuality: authoritativeMoveQuality(job),
     });
   });
 }
