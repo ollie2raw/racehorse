@@ -272,60 +272,119 @@ test.describe('real rack flow at 667x375: a 14-tile hand played down, then the n
   });
 });
 
+/** The only randomness in a Play vs Fritz match is the deal and the opening draw (Math.random in botEngine's shuffle and
+ *  preGameDraw's default rng; Fritz Rookie's replies are a pure function of the position). Seeding Math.random for the opening
+ *  (test-only, via an init script, no production hook) makes the match reproducible. Seed 8 opens on this exact 7-tile hand. */
+const SEED = 8;
+const OPENING_HAND = 'Domino 2-3|Domino 4-4|Domino 2-4|Domino 2-2|Domino 2-6|Domino 1-3|Domino 5-5';
+
+/** Opens Play vs Fritz (Rookie, 7-tile deal) on the seeded deal and returns once the opening hand is on screen. */
+async function openSeededMatch(page: Page, w: number, h: number, native: boolean) {
+  await page.addInitScript(({ seed, markNative }) => {
+    const win = window as unknown as { __rhRealRandom: () => number };
+    win.__rhRealRandom = Math.random;
+    let a = seed;
+    // mulberry32
+    Math.random = () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    if (!markNative) return;
+    const add = () => document.documentElement?.classList.add('rh-native');
+    add();
+    new MutationObserver(add).observe(document, { childList: true, attributes: true, attributeFilter: ['class'] });
+  }, { seed: SEED, markNative: native });
+  await page.setViewportSize({ width: w, height: h });
+  await page.goto('/');
+  await page.addStyleTag({ content: '*,*::before,*::after{animation:none!important;transition:none!important}' });
+  await page.getByText(/^(Single Player|Solo)$/).filter({ visible: true }).first().click();
+  await page.getByText('Play vs Fritz', { exact: false }).filter({ visible: true }).first().click();
+  await page.locator('.pvf-tier-name', { hasText: 'Rookie' }).click();
+  await page.locator('.pvf-deal-card', { hasText: '7 Tiles' }).click();
+  await page.getByText('Start Match', { exact: false }).first().click();
+  // the opening draw: pick the first pickable tile until the hand is on screen
+  const pickable = page.locator('.pre-game-draw-board__tile-slot.is-pickable').first();
+  for (let i = 0; i < 40 && (await tileCount(page)) === 0; i += 1) {
+    if (await pickable.isVisible().catch(() => false)) await pickable.click({ timeout: 3000, force: true }).catch(() => {});
+    await page.waitForTimeout(300);
+  }
+  // the deal is done: from here the game is deterministic, give the page its real Math.random back
+  await page.evaluate(() => { Math.random = (window as unknown as { __rhRealRandom: () => number }).__rhRealRandom; });
+  await page.mouse.move(1, 1);
+  await page.waitForTimeout(500);
+  const labels = await page.locator('.hand-row .domino-tile').evaluateAll((els) => els.map((e) => (e.getAttribute('aria-label') ?? '').replace(/,.*/, '')));
+  expect(labels.join('|'), 'seeded opening hand (if this moved, the deal or the opening draw consumed Math.random differently)').toBe(OPENING_HAND);
+}
+
 test.describe('real rack flow at 667x375: a draw grows a 7-tile hand and splits it', () => {
+  // DETERMINISTIC. The old version dealt fresh matches and waited for the player to be forced to draw (1.4-12 minutes, and it could
+  // exhaust its attempts). With the seeded opening (openSeededMatch) the fixed play policy below forces a real, UI-driven draw on
+  // the second turn: the boneyard chip is tapped because no tile is playable, then the hand keeps growing to 14.
   test('a real draw takes the hand past the single-row limit and the rack re-splits cleanly', async ({ page }) => {
-    test.setTimeout(1_200_000);
+    test.setTimeout(120_000);
     const c = CASES[0]!;
     const limit = compactSingleRowLimit(c.w, true)!;
-    let observed: number[] = [];
-    for (let attempt = 0; attempt < 40 && !observed.some((n) => n > limit); attempt += 1) {
-      await start(page, c, 7);
-      // the pre-game draw decides who starts; pick tiles until the hand is on screen
-      const pickable = page.locator('.pre-game-draw-board__tile-slot.is-pickable').first();
-      for (let i = 0; i < 24 && (await tileCount(page)) === 0; i += 1) {
-        if (await pickable.isVisible().catch(() => false)) await pickable.click({ timeout: 4000, force: true }).catch(() => {});
-        await page.waitForTimeout(700);
+    await openSeededMatch(page, c.w, c.h, true);
+    await assertRack(page, c, 'opening 7-tile hand');
+
+    const zone = page.locator('.placement-zone.active').first();
+    const boneyard = page.locator('.boneyard-pill').first();
+    /** Fixed policy: the playable tile whose pips have the fewest matches left in the hand; ties go to the leftmost. */
+    const pickPlayable = async () => {
+      const info = await page.locator('.hand-row .domino-tile').evaluateAll((els) => els.map((e) => ({
+        label: e.getAttribute('aria-label') ?? '', playable: e.classList.contains('highlight') && !e.classList.contains('disabled'),
+      })));
+      const pips = info.map((t) => (t.label.match(/(\d)-(\d)/) ?? []).slice(1, 3).map(Number));
+      const friends = (i: number, p: number) => pips.reduce((n, pp, j) => n + (j !== i && pp.includes(p) ? 1 : 0), 0);
+      let best = -1; let bestScore = Infinity;
+      info.forEach((t, i) => {
+        const pp = pips[i]!;
+        if (!t.playable || pp.length !== 2) return;
+        const score = Math.min(friends(i, pp[0]!), friends(i, pp[1]!));
+        if (score < bestScore) { bestScore = score; best = i; }
+      });
+      return best;
+    };
+
+    const turnText = () => page.locator('.rh-hud-turn').first().innerText().then((t) => t.trim().toLowerCase()).catch(() => '');
+    const isMyTurn = async () => /your move/.test(await turnText());
+    const waitFor = async (cond: () => Promise<boolean>, timeoutMs: number) => {
+      const end = Date.now() + timeoutMs;
+      while (Date.now() < end) {
+        if (await cond()) return true;
+        await page.waitForTimeout(50);
       }
-      const boneyard = page.locator('.boneyard-pill').first();
-      const zone = page.locator('.placement-zone.active').first();
-      /** The playable tile whose pips have the fewest matches left in the hand, so the new open end is one we cannot answer (a draw). */
-      const pickPlayable = async () => {
-        const info = await page.locator('.hand-row .domino-tile').evaluateAll((els) => els.map((e) => ({
-          label: e.getAttribute('aria-label') ?? '', playable: e.classList.contains('highlight') && !e.classList.contains('disabled'),
-        })));
-        const pips = info.map((t) => (t.label.match(/(\d)-(\d)/) ?? []).slice(1, 3).map(Number));
-        const friends = (i: number, p: number) => pips.reduce((n, pp, j) => n + (j !== i && pp.includes(p) ? 1 : 0), 0);
-        let best = -1; let bestScore = Infinity;
-        info.forEach((t, i) => {
-          const pp = pips[i]!;
-          if (!t.playable || pp.length !== 2) return;
-          const score = Math.min(friends(i, pp[0]!), friends(i, pp[1]!));
-          if (score < bestScore) { bestScore = score; best = i; }
-        });
-        return best;
-      };
-      const size = new Set<number>();
-      for (let turn = 0; turn < 14; turn += 1) {
-        const n = await tileCount(page);
-        if (n > 0 && !size.has(n)) {
-          size.add(n);
-          if (n > 7) { await assertRack(page, c, `after a draw: ${n} tiles`); observed.push(n); }
+      return false;
+    };
+    const sizes: number[] = [];
+    let drew = false;
+    for (let turn = 0; turn < 14; turn += 1) {
+      const n = await tileCount(page);
+      if (sizes[sizes.length - 1] !== n) {
+        sizes.push(n);
+        if (n > limit) {
+          // a real draw grew the hand past the single-row limit: the rack must re-split and stay contained
+          await page.mouse.move(1, 1);
+          await page.waitForTimeout(400);
+          await assertRack(page, c, `after a draw: ${n} tiles`);
+          drew = true;
         }
-        const pick = await pickPlayable();
-        if (pick >= 0) {
-          await page.locator('.hand-row .domino-tile').nth(pick).click({ force: true, timeout: 4000 }).catch(() => {});
-          if (await zone.isVisible({ timeout: 1500 }).catch(() => false)) await zone.click({ force: true, timeout: 4000 }).catch(() => {});
-        } else if (await boneyard.isVisible().catch(() => false)) {
-          await boneyard.click({ force: true, timeout: 4000 }).catch(() => {});
-        }
-        await page.waitForTimeout(1200);
-        if (observed.some((m) => m > limit)) break;
       }
-      if (!observed.some((m) => m > limit)) await page.goto('about:blank');
+      if (sizes.includes(14)) break; // 8, 10, 12 and 14 tiles all checked (two rows of up to 7): the larger racks stay contained
+      // State-driven pacing (no fixed sleeps): act only once it is the player's turn, then wait for the position to change.
+      if (!(await waitFor(isMyTurn, 15_000))) break;
+      const before = `${await tileCount(page)}|${await turnText()}`;
+      const pick = await pickPlayable();
+      if (pick >= 0) {
+        await page.locator('.hand-row .domino-tile').nth(pick).click({ force: true, timeout: 4000 });
+        await zone.waitFor({ state: 'visible', timeout: 4000 });
+        await zone.click({ force: true, timeout: 4000 });
+      } else {
+        // nothing is playable: draw through the real boneyard chip (the same tap a player makes)
+        await boneyard.click({ force: true, timeout: 4000 });
+      }
+      await waitFor(async () => `${await tileCount(page)}|${await turnText()}` !== before, 8_000);
     }
-    console.log(`DRAW hand sizes laid out after draws: ${observed.join(',')} (single-row limit ${limit})`);
-    expect(observed.some((n) => n > limit), `a real draw past ${limit} tiles was exercised`).toBe(true);
-    observed = [];
+    console.log(`DRAW hand sizes: ${sizes.join(',')} (single-row limit ${limit})`);
+    expect(drew, `seed ${SEED}: a real draw past ${limit} tiles happened (sizes ${sizes.join(',')})`).toBe(true);
+    expect(sizes.slice(0, 5), 'the recorded hand-size sequence for this seed (state-driven pacing makes it identical every run)').toEqual([7, 8, 10, 12, 14]);
   });
 });
 
@@ -378,13 +437,7 @@ test.describe('web 932px rack containment (regression: a 7-tile hand ran from x=
   // web-rack-breakpoint.spec.ts. This positive assertion stays with the touch-target gate.
   test('web 932x430: every tile of a fresh 7-tile hand is inside the viewport', async ({ page }) => {
     test.setTimeout(120_000);
-    await start(page, { w: 932, h: 430, insets: NONE }, 7, true, false);
-    const pickable = page.locator('.pre-game-draw-board__tile-slot.is-pickable').first();
-    for (let i = 0; i < 24 && (await tileCount(page)) === 0; i += 1) {
-      if (await pickable.isVisible().catch(() => false)) await pickable.click({ timeout: 3000, force: true }).catch(() => {});
-      await page.waitForTimeout(700);
-    }
-    await page.mouse.move(1, 1);
+    await openSeededMatch(page, 932, 430, false);
     const box = await page.evaluate(() => {
       const t = [...document.querySelectorAll('.hand-row .domino-tile')].map((e) => e.getBoundingClientRect());
       return { n: t.length, left: Math.min(...t.map((r) => r.left)), right: Math.max(...t.map((r) => r.right)), vw: innerWidth };
