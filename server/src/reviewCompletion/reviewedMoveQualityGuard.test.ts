@@ -61,7 +61,35 @@ const RULES: Array<{ name: string; token: RegExp; allowed: string[]; why: string
   },
 ];
 
+type SourceFile = { path: string; text: string };
+type Rule = (typeof RULES)[number];
+const usersOf = (files: SourceFile[], rule: Rule): string[] => files.filter((f) => rule.token.test(f.text)).map((f) => f.path).sort();
+const unexpectedUsersOf = (files: SourceFile[], rule: Rule): string[] => usersOf(files, rule).filter((path) => !rule.allowed.includes(path));
+
 describe('move quality persistence guard', () => {
+  it('rejects an attempt to persist, rank, reward, publish or expose the value (synthetic violations are detected)', () => {
+    const synthetic: SourceFile[] = [
+      { path: 'server/src/stats/persistMoveQuality.ts', text: "supabaseFetch('/rest/v1/matches', { body: { avg_move_quality: reviewedMoveQuality.avgMoveQuality } })" },
+      { path: 'server/src/ranking/moveQualityRank.ts', text: 'const q = deriveReviewedMoveQuality(job); rankPlayers(q.avgMoveQuality)' },
+      { path: 'server/src/rewards/moveQualityBadge.ts', text: 'if (deriveReviewedMoveQuality(job).avgMoveQuality > 90) grantBadge()' },
+      { path: 'server/src/social/publishQuality.ts', text: 'const shareable = assertMoveQualityShareable(q); feed.publish(shareable)' },
+      { path: 'client/src/screens/ProfileScreen.tsx', text: '<span>{data.reviewedMoveQuality.avgMoveQuality}</span>' },
+      // the allowlisted definition is not flagged
+      { path: 'packages/review-engine/src/reviewedMoveQuality.ts', text: 'deriveReviewedMoveQuality assertMoveQualityShareable' },
+    ];
+    const byRule = Object.fromEntries(RULES.map((rule) => [rule.name, unexpectedUsersOf(synthetic, rule)]));
+    expect(byRule['the reviewed (owner-only) move quality']).toEqual([
+      'client/src/screens/ProfileScreen.tsx', // exposed to another user
+      'server/src/ranking/moveQualityRank.ts', // ranked
+      'server/src/rewards/moveQualityBadge.ts', // rewarded
+      'server/src/stats/persistMoveQuality.ts', // persisted
+    ]);
+    expect(byRule['the shareability gate']).toEqual(['server/src/social/publishQuality.ts']); // published
+    expect(byRule['the legacy avg_move_quality column']).toEqual(['server/src/stats/persistMoveQuality.ts']);
+    // and the real tree has none of these
+    for (const rule of RULES) expect(unexpectedUsersOf(FILES, rule), rule.name).toEqual([]);
+  });
+
   it('scans a real tree (the guard cannot pass vacuously)', () => {
     const paths = FILES.map((f) => f.path);
     expect(paths).toContain('server/src/reviewCompletion/reviewCompletionWorker.ts');

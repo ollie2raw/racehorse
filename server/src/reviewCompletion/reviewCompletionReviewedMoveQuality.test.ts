@@ -22,7 +22,15 @@ import {
   setReviewPositionEvaluatorForTests,
 } from './reviewCompletionWorker';
 
-vi.mock('../platform/auth/supabaseAuth', () => ({ getAuthenticatedUserId: async () => 'move-quality-user' }));
+// Two real identities and an anonymous caller, chosen by the bearer token, so ownership is actually exercised.
+vi.mock('../platform/auth/supabaseAuth', () => ({
+  getAuthenticatedUserId: async (req: { headers: { authorization?: string } }) => {
+    const authorization = req.headers.authorization;
+    if (authorization === 'Bearer crafted') return 'move-quality-user';
+    if (authorization === 'Bearer intruder') return 'intruder-user';
+    return null;
+  },
+}));
 vi.mock('../reviewPersistence/gameReviewCohort', () => ({ isGameReviewCohortUser: () => false }));
 
 type MoveQuality = (
@@ -140,6 +148,35 @@ describe('V2 avgMoveQuality on the authoritative job endpoints (crafted requests
     const byDigest = await res.json() as { complete: boolean; reviewedMoveQuality: MoveQuality };
     expect(byDigest.complete).toBe(true);
     expect(byDigest.reviewedMoveQuality).toEqual(view.reviewedMoveQuality);
+  });
+
+  it('owner-only: another user and an anonymous caller get no job and no value, by id and by digest', async () => {
+    const { view, digest } = await submit(honest);
+    expect(view.reviewedMoveQuality.status).toBe('available');
+    const byIdUrl = `${base}/api/review-completion-jobs/${encodeURIComponent(view.jobId)}`;
+    const byDigestUrl = `${base}/api/review-completion-jobs?gameDigest=${encodeURIComponent(digest)}`;
+    const intruder = { Authorization: 'Bearer intruder' };
+
+    // the owner can read both
+    expect((await fetch(byIdUrl, { headers })).status).toBe(200);
+    expect((await fetch(byDigestUrl, { headers })).status).toBe(200);
+
+    // a different authenticated user: 404, and the body carries nothing about the value
+    for (const url of [byIdUrl, byDigestUrl]) {
+      const res = await fetch(url, { headers: intruder });
+      expect(res.status, url).toBe(404);
+      const text = JSON.stringify(await res.json());
+      expect(text).not.toMatch(/reviewedMoveQuality|avgMoveQuality|accuracyModelResult|provenance/);
+    }
+    // an anonymous caller: 401
+    for (const url of [byIdUrl, byDigestUrl]) expect((await fetch(url)).status, url).toBe(401);
+    // the intruder cannot reach the owner's job by submitting the same digest either: it gets its own, separate job
+    const own = await fetch(`${base}/api/review-completion-jobs`, {
+      method: 'POST', headers: { ...intruder, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameDigest: digest, sourceMatchId: 'move-quality', snapshots: [honest], expectedDecisionIds: [honest.identifiers.decisionId] }),
+    });
+    expect(own.status).toBe(202);
+    expect((await own.json() as { jobId: string }).jobId).not.toBe(view.jobId);
   });
 
   it('a decision the server cannot score leaves the stat unavailable (null, with a reason), never 0 or 100', async () => {
