@@ -1,6 +1,7 @@
 import { processInterval, cancelProcessInterval, trackProcessWork, isProcessClosing, onProcessStop } from '../platform/processLifecycle';
 import type { Application, Request, Response } from 'express';
 import {
+  deriveReviewedMoveQuality,
   createReviewCompletionJob,
   InMemoryCheckpointStore,
   jobAuthoritativeComplete,
@@ -451,6 +452,9 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
         remaining: job.expectedDecisionIds.length - forced - scored,
       },
       accuracyModelResult: job.accuracyModelResult,
+      // OWNER-ONLY, not authoritative: candidates and evaluations are this server's, but the PLAYED action is the client's claim
+      // (see `provenance`). Returned to the job's owner only; never persist or share it (the review-engine shareability gate refuses).
+      reviewedMoveQuality: deriveReviewedMoveQuality(job),
       decisions: job.decisions.map((d) => ({
         decisionId: d.decisionId,
         positionHash: d.positionHash,
@@ -481,6 +485,7 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       jobId: job.jobId,
       status: job.status,
       complete: jobAuthoritativeComplete(job),
+      reviewedMoveQuality: deriveReviewedMoveQuality(job),
     });
   });
 }

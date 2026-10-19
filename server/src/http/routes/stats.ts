@@ -124,7 +124,6 @@ export function registerStatsRoutes(app: Application, deps: StatsRouteDeps): voi
         winnerScore: req.body?.winnerScore ?? null,
         loserScore: req.body?.loserScore ?? null,
         moveCount: req.body?.moveCount ?? null,
-        avgMoveQuality: req.body?.avgMoveQuality ?? null,
         roomCode: req.body?.roomCode ?? null,
         metadata: req.body?.metadata ?? null,
       });

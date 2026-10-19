@@ -123,6 +123,9 @@ export type { CalibratedLossBandBoundaries } from './accuracyModelCalibration';
 export { gradeFromAccuracy } from './accuracyGrade';
 export { computeGameAccuracyModel, MINIMUM_COVERAGE_FLOOR } from './gameAccuracyModel';
 export type { GameAccuracyModelResult } from './gameAccuracyModel';
+// OWNER-ONLY move quality: the played action is client-asserted, so this must not be persisted or shared (see the module header).
+export { deriveReviewedMoveQuality, assertMoveQualityShareable, MoveQualityNotShareableError } from './reviewedMoveQuality';
+export type { ReviewedMoveQuality, ShareableMoveQuality, MoveQualityProvenance } from './reviewedMoveQuality';
 export {
   serializeReviewCaptureRecordsToJsonl,
   deserializeReviewCaptureRecordsFromJsonl,

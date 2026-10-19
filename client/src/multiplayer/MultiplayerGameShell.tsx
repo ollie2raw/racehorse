@@ -791,36 +791,28 @@ function MultiplayerGameShellComponent({
     const winnerScore = finalState.players[winnerSocketId]?.score ?? null;
     const loserScore = finalState.players[loserSocketId]?.score ?? null;
 
-    void Promise.all([import('../analyzer/moveAnalyzer'), import('../stats/statsApi')])
-      .then(([{ analyzeMoveLogDeferred }, { recordMatchResult }]) =>
-        analyzeMoveLogDeferred(multiplayerMoveLog, true, { oracleMode: 'tier', tierPlayed: 'standard' }).then(
-          (matchAnalysis) => {
-            const avgMoveQuality =
-              matchAnalysis.analyzedMoves.length > 0 && matchAnalysis.accuracy > 0
-                ? matchAnalysis.accuracy
-                : undefined;
-
-            return recordMatchResult({
-              mode: 'online',
-              opponentType: 'online',
-              winnerUserId,
-              loserUserId,
-              winnerScore,
-              loserScore,
-              avgMoveQuality,
-              moveCount: null,
-              roomCode: joinedRoom,
-              metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
-            });
-          },
-        ),
+    // No move quality here: it used to be a browser-computed number (the legacy wall-clock analyzer) sent as a claim, and the
+    // match record must not carry one. The only move quality that exists is owner-only data on the review job read (not
+    // authoritative: the played action is client-asserted); it must not be recorded on the match or shown to anyone else.
+    void import('../stats/statsApi')
+      .then(({ recordMatchResult }) =>
+        recordMatchResult({
+          mode: 'online',
+          opponentType: 'online',
+          winnerUserId,
+          loserUserId,
+          winnerScore,
+          loserScore,
+          moveCount: null,
+          roomCode: joinedRoom,
+          metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
+        }),
       )
       .catch(() => {});
   }, [
     authUser,
     isMutedRef,
     joinedRoom,
-    multiplayerMoveLog,
     players,
     state,
     supabaseEnabled,
