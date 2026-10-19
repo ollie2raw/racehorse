@@ -73,3 +73,38 @@ describe('App Store submission assets and native security wiring', () => {
     expect(pbxproj).toContain('PRODUCT_BUNDLE_IDENTIFIER = com.racehorse.dominoes;');
   });
 });
+
+describe('Release build hygiene (what a TestFlight build must not carry)', () => {
+  // The four XCBuildConfiguration blocks: project and target, Debug and Release.
+  const blocks = [...pbxproj.matchAll(/\/\* (Debug|Release) \*\/ = \{\s*isa = XCBuildConfiguration;([\s\S]*?)\n\t\t\};/g)].map((m) => ({ name: m[1], body: m[2] }));
+  const release = blocks.filter((b) => b.name === 'Release');
+  const debug = blocks.filter((b) => b.name === 'Debug');
+
+  it('finds both configurations at project and target level (the checks below cannot pass vacuously)', () => {
+    expect(release).toHaveLength(2);
+    expect(debug).toHaveLength(2);
+  });
+
+  it('only Debug picks up debug.xcconfig (CAPACITOR_DEBUG = true); Release has no Capacitor debug flag or DEBUG compile condition', () => {
+    expect(read('../ios/debug.xcconfig')).toMatch(/CAPACITOR_DEBUG\s*=\s*true/);
+    expect(debug.some((b) => b.body.includes('baseConfigurationReference'))).toBe(true);
+    for (const b of release) {
+      expect(b.body).not.toContain('baseConfigurationReference');
+      expect(b.body).not.toContain('CAPACITOR_DEBUG');
+      expect(b.body).not.toMatch(/SWIFT_ACTIVE_COMPILATION_CONDITIONS = [^;]*DEBUG/);
+    }
+  });
+
+  it('uses automatic signing with no hard-coded profile or certificate (a team ID is allowed: Xcode writes DEVELOPMENT_TEAM when the owner selects the team, and the owner checklist says to commit it)', () => {
+    expect(pbxproj).toContain('CODE_SIGN_STYLE = Automatic;');
+    expect(pbxproj).not.toMatch(/CODE_SIGN_STYLE = Manual;/);
+    expect(pbxproj).not.toMatch(/PROVISIONING_PROFILE(_SPECIFIER)? = [^;"]+;/);
+    expect(pbxproj).not.toMatch(/CODE_SIGN_IDENTITY\[sdk=iphoneos\*\] = "?(iPhone Distribution|Apple Distribution)/);
+  });
+
+  it('Capacitor logs nothing: the bridge would otherwise print plugin payloads, including the stored session, from a Release build', async () => {
+    const { default: config } = await import('../capacitor.config');
+    expect(config.loggingBehavior).toBe('none');
+    expect(config.appId).toBe('com.racehorse.dominoes');
+  });
+});

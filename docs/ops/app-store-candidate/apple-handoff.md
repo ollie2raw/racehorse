@@ -23,6 +23,11 @@ It complements [apple-owner-checklist.md](apple-owner-checklist.md) (step-by-ste
 
 Nothing about the Apple account, certificates, team or profiles was changed.
 
+**Re-measured 2026-10-18 at `b2c5bd92`:** unchanged: Xcode 27.1 (27A9275, iPhoneOS 27.1 SDK), **0** valid code-signing identities, **no**
+provisioning profiles, **no** Apple ID signed in to Xcode, **no** `DEVELOPMENT_TEAM`. A signed archive cannot be produced on this Mac until
+steps 1, 2 and 5 of §6 are done by the account owner. The icon is still the stock Capacitor placeholder (the only valid-format-but-unapproved
+asset in the repo; no approved 1024 px master exists anywhere in it).
+
 ## 2. Release identity (verified in the final archive)
 
 Product **Racehorse Dominoes** (`appName`, App Store name) · home-screen label **Racehorse** (`CFBundleDisplayName`) ·
@@ -125,7 +130,8 @@ application-identifier entitlement automatically.
 
 ## 7. Physical iPhone checklist (what simulators cannot prove)
 
-Install from **TestFlight**. This is the short list; [device-matrix.md](device-matrix.md) is the full sheet.
+Install from **TestFlight**. This is the short list; [testflight-qa-checklist.md](testflight-qa-checklist.md) splits it into what a simulator has
+already proven and what only a device can, and [device-matrix.md](device-matrix.md) is the full sheet.
 
 1. **Home screen:** the icon is the final artwork and the label reads `Racehorse` in full; launch is navy with no white flash.
 2. **Real account login:** sign in with a production test account; Home shows your stats.

@@ -17,6 +17,7 @@ Related docs:
 | [`support-and-smtp-runbook.md`](support-and-smtp-runbook.md) | Support mailbox, Supabase custom SMTP, auth URLs |
 | [`posthog-location-decision.md`](posthog-location-decision.md) | Keep or drop Coarse Location (privacy manifest + App Privacy) |
 | [`production-test-accounts.md`](production-test-accounts.md) | Two disposable accounts + live moderation checklist |
+| [`testflight-qa-checklist.md`](testflight-qa-checklist.md) | What is proven in a simulator vs what needs a physical iPhone and a signed build (2026-10-18) |
 | [`device-matrix.md`](device-matrix.md) | Real-device pass/fail matrix, cold-start measurement |
 | [`native-surface-audit.md`](native-surface-audit.md) | Every screen reachable in the iOS build: live, hidden or admin-only |
 
@@ -59,11 +60,11 @@ Not required for TestFlight but tracked: self-hosting the two web fonts
 | Privacy manifest | `PrivacyInfo.xcprivacy` in the App target's Resources | `project.pbxproj` (`PrivacyInfo.xcprivacy in Resources`); `client/ios/App/App/PrivacyInfo.xcprivacy`: no tracking, UserDefaults `CA92.1`, 8 collected data types incl. Coarse Location | Verified. Coarse Location pending [decision](posthog-location-decision.md) |
 | Export compliance | `ITSAppUsesNonExemptEncryption = NO` | `Info.plist` | Verified. Means App Store Connect won't ask per build |
 | Permissions | None requested | `Info.plist` has no `NS*UsageDescription` keys | Verified |
-| Native code | Capacitor 8.5.2 + `@capacitor/preferences` only | `client/ios/App/CapApp-SPM/Package.swift` | Verified |
+| Native code | Capacitor 8.5.2, `@capacitor/preferences` (one-time migration read only) and the in-repo `packages/capacitor-keychain-storage` (session storage) | `client/ios/App/CapApp-SPM/Package.swift`; both plugins listed in the packaged `capacitor.config.json` `packageClassList` | Verified 2026-10-18 |
 | Signing | Automatic, **no team yet** | `project.pbxproj` `CODE_SIGN_STYLE = Automatic`, no `DEVELOPMENT_TEAM` | Owner: select the team in Xcode (writes `DEVELOPMENT_TEAM`; that diff is fine to commit) |
 | App icon | Single 1024 universal entry | `Assets.xcassets/AppIcon.appiconset/Contents.json` | Structure verified; **art is the Capacitor placeholder** (item 2) |
-| Launch screen | `LaunchScreen.storyboard` showing image `Splash` aspect-fill | `client/ios/App/App/Base.lproj/LaunchScreen.storyboard`; `Splash.imageset` | Structure verified; **art is the Capacitor placeholder on white** (item 2) |
-| `UIRequiredDeviceCapabilities` | `armv7` (Capacitor template default) | `Info.plist` | Watch: if Validate App warns about it, change to `arm64`. Not changed pre-emptively |
+| Launch screen | `LaunchScreen.storyboard` is a plain navy (`#0A0E17`) view with **no image view** | `client/ios/App/App/Base.lproj/LaunchScreen.storyboard` (no `imageView`, re-checked 2026-10-18); `Splash.imageset` still holds the Capacitor art but is not shown | Verified. A mark on the launch screen is a deliberate storyboard change, see [brand-assets](brand-assets.md) |
+| `UIRequiredDeviceCapabilities` | `arm64` | `Info.plist`; pinned by `client/scripts/iosProjectSettings.test.ts`; confirmed in the unsigned Release archive (2026-10-18: arm64-only binary, `minos 15.0`) | Verified. The old `armv7` template value is gone |
 
 ## 3. Decisions recorded in this phase
 
