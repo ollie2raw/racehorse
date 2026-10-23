@@ -76,11 +76,11 @@ function makeLesson(id: string, nodeId: string, prerequisites: string[] = []): J
 }
 
 describe('Journey content resolver coverage', () => {
-  it('keeps the eight production premium migration boundaries explicit', () => {
+  it('keeps the nine production premium migration boundaries explicit', () => {
     expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors).toHaveLength(105);
-    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'legacy')).toHaveLength(97);
-    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'premium')).toHaveLength(8);
-    expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS).toHaveLength(8);
+    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'legacy')).toHaveLength(96);
+    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'premium')).toHaveLength(9);
+    expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS).toHaveLength(9);
     expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS[0].nodeId).toBe('ch1-n07');
     expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS[0].id).not.toBe('ch1-n07');
   });
@@ -97,15 +97,15 @@ describe('Journey content resolver coverage', () => {
     const summary = summarizeJourneyContent();
     // Chapter 1 slice restructure: 10 -> 9 nodes. Retired the two acknowledgement briefings (n01, n06)
     // and the guessable interactive puzzle (n03); added Marlow's Table (a bot match) and Greedy Hands
-    // (honestly `unsupported` until its Stage 2 lesson exists).
+    // (a premium lesson since Stage 2, so no Chapter One stage is `unsupported` any more).
     expect(summary.totalNodeCount).toBe(105);
     expect(summary.trials.fullMatchCount + summary.trials.shortRaceCount).toBe(38);
     expect(summary.puzzleAnswerDistribution.totalPuzzles).toBe(47);
     expect(summary.normalizedContent).toMatchObject({
-      supported: 92,
+      supported: 93,
       legacyFallback: 0,
       placeholder: 12,
-      unsupported: 1,
+      unsupported: 0,
       coreJourneyRuleset: 105,
     });
     expect(summary.normalizedContent.capabilities).toMatchObject({
@@ -114,9 +114,9 @@ describe('Journey content resolver coverage', () => {
       bot_match: 32,
       boss_match: 6,
       puzzle_sprint: 1,
-      lesson_sequence: 8,
-      unsupported: 1,
+      lesson_sequence: 9,
     });
+    expect(summary.normalizedContent.capabilities.unsupported ?? 0).toBe(0);
     expect(summary.normalizedContent.capabilities.interactive_board_decision ?? 0).toBe(0);
   });
 
@@ -175,7 +175,7 @@ describe('Journey content resolver coverage', () => {
     expect(stages).toEqual([
       ['ch1-n07', 'Read the Gate', 'lesson_sequence', 'available'],
       ['ch1-n02', 'Dot’s Table', 'bot_match', 'available'],
-      ['ch1-n11', 'Greedy Hands', 'unsupported', 'unavailable'],
+      ['ch1-n11', 'Greedy Hands', 'lesson_sequence', 'available'],
       ['ch1-n08', 'Count the Yard', 'lesson_sequence', 'available'],
       ['ch1-n04', 'Open Book', 'bot_match', 'available'],
       ['ch1-n05', 'Quick Reads', 'puzzle_sprint', 'available'],
@@ -376,7 +376,7 @@ describe('future Journey lesson contract validation', () => {
 
   it('exposes isolated production and registry lookup collections', () => {
     expect(getJourneyLessonDefinition('premium:lesson-a')).toBeNull();
-    expect(getAllJourneyLessonDefinitions()).toHaveLength(8);
+    expect(getAllJourneyLessonDefinitions()).toHaveLength(9);
     expect(getAllJourneyLessonDefinitions()[0].id).toBe('journey:ch1:open-end-discipline');
     const registry = buildJourneyContentRegistry({ canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS, premiumLessonDefinitions: [makeLesson('premium:lookup', 'ch1-n02')] });
     const definitions = getAllJourneyLessonDefinitionsFromRegistry(registry);

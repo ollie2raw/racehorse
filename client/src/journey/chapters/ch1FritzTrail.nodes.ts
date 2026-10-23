@@ -55,7 +55,7 @@ export const CH1_FRITZ_TRAIL_NODES: JourneyNode[] = [
     chapterTitle: CH1_FRITZ_TRAIL_CHAPTER_TITLE,
     order: 3,
     title: 'Greedy Hands',
-    subtitle: 'Three positions where the points on offer are not the whole story.',
+    subtitle: 'Price the whole turn: what you take, and what you leave the table to answer with.',
     nodeType: 'checkpoint',
     difficulty: 'casual',
     requirements: ['Complete Dot’s Table'],

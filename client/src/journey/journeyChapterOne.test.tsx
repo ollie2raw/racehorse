@@ -68,7 +68,7 @@ describe('Chapter One: the approved nine-stage trail', () => {
     }
   });
 
-  it('resolves every stage to the runtime its title promises — and Greedy Hands is honestly unavailable', () => {
+  it('resolves every stage to the runtime its title promises — Greedy Hands is a real lesson, not a placeholder', () => {
     const runtime = (id: string) => getJourneyContentDescriptor(id)?.runtime.kind;
     expect(runtime('ch1-n02')).toBe('bot_match');
     expect(runtime('ch1-n04')).toBe('bot_match');
@@ -76,9 +76,9 @@ describe('Chapter One: the approved nine-stage trail', () => {
     expect(runtime('ch1-n12')).toBe('bot_match');
     expect(runtime('ch1-n10')).toBe('boss_match');
     const greedy = getJourneyContentDescriptor('ch1-n11');
-    expect(greedy?.runtime.kind).toBe('unsupported');
-    expect(greedy?.runtimeAvailability).toBe('unavailable');
-    expect(greedy?.supportStatus).toBe('unsupported');
+    expect(greedy?.runtime.kind).toBe('lesson_sequence');
+    expect(greedy?.runtimeAvailability).toBe('available');
+    expect(greedy?.supportStatus).toBe('supported');
   });
 
   it('no Chapter One stage is an acknowledgement-only placeholder', () => {

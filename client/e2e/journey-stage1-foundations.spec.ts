@@ -100,7 +100,7 @@ async function expectInsideViewport(locator: Locator, page: Page) {
 }
 
 test.describe('Journey Chapter One trail (Stage 1)', () => {
-  test('shows the nine stages in order, only Chapter One, and says Greedy Hands is in development', async ({ page }) => {
+  test('shows the nine stages in order, only Chapter One, and Greedy Hands is a playable lesson', async ({ page }) => {
     await seedProgress(page, ['ch1-n07', 'ch1-n02']);
     await page.goto('/journey');
     await expect(page.locator('.rh-jt-map')).toBeVisible({ timeout: 20_000 });
@@ -117,11 +117,11 @@ test.describe('Journey Chapter One trail (Stage 1)', () => {
     expect(labels[2]).toMatch(/Current$/); // Greedy Hands — the unlock chain runs in trail order
     expect(labels[3]).toMatch(/Locked$/);
 
-    // Greedy Hands has no runtime yet: it must say so instead of offering a Play that does nothing.
+    // Greedy Hands is a real lesson now (Stage 2): it offers Play, not the old "In development" placeholder.
     await page.getByLabel('Greedy Hands, Current').click();
     const cta = page.locator('.rh-jt-mission__cta');
-    await expect(cta).toHaveText('In development');
-    await expect(cta).toBeDisabled();
+    await expect(cta).toHaveText('Play');
+    await expect(cta).toBeEnabled();
     await expect(page.locator('.rh-jt-mission__eyebrow')).toContainText('Lesson');
   });
 
@@ -639,6 +639,243 @@ test.describe('Journey lesson and sprint completion contract (Stage 2, phases 1-
       expect(sprints.every((attempt) => attempt.outcome !== 'won')).toBe(true);
     });
   });
+});
+
+test.describe('Greedy Hands lesson on the real screen (Stage 2)', () => {
+  // Answers for the positions a clean run meets, in order. They are the intended answers of the authored positions
+  // (verified against the engine by the lesson's own validator and unit tests); this spec drives the UI with them.
+  const CLEAN_RUN = [
+    { stage: 'guided-decision', scenario: 'scenario:greedy-guided', tile: '2-6', end: 'left' },
+    { stage: 'independent-practice', scenario: 'scenario:greedy-practice-cost-1', tile: '1-5', end: 'left' },
+    { stage: 'practice-take', scenario: 'scenario:greedy-practice-take-1', tile: '4-4', end: 'left' },
+    { stage: 'proof', scenario: 'scenario:greedy-proof-1', tile: '0-1', end: 'left' },
+  ] as const;
+
+  const pendingKeys = (page: Page) => page.evaluate(() => {
+    const keys: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key && key.startsWith('rh_journey_pending_completion_v1:guest:p:')) keys.push(key);
+    }
+    return keys;
+  });
+
+  async function openGreedyHands(page: Page) {
+    await seedProgress(page, ['ch1-n07', 'ch1-n02']);
+    await page.goto('/journey');
+    const node = page.getByLabel('Greedy Hands, Current');
+    await expect(node).toBeVisible({ timeout: 20_000 });
+    await node.click();
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Greedy Hands', level: 1 })).toBeVisible();
+    await page.getByRole('button', { name: /take a seat/i }).click();
+    await expect(page.locator('.journey-lesson-host__demo-description')).toContainText('multiple of 5');
+    for (let i = 0; i < 4; i += 1) await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await page.getByRole('button', { name: /continue to decision/i }).click();
+  }
+  async function answer(page: Page, step: { stage: string; scenario: string; tile: string; end: string }) {
+    const section = page.locator(`[data-stage-id="${step.stage}"]`);
+    await expect(section).toHaveAttribute('data-scenario-id', step.scenario);
+    await page.getByRole('button', { name: `Domino ${step.tile}` }).click();
+    await page.getByRole('button', { name: new RegExp(`play on ${step.end} end`, 'i') }).click();
+    await page.getByRole('button', { name: /submit move/i }).click();
+    await expect(page.getByText('Board consequence')).toBeVisible();
+  }
+
+  test('a clean run plays guided → cost → take-it → proof, completes, credits the stage and unlocks the next', async ({ page }) => {
+    await openGreedyHands(page);
+    for (const step of CLEAN_RUN) {
+      await answer(page, step);
+      await page.getByRole('button', { name: /^continue$/i }).click();
+    }
+    await expect(page.getByRole('heading', { name: 'Proof challenge passed' })).toBeVisible();
+    await page.getByRole('button', { name: /return to journey/i }).click();
+    await expect(page.getByLabel('Greedy Hands, Completed')).toBeVisible();
+    await expect(page.getByLabel('Count the Yard, Current')).toBeVisible(); // the next stage unlocked
+    expect(await readCompleted(page)).toEqual(['ch1-n07', 'ch1-n02', 'ch1-n11']);
+
+    const lessons = (await readAttempts(page)).filter((attempt) => attempt.kind === 'lesson');
+    expect(lessons).toHaveLength(1);
+    expect(lessons[0]).toMatchObject({ outcome: 'won', nodeId: 'ch1-n11', detail: { contentId: 'journey:ch1:greedy-hands', stage: 'Greedy Hands', chapterLayout: 2, retries: 0 } });
+    const proof = JSON.parse(String(lessons[0].detail.completionProof));
+    expect(proof.stages.map((stage: { stageId: string }) => stage.stageId)).toEqual(['independent-practice', 'practice-take', 'proof']);
+    expect(lessons[0].detail.sessionId).toBe(proof.sessionId);
+    await page.reload();
+    await expect(page.getByLabel('Greedy Hands, Completed')).toBeVisible({ timeout: 20_000 });
+    expect(await readCompleted(page)).toEqual(['ch1-n07', 'ch1-n02', 'ch1-n11']);
+  });
+
+  test('a greedy answer explains the reply it left, and a retry is a FRESH position that does not count as mastery', async ({ page }) => {
+    await openGreedyHands(page);
+    await answer(page, CLEAN_RUN[0]);
+    await page.getByRole('button', { name: /^continue$/i }).click();
+
+    // practice-cost-1: take the bigger score (5-6, +2) instead of the smaller one that costs less
+    await answer(page, { stage: 'independent-practice', scenario: 'scenario:greedy-practice-cost-1', tile: '5-6', end: 'left' });
+    const feedback = page.locator('.journey-lesson-host__feedback');
+    await expect(feedback).toContainText('That score hands points straight back.');
+    await expect(feedback).toContainText('You took 2; the best single reply could take 3.');
+    await page.getByRole('button', { name: /new position/i }).click();
+    await expect(page.locator('[data-stage-id="independent-practice"]')).toHaveAttribute('data-scenario-id', 'scenario:greedy-practice-cost-2');
+    await expect(page.getByText('Board consequence')).toHaveCount(0); // the retry shows no answer before an attempt
+
+    // finish the lesson cleanly from here
+    await answer(page, { stage: 'independent-practice', scenario: 'scenario:greedy-practice-cost-2', tile: '4-5', end: 'left' });
+    await page.getByRole('button', { name: /^continue$/i }).click();
+    for (const step of CLEAN_RUN.slice(2)) {
+      await answer(page, step);
+      await page.getByRole('button', { name: /^continue$/i }).click();
+    }
+    await expect(page.getByRole('heading', { name: 'Proof challenge passed' })).toBeVisible();
+    await page.getByRole('button', { name: /return to journey/i }).click();
+    const lessons = (await readAttempts(page)).filter((attempt) => attempt.kind === 'lesson');
+    expect(lessons[0]).toMatchObject({ outcome: 'won', detail: { retries: 1 } }); // the miss is on the record
+  });
+
+  test('missing every position of a pool keeps the stage playable: the 4th position is a repeat under a new id, and the lesson still completes', async ({ page }) => {
+    await openGreedyHands(page);
+    await answer(page, CLEAN_RUN[0]);
+    await page.getByRole('button', { name: /^continue$/i }).click();
+    // three authored cost positions, each answered with the tempting (bigger-score) play
+    const misses = [
+      { scenario: 'scenario:greedy-practice-cost-1', tile: '5-6', end: 'left' },
+      { scenario: 'scenario:greedy-practice-cost-2', tile: '1-6', end: 'right' },
+      { scenario: 'scenario:greedy-practice-cost-3', tile: '1-2', end: 'right' },
+    ];
+    for (const miss of misses) {
+      await answer(page, { stage: 'independent-practice', ...miss });
+      await page.getByRole('button', { name: /new position/i }).click();
+    }
+    // the pool is used up, yet there is a 4th position: authored position 2 again, under its own id
+    const next = page.locator('[data-stage-id="independent-practice"]');
+    await expect(next).toHaveAttribute('data-scenario-id', 'scenario:greedy-practice-cost-r02-1');
+    await expect(page.getByText('Board consequence')).toHaveCount(0);
+    await answer(page, { stage: 'independent-practice', scenario: 'scenario:greedy-practice-cost-r02-1', tile: '4-5', end: 'left' });
+    await page.getByRole('button', { name: /^continue$/i }).click();
+    for (const step of CLEAN_RUN.slice(2)) {
+      await answer(page, step);
+      await page.getByRole('button', { name: /^continue$/i }).click();
+    }
+    await expect(page.getByRole('heading', { name: 'Proof challenge passed' })).toBeVisible();
+    await page.getByRole('button', { name: /return to journey/i }).click();
+    expect(await readCompleted(page)).toEqual(['ch1-n07', 'ch1-n02', 'ch1-n11']);
+    const lessons = (await readAttempts(page)).filter((attempt) => attempt.kind === 'lesson');
+    expect(lessons[0]).toMatchObject({ outcome: 'won', detail: { retries: 3 } });
+  });
+
+  for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    test(`a progress write that fails shows an honest pending notice (never a bare success), and Check again finishes it at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+      await page.setViewportSize(viewport);
+      // The real progress write fails (the browser's own storage call is made to drop it) once the flag is set.
+      await page.addInitScript(() => {
+        const original = Storage.prototype.setItem;
+        Storage.prototype.setItem = function patched(key: string, value: string) {
+          if ((window as unknown as { __dropProgress?: boolean }).__dropProgress && key.startsWith('rh_journey_progress_v1')) return;
+          return original.call(this, key, value);
+        };
+      });
+      await openGreedyHands(page);
+      for (const step of CLEAN_RUN.slice(0, 3)) {
+        await answer(page, step);
+        await page.getByRole('button', { name: /^continue$/i }).click();
+      }
+      await page.evaluate(() => { (window as unknown as { __dropProgress?: boolean }).__dropProgress = true; });
+      await answer(page, CLEAN_RUN[3]);
+      await page.getByRole('button', { name: /^continue$/i }).click();
+
+      const notice = page.locator('[data-completion-status="pending"]');
+      await expect(notice).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Passed — your progress is still saving' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Proof challenge passed' })).toHaveCount(0);
+      await expect(notice).toHaveAttribute('role', 'status');
+      await page.screenshot({ path: testInfo.outputPath(`pending-${viewport.width}x${viewport.height}.png`) });
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)).toBe(true);
+      for (const name of ['Return to Journey', 'Check again']) {
+        const box = (await page.getByRole('button', { name }).boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+        expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
+      }
+      // nothing is credited yet, but the durable obligation is stored
+      expect(await readCompleted(page)).toEqual(['ch1-n07', 'ch1-n02']);
+      expect(await pendingKeys(page)).toHaveLength(1);
+
+      await page.getByRole('button', { name: 'Check again' }).click(); // still failing: stays pending, changes nothing
+      await expect(notice).toBeVisible();
+      expect(await pendingKeys(page)).toHaveLength(1);
+      expect((await readAttempts(page)).filter((attempt) => attempt.kind === 'lesson')).toHaveLength(1);
+
+      await page.evaluate(() => { (window as unknown as { __dropProgress?: boolean }).__dropProgress = false; });
+      await page.getByRole('button', { name: 'Check again' }).click();
+      await expect(page.getByRole('heading', { name: 'Proof challenge passed' })).toBeVisible();
+      expect(await readCompleted(page)).toEqual(['ch1-n07', 'ch1-n02', 'ch1-n11']);
+      expect(await pendingKeys(page)).toEqual([]);
+      await page.getByRole('button', { name: /return to journey/i }).click();
+      await expect(page.getByLabel('Greedy Hands, Completed')).toBeVisible();
+      await expect(page.getByLabel('Count the Yard, Current')).toBeVisible();
+      expect((await readAttempts(page)).filter((attempt) => attempt.kind === 'lesson').map((attempt) => attempt.outcome)).toEqual(['won']);
+    });
+  }
+
+  test('leaving a pending notice keeps the obligation, and the next Journey load finishes it', async ({ page }) => {
+    await page.addInitScript(() => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function patched(key: string, value: string) {
+        if ((window as unknown as { __dropProgress?: boolean }).__dropProgress && key.startsWith('rh_journey_progress_v1')) return;
+        return original.call(this, key, value);
+      };
+    });
+    await openGreedyHands(page);
+    for (const step of CLEAN_RUN.slice(0, 3)) {
+      await answer(page, step);
+      await page.getByRole('button', { name: /^continue$/i }).click();
+    }
+    await page.evaluate(() => { (window as unknown as { __dropProgress?: boolean }).__dropProgress = true; });
+    await answer(page, CLEAN_RUN[3]);
+    await page.getByRole('button', { name: /^continue$/i }).click();
+    await expect(page.locator('[data-completion-status="pending"]')).toBeVisible();
+    await page.getByRole('button', { name: 'Return to Journey' }).click();
+    await expect(page.getByLabel('Greedy Hands, Current')).toBeVisible();
+    await expect(page.getByLabel('Count the Yard, Locked')).toBeVisible();
+    expect(await pendingKeys(page)).toHaveLength(1); // dismissing did not clear it
+    await page.evaluate(() => { (window as unknown as { __dropProgress?: boolean }).__dropProgress = false; });
+    await page.reload(); // the next Journey load runs the existing recovery
+    await expect(page.getByLabel('Greedy Hands, Completed')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByLabel('Count the Yard, Current')).toBeVisible();
+    expect(await readCompleted(page)).toEqual(['ch1-n07', 'ch1-n02', 'ch1-n11']);
+    expect(await pendingKeys(page)).toEqual([]);
+  });
+
+  test('leaving mid-lesson earns nothing', async ({ page }) => {
+    await openGreedyHands(page);
+    await answer(page, CLEAN_RUN[0]);
+    await page.getByRole('button', { name: 'Exit lesson' }).click();
+    await expect(page.getByLabel('Greedy Hands, Current')).toBeVisible();
+    expect(await readCompleted(page)).toEqual(['ch1-n07', 'ch1-n02']);
+    expect((await readAttempts(page)).filter((attempt) => attempt.kind === 'lesson').map((attempt) => attempt.outcome)).toEqual(['abandoned']);
+  });
+
+  for (const viewport of [{ width: 1280, height: 800 }, { width: 844, height: 390 }, { width: 390, height: 844 }]) {
+    test(`the decision screen has no horizontal overflow and its controls are reachable at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+      await page.setViewportSize(viewport);
+      await openGreedyHands(page);
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`decision-${viewport.width}x${viewport.height}.png`) });
+      const step = CLEAN_RUN[0];
+      await page.getByRole('button', { name: `Domino ${step.tile}` }).click();
+      await page.getByRole('button', { name: new RegExp(`play on ${step.end} end`, 'i') }).click();
+      const submit = page.getByRole('button', { name: /submit move/i });
+      await submit.scrollIntoViewIfNeeded();
+      await expect(submit).toBeVisible();
+      const box = (await submit.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+      await submit.click();
+      await expect(page.getByText('Board consequence')).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`feedback-${viewport.width}x${viewport.height}.png`) });
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)).toBe(true);
+    });
+  }
 });
 
 test.describe('Journey match play-through (opt-in: JOURNEY_E2E_PLAY=1)', () => {
