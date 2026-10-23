@@ -29,7 +29,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-type Mutable = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- editing a session to forge it
+type Mutable = Record<string, any>; // loosely typed on purpose: these tests edit a real session to forge it
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 /** A session with two missed positions on the way, so history has retries to tamper with. */
 const withRetries = { outcome: (stageId: string, ordinal: number) => (ordinal < 3 && stageId === 'independent-practice' ? 'failed' as const : 'passed' as const) };
