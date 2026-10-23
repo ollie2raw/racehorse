@@ -99,6 +99,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     isAuthoringV2Mode,
     isGuidedV2Mode,
     isJourneyTrial,
+    journeyContext: bootstrap.journeyTrial?.context ?? null,
     isStandaloneFritzMatch,
     isPlayVsFritzGameOver,
     guidedV2BootError,

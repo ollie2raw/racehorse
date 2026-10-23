@@ -54,7 +54,7 @@ export function getJourneyHomeSummary(progress: JourneyProgress = loadJourneyPro
 
   let progressLine: string;
   if (allChaptersComplete) {
-    progressLine = `${totalCompleted} / ${totalNodes} nodes complete · All six chapters cleared`;
+    progressLine = `${totalCompleted} / ${totalNodes} nodes complete · All ${playable.length === 1 ? 'chapter' : `${playable.length} chapters`} cleared`;
   } else {
     progressLine = `Chapter ${activeChapter.chapterNumber}: ${activeChapter.title} · ${activeSummary.completed} / ${activeSummary.total} · ${totalCompleted} / ${totalNodes} overall`;
   }

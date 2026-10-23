@@ -29,38 +29,6 @@ export interface JourneyPuzzle {
 }
 
 export const JOURNEY_PUZZLES: Record<string, JourneyPuzzle> = {
-  "ch1-n03": {
-    nodeId: "ch1-n03",
-    eyebrow: "Puzzle · Open Ends",
-    title: "Open Ends Trial",
-    scenario:
-      "The board shows open ends of 6 and 5. You hold 3-4 and 5-6. Fritz leads the race to 60 by eight points, but you still have the lead this hand.",
-    prompt: "Before you play, what is the soundest principle?",
-    choices: [
-      { id: "a", label: "Play 5-6. It actually reaches the board—3-4 touches neither open end." },
-      { id: "b", label: "Play 3-4 anyway—it's the safer, smaller commitment." },
-      { id: "c", label: "Pass and wait for Fritz to open a mistake." },
-      { id: "d", label: "Play the tile with the highest pip total." },
-    ],
-    correctChoiceId: "a",
-    explanation:
-      "3-4 doesn't touch either open end—it isn't a legal reply here at all. 5-6 is the only tile that actually plays, and it fits both the 6 and the 5. Read what the board will actually accept before you decide what you'd like to play.",
-    rewardLabel: "Open Eye",
-    boardState: {
-      ends: [6, 5],
-      placedTiles: [
-        { high: 6, low: 6 },
-        { high: 6, low: 3 },
-        { high: 5, low: 3 },
-        { high: 5, low: 5 },
-      ],
-    },
-    playerHand: [
-      { high: 5, low: 6 },
-      { high: 3, low: 4 },
-    ],
-    correctTile: { high: 5, low: 6 },
-  },
   "ch1-n08": {
     nodeId: "ch1-n08",
     eyebrow: "Puzzle · Tactical Gate",

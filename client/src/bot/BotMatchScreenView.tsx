@@ -9,6 +9,7 @@ import { BotMatchLiveLayoutSection } from './view/layouts/BotMatchLiveLayoutSect
 import { BotMatchLiveHudLeft, BotMatchLiveHudRight } from './view/hud/BotMatchLiveHud.tsx';
 import { BotMatchLiveTurnHud } from './view/hud/BotMatchLiveTurnHud.tsx';
 import { BotMatchPreGameDrawHud } from './view/hud/BotMatchPreGameDrawHud.tsx';
+import { BotMatchJourneyChip } from './view/hud/BotMatchJourneyChip.tsx';
 import { BotMatchInGameOverlays } from './view/overlays/BotMatchInGameOverlays.tsx';
 import { BotMatchModalLayer } from './view/overlays/BotMatchModalLayer.tsx';
 import { BotMatchScreenShell } from './view/shell/BotMatchScreenShell.tsx';
@@ -252,7 +253,12 @@ export function BotMatchScreenView({
           <BotMatchLiveLayoutSection
             boardStageRef={layout.boardStageRef}
             ghostBoardPulse={board.ghostBoardPulse}
-            boardStageInner={boardStageInner}
+            boardStageInner={layout.journeyContext ? (
+              <>
+                <BotMatchJourneyChip context={layout.journeyContext} />
+                {boardStageInner}
+              </>
+            ) : boardStageInner}
             handTray={handTray}
             hudLeft={(
               <BotMatchLiveHudLeft

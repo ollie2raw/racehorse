@@ -23,7 +23,8 @@ export const OPEN_END_DISCIPLINE_LESSON_DEFINITION: JourneyLessonDefinition = {
   skillId: OPEN_END_DISCIPLINE_SKILL_ID,
   contentVersion: 1,
   ruleset: { kind: 'core_journey', id: CORE_JOURNEY_RULESET_ID },
-  prerequisites: ['ch1-n06' as JourneyContentId],
+  // First stage of Chapter 1 — the retired ch1-n06 briefing is no longer a prerequisite.
+  prerequisites: [],
   presentation: { tableContextId: 'table:fritz', rivalContextId: null },
   stages: [
     { id: 'welcome', kind: 'frame', copyRef: 'open-end-discipline:welcome', evidenceRole: 'none' },
