@@ -236,6 +236,16 @@ jobs:
           npx playwright install chromium --with-deps
           npm run e2e --prefix client
 
+      # Failure evidence (screenshots, traces, error context) so a CI-only e2e failure can be diagnosed without a rerun.
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-artifacts
+          path: client/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
   mobile-reachability:
     name: Mobile Reachability Gate
     runs-on: ubuntu-latest
