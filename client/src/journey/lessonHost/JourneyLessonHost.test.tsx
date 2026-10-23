@@ -4,6 +4,8 @@ import { StrictMode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { OPEN_END_DISCIPLINE_LESSON_DEFINITION } from '../lessons/openEndDiscipline/openEndDisciplineLesson.ts';
 import { JourneyLessonHost } from './JourneyLessonHost.tsx';
+import { buildJourneyLessonCompletionProof } from '../journeyStageCompletion.ts';
+import type { JourneyLessonSessionState } from '../journeyLessonController.ts';
 
 function deterministicRuntime() {
   let execution = 0;
@@ -55,7 +57,7 @@ describe('JourneyLessonHost', () => {
   });
 
   it('completes once after passed proof and keeps failed proof non-terminal', async () => {
-    const onLessonCompleted = vi.fn();
+    const onLessonCompleted = vi.fn(() => ({ kind: 'confirmed' as const }));
     render(<JourneyLessonHost definition={OPEN_END_DISCIPLINE_LESSON_DEFINITION} onExit={vi.fn()} onLessonCompleted={onLessonCompleted} runtime={deterministicRuntime()} />);
     await enterGuidedStage();
     await play('Domino 3-6', /play on right end/i);
@@ -77,5 +79,45 @@ describe('JourneyLessonHost', () => {
     fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
     expect(await screen.findByRole('heading', { name: 'Proof challenge passed' })).toBeInTheDocument();
     await waitFor(() => expect(onLessonCompleted).toHaveBeenCalledTimes(1));
+  });
+
+  async function playOpenEndLessonWithRetries() {
+    await enterGuidedStage();
+    await play('Domino 3-6', /play on right end/i);
+    await screen.findByText('Fritz got the wider reply.');
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+    await play('Domino 1-4', /play on left end/i);
+    fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
+    await play('Domino 3-4', /play on right end/i);
+    fireEvent.click(await screen.findByRole('button', { name: /new position/i }));
+    await play('Domino 2-5', /play on left end/i);
+    fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
+    await play('Domino 4-1', /play on right end/i);
+    await screen.findByText('Two open ends gave Fritz more room.');
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+    await play('Domino 2-2', /play on left end/i);
+    fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
+    await screen.findByRole('heading', { name: 'Proof challenge passed' });
+  }
+
+  it('hands the completed controller session to the callback, and that session yields an honest proof with its retries', async () => {
+    const received: JourneyLessonSessionState[] = [];
+    render(<JourneyLessonHost definition={OPEN_END_DISCIPLINE_LESSON_DEFINITION} onExit={vi.fn()} onLessonCompleted={(session) => { received.push(session); return { kind: 'confirmed' }; }} runtime={deterministicRuntime()} />);
+    await playOpenEndLessonWithRetries();
+    await waitFor(() => expect(received).toHaveLength(1));
+    expect(received[0].status).toBe('completed');
+    const proof = buildJourneyLessonCompletionProof(received[0], OPEN_END_DISCIPLINE_LESSON_DEFINITION);
+    expect(proof).not.toBeNull();
+    expect(proof!.stages.map((stage) => stage.stageId)).toEqual(['independent-practice', 'proof']);
+    expect(proof!.retries).toBeGreaterThan(0); // the player missed positions on the way; the proof says so
+  });
+
+  it('under Strict Mode a full run still reports completion exactly once', async () => {
+    const onLessonCompleted = vi.fn(() => ({ kind: 'confirmed' as const }));
+    render(<StrictMode><JourneyLessonHost definition={OPEN_END_DISCIPLINE_LESSON_DEFINITION} onExit={vi.fn()} onLessonCompleted={onLessonCompleted} runtime={deterministicRuntime()} /></StrictMode>);
+    await playOpenEndLessonWithRetries();
+    await waitFor(() => expect(onLessonCompleted).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(onLessonCompleted).toHaveBeenCalledTimes(1);
   });
 });

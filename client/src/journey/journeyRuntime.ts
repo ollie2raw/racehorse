@@ -15,6 +15,10 @@ export type JourneyActiveChallenge = {
   scoringMultiple?: number;
   scoreHandicap?: { you: number; bot: number };
   nodeTitle: string;
+  /** Named opponent for the match HUD (presentation only). */
+  rivalName?: string;
+  /** Set when the attempt is started at launch; replaced on every rematch. */
+  attemptId?: string;
 };
 
 let activeChallenge: JourneyActiveChallenge | null = null;

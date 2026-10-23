@@ -9,6 +9,8 @@ import './styles/table-theme-toggle.css';
 import './styles/weekly-awards.css';
 import './styles/responsive.css';
 import { useAuthSession } from './auth/useAuthSession';
+import { useJourneyStorageScope } from './journey/useJourneyStorageScope';
+import { useClearJourneyChallengeOutsideMatch } from './journey/useJourneyChallengeLifecycle';
 import { useAppSessionUi } from './auth/useAppSessionUi';
 import type { GameState } from './types';
 import { useBotGamePreferences } from './bot/useBotGamePreferences';
@@ -130,6 +132,10 @@ export default function App() {
     multiplayerIdentityUserIdRef,
     isAdmin,
   } = useAuthSession();
+  // Journey progress and attempts are local: keep them in the signed-in user's namespace (or guest's).
+  useJourneyStorageScope(authUser?.id ?? null, authLoading);
+  // A Journey challenge is only valid while a match is being played; drop it however the player left.
+  useClearJourneyChallengeOutsideMatch(appMode);
 
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
   const [roomCode, setRoomCode] = useState('');

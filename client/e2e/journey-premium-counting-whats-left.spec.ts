@@ -1,12 +1,12 @@
 import { test, expect, type Page, type TestInfo } from '@playwright/test';
 
-const progress = { version: 2, activeChapterId: 'ch1-fritz-trail', chapters: { 'ch1-fritz-trail': { completedNodeIds: ['ch1-n01','ch1-n02','ch1-n03','ch1-n04','ch1-n05','ch1-n06','ch1-n07'], lastVisitedNodeId: 'ch1-n08', completedAt: null, completionCelebrated: false } }, updatedAt: '2026-01-01T00:00:00.000Z' };
+const progress = { version: 2, activeChapterId: 'ch1-fritz-trail', chapters: { 'ch1-fritz-trail': { layoutVersion: 2, completedNodeIds: ['ch1-n07','ch1-n02','ch1-n11'], lastVisitedNodeId: 'ch1-n08', completedAt: null, completionCelebrated: false } }, updatedAt: '2026-01-01T00:00:00.000Z' };
 
 function guard(page: Page) { const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message)); page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); }); return errors; }
 async function shot(page: Page, info: TestInfo, name: string) { await page.screenshot({ path: info.outputPath(name), fullPage: true }); }
 async function open(page: Page) {
   await page.goto('/journey');
-  await page.getByLabel('Puzzle Gate, Current').click();
+  await page.getByLabel('Count the Yard, Current').click();
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Counting What’s Left' })).toBeVisible();
   await page.getByRole('button', { name: /take a seat/i }).click();
@@ -32,6 +32,6 @@ async function complete(page: Page, info: TestInfo) {
 
 test.describe('Journey premium Counting What’s Left', () => {
   test.beforeEach(async ({ page }) => { await page.addInitScript((fixture) => localStorage.setItem('rh_journey_progress_v1', JSON.stringify(fixture)), progress); });
-  test('desktop completes, replays, and preserves completion', async ({ page }, info) => { const errors = guard(page); await open(page); await shot(page, info, 'guided-count.png'); await complete(page, info); await shot(page, info, 'completion.png'); await page.getByRole('button', { name: /return to journey/i }).click(); await page.getByLabel('Puzzle Gate, Completed').click(); await page.getByRole('button', { name: /replay lesson/i }).click(); await page.getByRole('button', { name: 'Exit lesson' }).click(); await expect(page.getByLabel('Puzzle Gate, Completed')).toBeVisible(); expect(errors).toEqual([]); });
-  test('mobile completes without horizontal overflow', async ({ page }, info) => { const errors = guard(page); await page.setViewportSize({ width: 390, height: 844 }); await open(page); await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)).toBe(true); await shot(page, info, 'guided-count-mobile.png'); await complete(page, info); await shot(page, info, 'completion-mobile.png'); await page.getByRole('button', { name: /return to journey/i }).click(); await expect(page.getByLabel('Puzzle Gate, Completed')).toBeVisible(); expect(errors).toEqual([]); });
+  test('desktop completes, replays, and preserves completion', async ({ page }, info) => { const errors = guard(page); await open(page); await shot(page, info, 'guided-count.png'); await complete(page, info); await shot(page, info, 'completion.png'); await page.getByRole('button', { name: /return to journey/i }).click(); await page.getByLabel('Count the Yard, Completed').click(); await page.getByRole('button', { name: /replay lesson/i }).click(); await page.getByRole('button', { name: 'Exit lesson' }).click(); await expect(page.getByLabel('Count the Yard, Completed')).toBeVisible(); expect(errors).toEqual([]); });
+  test('mobile completes without horizontal overflow', async ({ page }, info) => { const errors = guard(page); await page.setViewportSize({ width: 390, height: 844 }); await open(page); await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)).toBe(true); await shot(page, info, 'guided-count-mobile.png'); await complete(page, info); await shot(page, info, 'completion-mobile.png'); await page.getByRole('button', { name: /return to journey/i }).click(); await expect(page.getByLabel('Count the Yard, Completed')).toBeVisible(); expect(errors).toEqual([]); });
 });
