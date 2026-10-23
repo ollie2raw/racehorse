@@ -76,11 +76,11 @@ function makeLesson(id: string, nodeId: string, prerequisites: string[] = []): J
 }
 
 describe('Journey content resolver coverage', () => {
-  it('keeps the eight production premium migration boundaries explicit', () => {
-    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors).toHaveLength(106);
-    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'legacy')).toHaveLength(98);
-    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'premium')).toHaveLength(8);
-    expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS).toHaveLength(8);
+  it('keeps the nine production premium migration boundaries explicit', () => {
+    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors).toHaveLength(105);
+    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'legacy')).toHaveLength(96);
+    expect(PRODUCTION_JOURNEY_CONTENT_REGISTRY.descriptors.filter((descriptor) => descriptor.migrationClass === 'premium')).toHaveLength(9);
+    expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS).toHaveLength(9);
     expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS[0].nodeId).toBe('ch1-n07');
     expect(PRODUCTION_PREMIUM_LESSON_DEFINITIONS[0].id).not.toBe('ch1-n07');
   });
@@ -95,24 +95,29 @@ describe('Journey content resolver coverage', () => {
 
   it('reports the current inventory and normalized capability baseline', () => {
     const summary = summarizeJourneyContent();
-    expect(summary.totalNodeCount).toBe(106);
-    expect(summary.trials.fullMatchCount + summary.trials.shortRaceCount).toBe(37);
-    expect(summary.puzzleAnswerDistribution.totalPuzzles).toBe(48);
+    // Chapter 1 slice restructure: 10 -> 9 nodes. Retired the two acknowledgement briefings (n01, n06)
+    // and the guessable interactive puzzle (n03); added Marlow's Table (a bot match) and Greedy Hands
+    // (a premium lesson since Stage 2, so no Chapter One stage is `unsupported` any more).
+    expect(summary.totalNodeCount).toBe(105);
+    expect(summary.trials.fullMatchCount + summary.trials.shortRaceCount).toBe(38);
+    expect(summary.puzzleAnswerDistribution.totalPuzzles).toBe(47);
     expect(summary.normalizedContent).toMatchObject({
-      supported: 92,
+      supported: 93,
       legacyFallback: 0,
-      placeholder: 14,
+      placeholder: 12,
       unsupported: 0,
-      coreJourneyRuleset: 106,
+      coreJourneyRuleset: 105,
     });
     expect(summary.normalizedContent.capabilities).toMatchObject({
-      briefing_acknowledgement: 14,
+      briefing_acknowledgement: 12,
       static_decision: 45,
-      interactive_board_decision: 1,
-      bot_match: 31,
+      bot_match: 32,
       boss_match: 6,
       puzzle_sprint: 1,
+      lesson_sequence: 9,
     });
+    expect(summary.normalizedContent.capabilities.unsupported ?? 0).toBe(0);
+    expect(summary.normalizedContent.capabilities.interactive_board_decision ?? 0).toBe(0);
   });
 
   it('activates the production Open-End Discipline lesson on the former fallback node', () => {
@@ -131,7 +136,8 @@ describe('Journey content resolver coverage', () => {
   });
 
   it('marks placeholders without promoting them to premium content', () => {
-    const descriptor = getJourneyContentDescriptor('ch1-n01');
+    // ch1 no longer contains acknowledgement stages; ch2-n01 is a surviving placeholder briefing.
+    const descriptor = getJourneyContentDescriptor('ch2-n01');
     expect(descriptor?.supportStatus).toBe('placeholder');
     expect(descriptor?.migrationClass).toBe('legacy');
     expect(descriptor?.runtime.kind).toBe('briefing_acknowledgement');
@@ -139,7 +145,7 @@ describe('Journey content resolver coverage', () => {
   });
 
   it('rejects an unsupported descriptor that tries to use acknowledgement fallback', () => {
-    const descriptor = getJourneyContentDescriptor('ch1-n01');
+    const descriptor = getJourneyContentDescriptor('ch2-n01');
     expect(descriptor).not.toBeNull();
     if (!descriptor) return;
     const errors = validateJourneyContentCoverage([
@@ -150,7 +156,7 @@ describe('Journey content resolver coverage', () => {
   });
 
   it('represents current puzzle, interactive puzzle, match, and boss authority', () => {
-    expect(getJourneyContentDescriptor('ch1-n03')?.runtime.kind).toBe('interactive_board_decision');
+    expect(getJourneyContentDescriptor('ch1-n05')?.runtime.kind).toBe('puzzle_sprint');
     expect(getJourneyContentDescriptor('ch2-n02')?.runtime.kind).toBe('static_decision');
     expect(getJourneyContentDescriptor('ch1-n02')?.completion).toEqual({
       kind: 'bot_result', owner: 'journey_match_bridge', requiredResult: 'win',
@@ -160,10 +166,47 @@ describe('Journey content resolver coverage', () => {
     });
   });
 
+  it('resolves the approved nine-stage Chapter 1 order to truthful runtimes', () => {
+    const chapter = JOURNEY_CHAPTER_DEFINITIONS[0];
+    const stages = [...chapter.nodes].sort((a, b) => a.order - b.order).map((node) => {
+      const descriptor = getJourneyContentDescriptor(node.id);
+      return [node.id, node.title, descriptor?.runtime.kind, descriptor?.runtimeAvailability];
+    });
+    expect(stages).toEqual([
+      ['ch1-n07', 'Read the Gate', 'lesson_sequence', 'available'],
+      ['ch1-n02', 'Dot’s Table', 'bot_match', 'available'],
+      ['ch1-n11', 'Greedy Hands', 'lesson_sequence', 'available'],
+      ['ch1-n08', 'Count the Yard', 'lesson_sequence', 'available'],
+      ['ch1-n04', 'Open Book', 'bot_match', 'available'],
+      ['ch1-n05', 'Quick Reads', 'puzzle_sprint', 'available'],
+      ['ch1-n09', 'Doubles Aren’t Free', 'lesson_sequence', 'available'],
+      ['ch1-n12', 'Marlow’s Table', 'bot_match', 'available'],
+      ['ch1-n10', 'Handicap Stakes', 'boss_match', 'available'],
+    ]);
+  });
+
+  it('keeps the three lesson IDs and their premium definitions bound to the same nodes', () => {
+    expect(getJourneyContentDescriptor('ch1-n07')?.contentId).toBe('journey:ch1:open-end-discipline');
+    expect(getJourneyContentDescriptor('ch1-n08')?.contentId).toBe('journey:ch1:counting-whats-left');
+    expect(getJourneyContentDescriptor('ch1-n09')?.contentId).toBe('journey:ch1:doubles-arent-free');
+    for (const nodeId of ['ch1-n07', 'ch1-n08', 'ch1-n09']) {
+      expect(getJourneyContentDescriptor(nodeId)?.migrationClass).toBe('premium');
+    }
+  });
+
+  it('configures Open Book as a 14-tile Standard race to 40 and the boss as Elite at 60 with a +15 player head start', () => {
+    expect(getJourneyContentDescriptor('ch1-n04')?.runtime).toMatchObject({
+      kind: 'bot_match', fritzTier: 'standard', dealSize: 14, winningScore: 40,
+    });
+    expect(getJourneyContentDescriptor('ch1-n10')?.runtime).toMatchObject({
+      kind: 'boss_match', fritzTier: 'elite', dealSize: 7, winningScore: 60, scoreHandicap: { you: 15, bot: 0 },
+    });
+  });
+
   it('returns a typed missing result and rejects coverage drift', () => {
     expect(resolveJourneyContent('does-not-exist')).toEqual({ kind: 'missing', nodeId: 'does-not-exist' });
     const descriptors = getAllJourneyContentDescriptors();
-    expect(validateJourneyContentCoverage(descriptors.slice(1))).toContain('ch1-n01: missing normalized descriptor');
+    expect(validateJourneyContentCoverage(descriptors.slice(1))).toContain(`${descriptors[0].nodeId}: missing normalized descriptor`);
     expect(validateJourneyContentCoverage([
       ...descriptors,
       { ...descriptors[0], nodeId: asNodeId('unknown-node'), contentId: asContentId('unknown-node') },
@@ -247,8 +290,8 @@ describe('future Journey lesson contract validation', () => {
       canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS,
       premiumLessonDefinitions: [makeFutureLesson()],
     });
-    expect(registry.descriptors).toHaveLength(106);
-    expect(new Set(registry.descriptors.map((descriptor) => descriptor.nodeId)).size).toBe(106);
+    expect(registry.descriptors).toHaveLength(105);
+    expect(new Set(registry.descriptors.map((descriptor) => descriptor.nodeId)).size).toBe(105);
     const descriptor = registry.descriptors.find((entry) => entry.nodeId === 'ch1-n02');
     expect(descriptor?.migrationClass).toBe('premium');
     expect(descriptor?.contentId).toBe('premium:tempo-foundation');
@@ -261,7 +304,7 @@ describe('future Journey lesson contract validation', () => {
   it('rejects duplicate premium targets, duplicate IDs, unknown nodes, and chapter mismatches', () => {
     expect(() => buildJourneyContentRegistry({
       canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS,
-      premiumLessonDefinitions: [makeLesson('ch1-n03', 'ch1-n02')],
+      premiumLessonDefinitions: [makeLesson('ch1-n04', 'ch1-n02')],
     })).toThrow('collides with untouched legacy content');
     expect(() => buildJourneyContentRegistry({
       canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS,
@@ -269,7 +312,7 @@ describe('future Journey lesson contract validation', () => {
     })).toThrow('Multiple premium lessons target node ch1-n02');
     expect(() => buildJourneyContentRegistry({
       canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS,
-      premiumLessonDefinitions: [makeFutureLesson(), makeFutureLesson({ nodeId: asNodeId('ch1-n03') })],
+      premiumLessonDefinitions: [makeFutureLesson(), makeFutureLesson({ nodeId: asNodeId('ch1-n04') })],
     })).toThrow('Duplicate premium content ID');
     expect(() => buildJourneyContentRegistry({
       canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS,
@@ -313,19 +356,19 @@ describe('future Journey lesson contract validation', () => {
     })).toThrow('unknown prerequisite content ID ch1-n02');
     expect(() => buildJourneyContentRegistry({
       canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS,
-      premiumLessonDefinitions: [makeLesson('premium:duplicate-prereq', 'ch1-n02', ['ch1-n01', 'ch1-n01'])],
+      premiumLessonDefinitions: [makeLesson('premium:duplicate-prereq', 'ch1-n02', ['ch1-n04', 'ch1-n04'])],
     })).toThrow('duplicate prerequisite');
   });
 
   it('validates cross-premium prerequisites independent of input order', () => {
     const lessonA = makeLesson('premium:lesson-a', 'ch1-n02');
-    const lessonB = makeLesson('premium:lesson-b', 'ch1-n03', ['premium:lesson-a']);
+    const lessonB = makeLesson('premium:lesson-b', 'ch1-n04', ['premium:lesson-a']);
     const first = buildJourneyContentRegistry({ canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS, premiumLessonDefinitions: [lessonA, lessonB] });
     const second = buildJourneyContentRegistry({ canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS, premiumLessonDefinitions: [lessonB, lessonA] });
     expect(first.descriptors.map((descriptor) => descriptor.nodeId)).toEqual(second.descriptors.map((descriptor) => descriptor.nodeId));
     expect(first.premiumDefinitions.map((definition) => definition.id)).toEqual(['premium:lesson-a', 'premium:lesson-b']);
     expect(second.premiumDefinitions.map((definition) => definition.id)).toEqual(['premium:lesson-a', 'premium:lesson-b']);
-    expect(first.descriptors).toHaveLength(106);
+    expect(first.descriptors).toHaveLength(105);
     expect(first.premiumDefinitions).toHaveLength(2);
     expect(getJourneyLessonDefinitionFromRegistry(first, 'premium:lesson-a')?.id).toBe('premium:lesson-a');
     expect(getJourneyLessonDefinitionFromRegistry(first, 'ch1-n02')).toBeNull();
@@ -333,7 +376,7 @@ describe('future Journey lesson contract validation', () => {
 
   it('exposes isolated production and registry lookup collections', () => {
     expect(getJourneyLessonDefinition('premium:lesson-a')).toBeNull();
-    expect(getAllJourneyLessonDefinitions()).toHaveLength(8);
+    expect(getAllJourneyLessonDefinitions()).toHaveLength(9);
     expect(getAllJourneyLessonDefinitions()[0].id).toBe('journey:ch1:open-end-discipline');
     const registry = buildJourneyContentRegistry({ canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS, premiumLessonDefinitions: [makeLesson('premium:lookup', 'ch1-n02')] });
     const definitions = getAllJourneyLessonDefinitionsFromRegistry(registry);
@@ -349,7 +392,7 @@ describe('future Journey lesson contract validation', () => {
       chapterByNodeId: new Map(JOURNEY_CHAPTER_DEFINITIONS.flatMap((chapter) => chapter.nodes.map((node) => [node.id, chapter.chapterId] as const))),
       knownContentIds: new Set(registry.descriptors.map((descriptor) => descriptor.contentId)),
     };
-    expect(validateJourneyDescriptorSet([{ ...registry.descriptors[1], contentId: asContentId('premium:missing') }], [definition], context)).toContainEqual(expect.stringContaining('missing definition'));
+    expect(validateJourneyDescriptorSet([{ ...registry.descriptors.find((descriptor) => descriptor.nodeId === 'ch1-n02')!, contentId: asContentId('premium:missing') }], [definition], context)).toContainEqual(expect.stringContaining('missing definition'));
     const premium = registry.descriptors.find((descriptor) => descriptor.migrationClass === 'premium');
     expect(premium).toBeDefined();
     if (!premium || premium.migrationClass !== 'premium') return;

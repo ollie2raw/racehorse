@@ -59,6 +59,27 @@ export const JOURNEY_MATCH_VARIANTS: Record<string, JourneyMatchVariant> = {
     blockedHandRule: 'noScore',
     endHandBonus: 'none',
   },
+  // Chapter 1, stage 5 (provisional): every tile is dealt, so the opponent's hand is exactly the
+  // tiles you do not hold. Standard-tier opponent, so the 60-point constant in the Elite/Master
+  // evaluation does not apply.
+  'open-book': {
+    id: 'open-book',
+    fritzTier: 'standard',
+    dealSize: 14,
+    winningScore: 40,
+    trialFormat: 'shortRace',
+  },
+  // Chapter 1 boss: Elite at 60 with a player-side head start as the difficulty bridge. The +15
+  // is an uncalibrated starting value — see the boss calibration protocol; it is node-driven
+  // config, not match-component logic.
+  'handicap-stakes': {
+    id: 'handicap-stakes',
+    fritzTier: 'elite',
+    dealSize: 7,
+    winningScore: 60,
+    trialFormat: 'fullMatch',
+    scoreHandicap: { you: 15, bot: 0 },
+  },
   'all-fives-scoring': {
     id: 'all-fives-scoring',
     fritzTier: 'standard',

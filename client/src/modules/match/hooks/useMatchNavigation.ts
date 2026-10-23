@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useJourneyTrialAttempt } from './useJourneyTrialAttempt.ts';
 import { createBotMatch } from '../runtime/botEngine.ts';
 import { createPreGameDrawShellMatch } from '../../../match/preGameDraw/preGameDrawEligibility.ts';
 import type { BotMatchScreenProps } from '../types.ts';
@@ -44,6 +45,8 @@ export function useMatchNavigation({
     onNavigate,
     journeyTrial,
     onJourneyTrialComplete,
+    onJourneyTrialSettled,
+    onJourneyTrialRematch,
     onDailyFritzComplete,
     currentGlickoRating,
     matchRuleOverrides,
@@ -89,6 +92,16 @@ export function useMatchNavigation({
     setPivotalReviewSummary,
   } = review;
 
+  const { getAttemptId, beginRematchAttempt } = useJourneyTrialAttempt({
+    journeyTrial,
+    gameOver: match.gameOver,
+    winnerId: match.winnerId,
+    youScore: match.players.you.score,
+    botScore: match.players.bot.score,
+    onSettled: onJourneyTrialSettled,
+    onRematch: onJourneyTrialRematch,
+  });
+
   const exitMatch = useCallback(() => {
     invalidateLocalRuns();
     onBack();
@@ -105,9 +118,10 @@ export function useMatchNavigation({
       onJourneyTrialComplete({
         won: markCompleteOnWin && won,
         nodeId: journeyTrial.nodeId,
+        attemptId: getAttemptId() ?? journeyTrial.attemptId,
       });
     },
-    [exitMatch, invalidateLocalRuns, journeyTrial, match.winnerId, onJourneyTrialComplete],
+    [exitMatch, getAttemptId, invalidateLocalRuns, journeyTrial, match.winnerId, onJourneyTrialComplete],
   );
 
   const startFreshMatch = useCallback(() => {
@@ -120,6 +134,8 @@ export function useMatchNavigation({
       return;
     }
     invalidateLocalRuns();
+    // A Journey rematch is a new attempt with the same stage rules; the owner supplies its id.
+    beginRematchAttempt(journeyTrial);
     localPendingRegisteredRef.current = false;
     localPendingResolvedRef.current = false;
     setSelectedTile(null);
@@ -208,6 +224,8 @@ export function useMatchNavigation({
     winningScore,
     dealSize,
     matchRuleOverrides,
+    beginRematchAttempt,
+    journeyTrial,
   ]);
 
   const goHome = useCallback(() => {

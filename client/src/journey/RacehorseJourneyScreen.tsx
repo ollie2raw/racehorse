@@ -23,9 +23,18 @@ import { assertNever } from './journeyContentContract';
 import { JourneyBriefingModal } from './JourneyBriefingModal';
 import { getJourneyPuzzle } from './journeyPuzzles';
 import { getJourneyPuzzleSprint } from './journeyPuzzleSprints';
+import { classifyJourneyLessonCompletion } from './journeyLessonCompletionStatus';
+import type { JourneyMatchOutcomeResult } from './journeyCompletionCore';
+import {
+  journeyStageAttemptDetail,
+  recordJourneyLessonCompletion,
+  recordJourneySprintResult,
+} from './journeyStageCompletion';
 import { JourneyPuzzleModal } from './JourneyPuzzleModal';
 import { InteractivePuzzleModal } from './InteractivePuzzleModal';
 import { PuzzleSprintModal } from './PuzzleSprintModal';
+import { useJourneyAttemptTracker } from './useJourneyAttemptTracker';
+import { abandonStaleJourneyMatchAttempts } from './journeyMatchOutcome';
 import { JourneyChapterCompleteModal } from './JourneyChapterCompleteModal';
 import type { JourneyActiveChallenge } from './journeyRuntime';
 import type {
@@ -61,6 +70,13 @@ function getJourneyWinConditionLabel(node: JourneyNodeWithStatus): string {
     return `Win vs ${formatFritzTierLabel(trialRuntime.fritzTier)} Fritz · Race to ${trialRuntime.winningScore}`;
   }
   return node.completionCriteria;
+}
+
+/** What the player is being asked to do — lessons and sprints are not "puzzles" or "checkpoints". */
+function stageKindLabel(node: JourneyNodeWithStatus): string {
+  if (node.action.kind === 'lesson') return 'Lesson';
+  if (node.action.kind === 'puzzleSprint') return 'Sprint';
+  return nodeTypeLabel(node.nodeType);
 }
 
 function statusLabel(status: JourneyNodeWithStatus['status']): string {
@@ -217,6 +233,7 @@ export default function RacehorseJourneyScreen({
     selectNode,
     selectChapter,
     completeNode,
+    syncProgressFromStorage,
     celebrateChapterCompletion,
   } = useJourneyProgress();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -227,6 +244,16 @@ export default function RacehorseJourneyScreen({
   const [activePremiumLessonContentId, setActivePremiumLessonContentId] = useState<string | null>(null);
   const [premiumLessonInstance, setPremiumLessonInstance] = useState(0);
   const [chapterCompleteDismissed, setChapterCompleteDismissed] = useState(false);
+  const lessonAttempt = useJourneyAttemptTracker('lesson');
+  const sprintAttempt = useJourneyAttemptTracker('sprint');
+  /** The run whose completion the lesson screen last recorded, so a user-initiated re-check can read its status. */
+  const lessonCompletionRun = useRef<{ attemptId: string | null; nodeId: string; result: JourneyMatchOutcomeResult | null } | null>(null);
+
+  // Returning to the trail settles match attempts that can no longer finish: left by browser back or a
+  // swipe (no exit handler ran) or orphaned by a refresh (the attempt log reconciles those on read).
+  useEffect(() => {
+    abandonStaleJourneyMatchAttempts();
+  }, []);
 
   if (!shouldShowChapterCompleteCelebration && chapterCompleteDismissed) {
     setChapterCompleteDismissed(false);
@@ -350,9 +377,15 @@ export default function RacehorseJourneyScreen({
     selectedDescriptor?.runtimeAvailability === 'available' &&
     (selectedNode?.status === 'current' || selectedNode?.status === 'unlocked' || selectedNode?.status === 'completed');
 
+  // A stage whose runtime does not exist yet (e.g. a lesson still to be authored) must say so, not
+  // offer a Play button that does nothing.
+  const contentUnavailable =
+    selectedDescriptor?.runtimeAvailability === 'unavailable' && selectedNode?.status !== 'locked';
+
   const detailCtaLabel = (() => {
     if (!selectedNode) return 'Play';
     if (selectedNode.status === 'locked') return 'Locked';
+    if (contentUnavailable) return 'In development';
     if (selectedNode.status === 'completed') return selectedPremiumHost ? 'Replay Lesson' : 'Completed ✓';
     return 'Play';
   })();
@@ -360,6 +393,7 @@ export default function RacehorseJourneyScreen({
   const detailCtaDisabled =
     !selectedNode ||
     selectedNode.status === 'locked' ||
+    contentUnavailable ||
     (selectedNode.status === 'completed' && !selectedPremiumHost) ||
     !(canBegin || canOpenBriefing || canOpenPuzzle || canOpenPuzzleSprint || canOpenPremiumLesson);
 
@@ -424,12 +458,20 @@ export default function RacehorseJourneyScreen({
         if (descriptor.runtimeAvailability !== 'available') return;
         if (getJourneyPremiumHostKind(String(descriptor.contentId)) !== 'authored_board_lesson') return;
         setSheetOpen(false);
+        lessonAttempt.start(selectedNode.id, journeyStageAttemptDetail(selectedNode.id, {
+          contentId: String(descriptor.contentId),
+          replay: selectedNode.status === 'completed',
+        }));
         setActivePremiumLessonContentId(String(descriptor.contentId));
         return;
       case 'unsupported':
         return;
       case 'puzzle_sprint':
-        if (isPuzzleSprintNode && canOpenPuzzleSprint) setPuzzleSprintOpen(true);
+        if (isPuzzleSprintNode && canOpenPuzzleSprint) {
+          // Completed sprints reopen as a review, not a new scored attempt.
+          if (selectedNode.status !== 'completed') sprintAttempt.start(selectedNode.id, journeyStageAttemptDetail(selectedNode.id));
+          setPuzzleSprintOpen(true);
+        }
         return;
       default:
         return assertNever(descriptor.runtime);
@@ -462,7 +504,15 @@ export default function RacehorseJourneyScreen({
     setPuzzleSprintOpen(false);
     if (!selectedNode || puzzleSprintReviewMode) return;
     if (selectedNode.status === 'locked' || selectedNode.status === 'completed') return;
-    if (result.total > 0 && result.correct >= Math.ceil(result.total / 2)) completeNode(selectedNode.id);
+    // One durable sequence (pending obligation → settle → apply and verify → clear). A pass is credited only
+    // if the result satisfies the sprint predicate; a fail is recorded as lost and can never be recovered as a win.
+    recordJourneySprintResult({
+      attemptId: sprintAttempt.getAttemptId(),
+      nodeId: selectedNode.id,
+      correct: result.correct,
+      total: result.total,
+    });
+    syncProgressFromStorage();
   };
 
   const handleDismissChapterComplete = () => {
@@ -482,9 +532,44 @@ export default function RacehorseJourneyScreen({
         <JourneyLessonHost
           key={`${activePremiumLessonContentId}-${premiumLessonInstance}`}
           definition={lessonDefinition}
-          onExit={() => setActivePremiumLessonContentId(null)}
-          onReplay={() => setPremiumLessonInstance((current) => current + 1)}
-          onLessonCompleted={() => completeNode(lessonDefinition.nodeId)}
+          onExit={() => {
+            // A no-op if the lesson already completed (a terminal attempt is never rewritten).
+            lessonAttempt.settle('abandoned');
+            // Leaving never clears a pending completion; it gives the existing recovery another chance to finish it, so
+            // the trail the player returns to reflects whatever the stored obligations now allow.
+            syncProgressFromStorage();
+            setActivePremiumLessonContentId(null);
+          }}
+          onReplay={() => {
+            lessonAttempt.start(String(lessonDefinition.nodeId), journeyStageAttemptDetail(String(lessonDefinition.nodeId), {
+              contentId: String(lessonDefinition.id),
+              replay: true,
+            }));
+            setPremiumLessonInstance((current) => current + 1);
+          }}
+          onLessonCompleted={(session) => {
+            // Credit comes from the controller's completed session, validated and recorded through the shared
+            // durable sequence — not from the fact that the host called back. An incomplete or invalid session
+            // writes nothing; a duplicate callback finds a terminal attempt and changes nothing.
+            const attemptId = lessonAttempt.getAttemptId();
+            const nodeId = String(lessonDefinition.nodeId);
+            // Remember the run BEFORE recording, so a user-initiated re-check can still read real storage if the
+            // record call itself throws (the host then shows "unverified", never success).
+            lessonCompletionRun.current = { attemptId, nodeId, result: null };
+            const result = recordJourneyLessonCompletion({ attemptId, nodeId, session });
+            lessonCompletionRun.current = { attemptId, nodeId, result };
+            syncProgressFromStorage();
+            // Tell the player what was actually saved, read back from storage — never just that the lesson was passed.
+            return classifyJourneyLessonCompletion({ attemptId, nodeId, result });
+          }}
+          onRecheckCompletion={() => {
+            // User-initiated only. Re-runs the existing recovery and re-reads storage; it never records a second
+            // completion, so it cannot disturb attempt ownership or bypass proof validation.
+            const run = lessonCompletionRun.current;
+            if (!run) return { kind: 'unverified' };
+            syncProgressFromStorage();
+            return classifyJourneyLessonCompletion({ attemptId: run.attemptId, nodeId: run.nodeId, result: null });
+          }}
         />
       );
     }
@@ -668,7 +753,7 @@ export default function RacehorseJourneyScreen({
           {selectedNode ? (
             <div className="rh-jt-mission">
               <p className="rh-jt-mission__eyebrow">
-                {nodeTypeLabel(selectedNode.nodeType)}
+                {stageKindLabel(selectedNode)}
                 {selectedTrialRuntime ? ` · ${selectedTrialRuntime.fritzTier.toUpperCase()}` : ''}
               </p>
               <p className="rh-jt-mission__subtitle">{selectedNode.subtitle}</p>
@@ -732,7 +817,10 @@ export default function RacehorseJourneyScreen({
         }
         title={selectedNode?.title}
         onComplete={puzzleSprintReviewMode ? () => setPuzzleSprintOpen(false) : handleCompletePuzzleSprint}
-        onExit={() => setPuzzleSprintOpen(false)}
+        onExit={() => {
+          sprintAttempt.settle('abandoned');
+          setPuzzleSprintOpen(false);
+        }}
       />
 
       <JourneyChapterCompleteModal

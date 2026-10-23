@@ -57,6 +57,8 @@ export interface JourneyNode {
   requirements: string[];
   rewardText: string;
   badgeText?: string;
+  /** Named opponent shown in the match context HUD. Presentation only — the engine tier comes from `action`. */
+  rivalName?: string;
   action: JourneyNodeAction;
   completionCriteria: string;
 }
@@ -76,6 +78,13 @@ export interface JourneyChapterDefinition {
 }
 
 export interface JourneyChapterProgress {
+  /**
+   * Which version of the chapter's node layout this progress was recorded against. Only Chapter One is
+   * versioned (see `JOURNEY_CHAPTER_ONE_LAYOUT_VERSION`); absent means the original layout. This is a
+   * first-class field because the sanitizer rebuilds every chapter from a fixed field list and would
+   * silently drop an unknown one.
+   */
+  layoutVersion?: number;
   completedNodeIds: string[];
   lastVisitedNodeId: string | null;
   completedAt: string | null;

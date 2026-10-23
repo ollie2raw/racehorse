@@ -56,6 +56,24 @@ export interface BotMatchScreenProps {
   journeyTrial?: {
     nodeId: string;
     nodeTitle: string;
+    /** Identity of the current attempt; changes on every rematch. */
+    attemptId: string;
+    /** What the match HUD shows for this stage. Plain data — the match layer knows nothing about Journey content. */
+    context: JourneyMatchContext;
   } | null;
-  onJourneyTrialComplete?: ((result: { won: boolean; nodeId: string }) => void) | null;
+  /** The player is leaving the trial (Continue Trail, Return to Trail, Leave). Navigation only — never what records a win. */
+  onJourneyTrialComplete?: ((result: { won: boolean; nodeId: string; attemptId: string }) => void) | null;
+  /** Fired once per attempt when authoritative local game state reaches game over. */
+  onJourneyTrialSettled?: ((result: { attemptId: string; nodeId: string; won: boolean; finalScore: { you: number; bot: number } }) => void) | null;
+  /** Rematch started: the owner returns the new attempt's id (or null if none could be created). */
+  onJourneyTrialRematch?: ((previousAttemptId: string) => string | null) | null;
+}
+
+/** HUD context for a Journey match (stage title, rival, target score, and a head-start label when configured). */
+export interface JourneyMatchContext {
+  stageTitle: string;
+  rivalName: string;
+  targetScore: number;
+  /** e.g. "You start +15"; null when there is no head start. */
+  headStartLabel: string | null;
 }

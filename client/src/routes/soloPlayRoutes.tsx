@@ -15,7 +15,13 @@ import {
   getJourneyActiveChallenge,
   setJourneyActiveChallenge,
 } from '../journey/journeyRuntime';
-import { markJourneyNodeCompleted } from '../journey/journeyStorage';
+import { getJourneyStorageScopeId } from '../journey/journeyStorageScope';
+import { buildJourneyMatchContext } from '../journey/journeyMatchContext';
+import {
+  abandonJourneyMatchAttempt,
+  beginJourneyMatchAttempt,
+  recordJourneyMatchOutcome,
+} from '../journey/journeyMatchOutcome';
 
 const SinglePlayerHubScreen = React.lazy(() => import('../screens/SinglePlayerHubScreen'));
 const PuzzleRushScreen = React.lazy(() => import('../puzzleRush/PuzzleRushScreen'));
@@ -336,6 +342,9 @@ export function BotMatchRoute({
         {auth.authLoading ? <ScreenLoader label="Loading player…" /> : <BotMatchScreen
           onBack={() => {
             if (journeyChallenge) {
+              // Leaving without a recorded result is an abandonment (a no-op once a win/loss is recorded).
+              // Read at call time: a rematch swaps the attempt in module state without re-rendering this route.
+              abandonJourneyMatchAttempt(getJourneyActiveChallenge()?.attemptId);
               clearJourneyActiveChallenge();
               setAppMode('journey');
               return;
@@ -351,6 +360,8 @@ export function BotMatchRoute({
           }}
           onNavigate={(mode) => {
             if (journeyChallenge) {
+              // Read at call time: a rematch swaps the attempt in module state without re-rendering this route.
+              abandonJourneyMatchAttempt(getJourneyActiveChallenge()?.attemptId);
               clearJourneyActiveChallenge();
             }
             if (mode === 'learn') {
@@ -376,13 +387,37 @@ export function BotMatchRoute({
           }
           journeyTrial={
             journeyChallenge
-              ? { nodeId: journeyChallenge.nodeId, nodeTitle: journeyChallenge.nodeTitle }
+              ? {
+                  nodeId: journeyChallenge.nodeId,
+                  nodeTitle: journeyChallenge.nodeTitle,
+                  // Always set at launch; '' (never recorded) only if something launched a trial without one.
+                  attemptId: journeyChallenge.attemptId ?? '',
+                  context: buildJourneyMatchContext(journeyChallenge),
+                }
               : null
           }
+          onJourneyTrialSettled={
+            journeyChallenge
+              ? (result) => {
+                  // The one place a Journey match result is recorded — at game over, not on navigation.
+                  recordJourneyMatchOutcome(result);
+                }
+              : undefined
+          }
+          onJourneyTrialRematch={
+            journeyChallenge
+              ? (previousAttemptId) => {
+                  abandonJourneyMatchAttempt(previousAttemptId);
+                  const next = beginJourneyMatchAttempt(getJourneyActiveChallenge() ?? journeyChallenge);
+                  setJourneyActiveChallenge(next);
+                  return next.attemptId ?? null;
+                }
+              : undefined
+          }
           onJourneyTrialComplete={(result) => {
-            if (result.won) {
-              markJourneyNodeCompleted(result.nodeId);
-            }
+            // Navigation only. Completion is recorded at game over via `onJourneyTrialSettled`;
+            // anything that reaches here without a recorded result is an abandonment.
+            abandonJourneyMatchAttempt(result.attemptId);
             clearJourneyActiveChallenge();
             setAppMode('journey');
           }}
@@ -583,17 +618,28 @@ export function JourneyRoute({
       </div>
     );
   }
+  // Journey data is namespaced per signed-in user; wait for auth so the trail never renders (or
+  // writes) under the wrong namespace.
+  if (auth.authLoading) {
+    return withAuthModals(
+      <div className={appRootClassName}>
+        <ScreenLoader label="Loading Journey…" />
+      </div>
+    );
+  }
   return withAuthModals(
     <div className={appRootClassName}>
       <Suspense fallback={<ScreenLoader label="Loading Journey…" />}>
         <ErrorBoundary context="journey">
         <RacehorseJourneyScreen
+          key={getJourneyStorageScopeId()}
           onBack={() => setAppMode('singlePlayerHub')}
           onNavigate={setAppMode}
           onOpenAuth={handleOpenAuthModal}
           onSignOut={handleSignOut}
           onStartBotTrial={(challenge) => {
-            setJourneyActiveChallenge(challenge);
+            // Start the attempt here, in the launch event, so the match has a stable attempt identity.
+            setJourneyActiveChallenge(beginJourneyMatchAttempt(challenge));
             setBotFritzTier(challenge.fritzTier);
             setBotDealSize(challenge.dealSize);
             setAppMode('bot');

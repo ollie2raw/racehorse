@@ -29,6 +29,19 @@ export {
   JOURNEY_CHAPTER_6_ID,
 } from './journeyChapterIds.ts';
 
+/**
+ * Version of Chapter One's node layout, stamped on its stored progress (`layoutVersion`).
+ *
+ *   1  The original ten-node Fritz Trail. Never stamped: its progress has no `layoutVersion`.
+ *   2  The nine-stage Chapter One (Read the Gate ... Handicap Stakes).
+ *
+ * Several node IDs were reused for different stages in version 2 (e.g. `ch1-n02` was "First Score",
+ * now "Dot's Table"; `ch1-n10` was a Master boss, now Handicap Stakes), so a completion recorded under
+ * version 1 cannot be interpreted under version 2. Bump this - and add a step to `journeyStorage` - the
+ * next time Chapter One's stages are reshaped in a way that reuses an ID for something different.
+ */
+export const JOURNEY_CHAPTER_ONE_LAYOUT_VERSION = 2;
+
 export const JOURNEY_CHAPTER_DEFINITIONS: JourneyChapterDefinition[] = [
   {
     chapterId: JOURNEY_CHAPTER_1_ID,
@@ -36,7 +49,7 @@ export const JOURNEY_CHAPTER_DEFINITIONS: JourneyChapterDefinition[] = [
     title: 'The Fritz Trail',
     subtitle: 'Chapter 1 · Proving Ground',
     description:
-      'Ten milestones from trailhead briefing to your first Grandmaster gate—the opening march of a much longer Journey.',
+      'Nine stages from your first lesson at the gate to the Handicap Stakes—the opening march of a much longer Journey.',
     totalNodes: CH1_FRITZ_TRAIL_NODES.length,
     finalReward: 'Fritz Trail Conqueror',
     nextChapterCopy: 'Clear this trail to reveal the next chapter of Racehorse Journey.',
@@ -195,13 +208,30 @@ export function getChapterRuntimeStatusLabel(status: JourneyChapterRuntimeStatus
   return 'Locked';
 }
 
+/**
+ * Chapter One slice: Chapters 2–6 keep their content and stay in the registry (validation, content
+ * descriptors and tests still cover them) but are not surfaced — no tabs, no teaser, not selectable,
+ * and excluded from progress summaries. Flip to `false` to surface them again.
+ */
+export const JOURNEY_CHAPTER_ONE_SLICE = true;
+
+export function isJourneyChapterVisible(chapter: JourneyChapterDefinition): boolean {
+  return !JOURNEY_CHAPTER_ONE_SLICE || chapter.chapterNumber === 1;
+}
+
+export function getVisibleJourneyChapterDefinitions(): JourneyChapterDefinition[] {
+  return JOURNEY_CHAPTER_DEFINITIONS.filter(isJourneyChapterVisible);
+}
+
 export function getPlayableChapterDefinitions(): JourneyChapterDefinition[] {
-  return JOURNEY_CHAPTER_DEFINITIONS.filter((chapter) => chapter.releaseStatus === 'playable');
+  return JOURNEY_CHAPTER_DEFINITIONS.filter(
+    (chapter) => chapter.releaseStatus === 'playable' && isJourneyChapterVisible(chapter),
+  );
 }
 
 export function isPlayableChapterId(chapterId: string): boolean {
   const chapter = getJourneyChapterById(chapterId);
-  return chapter?.releaseStatus === 'playable';
+  return chapter?.releaseStatus === 'playable' && isJourneyChapterVisible(chapter);
 }
 
 export function getChapterReleaseStatusLabel(status: JourneyChapterReleaseStatus): string {

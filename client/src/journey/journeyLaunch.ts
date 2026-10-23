@@ -56,5 +56,6 @@ export function buildJourneyBotTrial(node: JourneyNodeWithStatus): JourneyActive
     scoringMultiple: runtime.scoringMultiple,
     scoreHandicap: runtime.scoreHandicap,
     nodeTitle: node.title,
+    rivalName: node.rivalName,
   };
 }
