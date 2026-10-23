@@ -4,11 +4,15 @@
  * never used, across both seats, branches, doubles, multi-draw runs, blocked hands, non-default rulesets and a JSON round trip.
  * A failure prints the replayable `<namespace>:<n>` and action index.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { REVIEW_FIXTURE_CORPUS } from '../../../game-core/src/reviewFixtureCorpus';
 import { deriveLegalActionsFromSnapshot, sanitizeSnapshotForReview } from '../deriveReviewLegalActions';
 import { actionKey, makeGame } from './support/reviewIntegrityHarness';
+
+// These replay many generated games per test; locally they run in ~1s, but on the shared CI runner they approach the 5s default
+// (observed 5.3s). Explicit, generous timeout: no assertion is changed.
+vi.setConfig({ testTimeout: 60_000 });
 
 const NS = 'gate-legal-ns-7f3';
 const GAMES = 60;

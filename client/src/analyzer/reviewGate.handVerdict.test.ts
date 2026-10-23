@@ -4,12 +4,16 @@
  * endHandBonus: none; expected values come from the authoritative scoreboard at the hand boundaries, read independently of the
  * code under test. Failure output names `<namespace>:<n>` and the hand.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Config } from '@racehorse/game-core';
 import { makeGame, type GeneratedGame } from '../../../packages/review-engine/src/__tests__/support/reviewIntegrityHarness';
 import { snapshotBoardState, toTileTuple, type MoveEntry } from '../game/moveLogger';
 import { analyzeMoveLog } from './moveAnalyzer';
 import { buildHandVerdict, segmentMoveLogByHand } from './handSegmentation';
+
+// These replay many generated games per test; locally they run in ~1s, but on the shared CI runner they approach the 5s default
+// (observed 5.3s). Explicit, generous timeout: no assertion is changed.
+vi.setConfig({ testTimeout: 60_000 });
 
 const NS = 'gate-hand-verdict-c41';
 const GAMES = 40;
