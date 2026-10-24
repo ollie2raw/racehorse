@@ -816,6 +816,14 @@
     padding: 10px 20px !important;
     font-size: 0.76rem !important;
   }
+
+  /* Web only; the installed app's pill is deliberately left as it was. The pill sets no font and `.app` (App.css) resets the
+     inherited face to the OS font, so "Tap a tile to draw" fit its 88px of content by ~5px in San Francisco on a Mac but
+     wrapped to 3 lines in the wider system font on a Linux runner (844x390). HUD labels are Barlow Condensed (CLAUDE.md);
+     using it here removes the dependence on the platform font. */
+  :root:not(.rh-native) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-turn-label {
+    font-family: var(--font-display);
+  }
 }
 
 @media (max-height: 760px) {
@@ -1138,11 +1146,6 @@
      scrubber fit between the cards. 160px keeps "Fritz is thinking…" on two lines, as at 844. */
   :root:not(.rh-native) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-center-status .wl-turn-label {
     max-width: 160px;
-    /* The pill sets no font, and `.app` (App.css) resets the inherited face to the OS font, so it rendered in San Francisco on
-       a Mac but a wider system font elsewhere: "Tap a tile to draw" fit its 88px of content by ~5px on macOS and wrapped to
-       3 lines on a Linux runner. HUD labels are Barlow Condensed (CLAUDE.md); using it here removes the dependence on the
-       platform font. Web only - the installed app's pill is deliberately left as it was. */
-    font-family: var(--font-display);
   }
 
   /* !important only because TileRack sets these sizes inline (native-landscape.css does the same for the same reason). */

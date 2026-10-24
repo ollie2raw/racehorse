@@ -545,6 +545,27 @@ export async function wipeNonIdentityLocalStorage(page: Page) {
   }, [[GUEST_ID_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, LAST_ROOM_STORAGE_KEY], GUEST_SEAT_CREDENTIAL_KEY_PREFIX] as [string[], string]);
 }
 
+/**
+ * Makes `context` behave like a second TAB of the browser `source` lives in: copies its per-room guest seat credentials
+ * into the new context's storage. A tab shares localStorage with its sibling, so it holds the credential the server
+ * requires (guest-seat hardening, 51c6c0ad); a fresh browser context for the same guest id does not, and the server
+ * correctly refuses it with `guest_reconnect_denied`.
+ */
+export async function shareGuestSeatCredentials(source: Page, context: BrowserContext) {
+  const entries = await source.evaluate((prefix) => {
+    const out: Array<[string, string]> = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      const value = key ? window.localStorage.getItem(key) : null;
+      if (key && value != null && key.startsWith(prefix)) out.push([key, value]);
+    }
+    return out;
+  }, GUEST_SEAT_CREDENTIAL_KEY_PREFIX);
+  await context.addInitScript((pairs) => {
+    for (const [key, value] of pairs) window.localStorage.setItem(key, value);
+  }, entries);
+}
+
 export async function installStaleMoveProbe(page: Page, roomCode: string) {
   await page.evaluate((code) => {
     const win = window as E2eSocketWindow & { __e2eStaleMoveAck?: unknown };
