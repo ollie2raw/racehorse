@@ -525,16 +525,24 @@ export async function readServerStateLog(page: Page): Promise<E2eServerStateSnap
   );
 }
 
+/**
+ * Wipes every cached key EXCEPT the guest's identity: its id, name, last room code and - since the guest-seat hardening
+ * (51c6c0ad) - the per-room seat credential (`rh:guest-seat:<ROOM>:<id>`). That credential is a secret the server demands
+ * to hand a guest back its seat; it is identity, not cached match state, so keeping it leaves the point of the tests
+ * intact: the match itself is restored from the server's state:update, not from anything the client cached.
+ */
+export const GUEST_SEAT_CREDENTIAL_KEY_PREFIX = 'rh:guest-seat:';
+
 export async function wipeNonIdentityLocalStorage(page: Page) {
-  await page.evaluate((keys) => {
+  await page.evaluate(([keys, credentialPrefix]) => {
     const keep = new Set(keys);
     const toRemove: string[] = [];
     for (let index = 0; index < window.localStorage.length; index += 1) {
       const key = window.localStorage.key(index);
-      if (key && !keep.has(key)) toRemove.push(key);
+      if (key && !keep.has(key) && !key.startsWith(credentialPrefix)) toRemove.push(key);
     }
     toRemove.forEach((key) => window.localStorage.removeItem(key));
-  }, [GUEST_ID_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, LAST_ROOM_STORAGE_KEY]);
+  }, [[GUEST_ID_STORAGE_KEY, GUEST_NAME_STORAGE_KEY, LAST_ROOM_STORAGE_KEY], GUEST_SEAT_CREDENTIAL_KEY_PREFIX] as [string[], string]);
 }
 
 export async function installStaleMoveProbe(page: Page, roomCode: string) {

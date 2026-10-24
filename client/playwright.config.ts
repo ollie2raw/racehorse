@@ -255,6 +255,9 @@ export default defineConfig({
           url: 'http://127.0.0.1:3001/ping',
           reuseExistingServer: !process.env.CI,
           timeout: 120_000,
+          // The game server logs to stdout. Playwright discards it by default, which left CI-only multiplayer failures
+          // with no server-side evidence at all; pipe it in CI so the log carries the server's own error.
+          stdout: process.env.CI ? 'pipe' : 'ignore',
           env: {
             ...process.env,
             // Unlock winningScore=5 so rematch/leave protocol proof can finish in E2E.
