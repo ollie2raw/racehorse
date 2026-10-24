@@ -114,6 +114,22 @@ describe('official run marking', () => {
     expect(retryBody[0].is_official).toBe(false);
   });
 
+  it('recovers the winning open run if the unofficial retry also collides', async () => {
+    const { createRushRun } = await import('../http/stores/puzzleRushStore');
+    mocks.supabaseFetch
+      .mockRejectedValueOnce(new Error('duplicate key value violates unique constraint "rush_runs_one_official_per_user_day_idx"'))
+      .mockRejectedValueOnce(new Error('duplicate key value violates unique constraint "rush_runs_one_open_per_user_idx"'))
+      .mockResolvedValueOnce([{ id: 'run-winner', user_id: 'user-1', status: 'in_progress', started_at: 'x', run_date: '2026-08-20', is_official: true, assigned_puzzle_ids: ['puzzle-1'] }]);
+
+    const result = await createRushRun({
+      userId: 'user-1', username: 'P', runDate: '2026-08-20', isOfficial: true,
+      assignedPuzzleIds: ['puzzle-2'],
+    });
+    expect(result.created).toBe(false);
+    expect(result.run.id).toBe('run-winner');
+    expect(result.run.assignedPuzzleIds).toEqual(['puzzle-1']);
+  });
+
   it('does not swallow an unrelated insert failure', async () => {
     const { createRushRun } = await import('../http/stores/puzzleRushStore');
     mocks.supabaseFetch.mockRejectedValueOnce(new Error('connection reset'));

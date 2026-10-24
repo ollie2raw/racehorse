@@ -12,6 +12,8 @@ import {
   getLegalMoves,
 } from '../runtime/botEngine.ts';
 import { asPlayMoves } from '../../../game/tileUtils.ts';
+import { compactSingleRowLimit } from '../../../match/compactLandscape.ts';
+import { isNativeShell, measureRack, resolveLandscapeRackHalfWidth } from '../../../match/rackTileSizing.ts';
 import {
   playMatchLoseSound,
   playMatchWinSound,
@@ -387,6 +389,21 @@ export function useMatchPresentation({
 
       const tileCount = Math.max(1, match.players.you.hand.length);
       const isLandscape = window.innerWidth > window.innerHeight;
+      if (isLandscape) {
+        // Landscape: size from the real tray, gap and zoom (see rackTileSizing.ts), not a fixed cap.
+        const isShortLandscape = window.innerHeight <= 430;
+        setHandTileSize(
+          resolveLandscapeRackHalfWidth({
+            tileCount,
+            rowLimit: compactSingleRowLimit(window.innerWidth, isShortLandscape) ?? (isShortLandscape ? 8 : 9),
+            innerWidth: window.innerWidth,
+            isNative: isNativeShell(),
+            ...measureRack(handAreaRef.current, window.innerWidth - 56),
+            caps: { few: 60, many: 46 },
+          }),
+        );
+        return;
+      }
       const isMobileWidth = window.innerWidth <= 900;
       const forceTwoRows = tileCount > 9;
       const maxTileSize = (isLandscape && isMobileWidth ? 42 : (tileCount > 9 ? 46 : 60));

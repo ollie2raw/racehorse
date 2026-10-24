@@ -1,4 +1,5 @@
 import {
+  JOURNEY_CHAPTER_ONE_LAYOUT_VERSION,
   createEmptyChapterProgress,
   getAllJourneyNodeIds,
   getJourneyChapterById,
@@ -8,6 +9,8 @@ import {
   isPlayableChapterId,
 } from './journeyChapters';
 import { JOURNEY_CHAPTER_1_ID } from './journeyTypes';
+import { journeyLegacyKeySuffix } from './journeyStorageScope';
+import { clearPendingCompletions } from './journeyPendingCompletions';
 import type {
   JourneyChapterProgress,
   JourneyNode,
@@ -16,7 +19,18 @@ import type {
   JourneyProgressV1,
 } from './journeyTypes';
 
+/**
+ * Base key. Guests use it as-is (unchanged from before user scoping); signed-in users get a `:u:<id>` suffix.
+ *
+ * Isolation, not merging: progress made as a guest is NOT imported when the player signs in - a signed-in
+ * user starts from their own (initially empty) namespace, and the guest data stays where it was. Data that
+ * was saved under this bare key before user scoping existed is treated as guest data, whoever wrote it.
+ */
 export const JOURNEY_PROGRESS_KEY = 'rh_journey_progress_v1';
+
+export function getJourneyProgressStorageKey(): string {
+  return `${JOURNEY_PROGRESS_KEY}${journeyLegacyKeySuffix()}`;
+}
 
 const DEFAULT_PROGRESS: JourneyProgress = {
   version: 2,
@@ -77,17 +91,52 @@ function sanitizeChapterProgress(value: unknown, validIds: Set<string>): Journey
         : null,
     completedAt: typeof parsed.completedAt === 'string' ? parsed.completedAt : null,
     completionCelebrated: parsed.completionCelebrated === true,
+    ...(typeof parsed.layoutVersion === 'number' && Number.isInteger(parsed.layoutVersion) && parsed.layoutVersion >= 1
+      ? { layoutVersion: parsed.layoutVersion }
+      : {}),
   };
 }
 
-function sanitizeProgress(value: unknown): JourneyProgress {
+/**
+ * Chapter One layout versioning (see `JOURNEY_CHAPTER_ONE_LAYOUT_VERSION`).
+ *
+ * `migrate: true` is for data read from storage. Progress with no `layoutVersion`, or an older one, was
+ * recorded against an earlier layout whose reused IDs now mean different stages, so Chapter One's entry -
+ * and only that entry - is reset to empty and stamped with the current version:
+ *
+ *   invalidated (Chapter One only):  completedNodeIds, lastVisitedNodeId, completedAt, completionCelebrated
+ *   preserved:                       every other chapter's entry, activeChapterId, the attempt log (a
+ *                                    separate key) and anything outside this store
+ *
+ * `completedAt` and `completionCelebrated` are reset deliberately: a chapter-complete timestamp left from
+ * the old layout would otherwise make `isChapterFullyComplete` report the new sequence as finished.
+ *
+ * Idempotent: once stamped, the stored version equals the current one and nothing is reset again. Progress
+ * stamped with a NEWER version (written by a newer build) is left untouched rather than reset.
+ *
+ * `migrate: false` is for progress the current code is saving (it is, by construction, in the current
+ * layout), so an unstamped entry is just stamped - never reset.
+ */
+function applyChapterOneLayout(chapters: Record<string, JourneyChapterProgress>, migrate: boolean): void {
+  const chapterOne = chapters[JOURNEY_CHAPTER_1_ID];
+  if (!chapterOne) return;
+  const stored = chapterOne.layoutVersion ?? 1;
+  if (stored >= JOURNEY_CHAPTER_ONE_LAYOUT_VERSION) return;
+  chapters[JOURNEY_CHAPTER_1_ID] = migrate
+    ? { ...createEmptyChapterProgress(), layoutVersion: JOURNEY_CHAPTER_ONE_LAYOUT_VERSION }
+    : { ...chapterOne, layoutVersion: JOURNEY_CHAPTER_ONE_LAYOUT_VERSION };
+}
+
+function sanitizeProgress(value: unknown, migrate = false): JourneyProgress {
   if (!value || typeof value !== 'object') {
     return { ...DEFAULT_PROGRESS, updatedAt: new Date().toISOString() };
   }
 
   const parsed = value as Partial<JourneyProgress> | JourneyProgressV1;
   if (parsed.version === 1) {
-    return migrateV1Progress(parsed as JourneyProgressV1);
+    const upgraded = migrateV1Progress(parsed as JourneyProgressV1);
+    applyChapterOneLayout(upgraded.chapters, migrate); // v1 predates layout versioning: it is the original layout
+    return upgraded;
   }
 
   const chaptersRaw =
@@ -106,6 +155,8 @@ function sanitizeProgress(value: unknown): JourneyProgress {
   if (!chapters[JOURNEY_CHAPTER_1_ID]) {
     chapters[JOURNEY_CHAPTER_1_ID] = createEmptyChapterProgress();
   }
+  // Before the all-complete check below, so invalidated completions cannot be re-derived into a completedAt.
+  applyChapterOneLayout(chapters, migrate);
 
   for (const [chapterId, chapterProgress] of Object.entries(chapters)) {
     const chapter = getJourneyChapterById(chapterId);
@@ -139,11 +190,16 @@ export function loadJourneyProgress(): JourneyProgress {
     return { ...DEFAULT_PROGRESS, updatedAt: new Date().toISOString() };
   }
   try {
-    const raw = window.localStorage.getItem(JOURNEY_PROGRESS_KEY);
+    const raw = window.localStorage.getItem(getJourneyProgressStorageKey());
     if (!raw) return { ...DEFAULT_PROGRESS, updatedAt: new Date().toISOString() };
     const parsed = JSON.parse(raw) as Partial<JourneyProgress> | JourneyProgressV1;
-    const migrated = sanitizeProgress(parsed);
-    if (parsed.version !== 2) {
+    // `migrate: true` — this is stored data, possibly recorded against an older Chapter One layout.
+    const migrated = sanitizeProgress(parsed, true);
+    // Persist a v1->v2 upgrade, or the layout stamp (and any invalidation it caused) exactly once: after
+    // this the stored version is current, so later loads neither reset nor rewrite anything.
+    const storedLayout = (parsed as Partial<JourneyProgress>).chapters?.[JOURNEY_CHAPTER_1_ID]?.layoutVersion;
+    const layoutCurrent = typeof storedLayout === 'number' && storedLayout >= JOURNEY_CHAPTER_ONE_LAYOUT_VERSION;
+    if (parsed.version !== 2 || !layoutCurrent) {
       saveJourneyProgress(migrated);
     }
     return migrated;
@@ -153,10 +209,11 @@ export function loadJourneyProgress(): JourneyProgress {
 }
 
 export function saveJourneyProgress(progress: JourneyProgress): JourneyProgress {
+  // Saving never resets: progress handed to us by current code is, by construction, in the current layout.
   const next = sanitizeProgress({ ...progress, updatedAt: new Date().toISOString() });
   if (typeof window !== 'undefined') {
     try {
-      window.localStorage.setItem(JOURNEY_PROGRESS_KEY, JSON.stringify(next));
+      window.localStorage.setItem(getJourneyProgressStorageKey(), JSON.stringify(next));
     } catch {
       // Ignore quota / private mode errors during render paths.
     }
@@ -167,10 +224,14 @@ export function saveJourneyProgress(progress: JourneyProgress): JourneyProgress 
 export function resetJourneyProgress(): JourneyProgress {
   if (typeof window !== 'undefined') {
     try {
-      window.localStorage.removeItem(JOURNEY_PROGRESS_KEY);
+      window.localStorage.removeItem(getJourneyProgressStorageKey());
     } catch {
       // Ignore storage errors.
     }
+    // Win obligations owed to the progress being discarded are void with it (this namespace only): otherwise
+    // recovery would restore the reset stage once its prerequisite was replayed. The attempt log is history
+    // and is deliberately left alone.
+    clearPendingCompletions();
   }
   return { ...DEFAULT_PROGRESS, updatedAt: new Date().toISOString() };
 }

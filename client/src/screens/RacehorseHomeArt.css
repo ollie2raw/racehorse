@@ -806,6 +806,19 @@
   }
 }
 
+/* Separate from gameplay navigation; share its desktop content gutters. */
+.today-home .home-legal-footer {
+  position: relative;
+  z-index: 2;
+  margin-inline: 16px;
+}
+
+@media (--desk) {
+  .today-home .home-legal-footer {
+    margin-inline: 56px;
+  }
+}
+
 /* The compact Home is composed inside AppPresentation's bounded Hub content.
    The shell owns header, tabs, and safe areas; these rules own only Home. */
 @media (--compact-shell) {
@@ -1025,6 +1038,16 @@
 
   .today-home .home-card-status-wrap {
     margin-top: 10px;
+  }
+}
+
+/* The compact Home is sized to the pixel (its card row cannot shrink below 157px), so a legal footer under it forces
+   .home-main to scroll and pushes the streak strip under the tab bar on a phone held sideways in a browser.
+   Privacy / Terms / Support stay one tap away in Settings > Legal and support and in the sign-in sheet, and the legal
+   pages are public URLs. The native app has its own landscape fit (native-landscape.css) and keeps the footer. */
+@media (--short-landscape) {
+  html:not(.rh-native) .today-home .home-legal-footer {
+    display: none;
   }
 }
 

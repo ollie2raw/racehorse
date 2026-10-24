@@ -1,3 +1,4 @@
+import { trackProcessWork } from './platform/processLifecycle';
 
 import * as Sentry from '@sentry/node';
 import { config } from './config';
@@ -149,7 +150,11 @@ export function takeSupabaseUsage(): Map<string, SupabaseUsageEntry> {
 // Core fetch
 // ---------------------------------------------------------------------------
 
-export async function supabaseFetch<T>(path: string, init?: SupabaseFetchOptions): Promise<T> {
+export function supabaseFetch<T>(path: string, init?: SupabaseFetchOptions): Promise<T> {
+  return trackProcessWork('database', () => supabaseFetchImpl<T>(path, init));
+}
+
+async function supabaseFetchImpl<T>(path: string, init?: SupabaseFetchOptions): Promise<T> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const isReadRequest = method === 'GET' || method === 'HEAD';
 
@@ -164,9 +169,8 @@ export async function supabaseFetch<T>(path: string, init?: SupabaseFetchOptions
     const url = new URL(path, supabaseUrl);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    let response: Response;
     try {
-      response = await fetch(url, {
+      const response = await fetch(url, {
         ...requestInit,
         signal: controller.signal,
         headers: {
@@ -177,6 +181,29 @@ export async function supabaseFetch<T>(path: string, init?: SupabaseFetchOptions
           ...(requestInit.headers ?? {}),
         },
       });
+
+      if (!response.ok) {
+        throw new Error(`Supabase request failed: ${response.status} ${await response.text()}`);
+      }
+
+      const text = await response.text();
+      // Accounting must never affect the request it measures.
+      try {
+        recordSupabaseUsage(method, path, text.length, response.headers?.get?.('content-length') ?? null);
+      } catch {
+        // ignore
+      }
+      if (!text.trim()) {
+        return undefined as T;
+      }
+
+      try {
+        return JSON.parse(text) as T;
+      } catch (error) {
+        throw new Error(
+          `Supabase response JSON parse failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     } catch (error) {
       if (isReadRequest && init?.circuitBreakable) recordFailure();
       if (error instanceof Error && error.name === 'AbortError') {
@@ -185,30 +212,6 @@ export async function supabaseFetch<T>(path: string, init?: SupabaseFetchOptions
       throw error;
     } finally {
       clearTimeout(timeout);
-    }
-
-    if (!response.ok) {
-      if (isReadRequest && init?.circuitBreakable) recordFailure();
-      throw new Error(`Supabase request failed: ${response.status} ${await response.text()}`);
-    }
-
-    const text = await response.text();
-    // Accounting must never affect the request it measures.
-    try {
-      recordSupabaseUsage(method, path, text.length, response.headers?.get?.('content-length') ?? null);
-    } catch {
-      // ignore
-    }
-    if (!text.trim()) {
-      return undefined as T;
-    }
-
-    try {
-      return JSON.parse(text) as T;
-    } catch (error) {
-      throw new Error(
-        `Supabase response JSON parse failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
     }
   });
 }

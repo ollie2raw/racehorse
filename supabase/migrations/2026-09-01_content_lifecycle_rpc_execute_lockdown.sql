@@ -53,15 +53,23 @@ revoke all on function public.invalidate_daily_fritz_challenge(date, text)
 grant execute on function public.invalidate_daily_fritz_challenge(date, text)
   to service_role;
 
-revoke all on function public.gauntlet_publish_day(date, text, jsonb, jsonb, timestamptz)
-  from public, anon, authenticated;
-grant execute on function public.gauntlet_publish_day(date, text, jsonb, jsonb, timestamptz)
-  to service_role;
-
-revoke all on function public.gauntlet_close_day(date)
-  from public, anon, authenticated;
-grant execute on function public.gauntlet_close_day(date)
-  to service_role;
+-- These optional, retired-mode RPCs were created out-of-band and have no
+-- checked-in creation migration. Lock them down if present; a fresh database
+-- must not manufacture disabled product functions merely to revoke a grant.
+do $$
+declare signature text; fn regprocedure;
+begin
+  foreach signature in array array[
+    'public.gauntlet_publish_day(date,text,jsonb,jsonb,timestamptz)',
+    'public.gauntlet_close_day(date)'
+  ] loop
+    fn := to_regprocedure(signature);
+    if fn is not null then
+      execute format('revoke all on function %s from public, anon, authenticated',fn);
+      execute format('grant execute on function %s to service_role',fn);
+    end if;
+  end loop;
+end $$;
 
 do $$
 declare
@@ -69,12 +77,13 @@ declare
   targets regprocedure[] := array[
     'public.publish_daily_fritz_challenge(text, date, integer, integer, integer, integer, integer, integer, integer, integer, text, integer, text, text, jsonb, timestamptz)',
     'public.invalidate_daily_fritz_challenge(date, text)',
-    'public.gauntlet_publish_day(date, text, jsonb, jsonb, timestamptz)',
-    'public.gauntlet_close_day(date)'
+    to_regprocedure('public.gauntlet_publish_day(date, text, jsonb, jsonb, timestamptz)'),
+    to_regprocedure('public.gauntlet_close_day(date)')
   ]::regprocedure[];
 begin
   foreach fn in array targets
   loop
+    if fn is null then continue; end if;
     if has_function_privilege('anon', fn, 'EXECUTE')
        or has_function_privilege('authenticated', fn, 'EXECUTE') then
       raise exception 'lockdown failed: % still EXECUTE-able by a client role', fn;
@@ -84,7 +93,7 @@ begin
     end if;
   end loop;
 
-  raise notice 'content-lifecycle RPC EXECUTE restricted to service_role on all 4 functions';
+  raise notice 'content-lifecycle RPC EXECUTE restricted to service_role on all installed functions';
 end $$;
 
 commit;

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { assertPersistenceQaSafety, guardPersistenceQaBrowser } from './persistenceQaSafety.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientRoot = path.resolve(__dirname, '..');
@@ -206,13 +207,16 @@ async function main() {
   ensureFixtureDir();
   ensureFixtureIsIgnored();
 
+  const qaEnv = assertPersistenceQaSafety('captureAuthenticatedQaFixture', [appUrl, apiUrl]);
   const browser = await chromium.launch({
     channel: browserChannel,
     headless: false,
   });
   const context = await browser.newContext({
+    serviceWorkers: 'block',
     viewport: { width: 1440, height: 960 },
   });
+  await guardPersistenceQaBrowser(context, qaEnv);
   await context.addInitScript(() => {
     window.localStorage.setItem('hasSeenWelcome', '1');
   });

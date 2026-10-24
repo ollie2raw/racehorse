@@ -105,7 +105,7 @@ export default defineConfig({
   ] : [
     ...(MOBILE_VISUAL ? [{
       name: 'chromium-mobile-visual',
-      testMatch: ['mobile-landscape-visual.spec.ts', 'mobile-shell-contract.spec.ts', 'home-visual-conformance.spec.ts', 'solo-visual-conformance.spec.ts', 'learn-visual-conformance.spec.ts'],
+      testMatch: ['mobile-landscape-visual.spec.ts', 'mobile-shell-contract.spec.ts', 'home-visual-conformance.spec.ts', 'solo-visual-conformance.spec.ts', 'learn-visual-conformance.spec.ts', 'board-routing-visual.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 844, height: 390 },
@@ -179,6 +179,7 @@ export default defineConfig({
         /mobile-shell-contract\.spec\.ts/,
         /solo-visual-conformance\.spec\.ts/,
         /learn-visual-conformance\.spec\.ts/,
+        /board-routing-visual\.spec\.ts/,
         /mobile-390.*\.spec\.ts/,
         /mobile-reachability\.spec\.ts/,
         ...DF_SERIAL_DESKTOP_SPECS,
@@ -254,11 +255,16 @@ export default defineConfig({
           url: 'http://127.0.0.1:3001/ping',
           reuseExistingServer: !process.env.CI,
           timeout: 120_000,
+          // The game server logs to stdout. Playwright discards it by default, which left CI-only multiplayer failures
+          // with no server-side evidence at all; pipe it in CI so the log carries the server's own error.
+          stdout: process.env.CI ? 'pipe' : 'ignore',
           env: {
             ...process.env,
             // Unlock winningScore=5 so rematch/leave protocol proof can finish in E2E.
             MP_PRIVATE_CERT_MODE: '1',
             E2E_INSPECT: '1',
+            // Explicit opt-in for the `Bearer e2e-daily-fritz` identity shim (refused on hosted runtimes and production Supabase).
+            E2E_AUTH_SHIM: '1',
             DAILY_FRITZ_MEMORY_STORE: '1',
             DAILY_FRITZ_TEST_FIXTURES_ENABLED: 'true',
             NODE_ENV: process.env.NODE_ENV === 'production' ? 'development' : (process.env.NODE_ENV ?? 'development'),

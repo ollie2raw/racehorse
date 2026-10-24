@@ -1,0 +1,16 @@
+@import '../ui/motion.css';
+
+.rh-number-change {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  animation: rh-number-change var(--rh-motion-state) var(--rh-motion-settle);
+}
+
+@keyframes rh-number-change {
+  from { opacity: 0.6; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rh-number-change { animation: none; }
+}

@@ -9,6 +9,8 @@ import './styles/table-theme-toggle.css';
 import './styles/weekly-awards.css';
 import './styles/responsive.css';
 import { useAuthSession } from './auth/useAuthSession';
+import { useJourneyStorageScope } from './journey/useJourneyStorageScope';
+import { useClearJourneyChallengeOutsideMatch } from './journey/useJourneyChallengeLifecycle';
 import { useAppSessionUi } from './auth/useAppSessionUi';
 import type { GameState } from './types';
 import { useBotGamePreferences } from './bot/useBotGamePreferences';
@@ -49,7 +51,7 @@ import { useRegisterTournamentSocketHandlers } from './tournament/useRegisterTou
 import { useSocialInviteState } from './multiplayer/useSocialInviteState';
 import type { MatchFoundPayload } from './matchmaking/types';
 import type { RoomAckResponse } from './multiplayer/roomTransport';
-import { emitWithAck } from './multiplayer/roomTransport';
+import { emitWithAck, setRoomMatchIdReader } from './multiplayer/roomTransport';
 import type { RoomEventMeta } from './multiplayer/protocol/roomProtocol';
 import {
   LAST_ROOM_STORAGE_KEY,
@@ -130,6 +132,10 @@ export default function App() {
     multiplayerIdentityUserIdRef,
     isAdmin,
   } = useAuthSession();
+  // Journey progress and attempts are local: keep them in the signed-in user's namespace (or guest's).
+  useJourneyStorageScope(authUser?.id ?? null, authLoading);
+  // A Journey challenge is only valid while a match is being played; drop it however the player left.
+  useClearJourneyChallengeOutsideMatch(appMode);
 
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
   const [roomCode, setRoomCode] = useState('');
@@ -243,6 +249,8 @@ export default function App() {
   const rejoinInFlightRef = useRef(false);
   const maxSequenceRef = useRef<number>(-1);
   const roomMatchIdRef = useRef<string | null>(null);
+  // Commands are bound to the match the room session currently reports (same ref, no second identity).
+  useEffect(() => { setRoomMatchIdReader(() => roomMatchIdRef.current); }, []);
   const maxEventSequenceRef = useRef<number>(-1);
 
   useEffect(() => {
@@ -828,6 +836,7 @@ export default function App() {
       onSignIn={signIn}
       onSignUp={signUp}
       onResetPassword={resetPassword}
+      onOpenLegal={setAppMode}
       passwordRecoveryPending={passwordRecoveryPending}
       onUpdatePassword={updatePassword}
       onPasswordRecoveryClose={clearPasswordRecoveryPending}
@@ -936,6 +945,7 @@ export default function App() {
         updateEmail,
         isAdmin,
         authUser,
+        authLoading,
         authProfile,
         supabaseEnabled,
         supabaseConfigError,

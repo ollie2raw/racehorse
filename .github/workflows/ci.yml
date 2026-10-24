@@ -236,6 +236,16 @@ jobs:
           npx playwright install chromium --with-deps
           npm run e2e --prefix client
 
+      # Failure evidence (screenshots, traces, error context) so a CI-only e2e failure can be diagnosed without a rerun.
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-artifacts
+          path: client/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
   mobile-reachability:
     name: Mobile Reachability Gate
     runs-on: ubuntu-latest
@@ -308,6 +318,15 @@ jobs:
       - name: Client build
         env:
           VITE_APP_VERSION: ${{ github.sha }}
+          # The client build script runs scripts/legalReleaseGuard.mjs, which refuses any unresolved legal value. This job only validates
+          # the build pipeline (lazy boundaries, bundle size), so it supplies INERT, obviously non-release values: not secrets, and never
+          # shipped. A real release build (Vercel production, or the iOS build script) must provide the real VITE_LEGAL_* values and
+          # still fails closed without them.
+          VITE_LEGAL_LEGAL_ENTITY_NAME: CI Validation Only
+          VITE_LEGAL_SUPPORT_EMAIL: support@ci-validation.invalid
+          VITE_LEGAL_MINIMUM_AGE: '13'
+          VITE_LEGAL_POLICY_EFFECTIVE_DATE: '2026-01-01'
+          VITE_LEGAL_POSTHOG_LOCATION: discarded
         run: npm run build --prefix client
 
       - name: Bot match lazy-load boundaries

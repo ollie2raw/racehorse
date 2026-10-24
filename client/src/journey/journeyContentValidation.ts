@@ -7,6 +7,7 @@ import {
 } from './journeyContentIndex.ts';
 import { hasJourneyPuzzleSprint } from './journeyPuzzleSprints.ts';
 import { JOURNEY_CHAPTER_DEFINITIONS } from './journeyChapters.ts';
+import { getJourneyMatchVariant } from './journeyMatchVariants.ts';
 import {
   CORE_JOURNEY_RULESET_ID,
   type JourneyContentDescriptor,
@@ -174,9 +175,17 @@ function summarizeJourneyTrials(): JourneyContentSummary['trials'] {
     const chapter = JOURNEY_CHAPTER_DEFINITIONS.find((entry) => entry.chapterId === chapterSummary.chapterId);
     if (!chapter) continue;
     for (const node of chapter.nodes) {
-      if ((node.nodeType !== 'match' && node.nodeType !== 'boss') || node.action.kind !== 'botMatch') continue;
+      if (node.nodeType !== 'match' && node.nodeType !== 'boss') continue;
+      // `botMatchVariant` nodes carry their format on the variant, not on the node action.
+      const trial =
+        node.action.kind === 'botMatch'
+          ? node.action
+          : node.action.kind === 'botMatchVariant'
+            ? getJourneyMatchVariant(node.action.variantId)
+            : null;
+      if (!trial) continue;
       const trialFormat =
-        node.action.trialFormat ?? ((node.action.winningScore ?? 60) < 60 ? 'shortRace' : 'fullMatch');
+        trial.trialFormat ?? ((trial.winningScore ?? 60) < 60 ? 'shortRace' : 'fullMatch');
       if (trialFormat === 'shortRace') {
         chapterSummary.shortRaceCount += 1;
         continue;
@@ -645,22 +654,37 @@ function validateNodeFields(errors: string[], node: JourneyNode): void {
   }
 
   if (node.nodeType === 'match' || node.nodeType === 'boss') {
-    if (node.action.kind !== 'botMatch') {
-      pushNodeError(errors, node, `${node.nodeType} node must use botMatch action`);
+    let trial: {
+      fritzTier: FritzTier;
+      dealSize: number;
+      winningScore?: number;
+      trialFormat?: 'fullMatch' | 'shortRace';
+    };
+    if (node.action.kind === 'botMatch') {
+      trial = node.action;
+    } else if (node.action.kind === 'botMatchVariant') {
+      const variant = getJourneyMatchVariant(node.action.variantId);
+      if (!variant) {
+        pushNodeError(errors, node, `unknown match variant "${node.action.variantId}"`);
+        return;
+      }
+      trial = variant;
+    } else {
+      pushNodeError(errors, node, `${node.nodeType} node must use botMatch or botMatchVariant action`);
       return;
     }
-    if (!VALID_FRITZ_TIERS.includes(node.action.fritzTier)) {
-      pushNodeError(errors, node, `invalid fritzTier "${node.action.fritzTier}"`);
+    if (!VALID_FRITZ_TIERS.includes(trial.fritzTier)) {
+      pushNodeError(errors, node, `invalid fritzTier "${trial.fritzTier}"`);
     }
-    if (!VALID_DEAL_SIZES.has(node.action.dealSize)) {
-      pushNodeError(errors, node, `invalid dealSize ${node.action.dealSize}`);
+    if (!VALID_DEAL_SIZES.has(trial.dealSize)) {
+      pushNodeError(errors, node, `invalid dealSize ${trial.dealSize}`);
     }
-    const winningScore = node.action.winningScore ?? 60;
+    const winningScore = trial.winningScore ?? 60;
     if (!VALID_WINNING_SCORES.has(winningScore)) {
       pushNodeError(errors, node, `invalid winningScore ${winningScore}`);
     }
     const trialFormat =
-      node.action.trialFormat ?? (winningScore < 60 ? 'shortRace' : 'fullMatch');
+      trial.trialFormat ?? (winningScore < 60 ? 'shortRace' : 'fullMatch');
     if (!VALID_TRIAL_FORMATS.has(trialFormat)) {
       pushNodeError(errors, node, `invalid trialFormat "${trialFormat}"`);
     }
@@ -690,7 +714,9 @@ function validateNodeFields(errors: string[], node: JourneyNode): void {
     }
   }
 
-  if (node.nodeType === 'checkpoint' && !hasJourneyBriefing(node.id)) {
+  // Only acknowledgement checkpoints need briefing copy. A lesson checkpoint's runtime comes from a
+  // lesson definition (or, until one exists, resolves to an honest `unsupported` descriptor).
+  if (node.nodeType === 'checkpoint' && node.action.kind === 'placeholder' && !hasJourneyBriefing(node.id)) {
     pushNodeError(errors, node, 'missing briefing content in journey briefing registry');
   }
 }

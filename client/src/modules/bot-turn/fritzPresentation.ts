@@ -68,3 +68,19 @@ export function buildFritzTurnLabel(input: {
 
   return `${opponentLabel} is thinking…`;
 }
+
+/**
+ * True while Fritz's committed turn is still being presented draw-by-draw.
+ *
+ * Embedded forced-draw chains (scoring/double play that drains the boneyard) are
+ * resolved atomically inside the engine, so `match.currentPlayer` already names the
+ * human by the time the first tile is animated. Until the presentation releases the
+ * draw lock, the UI must keep treating it as Fritz's turn.
+ */
+export function isFritzTurnHeldByPresentation(input: {
+  handActive: boolean;
+  presentation: FritzPresentationState | null | undefined;
+  drawSequenceActive: boolean;
+}): boolean {
+  return input.handActive && input.drawSequenceActive && input.presentation?.phase === 'drawing';
+}

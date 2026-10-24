@@ -9,6 +9,7 @@ import './RacehorseHomeArt.css';
 import { isSpectatorModeEnabled } from '../config/spectatorModeFeature.ts';
 import { isTournamentsEnabled } from '../config/tournamentsFeature.ts';
 import { hidesComingSoonSurfaces } from '../config/nativeAppSurface';
+import { LegalFooter } from '../legal/LegalFooter';
 // One AppMode, defined in ../types. A local copy here drifted the moment a
 // mode was added elsewhere — which is what `settings` did.
 import type { AppMode } from '../types';
@@ -210,7 +211,7 @@ export default function RacehorseHomeScreen({
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#0A0E17] text-[var(--rh-text)] home-page-root today-home desk:min-h-screen"
+      className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#0A0E17] text-[var(--rh-text)] home-page-root today-home"
       style={themeVars}
     >
       <div className="home-bg" aria-hidden="true">
@@ -223,14 +224,14 @@ export default function RacehorseHomeScreen({
         <div className="home-bg__texture" />
       </div>
 
-      <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[1580px] flex-col home-shell desk:min-h-screen">
+      <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[1580px] flex-col home-shell">
         <GlobalNav
           onNavigate={navigate}
           onOpenAuth={onOpenAuth}
           onSignOut={onSignOut}
         />
 
-        <main className="relative min-h-0 flex-1 overflow-y-auto px-0 pt-4 home-main desk:overflow-visible desk:pb-5 desk:pt-8">
+        <main className="relative min-h-0 flex-1 overflow-y-auto px-0 pt-4 home-main desk:pb-5 desk:pt-8">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-[linear-gradient(180deg,rgba(7,12,22,0.26)_0%,transparent_100%)]" />
           <div className="home-heading text-center">
             <h1 className="text-[34px] font-black leading-[0.95] tracking-[-0.04em] text-white desk:text-[64px] desk:leading-[0.9] desk:tracking-[-0.05em]" style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}>Today&apos;s Race</h1>
@@ -345,6 +346,7 @@ export default function RacehorseHomeScreen({
             </div>
           </section>
         </main>
+        <LegalFooter className="home-legal-footer" onNavigate={navigate} />
       </div>
     </div>
   );

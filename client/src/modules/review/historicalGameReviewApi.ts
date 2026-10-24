@@ -29,7 +29,7 @@ export async function fetchRecentGameReviews(
   const result = await apiGet<{ reviews: RecentGameReviewListEntry[] }>(
     `/api/game-reviews/recent?limit=${Math.max(1, Math.min(20, Math.floor(limit)))}`,
   );
-  if (result.error || !result.data?.reviews) return [];
+  if (result.error || !result.data?.reviews) throw new Error(result.error ?? 'Could not load saved reviews.');
   return result.data.reviews;
 }
 

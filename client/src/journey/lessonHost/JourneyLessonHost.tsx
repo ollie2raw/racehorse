@@ -14,6 +14,7 @@ import {
   type JourneyLessonTransitionResult,
 } from '../journeyLessonController.ts';
 import type { JourneyLessonDefinition } from '../journeyContentContract.ts';
+import { normalizeJourneyLessonCompletionStatus, type JourneyLessonCompletionStatus } from '../journeyLessonCompletionStatus.ts';
 import { applyJourneyEvidenceToStore, createEmptyJourneyEvidenceStore } from '../journeyEvidenceReducer.ts';
 import { validateJourneyEvidenceEvent } from '../journeyEvidenceValidation.ts';
 import type { JourneyEvidenceStore } from '../journeyEvidenceTypes.ts';
@@ -32,7 +33,14 @@ type JourneyLessonHostProps = {
   definition: JourneyLessonDefinition;
   onExit: () => void;
   onReplay?: () => void;
-  onLessonCompleted: () => void;
+  /**
+   * Receives the controller's completed session — the facts a completion is validated from — records it, and MUST
+   * return what actually happened. The host shows success ONLY for a verified-credited status; a status that is
+   * missing, malformed or thrown for is shown as "unverified" (fail-closed), never as success.
+   */
+  onLessonCompleted: (session: JourneyLessonSessionState) => JourneyLessonCompletionStatus;
+  /** Re-reads the status of the completion already recorded for this run. Never records a second completion. */
+  onRecheckCompletion?: () => JourneyLessonCompletionStatus;
   runtime?: Partial<LessonRuntime>;
 };
 
@@ -54,7 +62,7 @@ function scenarioForStage(state: JourneyLessonSessionState, definition: JourneyL
   return scenarios[id] ?? null;
 }
 
-export function JourneyLessonHost({ definition, onExit, onReplay, onLessonCompleted, runtime }: JourneyLessonHostProps) {
+export function JourneyLessonHost({ definition, onExit, onReplay, onLessonCompleted, onRecheckCompletion, runtime }: JourneyLessonHostProps) {
   const bundle = getJourneyAuthoredLessonBundle(String(definition.id));
   if (!bundle || bundle.definition !== definition) throw new Error(`Missing authored Journey lesson bundle for ${definition.id}.`);
   const ids = useMemo(() => ({ ...defaultRuntime, ...runtime }), [runtime]);
@@ -74,6 +82,7 @@ export function JourneyLessonHost({ definition, onExit, onReplay, onLessonComple
   const [resultBoard, setResultBoard] = useState<BoardState | null>(null);
   const [demoStep, setDemoStep] = useState(0);
   const [lastConsequence, setLastConsequence] = useState<JourneyAuthoredMoveConsequence | null>(null);
+  const [completionStatus, setCompletionStatus] = useState<JourneyLessonCompletionStatus | null>(null);
 
   const applyEffects = useCallback((effects: JourneyLessonEffect[]) => {
     for (const effect of effects) {
@@ -144,10 +153,19 @@ export function JourneyLessonHost({ definition, onExit, onReplay, onLessonComple
   }, [session?.phase]);
 
   useEffect(() => {
-    if (session?.status !== 'completed' || completedCallback.current) return;
+    if (!session || session.status !== 'completed' || completedCallback.current) return;
     completedCallback.current = true;
-    onLessonCompleted();
-  }, [onLessonCompleted, session?.status]);
+    // One-shot report to the persistence boundary, which must follow the committed `completed` session; what it says
+    // happened decides what the player is told. No automatic retry: a re-check is only ever user-initiated.
+    let reported: unknown;
+    try {
+      reported = onLessonCompleted(session);
+    } catch {
+      reported = undefined; // the boundary failed: the outcome is unknown, which must never read as success
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- records the completion and shows its real outcome
+    setCompletionStatus(normalizeJourneyLessonCompletionStatus(reported));
+  }, [onLessonCompleted, session]);
 
   const stage = session ? definition.stages[session.currentStageIndex] : null;
   const scenario = session ? scenarioForStage(session, definition, bundle.scenarios) : null;
@@ -251,9 +269,27 @@ export function JourneyLessonHost({ definition, onExit, onReplay, onLessonComple
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.phase, session?.pendingRetry, session?.sessionId, stage?.id]);
 
+  /** User-initiated. A result that is missing, malformed, thrown for or "unverified" leaves the notice as it was. */
+  const recheckCompletion = () => {
+    let reported: unknown;
+    try {
+      reported = onRecheckCompletion?.();
+    } catch {
+      return;
+    }
+    const next = normalizeJourneyLessonCompletionStatus(reported);
+    if (next.kind !== 'unverified') setCompletionStatus(next);
+  };
+
   if (!session || !stage) return null;
 
-  if (session.status === 'completed') return <CompletionView onExit={onExit} onReplay={onReplay ?? onExit} evidenceRecorded={sessionEvidenceCount > 0} completionLine={bundle.presentation.completionLine} />;
+  if (session.status === 'completed') {
+    if (!completionStatus) return <CompletionSaving />;
+    if (completionStatus.kind !== 'confirmed' && completionStatus.kind !== 'already_credited') {
+      return <CompletionNotice status={completionStatus} onExit={onExit} onReplay={onReplay ?? onExit} onRecheck={onRecheckCompletion ? recheckCompletion : undefined} />;
+    }
+    return <CompletionView onExit={onExit} onReplay={onReplay ?? onExit} evidenceRecorded={sessionEvidenceCount > 0} completionLine={bundle.presentation.completionLine} />;
+  }
   if (session.status === 'abandoned' || session.status === 'ended') return <EndedView onExit={onExit} />;
 
   const continueStage = () => transition({ kind: 'continue_stage', stageId: stage.id, timestamp: ids.now() });
@@ -277,4 +313,42 @@ export function JourneyLessonHost({ definition, onExit, onReplay, onLessonComple
 }
 
 function CompletionView({ onExit, onReplay, evidenceRecorded, completionLine }: { onExit: () => void; onReplay: () => void; evidenceRecorded: boolean; completionLine: string }) { return <main className="journey-lesson-host journey-lesson-host--terminal" aria-labelledby="lesson-complete-title"><section className="journey-lesson-host__completion-card"><Check size={34} aria-hidden="true" /><h1 id="lesson-complete-title">Proof challenge passed</h1><p>{completionLine}</p>{evidenceRecorded ? <p className="journey-lesson-host__eyebrow">Evidence recorded for this session only</p> : null}<div><button type="button" onClick={onExit}>Return to Journey</button><button type="button" onClick={onReplay}>Replay Lesson</button></div></section></main>; }
+/** Shown for the instant between "the lesson is complete" and "we know what was saved": no success claim yet. */
+function CompletionSaving() {
+  return <main className="journey-lesson-host journey-lesson-host--terminal" aria-busy="true"><section className="journey-lesson-host__completion-card" role="status"><h1>Saving your result…</h1></section></main>;
+}
+
+/**
+ * The lesson was passed, but Journey progress is NOT credited. Two different situations, told apart:
+ *   pending  — the result is saved on this device and will be finished the next time the Journey opens (uncertain);
+ *   rejected — it could not be saved for this run (definitive); replaying is the safe way to try again.
+ * Neither says "passed" as a bare success, and neither claims the next stage unlocked. Leaving keeps any pending
+ * obligation: nothing here clears it.
+ */
+function CompletionNotice({ status, onExit, onReplay, onRecheck }: { status: Exclude<JourneyLessonCompletionStatus, { kind: 'confirmed' | 'already_credited' }>; onExit: () => void; onReplay: () => void; onRecheck?: () => void }) {
+  const pending = status.kind === 'pending';
+  const unverified = status.kind === 'unverified';
+  const notOpen = status.kind === 'rejected' && status.reason === 'stage_not_open';
+  return (
+    <main className="journey-lesson-host journey-lesson-host--terminal" aria-labelledby="lesson-notice-title">
+      <section className="journey-lesson-host__completion-card" role={pending ? 'status' : 'alert'} data-completion-status={status.kind}>
+        <h1 id="lesson-notice-title">{pending ? 'Passed — your progress is still saving' : unverified ? 'Passed — we couldn’t confirm it was saved' : 'Passed, but your progress wasn’t saved'}</h1>
+        <p>
+          {pending
+            ? 'You passed this lesson, but we couldn’t confirm it on your Journey map yet. Your result is kept on this device and will be finished the next time you open the Journey. The next stage stays locked until then.'
+            : unverified
+              ? 'You passed this lesson, but we couldn’t confirm that your progress was saved, so the next stage may not have unlocked. Check again, or return to the Journey and look at the stage. If it isn’t marked complete, replay the lesson to save it.'
+              : notOpen
+              ? 'You passed this lesson, but this stage isn’t open on your Journey yet, so your progress didn’t change. Finish the earlier stages first, then replay it.'
+              : 'You passed this lesson, but we couldn’t save it to your Journey, so the next stage hasn’t unlocked. Nothing on your map was changed. Replay the lesson to try again.'}
+        </p>
+        <div>
+          <button type="button" onClick={onExit}>Return to Journey</button>
+          {(pending || unverified) && onRecheck ? <button type="button" onClick={onRecheck}>Check again</button> : null}
+          {!pending ? <button type="button" onClick={onReplay}>Replay Lesson</button> : null}
+        </div>
+      </section>
+    </main>
+  );
+}
 function EndedView({ onExit }: { onExit: () => void }) { return <main className="journey-lesson-host journey-lesson-host--terminal"><section className="journey-lesson-host__completion-card"><h1>Lesson ended</h1><p>Your progress on the campaign map is unchanged.</p><button type="button" onClick={onExit}>Return to Journey</button></section></main>; }

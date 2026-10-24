@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFritzScoreCeremonyMessage,
   buildFritzTurnLabel,
+  isFritzTurnHeldByPresentation,
 } from './fritzPresentation.ts';
 
 describe('fritzPresentation copy', () => {
@@ -62,5 +63,18 @@ describe('fritzPresentation copy', () => {
         gameOver: false,
       }),
     ).toBe('Fritz is thinking…');
+  });
+});
+
+describe('isFritzTurnHeldByPresentation', () => {
+  const drawing = { phase: 'drawing', drawCount: 1, turnScoreTotal: 0, lastScorePoints: 0 } as const;
+  it('holds only while the hand is live, the draw lock is up AND Fritz is presenting draws', () => {
+    expect(isFritzTurnHeldByPresentation({ handActive: true, presentation: drawing, drawSequenceActive: true })).toBe(true);
+    // the human's own forced draws raise the lock but never a Fritz "drawing" phase
+    expect(isFritzTurnHeldByPresentation({ handActive: true, presentation: null, drawSequenceActive: true })).toBe(false);
+    expect(isFritzTurnHeldByPresentation({ handActive: true, presentation: { ...drawing, phase: 'thinking' }, drawSequenceActive: true })).toBe(false);
+    // lock released -> never stuck on Fritz's turn even if the phase lingers a tick
+    expect(isFritzTurnHeldByPresentation({ handActive: true, presentation: drawing, drawSequenceActive: false })).toBe(false);
+    expect(isFritzTurnHeldByPresentation({ handActive: false, presentation: drawing, drawSequenceActive: true })).toBe(false);
   });
 });

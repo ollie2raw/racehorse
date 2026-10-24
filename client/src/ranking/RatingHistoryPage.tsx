@@ -1,3 +1,4 @@
+import { HistoricalGameReviewPortal } from '../modules/review/HistoricalGameReviewPortal';
 import { useMemo } from 'react';
 import {
   Area,
@@ -380,6 +381,8 @@ export default function RatingHistoryPage({
             </ol>
           )}
         </div>
+
+        {userId ? <HistoricalGameReviewPortal enabled /> : null}
 
         <div className="rating-history-back" style={{ display: 'flex', justifyContent: 'flex-start' }}>
           <button className="mode-inline-btn rh-back-button" data-rh-parent-back onClick={onBack}>

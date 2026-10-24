@@ -2,6 +2,8 @@ import { childLogger } from '../logger';
 import type { Server, Socket } from 'socket.io';
 import { getRoom } from '../rooms';
 import { applyActiveMatchForfeit } from './roomForfeit';
+import { staleMatchAck } from './commandMatchBinding';
+import { isGuestSeatIdentity } from './guestReconnectCapability';
 import {
   getRoomPlayersWithFallback,
   getRoomRoster,
@@ -57,6 +59,11 @@ export function registerRoomAbandonHandlers(
 
     try {
       const room = getRoom(roomCode);
+      const stale = staleMatchAck(room, (payload as { matchId?: unknown }).matchId);
+      if (stale) {
+        cb?.(stale);
+        return;
+      }
       if (
         room.abandonedAt ||
         room.state?.gameOver ||
@@ -86,7 +93,14 @@ export function registerRoomAbandonHandlers(
         roster.find((player) => player.userId === authenticatedUserId)
         ?? roster.find((player) => player.socketId === socket.id)
         ?? null;
-      if (!abandoningPlayer || !room.players.includes(abandoningPlayer.id)) {
+      // A non-UUID user id is an unverified, client-chosen guest label (and every roster shares it), so
+      // it proves nothing about who is sending this. Guests may only resign the seat THIS socket owns;
+      // accounts are authenticated by a verified token, so any of their sockets may resign.
+      const guestNotSeatOwner =
+        abandoningPlayer != null &&
+        isGuestSeatIdentity(authenticatedUserId) &&
+        abandoningPlayer.socketId !== socket.id;
+      if (!abandoningPlayer || guestNotSeatOwner || !room.players.includes(abandoningPlayer.id)) {
         log.info({
           roomCode,
           userId: authenticatedUserId,

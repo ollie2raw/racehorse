@@ -5,7 +5,9 @@ const progressFixture = {
   activeChapterId: 'ch1-fritz-trail',
   chapters: {
     'ch1-fritz-trail': {
-      completedNodeIds: ['ch1-n01', 'ch1-n02', 'ch1-n03', 'ch1-n04', 'ch1-n05', 'ch1-n06'],
+      // Chapter 1 order: Read the Gate (ch1-n07) is stage 1, so nothing precedes it.
+      layoutVersion: 2, // the nine-stage layout; unstamped progress is treated as the old layout and reset
+      completedNodeIds: [],
       lastVisitedNodeId: 'ch1-n07',
       completedAt: null,
       completionCelebrated: false,
@@ -37,7 +39,7 @@ async function capture(page: Page, testInfo: TestInfo, name: string) {
 
 async function openLesson(page: Page) {
   await page.goto('/journey');
-  const nodeButton = page.getByLabel('Double Trouble, Current');
+  const nodeButton = page.getByLabel('Read the Gate, Current');
   await expect(nodeButton).toBeVisible({ timeout: 15_000 });
   await nodeButton.click();
   await page.getByRole('button', { name: 'Play', exact: true }).click();
@@ -109,7 +111,7 @@ test.describe('Journey premium Open-End Discipline', () => {
     await completeLesson(page, testInfo);
     await capture(page, testInfo, 'completion.png');
     await page.getByRole('button', { name: /return to journey/i }).click();
-    const completedNode = page.getByLabel('Double Trouble, Completed');
+    const completedNode = page.getByLabel('Read the Gate, Completed');
     await expect(completedNode).toBeVisible();
     await completedNode.click();
     await expect(page.getByRole('button', { name: /replay lesson/i })).toBeVisible();
@@ -117,7 +119,7 @@ test.describe('Journey premium Open-End Discipline', () => {
     await expect(page.getByText('Fritz’s Table', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /take a seat/i })).toBeVisible();
     await page.getByRole('button', { name: 'Exit lesson' }).click();
-    await expect(page.getByLabel('Double Trouble, Completed')).toBeVisible();
+    await expect(page.getByLabel('Read the Gate, Completed')).toBeVisible();
     await expect(runtimeErrors).toEqual([]);
   });
 
@@ -131,7 +133,7 @@ test.describe('Journey premium Open-End Discipline', () => {
     await assertNoHorizontalOverflow(page);
     await capture(page, testInfo, 'completion-mobile.png');
     await page.getByRole('button', { name: /return to journey/i }).click();
-    await expect(page.getByLabel('Double Trouble, Completed')).toBeVisible();
+    await expect(page.getByLabel('Read the Gate, Completed')).toBeVisible();
     await expect(runtimeErrors).toEqual([]);
   });
 });

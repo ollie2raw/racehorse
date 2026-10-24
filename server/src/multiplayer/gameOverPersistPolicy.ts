@@ -22,6 +22,14 @@ export const TOURNAMENT_FORFEIT_RESULT_PERSIST_FAILED_MESSAGE =
 export const MATCH_RESULT_STILL_SAVING_MESSAGE =
   "Result still saving — rematch isn't available yet.";
 
+/**
+ * Rematch while a completion is still owed after the foreground gave up. The terminal row is the
+ * durable replay source and a rematch would overwrite it (room-code keyed), so it waits for the
+ * automatic replay to log the result.
+ */
+export const MATCH_RESULT_RETRYING_MESSAGE =
+  "Match result isn't saved yet — it keeps retrying automatically. Rematch is unavailable until it's saved.";
+
 export type GameOverPersistStatus = 'idle' | 'pending' | 'succeeded' | 'failed';
 
 export type GameOverPersistOutcome = 'succeeded' | 'failed';

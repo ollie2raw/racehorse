@@ -30,6 +30,10 @@ export type BotMatchGuidedLayoutSectionProps = {
   setScoreTrackOpen: Dispatch<SetStateAction<boolean>>;
   opponentLabel: string;
   match: BotMatchState;
+  /** Presented Fritz rack size while draws are being shown (null = authoritative). */
+  fritzTileCount?: number | null;
+  /** Presented boneyard count while draws are being shown (null = authoritative). */
+  boneyardCount?: number | null;
   botTurn: boolean;
   turnLabel: string;
   openEndsSum: number;
@@ -59,6 +63,8 @@ export function BotMatchGuidedLayoutSection(props: BotMatchGuidedLayoutSectionPr
       setScoreTrackOpen={props.setScoreTrackOpen}
       opponentLabel={props.opponentLabel}
       match={props.match}
+      fritzTileCount={props.fritzTileCount}
+      boneyardCount={props.boneyardCount}
       botTurn={props.botTurn}
       turnLabel={props.turnLabel}
       openEndsSum={props.openEndsSum}

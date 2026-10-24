@@ -33,7 +33,7 @@ export function registerRoomJoinHandlers(
       arg2 && typeof arg2 === 'object' && !Array.isArray(arg2) ? (arg2 as RoomJoinConfig) : null;
     const codeFromObject =
       argCode && typeof argCode === 'object' && !Array.isArray(argCode)
-        ? (argCode as { roomCode?: unknown; username?: unknown; userId?: unknown; authToken?: unknown })
+        ? (argCode as { roomCode?: unknown; username?: unknown; userId?: unknown; authToken?: unknown; guestReconnectToken?: unknown })
         : null;
     const configFromCodeObject: RoomJoinConfig | null = codeFromObject
       ? {
@@ -41,6 +41,7 @@ export function registerRoomJoinHandlers(
             typeof codeFromObject.username === 'string' ? codeFromObject.username : undefined,
           userId: typeof codeFromObject.userId === 'string' ? codeFromObject.userId : null,
           authToken: typeof codeFromObject.authToken === 'string' ? codeFromObject.authToken : null,
+          guestReconnectToken: typeof codeFromObject.guestReconnectToken === 'string' ? codeFromObject.guestReconnectToken : null,
         }
       : null;
     const config = explicitConfig ?? configFromCodeObject ?? {};
@@ -56,6 +57,7 @@ export function registerRoomJoinHandlers(
         roomCode,
         username,
         userId,
+        guestReconnectToken: config.guestReconnectToken,
         via: 'room:join',
         hydrateMatchmakingRoom: true,
       });
@@ -64,6 +66,7 @@ export function registerRoomJoinHandlers(
         roomCode: attached.room.code,
         you: attached.joinedPlayerSeatId,
         players: attached.roster,
+        ...(attached.guestReconnectToken ? { guestReconnectToken: attached.guestReconnectToken } : {}),
         state: attached.stateWithCounts,
         legalMoves: attached.rejoinLegalMoves,
         canDraw: attached.rejoinCanDraw,

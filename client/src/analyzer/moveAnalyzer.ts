@@ -14,6 +14,7 @@ import type {
 } from './analysisTypes';
 import { buildConsequenceChainsForHand } from './consequenceChain';
 import { buildHandVerdict, segmentMoveLogByHand } from './handSegmentation';
+import { applyAuthoritativeScores, authoritativeHandBoundaries, verdictFromScores } from './authoritativeHandScores';
 import { derivePostMoveReviewBoard } from '../modules/replay/reviewBoardState.ts';
 import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import { gradeFromAccuracy } from './accuracyGrade';
@@ -48,6 +49,7 @@ export type AnalyzedMove = {
 };
 
 export type GameAnalysis = {
+  reviewPersistenceError?: string;
   accuracy: number;
   grade: 'S' | 'A' | 'B' | 'C' | 'D';
   analyzedAt: number;
@@ -162,12 +164,18 @@ function botDifficultyForTier(tier: FritzTier): BotDifficulty {
   return 'master';
 }
 
-function resolveAnalyzeOptions(options?: AnalyzeMoveLogOptions): Required<AnalyzeMoveLogOptions> {
+type ResolvedAnalyzeOptions = Required<Pick<AnalyzeMoveLogOptions, 'oracleMode' | 'tierPlayed' | 'winningScore' | 'reviewSnapshots'>>
+  & Pick<AnalyzeMoveLogOptions, 'finalScores' | 'scoreboardSnapshots' | 'youActorId'>;
+
+function resolveAnalyzeOptions(options?: AnalyzeMoveLogOptions): ResolvedAnalyzeOptions {
   return {
     oracleMode: options?.oracleMode ?? 'tier',
     tierPlayed: options?.tierPlayed ?? 'standard',
     winningScore: options?.winningScore ?? 60,
     reviewSnapshots: options?.reviewSnapshots ?? [],
+    finalScores: options?.finalScores,
+    scoreboardSnapshots: options?.scoreboardSnapshots,
+    youActorId: options?.youActorId,
   };
 }
 
@@ -295,7 +303,11 @@ function compareRecordedMoves(
 ): number {
   const tileCompare = compareTileTupleNumeric(a.tile, b.tile);
   if (tileCompare !== 0) return tileCompare;
-  return String(a.position ?? '').localeCompare(String(b.position ?? ''));
+  // UTF-16 code-unit order, never String#localeCompare: a tie between equally scored placements must resolve the same way on
+  // every host and locale.
+  const pa = String(a.position ?? '');
+  const pb = String(b.position ?? '');
+  return pa < pb ? -1 : pa > pb ? 1 : 0;
 }
 
 function scoredItemToEngineMove(
@@ -374,14 +386,20 @@ function getMoveScores(
 
   const bestMove = masterBest;
 
+  // The log records WHERE the tile went. The played move is that tile at that placement: the same tile on another end is a
+  // different move with a different score. Only a log that never recorded a position (very old entries) falls back to the
+  // tile alone. A recorded position that matches no reconstructed legal move yields no played score (graded "could not
+  // reconstruct"), never the score of some other placement of the tile.
+  const playedPosition = entry.position;
   const playedCandidate = entry.tile
-    ? legalMoves.find(({ move }) =>
-        sameMoveByTileAndPosition(
-          { tile: [move.tile!.low, move.tile!.high], position: move.position },
-          { tile: entry.tile, position: undefined },
-        ),
-      ) ??
-      legalMoves.find(({ move }) => sameTileTuple([move.tile!.low, move.tile!.high], entry.tile))
+    ? playedPosition !== undefined
+      ? legalMoves.find(({ move }) =>
+          sameMoveByTileAndPosition(
+            { tile: [move.tile!.low, move.tile!.high], position: move.position },
+            { tile: entry.tile, position: playedPosition },
+          ),
+        )
+      : legalMoves.find(({ move }) => sameTileTuple([move.tile!.low, move.tile!.high], entry.tile))
     : null;
 
   const gradeReference = gradeBest ?? masterBest;
@@ -400,14 +418,18 @@ function getMoveScores(
     bestBreakdown: bestCandidate?.scored?.breakdown ?? gradeReference?.breakdown ?? null,
     playedScore: playedCandidate?.scored?.score ?? null,
     playedBreakdown: playedCandidate?.scored?.breakdown ?? null,
+    // An exact match is the reference TILE at the reference PLACEMENT. Matching the tile alone graded the favourite tile on the
+    // wrong end as "Brilliant".
     exactMatch: Boolean(
       entry.tile &&
       gradeReference &&
-      sameMoveByTileAndPosition(
-        { tile: entry.tile, position: undefined },
-        { tile: gradeReference.tile, position: gradeReference.position },
-      ),
-    ) || Boolean(entry.tile && gradeReference && sameTileTuple(entry.tile, gradeReference.tile)),
+      (playedPosition !== undefined
+        ? sameMoveByTileAndPosition(
+            { tile: entry.tile, position: playedPosition },
+            { tile: gradeReference.tile, position: gradeReference.position },
+          )
+        : sameTileTuple(entry.tile, gradeReference.tile)),
+    ),
   };
 }
 
@@ -724,7 +746,7 @@ function analyzeHandMoves(
 function buildGameSummary(
   hands: HandAnalysis[],
   processedEntries: MoveEntry[],
-  options: Required<AnalyzeMoveLogOptions>,
+  options: ResolvedAnalyzeOptions,
 ): GameAnalysis {
   const allMoves = hands.flatMap((hand) => hand.analyzedMoves);
   const verdictByMoveNumber = new Map(allMoves.map((move) => [move.moveNumber, move]));
@@ -796,9 +818,15 @@ export function analyzeMoveLog(
     ? enrichMovesWithFritz(entries, referenceTier, hasV2Snapshots)
     : entries;
 
-  const segments = segmentMoveLogByHand(processedEntries);
-  const hands = segments.map((segment) =>
-    analyzeHandMoves(
+  // Hand scores come from the engine scoreboard wherever it is known (the move log omits the end-of-hand award).
+  const boundaries = authoritativeHandBoundaries(
+    resolved.scoreboardSnapshots ?? resolved.reviewSnapshots,
+    resolved.finalScores,
+    resolved.youActorId,
+  );
+  const segments = applyAuthoritativeScores(segmentMoveLogByHand(processedEntries), boundaries);
+  const hands = segments.map((segment) => {
+    const analysis = analyzeHandMoves(
       segment.entries,
       gradeTier,
       'Fritz',
@@ -806,8 +834,10 @@ export function analyzeMoveLog(
       segment.startingScores,
       segment.endingScores,
       hasV2Snapshots,
-    ),
-  );
+    );
+    const boundary = boundaries.get(segment.handNumber);
+    return boundary?.end ? { ...analysis, verdict: verdictFromScores(boundary.start, boundary.end) } : analysis;
+  });
 
   return buildGameSummary(hands, processedEntries, resolved);
 }

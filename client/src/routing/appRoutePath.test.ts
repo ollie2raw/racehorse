@@ -12,6 +12,10 @@ describe('app route paths', () => {
     ['/daily-fritz/leaderboard', { mode: 'dailyFritzLeaderboard' }],
     ['/learn/how-to-play', { mode: 'learn', learnHowToPlay: true }],
     ['/settings', { mode: 'settings' }],
+    ['/privacy', { mode: 'privacy' }],
+    ['/terms', { mode: 'terms' }],
+    ['/support', { mode: 'support' }],
+    ['/privacy/', { mode: 'privacy' }],
   ])('resolves %s', (path, expected) => {
     expect(resolveAppRoute(path)).toEqual(expected);
   });
@@ -90,5 +94,18 @@ describe('app route paths', () => {
       tournamentView: 'hub',
       mode: 'settings',
     })).toBe('/settings');
+  });
+
+  it.each(['privacy', 'terms', 'support'] as const)('builds the public /%s path', (mode) => {
+    expect(
+      buildAppPath({
+        mode,
+        multiplayerView: 'quick',
+        profileUsername: null,
+        learnHowToPlay: false,
+        tournamentId: null,
+        tournamentView: 'hub',
+      }),
+    ).toBe(`/${mode}`);
   });
 });

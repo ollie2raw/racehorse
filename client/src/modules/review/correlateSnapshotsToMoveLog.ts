@@ -1,58 +1,14 @@
 import type { MoveEntry } from '../../game/moveLogger';
-import { sameTileTuple } from '../../game/moveLogger';
+import { sameTileTuple, snapshotBoardState } from '../../game/moveLogger';
 import type { ReviewAction, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 
 /**
- * Correlates review snapshots (and, transitively, worker results keyed by
- * `decisionId`) back to the moveLog entry each one belongs to.
- *
- * This is the first time anything in the app has used `reviewSnapshots`
- * for more than a presence check (moveAnalyzer.ts's own comment: "Per-
- * decision correlation between a MoveEntry and its ReviewPositionSnapshotV2
- * is Phase B (oracle) work"), so the matching key was chosen deliberately,
- * not assumed:
- *
- * - `MoveEntry.authorityPreStateDigest` is NOT usable here -- traced its
- *   only two call sites (botActionCompletion.ts, botThinkingFallback.ts)
- *   and both populate it via `getDailyFritzAuthorityStateDigest`, a
- *   different hash function/format than review-engine's own
- *   `getReviewAuthorityStateDigest` (`review-state-v1:<hex>`). The two
- *   digests are not comparable.
- * - `ReviewSnapshotRecorder`'s `actionNumber` (embedded in
- *   `snapshot.identifiers.decisionId` as `${sessionId}:${actorId}:
- *   ${actionNumber}`, and separately on `snapshot.identifiers.actionNumber`)
- *   is a 1-based counter incremented once per captured decision, shared
- *   across both actors -- but is NOT reliably in lockstep with
- *   `MoveEntry.moveNumber`. Confirmed (2026-09-19 correctness audit) that
- *   PVF's non-Daily-Fritz multi-draw handling
- *   (`resolveTranscriptDrawLogCount` in dailyFritzDrawTranscript.ts,
- *   consumed by both `usePlayerNoMoveEffect.ts` and
- *   `botActionCompletion.ts`) deliberately collapses every real multi-draw
- *   turn into exactly ONE logged `MoveEntry`, while
- *   `recordPlayerReviewDecision`/`recordBotReviewDecision` still fires once
- *   per real draw step inside that same turn -- so `actionNumber` advances
- *   faster than `moveNumber` the moment any actor draws more than once in a
- *   turn, and the two counters permanently diverge by that turn's extra
- *   draw count for the remainder of the match. Both sequences stay dense
- *   and monotonic even after drifting, so a bare `actionNumber ===
- *   moveNumber` match does NOT fail closed on drift -- it silently returns
- *   a different real `MoveEntry` instead, which then gets rendered with
- *   another decision's oracle evaluation and coaching prose.
- *
- * `actionContentMatchesMoveEntry` below is the fix: even when the counters
- * agree, the match is only trusted if the snapshot's own recorded actor and
- * `actualAction` (draw/pass kind, or play kind + tile + position) actually
- * agree with what that `MoveEntry` claims happened. This can't perfectly
- * disambiguate two same-actor draws or two same-actor passes back to back
- * (neither carries a distinguishing payload), but it eliminates exactly the
- * class of bug traced above: a play snapshot silently absorbed by an
- * unrelated entry, or a snapshot attributed to the wrong actor. Any
- * disagreement is treated identically to "no matching moveNumber at all" --
- * omitted from the result, never paired with the wrong entry. This is
- * intentionally lossy once a match has drifted (everything downstream of
- * the drift point that can't be content-verified stays uncorrelated rather
- * than guessed), which is the correct trade for a review feature: an
- * honestly-missing evaluation, never a confidently-wrong one.
+ * Match the represented decision by hand, actor, pre-action board, and action.
+ * A tile can be played only once in a hand, and draw/pass decisions belong to
+ * their unchanged pre-action board. This identity survives collapsed draw logs.
+ * A collapsed draw represents the FIRST forced draw at that position; subsequent
+ * forced draws are still evaluated by the job but have no separate UI step.
+ * Legacy logs without a hand identifier retain the conservative counter check.
  */
 function actorMatchesMoveEntry(actorId: string, entry: MoveEntry): boolean {
   return (actorId === 'you') === (entry.player === 'you');
@@ -74,21 +30,24 @@ export function correlateSnapshotsToMoveLog(
   snapshots: readonly ReviewPositionSnapshotV2[],
   moveLog: readonly MoveEntry[],
 ): ReadonlyMap<string, MoveEntry> {
-  const moveEntryByNumber = new Map<number, MoveEntry>();
-  for (const entry of moveLog) {
-    moveEntryByNumber.set(entry.moveNumber, entry);
-  }
-
   const result = new Map<string, MoveEntry>();
+  const usedMoves = new Set<number>();
   for (const snapshot of snapshots) {
-    const entry = moveEntryByNumber.get(snapshot.identifiers.actionNumber);
-    if (
-      entry &&
-      actorMatchesMoveEntry(snapshot.identifiers.actorId, entry) &&
-      actionContentMatchesMoveEntry(snapshot.actualAction, entry)
-    ) {
-      result.set(snapshot.identifiers.decisionId, entry);
-    }
+    if (!snapshot.actualAction) continue;
+    const candidates = moveLog.filter((entry) => {
+      if (!actorMatchesMoveEntry(snapshot.identifiers.actorId, entry)
+        || !actionContentMatchesMoveEntry(snapshot.actualAction, entry)) return false;
+      if (entry.handNumber == null) return entry.moveNumber === snapshot.identifiers.actionNumber;
+      if (entry.handNumber !== snapshot.identifiers.handNumber) return false;
+      return JSON.stringify(entry.boardState) === JSON.stringify(snapshotBoardState(snapshot.preAction.board));
+    });
+    // Repeated forced draws share a represented step. Never replace its first
+    // decision with the last draw, or assign an ambiguous play/pass evaluation.
+    if (candidates.length !== 1) continue;
+    const entry = candidates[0];
+    if (usedMoves.has(entry.moveNumber)) continue;
+    usedMoves.add(entry.moveNumber);
+    result.set(snapshot.identifiers.decisionId, entry);
   }
   return result;
 }

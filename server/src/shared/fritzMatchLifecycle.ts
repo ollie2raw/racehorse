@@ -6,6 +6,7 @@ import {
   type RoomPlayer,
 } from '../multiplayer/roomSession';
 import {
+  getFritzConfig,
   FRITZ_ELITE_ID,
   FRITZ_GRANDMASTER_ID,
   FRITZ_MASTER_ID,
@@ -37,10 +38,14 @@ export function getFritzTierForRoom(room: Room, botPlayerId: string | null): str
   return 'elite';
 }
 
-export function getPendingFritzMatchContext(room: Room): { realPlayer: RoomPlayer; fritzTier: string } | null {
-  const rosterCached = getRoomRoster(room.code);
+export function getPendingFritzMatchContext(
+  room: Room,
+  /** Replay path: the durable roster of a room that is not (and must not be) in memory. */
+  rosterOverride?: readonly RoomPlayer[],
+): { realPlayer: RoomPlayer; fritzTier: string } | null {
+  const rosterCached = rosterOverride ?? getRoomRoster(room.code);
   const roster =
-    rosterCached.length > 0 ? rosterCached : getRoomPlayersWithFallback(room.code, room.players);
+    rosterCached.length > 0 ? [...rosterCached] : getRoomPlayersWithFallback(room.code, room.players);
   const botPlayer = roster.find((player) => typeof player.id === 'string' && player.id.startsWith('bot:fritz:')) ?? null;
   const realPlayers = roster.filter((player) => player.userId);
   if (!botPlayer || realPlayers.length !== 1) return null;
@@ -235,6 +240,10 @@ export async function recordPendingFritzDisconnectLoss(
     playerScore: verifiedScores.youScore,
     opponentScore: verifiedScores.botScore,
     gameType,
+    ratingTreatment: 'standard',
+            completionCause: 'completed',
+    opponentRating: getFritzConfig(fritzId).rating,
+    opponentRd: getFritzConfig(fritzId).rd,
     ratingBefore: profile.glicko_rating ?? 0,
     rdBefore: profile.glicko_rd ?? 0,
     playedAt: new Date().toISOString(),

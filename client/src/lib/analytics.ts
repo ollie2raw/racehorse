@@ -13,6 +13,7 @@
  * and in any local build without the env var.
  */
 import { Capacitor } from '@capacitor/core';
+import { redactAuthUrlsInProperties } from './redactAuthUrl';
 
 export type AnalyticsMode =
   | 'daily_fritz'
@@ -60,7 +61,11 @@ export function analyticsPlatform(capacitorPlatform: string = Capacitor.getPlatf
 }
 
 const KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
-const HOST = (import.meta.env.VITE_POSTHOG_HOST as string | undefined) ?? 'https://us.i.posthog.com';
+// `||`, not `??`: an env file line like `VITE_POSTHOG_HOST=` yields an empty
+// string, and an empty api_host makes PostHog post to relative paths — in the
+// iOS app that is the app's own bundle (capacitor://localhost/e/), so every
+// event was silently lost.
+const HOST = (import.meta.env.VITE_POSTHOG_HOST as string | undefined)?.trim() || 'https://us.i.posthog.com';
 
 let transportPromise: Promise<AnalyticsTransport | null> | null = null;
 /** Set by tests. Also the reason init is idempotent under StrictMode and HMR. */
@@ -106,6 +111,8 @@ async function loadTransport(): Promise<AnalyticsTransport | null> {
       capture_performance: false,
       capture_heatmaps: false,
       disable_surveys: true,
+      // Auth callbacks carry live tokens in the URL fragment; never let them ride along as $current_url.
+      sanitize_properties: (properties) => redactAuthUrlsInProperties(properties as Record<string, unknown>) as typeof properties,
     });
     // A super property: sent with every event, so web and App Store players
     // can be told apart without touching any event or call site.

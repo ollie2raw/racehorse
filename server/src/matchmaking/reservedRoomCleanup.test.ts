@@ -48,7 +48,7 @@ function player(suffix: string): QueuedPlayer {
   } as QueuedPlayer;
 }
 
-describe('matchmaking reserved-room cleanup (M5)', () => {
+describe('matchmaking reserved-room cleanup (M5)', async () => {
   beforeEach(() => {
     vi.clearAllMocks();
     rooms.resetRoomRuntimeForTests();
@@ -79,7 +79,7 @@ describe('matchmaking reserved-room cleanup (M5)', () => {
     room.matchmakingMatchId = 'mm-match-leak';
     markMatchmakingReservation('MMLEAK', T0);
 
-    const reaped = sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS);
+    const reaped = await sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS);
 
     expect(reaped).toEqual(['MMLEAK']);
     expect(rooms.peekRoom('MMLEAK')).toBeUndefined();
@@ -91,25 +91,50 @@ describe('matchmaking reserved-room cleanup (M5)', () => {
     );
   });
 
-  it('leaves a reserved room alone before the grace period expires', () => {
+  it('retains retry ownership when the terminal write fails, then retries once', async () => {
+    const room = rooms.createReservedRoom('MMRETRY', { winningScore: 60 });
+    room.matchmakingMatchId = 'retry-match';
+    markMatchmakingReservation(room.code, T0);
+    vi.mocked(persistence.recordMatchEnd).mockRejectedValueOnce(new Error('network failed'));
+    expect(await sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS)).toEqual([]);
+    expect(rooms.peekRoom(room.code)).toBe(room);
+    expect(getTrackedMatchmakingReservationsForTests()).toContain(room.code);
+    expect(await sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS)).toEqual([room.code]);
+    expect(rooms.peekRoom(room.code)).toBeUndefined();
+  });
+
+  it('excludes seating and duplicate sweep while terminal response is held', async () => {
+    const room = rooms.createReservedRoom('MMHOLD', { winningScore: 60 });
+    room.matchmakingMatchId = 'held-match';
+    markMatchmakingReservation(room.code, T0);
+    let release!: () => void;
+    vi.mocked(persistence.recordMatchEnd).mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+    const run = sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS);
+    expect(rooms.peekRoom(room.code)).toBe(room);
+    expect(() => rooms.joinRoom(room.code, 'new-seat')).toThrow('match_reservation_closing');
+    expect(await sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS)).toEqual([]);
+    release(); expect(await run).toEqual([room.code]);
+  });
+
+  it('leaves a reserved room alone before the grace period expires', async () => {
     rooms.createReservedRoom('MMYOUNG', { winningScore: 60 });
     markMatchmakingReservation('MMYOUNG', T0);
 
-    const reaped = sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS - 1);
+    const reaped = await sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS - 1);
 
     expect(reaped).toEqual([]);
     expect(rooms.peekRoom('MMYOUNG')).toBeDefined();
     expect(getTrackedMatchmakingReservationsForTests()).toEqual(['MMYOUNG']);
   });
 
-  it('hands a recovered room back to the normal lifecycle instead of reaping it', () => {
+  it('hands a recovered room back to the normal lifecycle instead of reaping it', async () => {
     rooms.createReservedRoom('MMBACK', { winningScore: 60 });
     markMatchmakingReservation('MMBACK', T0);
 
     // A player seats within the grace window.
     rooms.joinRoom('MMBACK', 'p1');
 
-    const reaped = sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS * 10);
+    const reaped = await sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS * 10);
 
     expect(reaped).toEqual([]);
     expect(rooms.peekRoom('MMBACK')).toBeDefined();
@@ -134,17 +159,17 @@ describe('matchmaking reserved-room cleanup (M5)', () => {
 
     // ...so a later sweep finds nothing to do — no second deleteRoom, no
     // recordMatchEnd for a match that never started.
-    expect(sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS * 10)).toEqual([]);
+    expect(await sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS * 10)).toEqual([]);
     expect(deleteSpy.mock.calls.length).toBe(deletesFromAbort);
     expect(vi.mocked(persistence.recordMatchEnd)).not.toHaveBeenCalled();
   });
 
-  it('never reaps a room whose reservation entry was already cleared', () => {
+  it('never reaps a room whose reservation entry was already cleared', async () => {
     rooms.createReservedRoom('MMCLR', { winningScore: 60 });
     markMatchmakingReservation('MMCLR', T0);
     clearMatchmakingReservation('MMCLR');
 
-    expect(sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS * 10)).toEqual([]);
+    expect(await sweepMatchmakingReservations(T0 + MATCHMAKING_RESERVATION_GRACE_MS * 10)).toEqual([]);
     expect(rooms.peekRoom('MMCLR')).toBeDefined();
   });
 

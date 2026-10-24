@@ -33,7 +33,7 @@ describe('listPublishedLadderSlotRowsInRange', () => {
     process.env.SUPABASE_URL = 'https://stub.supabase.co';
     process.env.SUPABASE_SERVICE_KEY = 'stub';
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
   it('pages until a short page, with the date range and published filter', async () => {
     const pages = [Array.from({ length: LADDER_RANGE_PAGE_SIZE }, (_, i) => row('2026-10-05', i)), [row('2026-10-06', 1)]];
@@ -54,6 +54,22 @@ describe('listPublishedLadderSlotRowsInRange', () => {
     expect(calls[0]).toContain('puzzle_date=lte.2027-10-04');
     expect(calls[0]).toContain(`offset=0`);
     expect(calls[1]).toContain(`offset=${LADDER_RANGE_PAGE_SIZE}`);
+  });
+
+  it('times out a stalled range response body, then permits a later run', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => ({
+      ok: true, status: 200,
+      text: () => new Promise<string>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      }),
+    })));
+    const request = listPublishedLadderSlotRowsInRange('2026-10-05', '2027-10-04');
+    const rejected = expect(request).rejects.toThrow('timed out after 30000ms');
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejected;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('[]')));
+    expect(await listPublishedLadderSlotRowsInRange('2026-10-05', '2027-10-04')).toEqual([]);
   });
 
   it('fails open: on a failed read every date in the window is listed', async () => {

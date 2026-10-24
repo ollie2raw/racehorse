@@ -1,0 +1,16 @@
+@import '../ui/motion.css';
+
+.rh-score-value { font-variant-numeric: tabular-nums; }
+.rh-score-value__digits { display: inline-block; }
+.rh-score-value__digits--changed {
+  animation: rh-score-acknowledge var(--rh-motion-reward) var(--rh-motion-settle);
+}
+/* Existing event-driven card pulses already acknowledge the same score. */
+.score-hit .rh-score-value__digits--changed { animation: none; }
+@keyframes rh-score-acknowledge {
+  0%, 100% { transform: scale(1); }
+  30% { transform: scale(1.08); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rh-score-value__digits--changed { animation: none; }
+}

@@ -1,6 +1,5 @@
 import {
   applyGameCommand,
-  DEFAULT_CONFIG,
   computePlayScore,
   simulatePlacement,
   tileEquals,
@@ -11,6 +10,7 @@ import {
 import type { ReviewAction, ReviewCandidateEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { countCombinations, enumerateCombinationsLazy } from './combinations';
 import { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
+import { resolveReviewConfig } from './reviewRuleset';
 import { commandForAction, searchGameTree, type GameTreeWalkConfig } from './searchGameTree';
 
 /**
@@ -158,7 +158,7 @@ export function solveExactEndgame(
 
   if (totalAllocationCount === 0) return null;
 
-  const config: Config = { ...DEFAULT_CONFIG, maxPips, winningScore: snapshot.preAction.winningTarget };
+  const config: Config = resolveReviewConfig(snapshot, maxPips);
   const nodeBudget = { count: 0, max: budget.maxNodes };
   const wallClockCeilingMs = budget.maxWallClockMs ?? EXACT_ENDGAME_DEFAULT_WALL_CLOCK_CEILING_MS;
   const startedAt = now();

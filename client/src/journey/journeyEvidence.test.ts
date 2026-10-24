@@ -191,11 +191,11 @@ describe('Journey scores, legacy projection, and merge', () => {
     const progress: JourneyProgress = {
       version: 2,
       activeChapterId: 'ch1-fritz-trail',
-      chapters: { 'ch1-fritz-trail': { completedNodeIds: ['ch1-n01', 'ch1-n01', 'unknown-node'], lastVisitedNodeId: 'ch1-n01', completedAt: null, completionCelebrated: false } },
+      chapters: { 'ch1-fritz-trail': { completedNodeIds: ['ch1-n02', 'ch1-n02', 'unknown-node'], lastVisitedNodeId: 'ch1-n02', completedAt: null, completionCelebrated: false } },
       updatedAt: '2026-07-11T10:00:00.000Z',
     };
     const projection = projectLegacyJourneyProgressToEvidence({ legacyProgress: progress, activeDescriptors: getAllJourneyContentDescriptors() });
-    const record = projection.store.recordsByContentId['ch1-n01'];
+    const record = projection.store.recordsByContentId['ch1-n02'];
     expect(record.learningLevel).toBe('practiced');
     expect(record.provenance.legacyCompletionCredit).toBe(true);
     expect(record.attempts.total).toBe(0);
@@ -218,7 +218,7 @@ describe('Journey scores, legacy projection, and merge', () => {
       updatedAt: '2026-07-11T10:00:00.000Z',
     },
     projection = projectLegacyJourneyProgressToEvidence({ legacyProgress: progress, activeDescriptors: getAllJourneyContentDescriptors() });
-    expect(Object.keys(projection.store.recordsByContentId)).toHaveLength(106);
+    expect(Object.keys(projection.store.recordsByContentId)).toHaveLength(105);
     expect(Object.values(projection.store.recordsByContentId).every((record) => record.learningLevel === 'practiced')).toBe(true);
   });
 

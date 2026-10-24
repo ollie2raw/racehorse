@@ -96,10 +96,11 @@ export async function queryGameReviewById(
 export async function queryRecentGameReviews(
   userId: string,
   limit: number = 10,
+  pvfOnly = false,
 ): Promise<GameReviewRow[]> {
   const safeLimit = Math.max(1, Math.min(20, Math.floor(limit)));
   const rows = await supabaseFetch<GameReviewRow[]>(
-    `/rest/v1/game_reviews?user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=${safeLimit}`,
+    `/rest/v1/game_reviews?user_id=eq.${encodeURIComponent(userId)}${pvfOnly ? '&mode=eq.pvf' : ''}&order=created_at.desc&limit=${safeLimit}`,
     { method: 'GET' },
   );
   return rows;

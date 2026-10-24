@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { motionDuration, useMotionAllowed } from '../ui/motion';
 
 /**
  * Counts from the last rendered value to `value` over `duration` ms via rAF.
@@ -13,13 +14,24 @@ import { useEffect, useRef, useState } from 'react';
  * The rAF handle is cancelled on unmount, so a results modal dismissed
  * mid-count leaves nothing running.
  */
-export function useAnimatedScore(value: number, duration = 600, from?: number): number {
-  const initial = from ?? value;
-  const [displayed, setDisplayed] = useState(initial);
+export function useAnimatedScore(value: number, duration: number = motionDuration.reward, from?: number): number {
+  const motionAllowed = useMotionAllowed();
+  const initial = motionAllowed ? (from ?? value) : value;
+  const enabled = motionAllowed && duration > 0;
+  const [presentation, setPresentation] = useState({ enabled, value: initial });
+  // Reset the displayed snapshot during render when animation is disabled or
+  // re-enabled, so a preference/tab change never flashes an old score.
+  if (presentation.enabled !== enabled || (!enabled && presentation.value !== value)) {
+    setPresentation({ enabled, value });
+  }
   const displayedRef = useRef(initial);
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      displayedRef.current = value;
+      return;
+    }
     if (value === displayedRef.current) return;
 
     const start = displayedRef.current;
@@ -30,12 +42,12 @@ export function useAnimatedScore(value: number, duration = 600, from?: number): 
       if (startTime === undefined) startTime = now;
       const progress = Math.min(1, (now - startTime) / duration);
       const next = Math.round(start + (to - start) * progress);
-      setDisplayed(next);
+      setPresentation({ enabled: true, value: next });
       displayedRef.current = next;
       if (progress < 1) {
         rafRef.current = requestAnimationFrame(tick);
       } else {
-        setDisplayed(to);
+        setPresentation({ enabled: true, value: to });
         displayedRef.current = to;
         rafRef.current = null;
       }
@@ -52,7 +64,7 @@ export function useAnimatedScore(value: number, duration = 600, from?: number): 
         rafRef.current = null;
       }
     };
-  }, [value, duration]);
+  }, [value, duration, enabled]);
 
-  return displayed;
+  return enabled ? presentation.value : value;
 }

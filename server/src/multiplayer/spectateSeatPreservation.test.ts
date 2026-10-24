@@ -23,6 +23,7 @@ import { withRoomGameplayLock, resetRoomGameplayLocksForTests } from './roomGame
 import * as livePersistence from './roomLivePersistence';
 import * as matchTerminalJoin from './matchTerminalJoin';
 import * as roomForfeit from './roomForfeit';
+import { RatingCutoverQuiescedError } from '../ranking/ratingCutoverGate';
 
 vi.mock('./roomForfeit', async (importOriginal) => {
   const actual = await importOriginal<typeof roomForfeit>();
@@ -229,6 +230,18 @@ describe('spectate seat preservation (S2) and awaited room detach (P4)', () => {
     expect(roomForfeit.applyActiveMatchForfeit).toHaveBeenCalledTimes(1);
     expect(getRoom('LIVEA2').abandonedAt).toBeTruthy();
     expect(getRoom('LIVEA2').players).not.toContain('p1');
+  });
+
+  it('retains the seat and rejects leave when rated forfeit is quiesced', async () => {
+    const { socket } = makeSocket('sock-a');
+    seedLiveSeatedRoom('GATED1', socket.id);
+    socket.rooms.add('GATED1'); socket.data.roomId = 'GATED1'; socket.data.playerId = 'p1';
+    vi.mocked(roomForfeit.applyActiveMatchForfeit).mockRejectedValueOnce(new RatingCutoverQuiescedError('room_forfeit'));
+    const { leaveTrackedRoom } = createRoomSocketAttach({ io: makeIo(), socket, handlerDeps });
+    await expect(leaveTrackedRoom('GATED1')).rejects.toMatchObject({ code: 'rating_cutover_quiesced' });
+    expect(getRoom('GATED1').players).toContain('p1');
+    expect(getRoom('GATED1').abandonedAt).toBeUndefined();
+    expect(socket.data.roomId).toBe('GATED1');
   });
 
   it('P4: the old room forfeit completes before the new attach resolves', async () => {

@@ -12,6 +12,8 @@ export type LogicalGameplayAction = {
   handNumber: number;
   signature: string;
   uncertain: boolean;
+  /** Match (room generation) this command was created for; every retry of it carries the same one. */
+  matchId: string | null;
 };
 
 export function buildLogicalActionSignature(params: {
@@ -44,9 +46,14 @@ export function resolveLogicalActionRequestId(params: {
   baselineSequence: number;
   handNumber: number;
   signature: string;
+  /** Authoritative current match id at the moment the command is created (null = not known yet). */
+  matchId?: string | null;
 }): LogicalGameplayAction {
+  const matchId = params.matchId ?? null;
   if (
     params.current?.uncertain &&
+    // A retry keeps its own match id. It is only NOT a retry when we positively know another match.
+    (matchId === null || params.current.matchId === null || params.current.matchId === matchId) &&
     params.current.kind === params.kind &&
     params.current.roomCode === params.roomCode.trim().toUpperCase() &&
     params.current.playerId === params.playerId &&
@@ -66,6 +73,7 @@ export function resolveLogicalActionRequestId(params: {
     handNumber: params.handNumber,
     signature: params.signature,
     uncertain: false,
+    matchId,
   };
 }
 

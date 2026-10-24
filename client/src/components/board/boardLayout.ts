@@ -4,9 +4,16 @@
 // walks a BoardState into positioned tiles + open-end zones, and fits a camera
 // scale to a viewport. Exercised directly by Board.reviewContainment.test.tsx.
 
-import type { Tile, BoardState, PlacementPosition, PlacedTile } from '../../types';
+import type { BoardState, PlacementPosition, PlacedTile } from '../../types';
 import { isDouble } from '../../game/openEndsGeometry';
 import { isRenderableNonNullBoard } from '../../multiplayer/boardSnapshotGuards';
+import {
+  computeHubTurnDirections,
+  resolveRoutingConflicts,
+  type ArmOverrides,
+  type RoutingContext,
+} from './boardRouting';
+import type { BoardLayout, BoardLayoutBend, BoardLayoutOptions, BoardLayoutTile, LayoutZone } from './boardLayoutTypes';
 
 // ─── Layout Constants ────────────────────────────────────────
 
@@ -17,36 +24,12 @@ const DOUBLE_CROSS_GAP = 0.2;
 
 // ─── Types ───────────────────────────────────────────────────
 
-export interface BoardLayoutTile {
-  tile: Tile;
-  x: number;
-  y: number;
-  rotation: number;
-  flipped: boolean;
-  key: string;
-}
-
-interface LayoutZone {
-  position: PlacementPosition;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  // Outward direction from endpoint center in layout lane coordinates.
-  dirX: number;
-  dirY: number;
-  lane: 'horizontal' | 'vertical';
-  key: string;
-}
-
-export interface BoardLayout {
-  tiles: BoardLayoutTile[];
-  zones: LayoutZone[];
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-}
+export type {
+  BoardLayout,
+  BoardLayoutBend,
+  BoardLayoutOptions,
+  BoardLayoutTile,
+} from './boardLayoutTypes';
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -58,22 +41,26 @@ interface HubLookup {
 
 // ─── Layout Engine ───────────────────────────────────────────
 
-export interface BoardLayoutOptions {
-  /**
-   * Bend vertical branch arms sideways after this many tiles (a "corner", as
-   * on a real table). Used where the board viewport is short and wide (phone
-   * landscape) so long arms never outgrow it. Omitted = straight arms
-   * (unchanged desktop/web layout).
-   */
-  maxVerticalArmTiles?: number;
-  /** The tile being placed is a double: arm-end zones stay straight, since a double never turns the corner. */
-  pendingTileIsDouble?: boolean;
-}
-
 export function computeBoardLayout(
   board: BoardState | null,
   validPositions: PlacementPosition[] = [],
   options: BoardLayoutOptions = {},
+): BoardLayout {
+  const bendsArms =
+    typeof options.maxVerticalArmExtent === 'number' || (options.maxVerticalArmTiles ?? 0) > 0;
+  // Straight layouts (static views, unmeasured containers) skip routing entirely.
+  if (!board || !bendsArms) return layoutOnce(board, validPositions, options, new Map());
+  return resolveRoutingConflicts(
+    (overrides) => layoutOnce(board, validPositions, options, overrides),
+    () => layoutOnce(board, [], {}, new Map()),
+  );
+}
+
+function layoutOnce(
+  board: BoardState | null,
+  validPositions: PlacementPosition[],
+  options: BoardLayoutOptions,
+  overrides: ArmOverrides,
 ): BoardLayout {
   const tiles: BoardLayoutTile[] = [];
   const zones: LayoutZone[] = [];
@@ -107,6 +94,7 @@ export function computeBoardLayout(
         maxX: halfLine + layoutPadX,
         minY: -TILE_UNIT - layoutPadY,
         maxY: TILE_UNIT + layoutPadY,
+        bends: [],
       };
     }
 
@@ -117,18 +105,19 @@ export function computeBoardLayout(
       maxX: 1.5,
       minY: -1,
       maxY: 1,
+      bends: [],
     };
   }
 
   if (!isRenderableNonNullBoard(board)) {
-    return computeBoardLayout(null, validPositions, options);
+    return layoutOnce(null, validPositions, options, overrides);
   }
 
   const { mainLine, hubDoubles } = board;
 
   for (const pt of mainLine) {
     if (!pt?.tile || typeof pt.orientation !== 'string') {
-      return computeBoardLayout(null, validPositions, options);
+      return layoutOnce(null, validPositions, options, overrides);
     }
   }
 
@@ -161,6 +150,15 @@ export function computeBoardLayout(
 
   const hubCenters = new Map<number, { x: number; y: number }>();
   const laidOutHubIds = new Set<number>();
+  const bends: BoardLayoutBend[] = [];
+
+  const routing: RoutingContext = {
+    maxTiles: options.maxVerticalArmTiles,
+    maxExtent: options.maxVerticalArmExtent,
+    overrides,
+    hubTurnDir: computeHubTurnDirections(hubDoubles),
+    bends,
+  };
 
   const layoutHubBranches = (
     hub: BoardState['hubDoubles'][number],
@@ -168,6 +166,7 @@ export function computeBoardLayout(
     hubX: number,
     hubY: number,
     laneHorizontal: boolean,
+    inheritedTurnDir?: -1 | 1,
   ) => {
     if (laidOutHubIds.has(hubId)) {
       return {
@@ -191,8 +190,9 @@ export function computeBoardLayout(
       hubCenters,
       layoutHubBranches,
       laneHorizontal,
-      options.maxVerticalArmTiles,
+      routing,
       options.pendingTileIsDouble,
+      inheritedTurnDir,
     );
   };
 
@@ -295,6 +295,7 @@ export function computeBoardLayout(
     maxX: maxX + 2.5,
     minY: minY - 2.5,
     maxY: maxY + 2.5,
+    bends,
   };
 }
 
@@ -332,6 +333,7 @@ function layoutBranches(
     hubX: number,
     hubY: number,
     laneHorizontal: boolean,
+    inheritedTurnDir?: -1 | 1,
   ) => {
     tiles: BoardLayoutTile[];
     zones: LayoutZone[];
@@ -341,8 +343,9 @@ function layoutBranches(
     maxY: number;
   },
   laneHorizontal: boolean,
-  maxVerticalArmTiles?: number,
-  pendingTileIsDouble?: boolean,
+  routing: RoutingContext,
+  pendingTileIsDouble: boolean | undefined,
+  inheritedTurnDir: -1 | 1 | undefined,
 ): {
   tiles: BoardLayoutTile[];
   zones: LayoutZone[];
@@ -384,18 +387,35 @@ function layoutBranches(
     let currentX = hubX + (verticalArms ? 0 : direction * (TILE_UNIT + DOUBLE_CROSS_GAP));
     let currentY = hubY + (verticalArms ? direction * (TILE_UNIT + DOUBLE_CROSS_GAP) : 0);
 
-    // Corner: a vertical arm that reaches maxVerticalArmTiles turns sideways,
-    // away from the board's centre so it clears the main line. The corner tile
-    // abuts the side of the last tile's outer half — the pip that is open.
-    const canBend = verticalArms && typeof maxVerticalArmTiles === 'number' && maxVerticalArmTiles > 0;
-    const turnDir = hubX < 0 ? -1 : 1;
+    // Corner: a vertical arm that reaches its limit (tile count on a phone,
+    // reach in layout units on a laptop/desktop) turns sideways, away from the
+    // board's centre so it clears the main line. The corner tile abuts the side
+    // of the last tile's outer half — the pip that is open. The turn is a pure
+    // function of the arm's own tiles and the limit, so appending a tile never
+    // moves an earlier one.
+    const { maxTiles, maxExtent, overrides, hubTurnDir, bends } = routing;
+    const hasTileLimit = typeof maxTiles === 'number' && maxTiles > 0;
+    const hasExtentLimit = typeof maxExtent === 'number' && Number.isFinite(maxExtent);
+    const override = overrides.get(`${hubId}:${armIdx}`);
+    const canBend = verticalArms && override !== 'straight' && (hasTileLimit || hasExtentLimit);
+    // Phone (tile-count) routing keeps its original away-from-centre sign test
+    // so its geometry is unchanged; viewport routing uses the stable rule.
+    const stableTurnDir = hasTileLimit ? undefined : (hubTurnDir.get(hubId) ?? inheritedTurnDir);
+    const turnDir: -1 | 1 =
+      typeof override === 'number' ? override : stableTurnDir ?? (hubX < 0 ? -1 : 1);
     let bent = false;
     let rowY = 0;
     let placedInArm = 0;
     let lastCenterY = hubY;
+    // Starts true so the first tile always leaves the hub straight, and a double
+    // never becomes the corner: the turn waits for an ordinary tile that follows
+    // an ordinary tile (a double lies across the arm, so nothing can wrap it).
     let lastWasDouble = true;
-    const shouldBendNext = () =>
-      canBend && !bent && placedInArm >= (maxVerticalArmTiles as number) && !lastWasDouble;
+    const reachedLimit = () =>
+      (hasTileLimit && placedInArm >= (maxTiles as number)) ||
+      // An ordinary vertical tile spans 2 units: bend if it would cross the limit.
+      (hasExtentLimit && Math.abs(currentY - hubY) + TILE_UNIT * 2 > (maxExtent as number));
+    const shouldBendNext = () => canBend && !bent && !lastWasDouble && reachedLimit();
 
     if (branchTiles.length > 0) {
       // Layout branch tiles
@@ -409,6 +429,7 @@ function layoutBranches(
         // other double, and the turn waits for the next regular tile.
         if (!double && shouldBendNext()) {
           bent = true;
+          bends.push({ hubId, arm: armIdx as 0 | 1, tileIndex: i, dir: turnDir });
           rowY = lastCenterY + direction * (TILE_UNIT / 2);
           currentX = hubX + turnDir * (TILE_UNIT / 2 + TILE_GAP);
         }
@@ -433,7 +454,7 @@ function layoutBranches(
               hubCenters.set(childHubId, { x: cx, y: rowY });
               const childHub = hubLookup.byId.get(childHubId);
               if (childHub && childHub.isCrossed) {
-                const nested = layoutHubBranches(childHub, childHubId, cx, rowY, true);
+                const nested = layoutHubBranches(childHub, childHubId, cx, rowY, true, turnDir);
                 tiles.push(...(nested.tiles ?? []));
                 zones.push(...(nested.zones ?? []));
                 minX = Math.min(minX, nested.minX);
@@ -580,4 +601,3 @@ function layoutBranches(
 
   return { tiles, zones, minX, maxX, minY, maxY };
 }
-

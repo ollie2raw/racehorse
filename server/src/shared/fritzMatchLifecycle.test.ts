@@ -17,6 +17,8 @@ vi.mock('../supabaseUtils', () => ({
 }));
 
 vi.mock('../ranking/periodService', () => ({
+  prepareRankedGameProfile: async () => ({ glicko_rating: 1500, glicko_rd: 200, glicko_vol: 0.06, ranked_games_played: 30, peak_rating: 1600 }),
+  readRankedOpponentSnapshot: async () => ({ rating: 1700, rd: 50 }),
   processRatingPeriod: (...args: unknown[]) => processRatingPeriodMock(...args),
 }));
 
@@ -36,9 +38,9 @@ describe('recordPendingFritzDisconnectLoss', () => {
   });
 
   it('writes Glicko using the real server-derived scores when verifiedScores is present — never a synthesized 0/60', async () => {
-    supabaseFetchMock.mockImplementation(async (path: string) => {
+    supabaseFetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.includes('/rest/v1/profiles')) return [{ id: 'u1', glicko_rating: 1500, glicko_rd: 200 }];
-      if (path.includes('/rest/v1/ranked_games')) return [{ id: 'row-1' }];
+      if (path.includes('/rest/v1/ranked_games')) return [{ id: 'row-1', ...JSON.parse(String(init?.body)) }];
       return [];
     });
 
@@ -74,9 +76,9 @@ describe('recordPendingFritzDisconnectLoss', () => {
   // --- RK-1 (HARDENING_PLAN §8.3): idempotent insert ---------------------
 
   it('routes the ranked_games insert through the idempotent on_conflict path using an explicit verifiedMatchId, and applies the rating on a genuinely new row', async () => {
-    supabaseFetchMock.mockImplementation(async (path: string) => {
+    supabaseFetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.includes('/rest/v1/profiles')) return [{ id: 'u1', glicko_rating: 1500, glicko_rd: 200 }];
-      if (path.includes('/rest/v1/ranked_games')) return [{ id: 'row-1', source_match_id: 'bot-match-pending:pending-1:forfeit' }];
+      if (path.includes('/rest/v1/ranked_games')) return [{ id: 'row-1', ...JSON.parse(String(init?.body)) }];
       return [];
     });
 
@@ -102,7 +104,7 @@ describe('recordPendingFritzDisconnectLoss', () => {
   });
 
   it('a duplicate sourceMatchId (same forfeit event recorded twice) is a no-op — no second rating application', async () => {
-    supabaseFetchMock.mockImplementation(async (path: string) => {
+    supabaseFetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
       if (path.includes('/rest/v1/profiles')) return [{ id: 'u1', glicko_rating: 1500, glicko_rd: 200 }];
       // ignore-duplicates on a conflicting source_match_id → PostgREST
       // returns an empty representation array, not an error.

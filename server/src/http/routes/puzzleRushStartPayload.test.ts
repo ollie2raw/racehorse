@@ -30,15 +30,12 @@ describe('run-start payload', () => {
     expect(handler).not.toContain('difficultyScore');
   });
 
-  it('ships exactly the selectRunPuzzles output, unmodified', () => {
+  it('ships the committed selection or reconstructs the committed IDs on replay', () => {
     const handler = startHandlerSource();
-    // A re-map or spread on the way to res.json is how a leak sneaks back in.
     expect(handler).toContain('const selection = selectRunPuzzles({ candidates });');
-    expect(handler).toContain('const puzzles = selection.puzzles;');
+    expect(handler).toContain('materializeAssignedPuzzles(run.assignedPuzzleIds');
     expect(handler).toContain('puzzles,');
-    const maps = handler.match(/puzzles\.map\(.*/g) ?? [];
-    // The only transform of `puzzles` is extracting ids for the play counter.
-    expect(maps).toEqual(['puzzles.map((puzzle) => puzzle.puzzleId));']);
+    expect(handler).toContain('assignedPuzzleIds: selection.puzzles.map((puzzle) => puzzle.puzzleId)');
   });
 
   it('serializes without any best-score field, over a real pool entry', () => {

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { createDeterministicDoubleSixDeal } from '@racehorse/game-core';
 import type { BotMatchState } from '../runtime/botEngine.ts';
-import { createBotMatchWithStarter, createFixedBotMatchWithStarter } from '../runtime/botEngine.ts';
+import { createFixedBotMatchWithStarter } from '../runtime/botEngine.ts';
 import { abandonLocalBotMatch, startLocalBotMatch } from '../api/botMatchApi.ts';
 import { resolveGameServerUrl } from '../../../lib/gameServerUrl';
 import { supabase } from '../../../lib/supabase';
@@ -106,7 +106,8 @@ export function useStandaloneFritzRatingSession({
           setVerifiedMatchId(matchId);
         }
         const seed = typeof response?.seed === 'string' ? response.seed.trim() : '';
-        if (seed && !cancelled) {
+        if (!seed) throw new Error('The match start did not return a deal. Please try again.');
+        if (!cancelled) {
           const live = matchRef.current;
           if (!live.handOpen && !live.gameOver) {
             const dealt = createDeterministicDoubleSixDeal({
@@ -133,13 +134,8 @@ export function useStandaloneFritzRatingSession({
       } catch (err) {
         console.warn('[Fritz Pending] start failed', err);
         const live = matchRef.current;
-        if (live.pendingDrawDeck && live.pendingDrawDeck.length === 26 && dealSize === 7) {
-          setMatch(createBotMatchWithStarter(
-            live.pendingDrawDeck,
-            live.matchStarter ?? 'you',
-            winningScore,
-            dealSize,
-          ));
+        if (live.handNumber === 0) {
+          setMatch({ ...live, initializationError: err instanceof Error ? err.message : 'Could not start your rated match. Please try again.' });
         }
         if (matchRef.current.gameOver) {
           setResultLoading(false);

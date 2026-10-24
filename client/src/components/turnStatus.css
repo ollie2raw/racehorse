@@ -1,0 +1,15 @@
+@import '../ui/motion.css';
+
+.rh-turn-status__content {
+  display: inline-block;
+  animation: rh-turn-handoff var(--rh-motion-state) var(--rh-motion-settle);
+}
+
+@keyframes rh-turn-handoff {
+  from { opacity: 0.5; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rh-turn-status__content { animation: none; }
+}

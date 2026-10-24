@@ -18,7 +18,6 @@ export type RecordUserMatchInput = {
   winnerScore: number | null;
   loserScore: number | null;
   moveCount: number | null;
-  avgMoveQuality?: number | null;
   roomCode?: string | null;
   metadata?: Record<string, unknown>;
 };
@@ -31,7 +30,6 @@ export type ValidatedRecordUserMatchPayload = {
   winner_score: number | null;
   loser_score: number | null;
   move_count: number | null;
-  avg_move_quality?: number;
   metadata: Record<string, unknown>;
   idempotency?: {
     roomCode: string;
@@ -66,13 +64,6 @@ function normalizeOptionalMoveCount(value: unknown): number | null {
   if (value == null) return null;
   const num = Number(value);
   if (!Number.isFinite(num) || !Number.isInteger(num) || num < 0) return null;
-  return num;
-}
-
-function normalizeAvgMoveQuality(value: unknown): number | null {
-  if (value == null) return null;
-  const num = Number(value);
-  if (!Number.isFinite(num) || num <= 0 || num > 100) return null;
   return num;
 }
 
@@ -145,11 +136,6 @@ export function validateRecordUserMatchInput(
     return { ok: false, error: 'Invalid move_count.', status: 400 };
   }
 
-  const avgMoveQuality = normalizeAvgMoveQuality(input.avgMoveQuality);
-  if (input.avgMoveQuality != null && avgMoveQuality == null) {
-    return { ok: false, error: 'Invalid avg_move_quality.', status: 400 };
-  }
-
   const roomCode = normalizeRoomCode(input.roomCode);
   if (input.roomCode != null && input.roomCode !== '' && !roomCode) {
     return { ok: false, error: 'Invalid room_code.', status: 400 };
@@ -182,7 +168,6 @@ export function validateRecordUserMatchInput(
     winner_score: winnerScore,
     loser_score: loserScore,
     move_count: moveCount,
-    ...(avgMoveQuality != null ? { avg_move_quality: avgMoveQuality } : {}),
     metadata,
     ...(idempotency ? { idempotency } : {}),
   };
@@ -241,15 +226,6 @@ async function hasAuthoritativeOnlineMatch(params: {
     { method: 'GET' },
   );
   return rows.length > 0;
-}
-
-function isMissingAvgMoveQualityColumn(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return (
-    message.includes('avg_move_quality') ||
-    message.includes('column') ||
-    message.includes('42703')
-  );
 }
 
 export async function recordUserMatch(
@@ -314,10 +290,6 @@ export async function recordUserMatch(
     move_count: payload.move_count,
     metadata: payload.metadata,
   };
-  if (payload.avg_move_quality != null) {
-    insertBody.avg_move_quality = payload.avg_move_quality;
-  }
-
   try {
     await supabaseFetch('/rest/v1/matches', {
       method: 'POST',
@@ -325,22 +297,6 @@ export async function recordUserMatch(
     });
     return { ok: true };
   } catch (err) {
-    if (payload.avg_move_quality != null && isMissingAvgMoveQualityColumn(err)) {
-      const { avg_move_quality: _ignored, ...withoutQuality } = insertBody;
-      try {
-        await supabaseFetch('/rest/v1/matches', {
-          method: 'POST',
-          body: JSON.stringify(withoutQuality),
-        });
-        return { ok: true };
-      } catch (retryErr) {
-        console.warn(
-          '[stats] recordUserMatch insert failed',
-          retryErr instanceof Error ? retryErr.message : retryErr,
-        );
-        return { ok: false, error: 'Failed to record match.', status: 500 };
-      }
-    }
     console.warn('[stats] recordUserMatch insert failed', err instanceof Error ? err.message : err);
     return { ok: false, error: 'Failed to record match.', status: 500 };
   }

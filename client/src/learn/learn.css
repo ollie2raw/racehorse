@@ -933,6 +933,13 @@
     overflow-y: auto;
   }
 
+  /* Three cards (the iOS app leaves out the locked Lesson Library card): one
+     row of three fills the height a 2x2 grid would, instead of leaving a lone
+     card on a half-empty second row. */
+  .learn-hub-main .learn-hub-grid--modes.rh-mode-card-grid.learn-hub-grid--trio {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .learn-hub-main .learn-mode-card {
     min-height: 0;
     height: 100%;

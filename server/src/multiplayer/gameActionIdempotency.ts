@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   deleteRoomCommandReceiptsForRoom,
   persistRoomCommandReceipt,
@@ -20,6 +21,12 @@ export type GameActionAck = {
   handNumber?: number | null;
   waitMs?: number;
   waitingFor?: string[];
+  /** Machine-readable rejection category (see classifyCommandError). */
+  code?: string;
+  /** Internal: payload fingerprint bound to the request id. Never sent to clients. */
+  fp?: string;
+  /** Internal: the command was valid but changed nothing; do not spend a receipt on it. */
+  noop?: boolean;
 };
 
 export type PersistedGameActionReceipt = {
@@ -39,9 +46,33 @@ const MAX_ENTRIES_PER_ROOM = 128;
 
 const cacheByRoomCode = new Map<string, Map<string, CacheEntry>>();
 const inFlightByKey = new Map<string, Promise<GameActionAck>>();
+const inFlightFingerprints = new Map<string, string>();
 
 function normalizeRoomCode(roomCode: string): string {
   return roomCode.trim().toUpperCase();
+}
+
+/** Ack for a request id reused with a different payload. Fails closed; no mutation is attempted. */
+export const REQUEST_ID_CONFLICT_ERROR = 'request_id_conflict';
+
+/**
+ * Stable digest of what a command asks for (never of the request id). A request id names exactly one
+ * command: reusing it with a different payload is a client bug or a forgery, not a retry.
+ */
+export function fingerprintGameCommand(kind: string, payload: unknown): string {
+  const p = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+  const move = p.move && typeof p.move === 'object' ? (p.move as Record<string, unknown>) : {};
+  const tile = move.tile && typeof move.tile === 'object' ? (move.tile as Record<string, unknown>) : {};
+  const canonical = JSON.stringify([
+    kind,
+    typeof p.type === 'string' ? p.type : null,
+    typeof tile.high === 'number' ? tile.high : null,
+    typeof tile.low === 'number' ? tile.low : null,
+    // Same precedence the engine uses (position, else the legacy `end` alias).
+    typeof move.position === 'string' ? move.position : typeof move.end === 'string' ? move.end : null,
+    typeof p.handNumber === 'number' ? p.handNumber : null,
+  ]);
+  return createHash('sha256').update(canonical).digest('base64url').slice(0, 22);
 }
 
 export function normalizeGameActionRequestId(value: unknown): string | null {
@@ -106,6 +137,11 @@ function readCachedAck(
   return { ...entry.ack, duplicate: true };
 }
 
+function stripInternal(ack: GameActionAck): GameActionAck {
+  const { fp: _fp, noop: _noop, ...rest } = ack;
+  return rest;
+}
+
 function storeCachedAck(
   roomCode: string,
   playerSeatId: string,
@@ -126,6 +162,7 @@ function storeCachedAck(
       ...(typeof ack.ignored === 'boolean' ? { ignored: ack.ignored } : {}),
       ...(ack.handNumber !== undefined ? { handNumber: ack.handNumber } : {}),
       ...(typeof ack.waitMs === 'number' ? { waitMs: ack.waitMs } : {}),
+      ...(ack.fp ? { fp: ack.fp } : {}),
     },
     expiresAt: Date.now() + ACTION_IDEMPOTENCY_TTL_MS,
   });
@@ -161,6 +198,7 @@ export function snapshotGameActionReceiptsForRoom(
         ...(entry.ack.forcedDraw ? { forcedDraw: entry.ack.forcedDraw } : {}),
         ...(entry.ack.error ? { error: entry.ack.error } : {}),
         ...(entry.ack.uncertain ? { uncertain: entry.ack.uncertain } : {}),
+        ...(entry.ack.fp ? { fp: entry.ack.fp } : {}),
       },
       expiresAt: entry.expiresAt,
     });
@@ -203,6 +241,7 @@ export function hydrateGameActionReceiptsForRoom(
         sequence: typeof ack.sequence === 'number' ? ack.sequence : null,
         ...(ack.forcedDraw ? { forcedDraw: ack.forcedDraw } : {}),
         ...(typeof ack.error === 'string' ? { error: ack.error } : {}),
+        ...(typeof ack.fp === 'string' && ack.fp.length <= 64 ? { fp: ack.fp } : {}),
       },
       expiresAt: entry.expiresAt,
     });
@@ -224,6 +263,10 @@ export type WithGameActionIdempotencyOptions = {
    * only returns after the move is already durable, e.g. `hand:ready`).
    */
   deferReceiptPersistUntilDurable?: () => Promise<boolean>;
+  /** Digest of the command payload (see fingerprintGameCommand). Enables request-id conflict detection. */
+  fingerprint?: string;
+  /** Match the receipt belongs to (stored with the durable receipt row). */
+  matchId?: string | null;
 };
 
 /**
@@ -243,19 +286,26 @@ export async function withGameActionIdempotency(
     return execute();
   }
 
+  const conflict = (): GameActionAck => ({ ok: false, error: REQUEST_ID_CONFLICT_ERROR });
   const cached = readCachedAck(roomCode, playerSeatId, normalizedRequestId);
-  if (cached) return cached;
+  if (cached) {
+    // Receipts written before fingerprints existed carry none and keep their old (id-only) behavior.
+    if (cached.fp && options.fingerprint && cached.fp !== options.fingerprint) return conflict();
+    return stripInternal(cached);
+  }
 
   const inflightKey = inFlightKeyFor(roomCode, playerSeatId, normalizedRequestId);
   const existing = inFlightByKey.get(inflightKey);
   if (existing) {
+    if (inFlightFingerprints.get(inflightKey) !== options.fingerprint && options.fingerprint) return conflict();
     const ack = await existing;
-    return ack.ok ? { ...ack, duplicate: true } : ack;
+    return ack.ok ? { ...stripInternal(ack), duplicate: true } : stripInternal(ack);
   }
 
   const inflight = (async () => {
-    const result = await execute();
-    if (result.ok) {
+    const executed = await execute();
+    const result: GameActionAck = options.fingerprint && executed.ok ? { ...executed, fp: options.fingerprint } : executed;
+    if (result.ok && !result.noop) {
       storeCachedAck(roomCode, playerSeatId, normalizedRequestId, result);
       const expiresAtMs = Date.now() + ACTION_IDEMPOTENCY_TTL_MS;
       const writeReceipt = () =>
@@ -263,11 +313,13 @@ export async function withGameActionIdempotency(
           roomCode,
           playerSeatId,
           requestId: normalizedRequestId,
+          matchId: options.matchId ?? null,
           ack: {
             ok: true,
             sequence: result.sequence ?? null,
             ...(result.forcedDraw ? { forcedDraw: result.forcedDraw } : {}),
             ...(result.error ? { error: result.error } : {}),
+            ...(result.fp ? { fp: result.fp } : {}),
           },
           expiresAtMs,
         });
@@ -287,10 +339,29 @@ export async function withGameActionIdempotency(
     return result;
   })().finally(() => {
     inFlightByKey.delete(inflightKey);
+    inFlightFingerprints.delete(inflightKey);
   });
 
+  if (options.fingerprint) inFlightFingerprints.set(inflightKey, options.fingerprint);
   inFlightByKey.set(inflightKey, inflight);
-  return inflight;
+  return inflight.then(stripInternal);
+}
+
+/**
+ * Receipt lookup without executing: lets a handler answer a retry of an already-applied command with
+ * its ORIGINAL result even when the room has since moved on (game over, next hand, rematch).
+ * Returns a conflict ack when the id was used for a different payload.
+ */
+export function lookupGameActionReceipt(
+  roomCode: string,
+  playerSeatId: string,
+  requestId: string,
+  fingerprint?: string,
+): GameActionAck | null {
+  const cached = readCachedAck(roomCode, playerSeatId, requestId);
+  if (!cached) return null;
+  if (cached.fp && fingerprint && cached.fp !== fingerprint) return { ok: false, error: REQUEST_ID_CONFLICT_ERROR };
+  return stripInternal(cached);
 }
 
 export function clearGameActionIdempotencyForRoom(roomCode: string): void {
@@ -313,6 +384,7 @@ export function getGameActionIdempotencyCacheSize(roomCode: string): number {
 export function resetGameActionIdempotencyForTests(): void {
   cacheByRoomCode.clear();
   inFlightByKey.clear();
+  inFlightFingerprints.clear();
 }
 
 export const GAME_ACTION_IDEMPOTENCY_TTL_MS = ACTION_IDEMPOTENCY_TTL_MS;

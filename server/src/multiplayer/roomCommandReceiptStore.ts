@@ -93,6 +93,7 @@ export async function persistRoomCommandReceipt(
       ...(input.ack.forcedDraw ? { forcedDraw: input.ack.forcedDraw } : {}),
       ...(input.ack.error ? { error: input.ack.error } : {}),
       ...(input.ack.uncertain ? { uncertain: input.ack.uncertain } : {}),
+      ...(input.ack.fp ? { fp: input.ack.fp } : {}),
     },
     expires_at: new Date(input.expiresAtMs).toISOString(),
   };
@@ -159,6 +160,7 @@ export async function loadRoomCommandReceiptsForRoom(
           ...(row.ack.forcedDraw ? { forcedDraw: row.ack.forcedDraw } : {}),
           ...(typeof row.ack.error === 'string' ? { error: row.ack.error } : {}),
           ...(row.ack.uncertain ? { uncertain: true } : {}),
+          ...(typeof row.ack.fp === 'string' ? { fp: row.ack.fp } : {}),
         },
         expiresAt,
       });

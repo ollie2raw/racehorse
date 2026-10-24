@@ -1,3 +1,4 @@
+import { trackProcessWork } from '../../platform/processLifecycle';
 import { createHash } from 'crypto';
 import * as Sentry from '@sentry/node';
 import type { DailyFritzSetGameNumber } from '../../dailyFritz';
@@ -63,7 +64,7 @@ export type DailyFritzRecordGameAsyncVerificationInput = {
 export function scheduleDailyFritzRecordGameVerification(
   input: DailyFritzRecordGameAsyncVerificationInput,
 ): void {
-  void runDailyFritzRecordGameVerification(input).catch((error) => {
+  void trackProcessWork('daily-fritz-verification', () => runDailyFritzRecordGameVerification(input)).catch((error) => {
     capture500(error, { route: 'record-game-async', attemptId: input.attemptId });
     log.error({
       attemptId: input.attemptId,

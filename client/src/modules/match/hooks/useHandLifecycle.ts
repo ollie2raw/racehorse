@@ -304,6 +304,9 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
   // eslint-disable-next-line react-hooks/immutability -- the callback mutates refs, not render-scope locals
   const advanceHand = useCallback(() => {
     const live = matchRef.current;
+    // Hand zero is an initialization shell, not a completed hand. Only the
+    // authoritative start response (or guest pre-game draw) may deal hand one.
+    if (live.handNumber === 0) return;
     const challengeHandOnlyGameOver = Boolean(
       isDailyFritzMode
       && dailyFritzPackage?.challenge_code

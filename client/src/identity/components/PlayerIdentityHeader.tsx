@@ -33,7 +33,7 @@ export function PlayerIdentityHeader({ subject, competitive, canInteract, adding
         <div className="identity-header__context">
           <span style={{ color: tier.color }}>{tier.label}</span>
           {competitive.globalRank != null && <span>#{competitive.globalRank} globally</span>}
-          {competitive.rankedGames != null && <span>{competitive.rankedGames} ranked games</span>}
+          {competitive.rankedGames != null && <span>{competitive.rankedGames} rated games</span>}
         </div>
       </div>
       {canInteract && !subject.isCurrentUser && (

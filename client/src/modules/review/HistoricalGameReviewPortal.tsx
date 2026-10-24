@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState, useRef } from 'react';
 import {
   fetchRecentGameReviews,
   loadHistoricalGameReview,
@@ -30,6 +30,7 @@ export function HistoricalGameReviewPortal({ enabled }: HistoricalGameReviewPort
   const [listKey, setListKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [hydration, setHydration] = useState<HistoricalGameReviewHydration | null>(null);
+  const requestRef = useRef(0);
   const [open, setOpen] = useState(false);
   const [loadingReview, setLoadingReview] = useState(false);
 
@@ -69,7 +70,7 @@ export function HistoricalGameReviewPortal({ enabled }: HistoricalGameReviewPort
         if (!cancelled) setEntries(reviews);
       })
       .catch(() => {
-        if (!cancelled) setEntries([]);
+        if (!cancelled) { setEntries([]); setError('Could not load saved reviews. Please try again.'); }
       });
     return () => {
       cancelled = true;
@@ -77,20 +78,42 @@ export function HistoricalGameReviewPortal({ enabled }: HistoricalGameReviewPort
   }, [accessEnabled, listKey]);
 
   const openReview = useCallback((reviewId: string) => {
+    const request = ++requestRef.current;
     setLoadingReview(true);
     setError(null);
     void loadHistoricalGameReview(reviewId)
       .then((loaded) => {
+        if (request !== requestRef.current) return;
         if (!loaded) {
           setError('Could not load that review.');
           return;
         }
         setHydration(loaded);
         setOpen(true);
+        const url = new URL(window.location.href);
+        url.searchParams.set('review', reviewId);
+        window.history.replaceState(window.history.state, '', url);
       })
-      .catch(() => setError('Could not load that review.'))
-      .finally(() => setLoadingReview(false));
+      .catch(() => { if (request === requestRef.current) setError('Could not load that review.'); })
+      .finally(() => { if (request === requestRef.current) setLoadingReview(false); });
   }, []);
+
+  useEffect(() => {
+    if (!accessEnabled) return;
+    const restore = () => {
+      const reviewId = new URLSearchParams(window.location.search).get('review');
+      if (reviewId) openReview(reviewId);
+      else setOpen(false);
+    };
+    restore();
+    window.addEventListener('popstate', restore);
+    return () => {
+      // This counter invalidates asynchronous requests; it is not a DOM ref.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      ++requestRef.current;
+      window.removeEventListener('popstate', restore);
+    };
+  }, [accessEnabled, openReview]);
 
   if (!accessEnabled) return null;
 
@@ -102,7 +125,7 @@ export function HistoricalGameReviewPortal({ enabled }: HistoricalGameReviewPort
       <section className="rh-recent-reviews" aria-label="Recent game reviews">
         <p className="rh-recent-reviews__eyebrow">Recent reviews</p>
         {loadingList ? <p className="rh-recent-reviews__status">Loading…</p> : null}
-        {!loadingList && rows.length === 0 ? (
+        {!loadingList && rows.length === 0 && !error ? (
           <p className="rh-recent-reviews__status">No saved reviews yet.</p>
         ) : null}
         <ul className="rh-recent-reviews__list">
@@ -128,12 +151,23 @@ export function HistoricalGameReviewPortal({ enabled }: HistoricalGameReviewPort
             {error}
           </p>
         ) : null}
+        {error ? <button type="button" className="dfd__btn" disabled={loadingReview} onClick={() => {
+          setError(null);
+          const reviewId = new URLSearchParams(window.location.search).get('review');
+          if (reviewId) openReview(reviewId);
+          else { setEntries(null); setListKey((key) => key + 1); }
+        }}>Retry</button> : null}
       </section>
       {hydration ? (
-        <Suspense fallback={null}>
+        <Suspense fallback={<p role="status">Loading game review…</p>}>
           <GameReviewer
             open={open}
-            onClose={() => setOpen(false)}
+            onClose={() => {
+              setOpen(false);
+              const url = new URL(window.location.href);
+              url.searchParams.delete('review');
+              window.history.replaceState(window.history.state, '', url);
+            }}
             analysis={hydration.analysis}
             reviewWorkerBatch={hydration.reviewWorkerBatch}
             decisionIdByMoveNumber={hydration.decisionIdByMoveNumber}

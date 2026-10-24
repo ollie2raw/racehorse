@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRoomCommandRequestId, emitGameStart, emitHandReady } from './roomTransport';
+import { createRoomCommandRequestId, emitGameStart, emitHandReady, emitRoomCreate, emitRoomJoin } from './roomTransport';
 
 describe('roomTransport requestId for hand lifecycle emits (A1 client follow-up)', () => {
   it('createRoomCommandRequestId returns kind-prefixed ids', () => {
@@ -38,5 +38,25 @@ describe('roomTransport requestId for hand lifecycle emits (A1 client follow-up)
       }),
       expect.any(Function),
     );
+  });
+});
+
+describe('guest private-room reconnect capability', () => {
+  it('stores a private create capability and presents it on a later join after reload', async () => {
+    window.localStorage.clear();
+    const createSocket = { emit: vi.fn((_event: string, ...args: unknown[]) => {
+      (args[args.length - 1] as (r: unknown) => void)({
+        ok: true, roomCode: 'ABCD12', guestReconnectToken: 'secret-capability',
+      });
+    }) };
+    await emitRoomCreate(createSocket, { username: 'Guest', userId: 'guest-42', authToken: null });
+    expect(window.localStorage.getItem('rh:guest-seat:ABCD12:guest-42')).toBe('secret-capability');
+
+    const joinSocket = { emit: vi.fn((_event: string, ...args: unknown[]) => {
+      (args[args.length - 1] as (r: unknown) => void)({ ok: true, roomCode: 'ABCD12' });
+    }) };
+    await emitRoomJoin(joinSocket, 'ABCD12', { username: 'Guest', userId: 'guest-42', authToken: null });
+    expect(joinSocket.emit).toHaveBeenCalledWith('room:join', 'ABCD12',
+      expect.objectContaining({ guestReconnectToken: 'secret-capability' }), expect.any(Function));
   });
 });

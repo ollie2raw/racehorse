@@ -392,6 +392,10 @@ export default function FriendsScreen({
                 <input
                   type="text"
                   placeholder="Add by username…"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="send"
                   value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={async (e) => {

@@ -3,7 +3,7 @@ import type { Socket } from 'socket.io-client';
 import type { GameState, Move, Tile } from '../../../types';
 import { drawAudit } from '../../../multiplayer/drawAudit';
 import { mpPerfBeginAction, mpPerfMarkAck } from '../../../multiplayer/mpPerf';
-import { emitGameAction } from '../../../multiplayer/roomTransport';
+import { currentRoomMatchId, emitGameAction } from '../../../multiplayer/roomTransport';
 import type { MoveEntry } from '../../../game/moveLogger';
 import {
   buildLogicalActionSignature,
@@ -113,6 +113,7 @@ export function useDrawAction(params: UseDrawActionParams): () => Promise<void> 
       baselineSequence,
       handNumber,
       signature,
+      matchId: currentRoomMatchId(),
     });
     logicalGameplayActionRef.current = logicalAction;
     const requestId = logicalAction.requestId;
@@ -129,7 +130,7 @@ export function useDrawAction(params: UseDrawActionParams): () => Promise<void> 
     });
     drawAudit('emit', { event: 'game:action', actionType: 'DRAW', roomCode: joinedRoom, requestId });
     try {
-      const resp = await emitGameAction(socket, joinedRoom, { type: 'DRAW', requestId });
+      const resp = await emitGameAction(socket, joinedRoom, { type: 'DRAW', requestId, matchId: logicalAction.matchId });
       mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
       drawAudit('ack', {
         requestId,

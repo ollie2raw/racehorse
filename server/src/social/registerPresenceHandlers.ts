@@ -78,9 +78,27 @@ export function registerPresenceHandlers(
       // its next request can arrive before the token has been verified.
       let identified!: () => void;
       socket.data.identifyPending = new Promise<void>((resolve) => { identified = resolve; });
+      // Identifies on one socket can overlap (token rotation racing a sign-out). Only the newest one may change the
+      // socket's identity: a slow verification of the OLD principal finishing after the sign-out must not re-install it.
+      const sequence = ((socket.data.identifySequence as number | undefined) ?? 0) + 1;
+      socket.data.identifySequence = sequence;
+      // A failed, downgraded or unverifiable identify (sign-out, expired/revoked token, guest) must not leave the
+      // socket acting as the previous account: drop the verified identity (and its presence).
+      const dropIdentity = () => {
+        const previous = deps.normalizeUserId(socket.data?.userId);
+        if (!previous) return;
+        const wentOffline = removeSocketPresence();
+        delete socket.data.userId;
+        delete socket.data.username;
+        if (wentOffline && deps.isUuidLike(previous)) emitPresenceUpdateToFriends(deps, previous, 'offline');
+      };
       try {
         const { username, userId } = await deps.resolveSocketIdentity(payload ?? {});
-        if (!userId) return cb?.({ ok: false });
+        if (socket.data.identifySequence !== sequence) return cb?.({ ok: false });
+        if (!userId) {
+          dropIdentity();
+          return cb?.({ ok: false });
+        }
         // Re-identify is routine: it fires on every reconnect and on every
         // access-token rotation. Only announce a transition the friends list
         // has not already been told about.
@@ -95,6 +113,13 @@ export function registerPresenceHandlers(
         }
         cb?.({ ok: true });
       } catch {
+        // Verification itself failed (auth backend unreachable). A routine token rotation for the SAME account keeps
+        // its identity; a request claiming a different principal than the one this socket holds drops it, so the
+        // previous account never keeps receiving or acting for a browser that has moved on.
+        if (socket.data.identifySequence === sequence) {
+          const claimed = deps.normalizeUserId((payload as { userId?: unknown } | undefined)?.userId);
+          if (claimed !== deps.normalizeUserId(socket.data?.userId)) dropIdentity();
+        }
         cb?.({ ok: false });
       } finally {
         identified();

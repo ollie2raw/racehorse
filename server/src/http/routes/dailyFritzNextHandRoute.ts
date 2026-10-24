@@ -46,6 +46,7 @@ import {
 } from './dailyFritzVerificationGlue';
 import { capture500, log, prodSafeError } from './dailyFritzRouteErrors';
 import { clearDailyFritzActiveCheckpoint } from './dailyFritzCheckpointPolicy';
+import { isDailyFritzVerifierProtocolAttempt } from './dailyFritzVerificationPolicy';
 
 export function registerDailyFritzNextHandRoute(app: Application): void {
   app.post('/api/daily-fritz/next-hand', async (req, res) => {
@@ -222,10 +223,18 @@ export function registerDailyFritzNextHandRoute(app: Application): void {
         });
         return;
       }
-      attempt.result = writeActiveGameProgress({
-        ...(attempt.result ?? {}),
-        verification_status: 'legacy_unverified',
-      }, {
+      // A protocol-pinned attempt that advances without evidence is an unverified advance (ledgered, sticky, unranked, no
+      // streak credit); only a pre-protocol attempt is a plain legacy finish. Scores keep the hand-start chain continuous.
+      const withoutEvidence = isDailyFritzVerifierProtocolAttempt(attempt.result)
+        ? writeUnverifiedDailyFritzHand(attempt.result, {
+            gameNumber,
+            handIndex: completedHandIndex,
+            verifierCode: 'missing_transcript',
+            playerScoreAfter: Math.round(legacyYouScore),
+            fritzScoreAfter: Math.round(legacyFritzScore),
+          })
+        : { ...(attempt.result ?? {}), verification_status: 'legacy_unverified' };
+      attempt.result = writeActiveGameProgress(withoutEvidence, {
         gameNumber,
         you: Math.round(legacyYouScore),
         fritz: Math.round(legacyFritzScore),

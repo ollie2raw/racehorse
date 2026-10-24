@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { fetchRankingProfile } from '../stats/statsApi';
+import { hasRankedProfile } from '../stats/rankedProfileId';
 import { normalizeLobbyUsername } from './privateMatchLobbyViewModel';
 
 export type UsePrivateMatchLobbyGuestProfileParams = {
@@ -54,7 +55,9 @@ export function usePrivateMatchLobbyGuestProfile({
         }
       }
 
-      if (!userId) {
+      // A signed-out guest seat (`guest_<…>` id) has no ranked profile: render
+      // the unrated guest state rather than requesting one.
+      if (!hasRankedProfile(userId)) {
         if (!cancelled) {
           setGuestRankedLoading(false);
           setGuestRating(null);

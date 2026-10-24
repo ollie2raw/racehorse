@@ -162,3 +162,15 @@ describe('hasModeActivity', () => {
     expect(hasModeActivity([-12])).toBe(true);
   });
 });
+
+it('separates a mixed rating history from the Play vs Fritz record', () => {
+  const summary = deriveFritzSummary([
+    { played_at: '2026-10-13', opponent_id: FRITZ_ROOKIE_ID, player_score: 20, opponent_score: 60, delta: -10 },
+    { played_at: '2026-10-13', opponent_id: 'human-opponent', player_score: 60, opponent_score: 10, delta: 20 },
+  ], getWeekStart(new Date('2026-10-13')));
+  expect(summary.gamesPlayed).toBe(1);
+  expect(summary.wins).toBe(0);
+  expect(summary.losses).toBe(1);
+  expect(summary.highestScore).toBe(20);
+  expect(summary.currentStreak).toBe(0);
+});

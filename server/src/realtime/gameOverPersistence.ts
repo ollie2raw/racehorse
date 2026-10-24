@@ -1,3 +1,4 @@
+import { trackProcessWork } from '../platform/processLifecycle';
 import * as Sentry from '@sentry/node';
 import { childLogger } from '../logger';
 import { countRecentMoveLogVerificationFailuresForUser } from '../multiplayer/mpAuthorityEventStore';
@@ -25,6 +26,7 @@ import {
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
 import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
 import { recordOperationalFailure } from '../operationalTelemetry';
+import { isRatingCutoverQuiescedError, withRatingCompletion } from '../ranking/ratingCutoverGate';
 import { isAnyTournamentRoom } from '../multiplayer/roomKind';
 import type { GhostMoveLogEntry } from '../ghost/service';
 import type { GhostMoveLogVerificationResult } from '../ghost/verifier';
@@ -45,6 +47,8 @@ import {
   type GameOverPersistOutcome,
 } from '../multiplayer/gameOverPersistPolicy';
 import type { Room } from '../rooms';
+import { markTerminalCompletionLogged } from '../multiplayer/terminalCompletionStore';
+import { isTournamentLikeRoom } from '../multiplayer/terminalCompletion';
 
 const log = childLogger('realtime:game-over');
 
@@ -168,8 +172,8 @@ function evaluateHumanMoveLogVerification(
   return { eligible: true };
 }
 
-async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Promise<void> {
-  const { room, sourceMatchId, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
+async function persistGameOverOnce(io: Server | null, input: GameOverPersistInput): Promise<void> {
+  const { room, a, b, scoreA, scoreB, winnerSeatId } = input;
   const winnerUserId =
     winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
 
@@ -187,12 +191,16 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
   // scores go with their ids so the engine can put them in the row's
   // player1/player2 order: room seats are in join order, not row order.
   const tournamentRoom = Boolean(room.scheduledTournamentMatchId) || isTournamentRoomCode(room.code);
+  if (tournamentRoom && !io) {
+    // Terminal-completion replay never owns tournament results (tournaments stay OFF).
+    throw new Error('tournament_replay_unsupported');
+  }
   const tournamentPlayerId = (seat: typeof a): string | null =>
     seat.userId ?? (tournamentRoom && seat.id.startsWith('bot:fritz:') ? seat.id : null);
   const tournamentWinnerId =
     winnerSeatId === a.id ? tournamentPlayerId(a) : winnerSeatId === b.id ? tournamentPlayerId(b) : null;
   if (tournamentWinnerId) {
-    const applied = await applyTournamentGameOverFromRoom(io, room, {
+    const applied = await applyTournamentGameOverFromRoom(io!, room, {
       winnerUserId: tournamentWinnerId,
       player1Score: scoreA,
       player2Score: scoreB,
@@ -227,7 +235,26 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
     throw new Error(TOURNAMENT_APPLY_FAILED_ERROR);
   }
 
-  if (getPendingFritzMatchContext(room)) {
+  // Guest seat identities are stable reconnect keys, not auth/profile IDs.
+  // Socket identity verification permits only authenticated accounts to retain
+  // UUID user IDs. Keep the roster unchanged; persist account references only.
+  const accountId = (id: string | null): string | null =>
+    id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : null;
+  input = { ...input, a: { ...a, userId: accountId(a.userId) }, b: { ...b, userId: accountId(b.userId) } };
+
+  if (!input.a.userId && !input.b.userId) return persistRatedGameOverOnce(io, input);
+
+  // Rating cutover gate: everything from here on is one vulnerable rating-
+  // affecting completion (ranked insert, Glicko, awaited Ghost write and the
+  // deferred Fritz training write). It is counted from this boundary, before
+  // any durable effect, and is rejected untouched while the gate is closed.
+  return withRatingCompletion('game_over_persist', () => persistRatedGameOverOnce(io, input));
+}
+
+async function persistRatedGameOverOnce(_io: Server | null, input: GameOverPersistInput): Promise<void> {
+  const { room, sourceMatchId, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
+
+  if (getPendingFritzMatchContext(room, input.replayRoster)) {
     await resolvePendingFritzMatch(room.code);
   }
 
@@ -252,7 +279,7 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
     pointDiff: Math.abs(scoreA - scoreB),
   });
 
-  const fritzActivityCtx = getPendingFritzMatchContext(room);
+  const fritzActivityCtx = getPendingFritzMatchContext(room, input.replayRoster);
   const winnerRoster = winnerSeatId === aId ? a : b;
   const loserRoster = winnerSeatId === aId ? b : a;
   const activityDisplayName = (p: typeof a) =>
@@ -311,41 +338,48 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
   const humanGlickoEligible = humanMoveLogVerification.eligible;
 
 
+  for (const participant of rankingParticipants) {
+    if (!participant.me.userId) continue;
+    let profile = rankingProfiles.get(participant.me.userId);
+    if (!profile) {
+      let profileData: Profile[] | undefined;
+      let profileFetchError: string | null = null;
+      try {
+        profileData = await supabaseFetch<Profile[]>(`/rest/v1/profiles?id=eq.${participant.me.userId}`);
+      } catch (err) {
+        profileFetchError = err instanceof Error ? err.message : String(err);
+      }
+      profile = profileData?.[0];
+      if (profile) {
+        rankingProfiles.set(participant.me.userId, profile);
+      } else if (participant.opp.userId && humanGlickoEligible) {
+        // RK-10: this is the silent-skip. A ranked human game reached here,
+        // was eligible, and got no `ranked_games` row purely because the
+        // profile lookup came back empty (or threw). Make it loud — a falsy
+        // profile lookup must NOT let the pipeline report success silently.
+        recordOperationalFailure(
+          'ranked_insert_skipped_no_profile',
+          profileFetchError ?? 'profiles lookup returned no row',
+          {
+            roomCode: room.code,
+            sourceMatchId,
+            playerId: participant.me.userId,
+            opponentId: participant.opp.userId,
+            profileFetchThrew: Boolean(profileFetchError),
+            rowsReturned: Array.isArray(profileData) ? profileData.length : null,
+          },
+        );
+      }
+    }
+  }
+
+
   for (const p of rankingParticipants) {
     if (p.me.userId) {
       const opponentId = p.opp.userId || (p.opp.id.startsWith('bot:fritz:') ? FRITZ_SYSTEM_ID : null);
       if (opponentId) {
-        let profile = rankingProfiles.get(p.me.userId);
-        if (!profile) {
-          let profileData: Profile[] | undefined;
-          let profileFetchError: string | null = null;
-          try {
-            profileData = await supabaseFetch<Profile[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
-          } catch (err) {
-            profileFetchError = err instanceof Error ? err.message : String(err);
-          }
-          profile = profileData?.[0];
-          if (profile) {
-            rankingProfiles.set(p.me.userId, profile);
-          } else if (opponentId !== FRITZ_SYSTEM_ID && humanGlickoEligible) {
-            // RK-10: this is the silent-skip. A ranked human game reached here,
-            // was eligible, and got no `ranked_games` row purely because the
-            // profile lookup came back empty (or threw). Make it loud — a falsy
-            // profile lookup must NOT let the pipeline report success silently.
-            recordOperationalFailure(
-              'ranked_insert_skipped_no_profile',
-              profileFetchError ?? 'profiles lookup returned no row',
-              {
-                roomCode: room.code,
-                sourceMatchId,
-                playerId: p.me.userId,
-                opponentId,
-                profileFetchThrew: Boolean(profileFetchError),
-                rowsReturned: Array.isArray(profileData) ? profileData.length : null,
-              },
-            );
-          }
-        }
+        const profile = rankingProfiles.get(p.me.userId);
+
         if (profile && opponentId !== FRITZ_SYSTEM_ID && humanGlickoEligible) {
           const insertResult = await insertRankedGameIdempotent({
             playerId: p.me.userId,
@@ -353,6 +387,10 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
             playerScore: p.myScore,
             opponentScore: p.oppScore,
             gameType: 'multiplayer',
+            ratingTreatment: 'standard',
+            completionCause: 'completed',
+            opponentRating: rankingProfiles.get(opponentId)?.glicko_rating ?? NaN,
+            opponentRd: rankingProfiles.get(opponentId)?.glicko_rd ?? NaN,
             ratingBefore: profile.glicko_rating ?? 0,
             rdBefore: profile.glicko_rd ?? 0,
             playedAt: rankedPlayedAt,
@@ -522,6 +560,40 @@ function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string
 }
 
 /**
+ * A game that ends while the rating cutover gate is closed has done nothing
+ * durable yet, so it can simply wait for the short drain window instead of
+ * burning its retry ceiling. Bounded: past the ceiling it fails visibly like
+ * any other persist failure and is never reported as saved.
+ */
+export const CUTOVER_GATE_WAIT_CEILING_MS = 120_000;
+export const CUTOVER_GATE_POLL_MS = 2_000;
+
+async function persistGameOverWaitingForCutoverGate(io: Server | null, input: GameOverPersistInput): Promise<void> {
+  const startedAt = Date.now();
+  for (;;) {
+    try {
+      await persistGameOverOnce(io, input);
+      return;
+    } catch (err) {
+      if (!isRatingCutoverQuiescedError(err) || Date.now() - startedAt >= CUTOVER_GATE_WAIT_CEILING_MS) {
+        throw err;
+      }
+      await sleep(CUTOVER_GATE_POLL_MS);
+    }
+  }
+}
+
+/**
+ * Restart-time replay of a terminal room's completion (no live `io`, no in-memory room).
+ * Same pipeline, same idempotency keys (sourceMatchId = room.matchId) as the foreground
+ * scheduler; it does NOT wait on the rating cutover gate — a closed gate rejects the
+ * unit untouched (isRatingCutoverQuiescedError) and the sweep simply retries later.
+ */
+export async function replayGameOverCompletion(input: GameOverPersistInput): Promise<void> {
+  await persistGameOverOnce(null, input);
+}
+
+/**
  * Factory bound to the process `io` instance. Returns the scheduler used by `initRoomSession` `onGameOver`.
  * Bounded retries; `matchLogged` is set only after a successful attempt.
  */
@@ -530,7 +602,7 @@ export function createGameOverPersistScheduler(io: Server) {
     input: GameOverPersistInput,
   ): () => Promise<GameOverPersistOutcome> {
     const { room, sourceMatchId } = input;
-    return async () => {
+    return () => trackProcessWork('game-over-persistence', async () => {
       let lastError: unknown = null;
       for (let attempt = 0; attempt < GAME_OVER_PERSIST_MAX_ATTEMPTS; attempt += 1) {
         const delayMs = GAME_OVER_PERSIST_RETRY_DELAYS_MS[attempt] ?? 0;
@@ -538,8 +610,15 @@ export function createGameOverPersistScheduler(io: Server) {
           await sleep(delayMs);
         }
         try {
-          await persistGameOverOnce(io, input);
+          await persistGameOverWaitingForCutoverGate(io, input);
           markGameOverPersistSucceeded(room);
+          // Make "logged" durable so a later restart does not replay a finished completion.
+          // Best effort: a missed write only means an idempotent replay.
+          if (!isTournamentLikeRoom(room)) {
+            await markTerminalCompletionLogged(room.code, sourceMatchId).catch((err) =>
+              log.warn({ err, roomCode: room.code, sourceMatchId }, 'terminal completion marker not written'),
+            );
+          }
           emitMpAuthorityFunnel('private_game_over_persist_succeeded', {
             roomCode: room.code,
             sequence: room.state?.sequence ?? null,
@@ -549,7 +628,7 @@ export function createGameOverPersistScheduler(io: Server) {
               attempt: attempt + 1,
             },
           });
-          return 'succeeded';
+          return 'succeeded' as const;
         } catch (err) {
           lastError = err;
           log.warn(
@@ -584,7 +663,7 @@ export function createGameOverPersistScheduler(io: Server) {
       });
       markGameOverPersistFailed(room);
       emitGameOverPersistFailed(io, room, sourceMatchId, lastError);
-      return 'failed';
-    };
+      return 'failed' as const;
+    });
   };
 }

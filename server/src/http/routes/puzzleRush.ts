@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/node';
 import type { Application } from 'express';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
 import { PUZZLE_RUSH_CONFIG, isPuzzleRushStageKey } from '../../puzzleRush/config';
-import { selectRunPuzzles, summarizeSelectionFallbacks } from '../../puzzleRush/difficulty';
+import { materializeAssignedPuzzles, selectRunPuzzles, summarizeSelectionFallbacks } from '../../puzzleRush/difficulty';
 import { gradeRun, type ReportedPuzzle } from '../../puzzleRush/grading';
 import {
   buildDailyPuzzleRushLeaderboard,
@@ -13,9 +13,11 @@ import { buildHomeDailySummary, createHomeDailyCompletionMap } from '../../homeD
 import { listCompletedPuzzleRushDatesForUser } from '../stores/homeCompletionDates';
 import {
   createRushRun,
+  claimRushRunCompletion,
   finalizeRushRun,
   hasOfficialRushRunForDate,
   getRushRunById,
+  invalidateUnassignedRushRun,
   incrementPuzzlePoolPlayCounts,
   listCompletedRushRuns,
   listCompletedRushRunsForUser,
@@ -23,7 +25,6 @@ import {
   listPuzzlePoolCandidates,
   listPuzzlePoolEntriesByIds,
   listRushRunPuzzles,
-  persistGradedRushPuzzles,
   recordReportedRushPuzzle,
 } from '../stores/puzzleRushStore';
 import { getUsernameForUserId } from '../stores/dailyPuzzleStore';
@@ -70,18 +71,22 @@ export function registerPuzzleRushRoutes(app: Application): void {
         getUsernameForUserId(userId),
         hasOfficialRushRunForDate(userId, runDate),
       ]);
+      const selection = selectRunPuzzles({ candidates });
+      if (selection.puzzles.length === 0) {
+        res.status(409).json({ error: 'Puzzle Rush could not assemble a run.' });
+        return;
+      }
       const { run, created } = await createRushRun({
         userId,
         username,
         runDate,
         isOfficial: !alreadyOfficial,
+        assignedPuzzleIds: selection.puzzles.map((puzzle) => puzzle.puzzleId),
       });
-      const selection = selectRunPuzzles({ candidates });
-      const puzzles = selection.puzzles;
-      if (puzzles.length === 0) {
-        res.status(409).json({ error: 'Puzzle Rush could not assemble a run.' });
-        return;
-      }
+      if (run.assignedPuzzleIds.length === 0) throw new Error('Puzzle Rush run has no durable assignment.');
+      const puzzles = created
+        ? selection.puzzles
+        : materializeAssignedPuzzles(run.assignedPuzzleIds, await listPuzzlePoolEntriesByIds(run.assignedPuzzleIds));
 
       // Observability for pool health: a tier that keeps falling back needs
       // more content, and we want to know before players feel the flattened
@@ -96,7 +101,7 @@ export function registerPuzzleRushRoutes(app: Application): void {
         });
       }
 
-      void incrementPuzzlePoolPlayCounts(puzzles.map((puzzle) => puzzle.puzzleId));
+      if (created) void incrementPuzzlePoolPlayCounts(puzzles.map((puzzle) => puzzle.puzzleId));
 
       res.json({
         ok: true,
@@ -107,7 +112,7 @@ export function registerPuzzleRushRoutes(app: Application): void {
           requested: selection.requestedCount,
           served: puzzles.length,
           shortfall: selection.shortfall,
-          fallbackCount: selection.fallbacks.length,
+          fallbackCount: created ? selection.fallbacks.length : 0,
         },
         // The run's stage plan, known up front so the client can render the
         // whole arc (and its transitions) without a second request.
@@ -174,9 +179,15 @@ export function registerPuzzleRushRoutes(app: Application): void {
         res.status(409).json({ error: 'Puzzle Rush run is already finished.' });
         return;
       }
+      if (run.assignedPuzzleIds.length === 0) {
+        await invalidateUnassignedRushRun(runId, userId);
+        res.status(409).json({ error: 'This older run cannot be verified. Start a new run.' });
+        return;
+      }
 
       const recorded = await recordReportedRushPuzzle({
         runId,
+        userId,
         puzzleId,
         ordinal,
         clientRawScore,
@@ -185,6 +196,10 @@ export function registerPuzzleRushRoutes(app: Application): void {
       });
       res.json({ ok: true, recorded: { ordinal: recorded.ordinal, puzzleId: recorded.puzzleId } });
     } catch (error) {
+      if (/rush_assignment_mismatch|rush_duplicate_ordinal|rush_run_closed/.test(String(error))) {
+        res.status(409).json({ error: 'Puzzle Rush report conflicts with this run.' });
+        return;
+      }
       capture500(error, { route: 'puzzle-rush/report' });
       res.status(500).json({ error: prodSafeError(error, 'Failed to record Puzzle Rush report.') });
     }
@@ -219,7 +234,17 @@ export function registerPuzzleRushRoutes(app: Application): void {
         res.json({ ok: true, replayed: true, run });
         return;
       }
+      if (run.assignedPuzzleIds.length === 0) {
+        await invalidateUnassignedRushRun(runId, userId);
+        res.status(409).json({ error: 'This older run cannot be verified. Start a new run.' });
+        return;
+      }
 
+      const claim = await claimRushRunCompletion({ runId, userId, clientReportedScore });
+      if (claim.outcome === 'already_completed') {
+        res.json({ ok: true, replayed: true, run: claim.run });
+        return;
+      }
       const reportedRows = await listRushRunPuzzles(runId);
       const poolEntries = await listPuzzlePoolEntriesByIds(reportedRows.map((row) => row.puzzleId));
       const poolById = new Map(poolEntries.map((entry) => [entry.id, entry]));
@@ -231,7 +256,7 @@ export function registerPuzzleRushRoutes(app: Application): void {
         clientRawScore: row.clientRawScore,
       }));
 
-      const endedAt = new Date();
+      const endedAt = new Date(claim.run.completionClaimedAt ?? new Date().toISOString());
       const runDurationSeconds = Math.max(
         0,
         Math.floor((endedAt.getTime() - new Date(run.startedAt).getTime()) / 1000),
@@ -240,31 +265,31 @@ export function registerPuzzleRushRoutes(app: Application): void {
       const grade = gradeRun({
         reported,
         poolById,
-        clientReportedScore,
+        clientReportedScore: claim.run.completionClientScore ?? clientReportedScore,
         runDurationSeconds,
       });
 
-      await persistGradedRushPuzzles(runId, grade.puzzles);
-      const finalized = await finalizeRushRun({
+      const finalization = await finalizeRushRun({
         runId,
+        userId,
         status: grade.valid ? 'completed' : 'invalidated',
         totalScore: grade.totalScore,
         puzzlesSolved: grade.puzzlesSolved,
-        clientReportedScore: Math.max(0, Math.round(clientReportedScore || 0)),
         invalidatedReason: grade.invalidatedReason,
-        endedAt: endedAt.toISOString(),
+        gradedPuzzles: grade.puzzles,
       });
+      const finalized = finalization.run;
 
       res.json({
         ok: true,
-        replayed: false,
+        replayed: !finalization.applied,
         run: finalized,
         // The server total is authoritative even when it disagrees with the
         // client; the client score is echoed back only so the UI can explain.
-        authoritativeScore: grade.totalScore,
-        clientReportedScore: Math.max(0, Math.round(clientReportedScore || 0)),
-        invalidated: !grade.valid,
-        invalidatedReason: grade.invalidatedReason,
+        authoritativeScore: finalized.totalScore,
+        clientReportedScore: finalized.clientReportedScore,
+        invalidated: finalized.status === 'invalidated',
+        invalidatedReason: finalized.invalidatedReason,
       });
     } catch (error) {
       capture500(error, { route: 'puzzle-rush/complete' });

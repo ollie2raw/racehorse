@@ -118,6 +118,7 @@ export function buildPlayerTurnArgs(
     fritzDifficulty: fritzConfig.difficulty,
     moveCounterRef: refs.moveCounterRef,
     drawSequenceActiveRef: refs.drawSequenceActiveRef,
+    drawSequenceActive: refs.drawSequenceActive,
     setDrawSequenceActiveBoth: refs.setDrawSequenceActiveBoth,
     isTransitioningRef: refs.isTransitioningRef,
     localRun: {

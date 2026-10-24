@@ -226,12 +226,12 @@ describe('Sentry rate limit for tournament step failures', () => {
     vi.setSystemTime(new Date('2026-10-07T12:09:59Z'));
     alertTournamentMatchStepFailed('reconcile', match, new Error('boom'));
     expect(alertsTagged('reconcile_failed')).toHaveLength(1);
-    expect(h.loggedErrors).toHaveLength(3);
+    expect(h.loggedErrors.filter((e) => e.context === 'tournament:alerts')).toHaveLength(3);
 
     vi.setSystemTime(new Date(Date.parse('2026-10-07T12:00:00Z') + ALERT_RESEND_INTERVAL_MS));
     alertTournamentMatchStepFailed('reconcile', match, new Error('boom'));
     expect(alertsTagged('reconcile_failed')).toHaveLength(2);
-    expect(h.loggedErrors).toHaveLength(4);
+    expect(h.loggedErrors.filter((e) => e.context === 'tournament:alerts')).toHaveLength(4);
   });
 
   it('keys are per (step, match): another step or match is not suppressed', () => {

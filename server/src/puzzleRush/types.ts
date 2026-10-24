@@ -62,6 +62,10 @@ export type PuzzleRushRun = {
   runDate: string | null;
   /** First run of that day for this user. Governs the daily leaderboard only. */
   isOfficial: boolean;
+  /** Server-owned ordinal order, persisted with the run. */
+  assignedPuzzleIds: string[];
+  completionClaimedAt: string | null;
+  completionClientScore: number | null;
 };
 
 /** A puzzle the client reported during a run, before/after server grading. */
@@ -129,6 +133,9 @@ export type RushRunRow = {
   config_version: number | null;
   run_date?: string | null;
   is_official?: boolean | null;
+  assigned_puzzle_ids?: string[] | null;
+  completion_claimed_at?: string | null;
+  completion_client_score?: number | null;
 };
 
 export type RushRunPuzzleRow = {
@@ -195,6 +202,9 @@ export function normalizeRushRun(row: RushRunRow): PuzzleRushRun {
     configVersion: int(row.config_version, 1),
     runDate: typeof row.run_date === 'string' ? row.run_date : null,
     isOfficial: row.is_official === true,
+    assignedPuzzleIds: Array.isArray(row.assigned_puzzle_ids) ? row.assigned_puzzle_ids : [],
+    completionClaimedAt: row.completion_claimed_at ?? null,
+    completionClientScore: row.completion_client_score ?? null,
   };
 }
 

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { verifyJourneyPuzzleAgainstEngine } from './journeyPuzzleEngineVerification';
-import { JOURNEY_PUZZLES, type JourneyPuzzle } from './journeyPuzzles';
+import { type JourneyPuzzle } from './journeyPuzzles';
+import { getAllJourneyPuzzleEntries } from './journeyContentIndex';
+import { JOURNEY_PUZZLE_SPRINTS } from './journeyPuzzleSprints';
 
 function makePuzzle(overrides: Partial<JourneyPuzzle> = {}): JourneyPuzzle {
   return {
@@ -62,17 +64,17 @@ describe('verifyJourneyPuzzleAgainstEngine', () => {
     expect(issues).toEqual([]);
   });
 
-  it('confirms ch1-n03 is now engine-legal after the content fix', () => {
-    // ch1-n03 is the one production puzzle with boardState populated today.
-    // Its chain is [6,6]-[6,3]-[5,3]-[5,5]: both end tiles are doubles, so the
-    // chain's genuine open ends are 6 and 5. It used to claim "3 and 5" and a
-    // correctTile (3-4) that was not actually a legal move against this
-    // board — this tool caught that. The content has since been corrected
-    // (see the ch1-n03 content-fix PR) so this now asserts a clean bill of
-    // health, guarding against the same class of bug recurring.
-    const puzzle = JOURNEY_PUZZLES['ch1-n03'];
-    expect(puzzle).toBeDefined();
-    expect(puzzle.boardState).toBeDefined();
-    expect(verifyJourneyPuzzleAgainstEngine(puzzle)).toEqual([]);
+  it('confirms every production puzzle with a board has an engine-legal correct tile', () => {
+    // History: ch1-n03 once claimed a correctTile (3-4) that was not a legal move against its board;
+    // this tool caught it. That stage was retired in the Chapter 1 restructure, so the guard now covers
+    // every production puzzle that carries a board — registry puzzles and sprint puzzles alike.
+    const withBoards = [
+      ...getAllJourneyPuzzleEntries().map(([, puzzle]) => puzzle),
+      ...Object.values(JOURNEY_PUZZLE_SPRINTS).flat(),
+    ].filter((puzzle) => puzzle.boardState);
+    expect(withBoards.length).toBeGreaterThan(0);
+    for (const puzzle of withBoards) {
+      expect(verifyJourneyPuzzleAgainstEngine(puzzle), puzzle.nodeId).toEqual([]);
+    }
   });
 });

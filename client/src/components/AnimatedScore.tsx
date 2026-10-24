@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { motionDuration } from '../ui/motion';
+import './animatedScore.css';
 import { useAnimatedScore } from '../hooks/useAnimatedScore';
 
 export interface AnimatedScoreProps {
@@ -14,7 +17,15 @@ export interface AnimatedScoreProps {
   className?: string;
 }
 
-export function AnimatedScore({ value, duration = 600, from, format, className }: AnimatedScoreProps) {
+export function AnimatedScore({ value, duration = motionDuration.reward, from, format, className }: AnimatedScoreProps) {
   const displayed = useAnimatedScore(value, duration, from);
-  return <span className={className}>{format ? format(displayed) : displayed}</span>;
+  const [observed, setObserved] = useState({ value, increased: false });
+  if (observed.value !== value) setObserved({ value, increased: value > observed.value });
+  return (
+    <span className={`rh-score-value ${className ?? ''}`} role="img" aria-label={format ? format(value) : String(value)}>
+      <span key={value} aria-hidden="true" className={`rh-score-value__digits${observed.increased ? ' rh-score-value__digits--changed' : ''}`}>
+        {format ? format(displayed) : displayed}
+      </span>
+    </span>
+  );
 }

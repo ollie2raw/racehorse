@@ -105,7 +105,7 @@ export function useHandLifecycleWatchdogs({
   ]);
 
   useEffect(() => {
-    if (!match.handOver || match.gameOver || handReveal || handRevealTimerRef.current) return;
+    if (match.handNumber === 0 || !match.handOver || match.gameOver || handReveal || handRevealTimerRef.current) return;
     if (isDailyFritzMode) return;
     if (isGuidedV2Mode && !isGuidedV2OffLine) return;
     const timer = window.setTimeout(() => {
@@ -123,6 +123,7 @@ export function useHandLifecycleWatchdogs({
     isGuidedV2OffLine,
     match.gameOver,
     match.handOver,
+    match.handNumber,
     matchRef,
   ]);
 
@@ -192,6 +193,7 @@ export function useHandLifecycleWatchdogs({
     lastDailyFlowLabelRef,
     match.gameOver,
     match.handOver,
+    match.handNumber,
     matchRef,
     pendingHandRevealRef,
     setHandReveal,

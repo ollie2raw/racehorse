@@ -1,3 +1,4 @@
+import { processTimeout, cancelProcessTimeout } from '../platform/processLifecycle';
 import type { Server, Socket } from 'socket.io';
 import {
   act,
@@ -62,7 +63,7 @@ export function clearDisconnectGrace(roomCode: string): void {
   const code = normalizeRoomCode(roomCode);
   for (const [key, entry] of graceTimersByRoomSeat) {
     if (!key.startsWith(`${code}:`)) continue;
-    clearTimeout(entry.timer);
+    cancelProcessTimeout(entry.timer);
     graceTimersByRoomSeat.delete(key);
   }
 }
@@ -71,7 +72,7 @@ function clearDisconnectGraceForSeat(roomCode: string, playerSeatId: string): bo
   const key = graceKey(roomCode, playerSeatId);
   const entry = graceTimersByRoomSeat.get(key);
   if (!entry) return false;
-  clearTimeout(entry.timer);
+  cancelProcessTimeout(entry.timer);
   graceTimersByRoomSeat.delete(key);
   return true;
 }
@@ -109,7 +110,7 @@ export function listActiveDisconnectGraceSeats(roomCode: string): string[] {
 /** Test-only reset between vitest cases. */
 export function resetDisconnectGraceForTests(): void {
   for (const entry of graceTimersByRoomSeat.values()) {
-    clearTimeout(entry.timer);
+    cancelProcessTimeout(entry.timer);
   }
   graceTimersByRoomSeat.clear();
   resolveSeatSocket = () => null;
@@ -139,8 +140,8 @@ function scheduleDisconnectGraceTimer(
 ): void {
   const code = normalizeRoomCode(roomCode);
   clearDisconnectGraceForSeat(code, playerSeatId);
-  const timer = setTimeout(() => {
-    void handleDisconnectGraceExpired(code, playerSeatId, io, broadcast, durabilityRetryCount);
+  const timer = processTimeout('room-timer', () => {
+    return handleDisconnectGraceExpired(code, playerSeatId, io, broadcast, durabilityRetryCount);
   }, delayMs);
   graceTimersByRoomSeat.set(graceKey(code, playerSeatId), {
     timer,

@@ -35,6 +35,8 @@ import { READING_THE_BONEYARD_LESSON_DEFINITION } from './lessons/readingTheBone
 import { validateReadingTheBoneyardContent } from './lessons/readingTheBoneyard/readingTheBoneyardValidation.ts';
 import { TEMPO_VS_SAFETY_LESSON_DEFINITION } from './lessons/tempoVsSafety/tempoVsSafetyLesson.ts';
 import { validateTempoVsSafetyContent } from './lessons/tempoVsSafety/tempoVsSafetyValidation.ts';
+import { GREEDY_HANDS_LESSON_DEFINITION } from './lessons/greedyHands/greedyHandsLesson.ts';
+import { validateGreedyHandsContent } from './lessons/greedyHands/greedyHandsValidation.ts';
 
 export type JourneyContentRegistryBuildInput = {
   canonicalChapters: JourneyChapterDefinition[];
@@ -245,6 +247,7 @@ export function buildJourneyContentRegistry(input: JourneyContentRegistryBuildIn
     if (definition.id === DEFENSIVE_HOLDING_LESSON_DEFINITION.id) errors.push(...validateDefensiveHoldingContent(definition));
     if (definition.id === READING_THE_BONEYARD_LESSON_DEFINITION.id) errors.push(...validateReadingTheBoneyardContent(definition));
     if (definition.id === TEMPO_VS_SAFETY_LESSON_DEFINITION.id) errors.push(...validateTempoVsSafetyContent(definition));
+    if (definition.id === GREEDY_HANDS_LESSON_DEFINITION.id) errors.push(...validateGreedyHandsContent(definition));
   }
   if (errors.length > 0) throw new Error(['Invalid Journey content registry:', ...[...new Set(errors)].sort()].join('\n'));
   const premiumByNode = new Map(premiumDefinitions.map((definition) => [String(definition.nodeId), definition]));
@@ -286,6 +289,7 @@ export const PRODUCTION_PREMIUM_LESSON_DEFINITIONS: JourneyLessonDefinition[] = 
   DEFENSIVE_HOLDING_LESSON_DEFINITION,
   READING_THE_BONEYARD_LESSON_DEFINITION,
   TEMPO_VS_SAFETY_LESSON_DEFINITION,
+  GREEDY_HANDS_LESSON_DEFINITION,
 ];
 export const PRODUCTION_JOURNEY_CONTENT_REGISTRY = buildJourneyContentRegistry({
   canonicalChapters: JOURNEY_CHAPTER_DEFINITIONS,

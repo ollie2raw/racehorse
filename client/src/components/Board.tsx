@@ -6,6 +6,9 @@ import {
   useState,
   type ForwardedRef,
 } from 'react';
+import { useMotionAllowed } from '../ui/motion';
+import { publicTileIdentity, usePlacementFeedback } from './board/usePlacementFeedback';
+import './board/placementFeedback.css';
 import { DominoTile } from './DominoTile';
 import { ZoomInIcon, ZoomOutIcon } from './MatchBoardControlIcons';
 import type { Tile, BoardState, PlacementPosition, Move } from '../types';
@@ -15,6 +18,7 @@ import { useRenderProfiler } from '../debug/renderProfiler';
 import { recordDailyFritzBoardMetric, traceDailyFritzBoardEvent } from './boardDiagnostics';
 import { useBoardRenderLayout } from './board/useBoardRenderLayout';
 import { useBoardCamera } from './board/useBoardCamera';
+import { useBoardContainerHeight } from './board/useBoardContainerHeight';
 import { useBoardPointerControls } from './board/useBoardPointerControls';
 import { useShortBoardViewport } from './board/useShortBoardViewport';
 
@@ -28,6 +32,14 @@ export interface BoardHandle {
 
 interface BoardProps {
   board: BoardState | null;
+  /** Opt in for live incremental commits only; disable during recovery/history. */
+  placementFeedback?: boolean;
+  /**
+   * Hand identity for placement feedback ONLY (a new hand never animates its first sync as a placement). Kept apart from
+   * `handNumber`, which also drives the board reset/camera signature: a screen that never passed `handNumber` must not
+   * change camera behaviour just to get landing feedback. Falls back to `handNumber`.
+   */
+  feedbackScope?: number;
   legalMoves: Move[];
   selectedTile: Tile | null;
   handNumber?: number;
@@ -65,6 +77,8 @@ function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean
 function BoardComponent(
   {
     board,
+    placementFeedback = false,
+    feedbackScope,
     legalMoves,
     selectedTile,
     handNumber = 0,
@@ -105,6 +119,10 @@ function BoardComponent(
   const showTargetDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOARD_TARGET_DEBUG') === '1';
 
+  // Measured here (not in the camera hook) so routing sees the container in the
+  // first committed render: the layout is computed before the camera runs.
+  const { containerRef, containerHeight } = useBoardContainerHeight(!staticView);
+
   const { boardTileCount, layout, placementZones, glowLayout, resetSignature } = useBoardRenderLayout({
     board,
     legalMoves,
@@ -116,13 +134,20 @@ function BoardComponent(
     staticView,
     profileDailyFritz,
     cameraScale: camera.scale,
+    containerHeight,
   });
+
+  const motionAllowed = useMotionAllowed();
+  const arrivingTile = usePlacementFeedback(
+    layout.tiles.flatMap((entry) => entry.tile ? [entry.tile] : []),
+    feedbackScope ?? handNumber,
+    placementFeedback && motionAllowed && !staticView && !handOver && !gameOver,
+  );
 
   // Convert layout units to pixels
   const unitToPixels = tileSize;
 
   const {
-    containerRef,
     viewportSize,
     manualCameraRef,
     markManualCamera,
@@ -140,6 +165,7 @@ function BoardComponent(
     staticFitMainline,
     staticSpineAnchor,
     resetSignature,
+    containerRef,
   });
 
   // Calculate board center offset
@@ -203,6 +229,8 @@ function BoardComponent(
           height: isMobile ? '100%' : viewportSize.height > 0 ? `${viewportSize.height}px` : '100%',
           transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
           transformOrigin: 'center center',
+          // Lets CSS size placement-zone hit slop in screen pixels despite the camera scale.
+          ['--rh-camera-scale' as string]: camera.scale,
         }}
       >
         {layout.tiles.map((lt) => {
@@ -214,6 +242,8 @@ function BoardComponent(
           return (
             <div
               key={lt.key}
+              data-layout-key={lt.key}
+              data-placement-feedback={arrivingTile === publicTileIdentity(lt.tile) ? 'arrive' : 'none'}
               className={`board-tile-wrapper ${
                 lastPlayedTile != null && tileEquals(lt.tile, lastPlayedTile) ? 'is-last-played' : ''
               }`.trim()}
@@ -377,6 +407,11 @@ function BoardComponent(
 function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
   return (
     prev.board === next.board &&
+    prev.placementFeedback === next.placementFeedback &&
+    prev.feedbackScope === next.feedbackScope &&
+    prev.handNumber === next.handNumber &&
+    prev.handOver === next.handOver &&
+    prev.gameOver === next.gameOver &&
     prev.legalMoves === next.legalMoves &&
     Boolean(prev.selectedTile && next.selectedTile && tileEquals(prev.selectedTile, next.selectedTile)) &&
     Boolean(prev.lastPlayedTile && next.lastPlayedTile && tileEquals(prev.lastPlayedTile, next.lastPlayedTile)) &&

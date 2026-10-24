@@ -8,7 +8,6 @@ export interface RecordMatchInput {
   winnerScore: number | null;
   loserScore: number | null;
   moveCount: number | null;
-  avgMoveQuality?: number | null;
   roomCode?: string | null;
   metadata?: Record<string, unknown>;
 }

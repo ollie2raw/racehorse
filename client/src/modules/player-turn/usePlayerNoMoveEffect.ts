@@ -44,6 +44,7 @@ type UsePlayerNoMoveEffectArgs = Pick<
   | 'fritzDifficulty'
   | 'moveCounterRef'
   | 'drawSequenceActiveRef'
+  | 'drawSequenceActive'
   | 'setDrawSequenceActiveBoth'
   | 'isTransitioningRef'
   | 'localRun'
@@ -63,6 +64,7 @@ export function usePlayerNoMoveEffect({
   fritzDifficulty,
   moveCounterRef,
   drawSequenceActiveRef,
+  drawSequenceActive,
   setDrawSequenceActiveBoth,
   isTransitioningRef,
   localRun,
@@ -315,6 +317,7 @@ export function usePlayerNoMoveEffect({
     captureGuidedMatchCandidateAction,
     createV2Event,
     currentTranscriptTurn,
+    drawSequenceActive,
     drawSequenceActiveRef,
     finishLocalRun,
     frozenLesson,

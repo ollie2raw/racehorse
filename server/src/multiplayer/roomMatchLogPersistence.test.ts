@@ -186,6 +186,7 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
 
   it('after persistRoomMatchLog completes, archives terminal row and deletes room_live_sessions', async () => {
     const room = seedTerminalRoom('CLN001');
+    room.matchLogged = true; // completion logged => the live row is disposable
     const terminalLiveStatuses: string[] = [];
 
     vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
@@ -261,6 +262,7 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
     room.abandonedAt = new Date().toISOString();
     room.abandonedByUserId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     room.abandonedReason = 'forfeit';
+    room.matchLogged = true; // rated forfeit completion logged => the live row is disposable
 
     const terminalLiveStatuses: string[] = [];
 
@@ -312,6 +314,79 @@ describe('roomMatchLogPersistence terminal cleanup', () => {
     }));
     expect(terminalLiveStatuses).toContain('abandoned');
     expect(persistenceStore.liveSessions.has('CLN002')).toBe(false);
+  });
+
+  describe('terminal-completion retention at cleanup (R1)', () => {
+    function stubFetch(deleted: string[]) {
+      vi.mocked(supabaseFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+        if (path.includes('/room_match_logs') && init?.method === 'POST') {
+          for (const row of JSON.parse(String(init.body)) as ArchiveRow[]) persistenceStore.matchLogs.set(String(row.match_id), row);
+          return undefined;
+        }
+        if (path.includes('/room_live_sessions') && init?.method === 'POST') {
+          for (const row of JSON.parse(String(init.body)) as LiveRow[]) persistenceStore.liveSessions.set(String(row.room_code), row);
+          return undefined;
+        }
+        if (path.includes('/room_live_sessions') && init?.method === 'DELETE') {
+          const code = decodeURIComponent(path.match(/room_code=eq\.([^&]+)/)?.[1] ?? '').trim().toUpperCase();
+          deleted.push(code);
+          persistenceStore.liveSessions.delete(code);
+          return undefined;
+        }
+        if (path.includes('/mp_authority_events')) return undefined;
+        throw new Error(`unexpected supabaseFetch call: ${init?.method ?? 'GET'} ${path}`);
+      });
+    }
+
+    it('keeps the terminal live row when the game-over completion is still unlogged (it is the replay source)', async () => {
+      const room = seedTerminalRoom('RET001');
+      room.matchLogged = false;
+      const deleted: string[] = [];
+      stubFetch(deleted);
+      await persistRoomMatchLog(room, 'completed');
+      expect(persistenceStore.matchLogs.get(room.matchId)?.status).toBe('completed'); // archive still written
+      expect(deleted).toEqual([]);
+      const row = persistenceStore.liveSessions.get('RET001') as { status: string; room_shell: { completionPending: boolean; matchLogged: boolean } };
+      expect(row.status).toBe('game_over');
+      expect(row.room_shell).toMatchObject({ completionPending: true, matchLogged: false });
+    });
+
+    it('keeps an unlogged rated forfeit row, with the forfeit reason the replay needs', async () => {
+      const room = seedTerminalRoom('RET002');
+      room.state = mkGameState({ gameOver: false, handOver: true });
+      room.abandonedAt = new Date().toISOString();
+      room.abandonedByUserId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      room.abandonedReason = 'forfeit';
+      room.abandonedForfeitReason = 'disconnect_timeout';
+      room.matchLogged = false;
+      const deleted: string[] = [];
+      stubFetch(deleted);
+      await persistRoomMatchLog(room, 'abandoned');
+      expect(deleted).toEqual([]);
+      expect(persistenceStore.liveSessions.get('RET002')).toMatchObject({
+        status: 'abandoned',
+        room_shell: expect.objectContaining({ completionPending: true, abandonedForfeitReason: 'disconnect_timeout' }),
+      });
+    });
+
+    it('deletes as before when nothing is owed (logged game over, or a forfeit with a guest seat)', async () => {
+      const logged = seedTerminalRoom('RET003');
+      logged.matchLogged = true;
+      const deleted: string[] = [];
+      stubFetch(deleted);
+      await persistRoomMatchLog(logged, 'completed');
+
+      const guestForfeit = seedTerminalRoom('RET004');
+      guestForfeit.state = mkGameState({ gameOver: false, handOver: true });
+      guestForfeit.abandonedAt = new Date().toISOString();
+      guestForfeit.abandonedReason = 'forfeit';
+      setRoomRoster('RET004', [
+        { id: 'seat-a', socketId: 's1', username: 'Alice', userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        { id: 'seat-b', socketId: 's2', username: 'Guest', userId: 'guest_abc' },
+      ]);
+      await persistRoomMatchLog(guestForfeit, 'abandoned');
+      expect(deleted).toEqual(['RET003', 'RET004']);
+    });
   });
 
   it('loads the latest archived terminal log by room code for offline room recovery', async () => {

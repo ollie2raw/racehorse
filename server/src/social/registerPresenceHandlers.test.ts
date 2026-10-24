@@ -161,6 +161,28 @@ describe('registerPresenceHandlers', () => {
     expect(registrySockets.size).toBe(0);
   });
 
+  it('a failed/downgraded identify strips the previous account identity from the socket (logout, revoked token)', async () => {
+    const socket = createSocketStub({ id: 'sock-a' });
+    const handlers = captureHandlers(socket);
+    const { io } = createIo();
+    const resolve = vi
+      .fn()
+      .mockResolvedValueOnce({ username: 'Alice', userId: USER_A })
+      .mockResolvedValueOnce({ username: 'Guest', userId: null });
+    registerPresenceHandlers(socket, { io, socketsByUserId: registrySockets, resolveSocketIdentity: resolve, normalizeUserId, isUuidLike });
+
+    await handlers['presence:identify']({ authToken: 'a' }, vi.fn());
+    expect(socket.data.userId).toBe(USER_A);
+    expect(registrySockets.get(USER_A)?.has('sock-a')).toBe(true);
+
+    const cb = vi.fn();
+    await handlers['presence:identify']({ userId: null, authToken: null }, cb);
+    expect(cb).toHaveBeenCalledWith({ ok: false });
+    expect(socket.data.userId).toBeUndefined();
+    expect(socket.data.username).toBeUndefined();
+    expect(registrySockets.get(USER_A)?.has('sock-a') ?? false).toBe(false);
+  });
+
   it('presence:identify returns ok:false when resolveSocketIdentity throws', async () => {
     const socket = createSocketStub();
     const handlers = captureHandlers(socket);

@@ -518,7 +518,9 @@
 }
 
 
-@media (max-width: 768px) {
+/* Portrait phones only. Racehorse is landscape-only, and in landscape this block (height:auto !important) collapsed the board to
+   0px at 667-768px wide, defeating `.rh-live-board-zone .wl-stage-shell { height: 100% }`. */
+@media (max-width: 768px) and (orientation: portrait) {
   .bot-match-screen .wl-stage-shell,
   .bot-match-screen .wl-board-area,
   .bot-match-screen .board-canvas,

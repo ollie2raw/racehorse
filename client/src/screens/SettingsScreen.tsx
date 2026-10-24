@@ -6,6 +6,8 @@ import { resolvePasswordChange } from '../auth/passwordChange';
 import { useMutePreference } from '../utils/useMutePreference';
 import type { UserProfile } from '../auth/useAuth';
 import type { AppMode } from '../types';
+import { LegalLink } from '../legal/LegalLinks';
+import type { LegalMode } from '../legal/legalModes';
 import './settingsScreen.css';
 
 /** What every account mutation on this page returns. */
@@ -73,7 +75,7 @@ function SettingsSection({
 }: {
   eyebrow: string;
   title: string;
-  accent?: 'green' | 'gold' | 'danger';
+  accent?: 'green' | 'gold' | 'danger' | 'steel';
   children: React.ReactNode;
 }) {
   return (
@@ -335,6 +337,32 @@ function PreferencesSection() {
   );
 }
 
+const LEGAL_ROWS: { mode: LegalMode; label: string; note: string }[] = [
+  { mode: 'privacy', label: 'Privacy Policy', note: 'What we collect and how to delete it' },
+  { mode: 'terms', label: 'Terms of Use', note: 'The rules for playing Racehorse' },
+  { mode: 'support', label: 'Support', note: 'Account help, multiplayer and contact' },
+];
+
+function LegalSection({ onNavigate }: { onNavigate?: (mode: AppMode) => void }) {
+  return (
+    <SettingsSection eyebrow="Help" title="Legal and support" accent="steel">
+      <ul className="rh-settings-legal-list">
+        {LEGAL_ROWS.map((row) => (
+          <li key={row.mode}>
+            <LegalLink mode={row.mode} onNavigate={onNavigate} className="rh-settings-legal-link">
+              <span className="rh-settings-legal-copy">
+                <span className="rh-settings-legal-label">{row.label}</span>
+                <span className="rh-settings-legal-note">{row.note}</span>
+              </span>
+              <span className="rh-settings-legal-chevron" aria-hidden="true">›</span>
+            </LegalLink>
+          </li>
+        ))}
+      </ul>
+    </SettingsSection>
+  );
+}
+
 /**
  * Account and preferences, in one place.
  *
@@ -409,6 +437,8 @@ export function SettingsScreen({
         {/* Sound is stored on the device, not the account, so it is offered
             whether or not anyone is signed in. */}
         {!authUser && <PreferencesSection />}
+
+        <LegalSection onNavigate={onNavigate} />
       </div>
       </div>
     </div>

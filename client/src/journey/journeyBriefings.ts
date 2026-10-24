@@ -8,21 +8,6 @@ export interface JourneyBriefing {
 }
 
 export const JOURNEY_BRIEFINGS: Record<string, JourneyBriefing> = {
-  'ch1-n01': {
-    nodeId: 'ch1-n01',
-    eyebrow: 'Trailhead Briefing',
-    title: 'Welcome to The Fritz Trail',
-    intro:
-      'Racehorse Journey is a long march through Fritz—not a daily sprint. Each node on this trail is a deliberate test of instinct, tempo, and score pressure. Chapter 1 is only the proving ground; many more chapters lie ahead.',
-    trailNotes: [
-      'Move in order. Each node unlocks the next when you earn it.',
-      'Match nodes are live Fritz trials. Win to advance.',
-      'Checkpoints like this one set the strategic frame before harder ground.',
-      'Puzzle gates train board reads—not luck.',
-      'The First Grandmaster Trial closes Chapter 1. The full Journey continues beyond it.',
-    ],
-    rewardLabel: 'Trail Marker',
-  },
   'ch1-n07': {
     nodeId: 'ch1-n07',
     eyebrow: 'Checkpoint · Doubles',
@@ -37,21 +22,6 @@ export const JOURNEY_BRIEFINGS: Record<string, JourneyBriefing> = {
       'Tempo beats flash. The right double at the right moment wins quiet hands.',
     ],
     rewardLabel: 'Double Down',
-  },
-  'ch1-n06': {
-    nodeId: 'ch1-n06',
-    eyebrow: 'Checkpoint · Sharpen Your Eye',
-    title: 'Sharpen Your Eye',
-    intro:
-      'You have cleared the trail’s first tests—wins, a sprint, and a puzzle. What comes next is not another race. Three short lessons train the reads that decide every hand that follows: which ends are actually open, what tiles remain unseen, and why a double is never "just" a big tile.',
-    trailNotes: [
-      'Open-end discipline: play what the board will actually accept, not what you wish it would.',
-      'Counting what’s left: the boneyard and Fritz’s hand are not mysteries if you track what has been played.',
-      'Doubles are not free: every double you play opens two ends—know both before you commit.',
-      'These three checkpoints are short by design. Take them slowly; the Grandmaster gate is close.',
-      'Clear all three lessons to reach The First Grandmaster Trial.',
-    ],
-    rewardLabel: 'Clear Sight',
   },
   'ch2-n01': {
     nodeId: 'ch2-n01',

@@ -10,6 +10,7 @@ import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { PivotalReviewSession, PivotalTurnReflection } from '../../training/pivotalReview/pivotalReviewStorage';
 import type { PivotalTurnSelection } from '../../training/pivotalReview/pivotalTurnSelector';
 import type { DailyFritzStartResponse } from '../../dailyFritz/api';
+import type { JourneyMatchContext } from '../../modules/match/contracts/matchScreenProps';
 import type { DailyFritzSetOverlayViewModel } from '../../dailyFritz/setOverlayViewModel';
 import type { GhostCompletionResult } from '../../ghost/api';
 import type { AppMode, BoardState, Move, PlacementPosition, Tile } from '../../types';
@@ -95,6 +96,8 @@ export type BotMatchLayoutViewModel = {
   isAuthoringV2Mode: boolean;
   isGuidedV2Mode: boolean;
   isJourneyTrial: boolean;
+  /** HUD context for a Journey trial; null for every other match. */
+  journeyContext: JourneyMatchContext | null;
   isStandaloneFritzMatch: boolean;
   isPlayVsFritzGameOver: boolean;
   guidedV2BootError: string | null;
@@ -135,6 +138,8 @@ export type MatchHudViewModel = {
 export type BoardViewModel = {
   boardRef: RefObject<BoardHandle | null>;
   boneyardRef: RefObject<HTMLDivElement | null>;
+  /** Presented (not authoritative) boneyard count while a draw sequence is being shown. */
+  boneyardDisplayCount: number | null;
   /** Board to render: the live board, or a projected historical board while scrubbing. */
   displayBoard: BoardState | null;
   /** True while the player is parked on a past move — board interaction is suppressed. */

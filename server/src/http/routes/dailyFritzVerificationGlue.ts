@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/node';
-import { parseDailyFritzTranscript, type DailyFritzTranscript } from '@racehorse/game-core';
+import { FRITZ_POLICY_VERSION, parseDailyFritzTranscript, type DailyFritzTranscript } from '@racehorse/game-core';
 import type { Response } from 'express';
 import {
   getDailyFritzSeed,
@@ -598,6 +598,18 @@ export function verifyAttemptHand(input: {
     handIndex: input.handIndex,
   });
   const authorityContract = readDailyFritzAuthorityContract(input.attempt.result);
+  // Policy v1/v2 evidence is verified against ANY top-score play, because the tie choices of those versions cannot be
+  // re-derived exactly. That leniency is a tie freedom, so it is retired for new evidence: an attempt pinned to an older
+  // policy was started before v3 shipped (a new attempt can only be created under the current one), is no longer reachable
+  // from the app (`/start` only resumes today's attempt), and may still be advanced only by a direct API call. Such an
+  // attempt finishes through the never-strand path (unverified, unranked) instead of earning verified credit under the
+  // historical rule. The pure verifier still accepts historical transcripts; only this attempt-level entry point refuses.
+  if (authorityContract && authorityContract.fritzPolicyVersion < FRITZ_POLICY_VERSION) {
+    throw new DailyFritzVerificationError(
+      'This Daily Fritz attempt was started under a retired Fritz policy and can no longer earn verified results.',
+      'fritz_policy_version_mismatch',
+    );
+  }
   const publishedAuthority = input.publishedChallenge
     ? resolveDailyFritzPublishedGameAuthority({
         challenge: input.publishedChallenge,

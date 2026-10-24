@@ -49,11 +49,24 @@
 .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-top-rail,
 .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-top-rail {
   display: grid !important;
-  grid-template-columns: minmax(420px, 1fr) auto minmax(220px, 1fr) !important;
+  /*
+   * Compact landscape (iPhone SE/8 667, 12 mini 740-812): the wide-screen tracks below need ~780px before a card or pill is
+   * placed, which pushed the right score card off a 667px screen. Flexible tracks keep both cards at the edges and the status
+   * pill centred; the fixed minimums only apply once the viewport can honour them (>= 844px, where the layout is unchanged).
+   */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) !important;
   align-items: center !important;
   min-height: 82px !important;
   padding: 0 !important;
-  gap: 22px !important;
+  gap: 12px !important;
+}
+
+@media (min-width: 844px) {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-top-rail,
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-top-rail {
+    grid-template-columns: minmax(420px, 1fr) auto minmax(220px, 1fr) !important;
+    gap: 22px !important;
+  }
 }
 
 @media (max-width: 600px) {

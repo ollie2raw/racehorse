@@ -1,0 +1,1445 @@
+diff --git a/server/src/ghost/ratingCutoverStraddle.test.ts b/server/src/ghost/ratingCutoverStraddle.test.ts
+new file mode 100644
+index 00000000..0ea5f8a6
+--- /dev/null
++++ b/server/src/ghost/ratingCutoverStraddle.test.ts
+@@ -0,0 +1,147 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++
++vi.hoisted(() => {
++  process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://example.supabase.co';
++  process.env.SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'test-service-key';
++});
++
++import { completeGhostGame } from './service';
++import { FRITZ_ELITE_ID } from '../ranking/glicko2';
++import {
++  getRatingCutoverCountersForTests,
++  getRatingCutoverStatus,
++  resetRatingCutoverGateForTests,
++  setLegacyRatingWritersEnforcedForTests,
++  setRatingCutoverQuiesced,
++  withRatingCompletion,
++} from '../ranking/ratingCutoverGate';
++import { handleFenceRequest, jsonResponse, newFenceStore } from '../../test/support/cutoverFenceStub';
++
++const USER_ID = '11111111-1111-4111-8111-111111111111';
++const MATCH_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
++const fritzInput = (matchId = MATCH_ID) => ({
++  userId: USER_ID, opponentUserId: FRITZ_ELITE_ID, finalScore: 60, opponentScore: 10,
++  moveLog: [], matchId, applyGlicko: true,
++});
++
++/** The OLD Fritz path against a database that the Ghost expand migration will fence. */
++function installDatabase() {
++  const fence = newFenceStore();
++  const db = {
++    rankedCommitted: 0,
++    ghostTrainingLanded: 0,
++    ghostTrainingFenced: 0,
++    expanded: false,
++    holdRankedInsert: null as null | Promise<void>,
++    holdDeferredGhostWrite: null as null | Promise<void>,
++    inFlightSamples: [] as number[],
++  };
++  const sample = () => {
++    const c = getRatingCutoverCountersForTests();
++    db.inFlightSamples.push(c.completions + c.deferredGhostWrites);
++  };
++  vi.stubGlobal('fetch', vi.fn(async (input: string | URL, init?: RequestInit) => {
++    const url = String(input);
++    const method = init?.method ?? 'GET';
++    const fenceResponse = handleFenceRequest(fence, url, init);
++    if (fenceResponse) return fenceResponse;
++    if (url.includes('/rest/v1/ghost_profiles') && method === 'GET') {
++      return jsonResponse([{ user_id: USER_ID, ghost_rating: 800, composite_log: null, style_profile: null, games_played: 5 }]);
++    }
++    if (url.includes('/rest/v1/ghost_profiles') && method === 'POST') return jsonResponse([JSON.parse(String(init?.body))[0]]);
++    if (url.includes('/rest/v1/ghost_profiles') && method === 'PATCH') return jsonResponse([]);
++    if (url.includes('/rest/v1/ghost_games') && method === 'POST') {
++      // The old deferred Ghost training write begins here.
++      if (db.holdDeferredGhostWrite) await db.holdDeferredGhostWrite;
++      sample();
++      if (db.expanded) { db.ghostTrainingFenced += 1; return jsonResponse({ message: 'ghost_legacy_writer_fenced' }, 400); }
++      db.ghostTrainingLanded += 1;
++      return jsonResponse([{ id: 'game-1', xmax: '0' }]);
++    }
++    if (url.includes('/rest/v1/ghost_games') && method === 'GET') return jsonResponse([]);
++    if (url.includes('/rest/v1/profiles') && method === 'GET') {
++      return jsonResponse([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200, ranked_games_played: 30, peak_rating: 1600, provisional: false }]);
++    }
++    if (url.includes('/rest/v1/ranked_games') && method === 'POST') {
++      db.rankedCommitted += 1;
++      if (db.holdRankedInsert) await db.holdRankedInsert;
++      sample();
++      return jsonResponse([{ id: 'rg-1', player_id: USER_ID, source_match_id: MATCH_ID }]);
++    }
++    if (url.includes('/rest/v1/ranked_games') && method === 'GET') {
++      return jsonResponse([{ id: 'rg-1', player_id: USER_ID, opponent_id: FRITZ_ELITE_ID, player_score: 60,
++        opponent_score: 10, played_at: new Date().toISOString() }]);
++    }
++    return jsonResponse([]);
++  }));
++  return db;
++}
++
++async function tryExpand(db: { expanded: boolean }): Promise<{ applied: boolean; reasons: string[] }> {
++  const status = await getRatingCutoverStatus();
++  if (!status.readyForExpand) return { applied: false, reasons: status.notReadyReasons };
++  db.expanded = true;
++  return { applied: true, reasons: [] };
++}
++
++const settle = () => new Promise((r) => setTimeout(r, 5));
++
++beforeEach(() => {
++  resetRatingCutoverGateForTests();
++  setLegacyRatingWritersEnforcedForTests(true);
++});
++afterEach(() => {
++  vi.unstubAllGlobals();
++  resetRatingCutoverGateForTests();
++});
++
++describe('OLD Fritz completion straddle against the bridge gate', () => {
++  it('cannot expand between ranked commit and the deferred Ghost write; expands only after both finish', async () => {
++    const db = installDatabase();
++    let releaseRanked!: () => void;
++    let releaseDeferred!: () => void;
++    db.holdRankedInsert = new Promise<void>((r) => { releaseRanked = r; });
++    db.holdDeferredGhostWrite = new Promise<void>((r) => { releaseDeferred = r; });
++
++    const completion = withRatingCompletion('old-fritz', () => completeGhostGame(fritzInput()));
++    await settle();
++    expect(db.rankedCommitted).toBe(1);
++
++    await setRatingCutoverQuiesced(true, 'cutover');
++    expect((await tryExpand(db)).reasons).toContain('1 completion(s) in flight');
++
++    releaseRanked();
++    await completion; // the old path has reported success to its caller
++    await settle();
++    expect(getRatingCutoverCountersForTests()).toMatchObject({ completions: 0, deferredGhostWrites: 1 });
++    const blocked = await tryExpand(db);
++    expect(blocked.applied).toBe(false);
++    expect(blocked.reasons).toContain('1 deferred Ghost write(s) in flight');
++    expect(db.expanded).toBe(false);
++
++    releaseDeferred();
++    await settle();
++    expect(db.ghostTrainingLanded).toBe(1);
++    expect(db.ghostTrainingFenced).toBe(0);
++    expect(db.inFlightSamples.every((n) => n > 0)).toBe(true);
++    expect((await tryExpand(db)).applied).toBe(true);
++
++    const before = db.rankedCommitted;
++    await expect(withRatingCompletion('late', () => completeGhostGame(fritzInput('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'))))
++      .rejects.toMatchObject({ code: 'rating_cutover_quiesced' });
++    expect(db.rankedCommitted).toBe(before);
++  });
++
++  it('control: without the gate the same sequence silently loses the Ghost write after success was reported', async () => {
++    const db = installDatabase();
++    setLegacyRatingWritersEnforcedForTests(false);
++    let releaseDeferred!: () => void;
++    db.holdDeferredGhostWrite = new Promise<void>((r) => { releaseDeferred = r; });
++    await completeGhostGame(fritzInput());
++    db.expanded = true;
++    releaseDeferred();
++    await settle();
++    expect(db.rankedCommitted).toBe(1);
++    expect(db.ghostTrainingFenced).toBe(1);
++  });
++});
+diff --git a/server/src/ghost/service.ts b/server/src/ghost/service.ts
+index d6d17883..dfcc3adc 100644
+--- a/server/src/ghost/service.ts
++++ b/server/src/ghost/service.ts
+@@ -2,6 +2,7 @@ import { childLogger } from '../logger';
+ import { supabaseFetch } from '../supabaseUtils';
+ import { FRITZ_ELITE_ID, isFritzId } from '../ranking/glicko2';
+ import { processRatingPeriod } from '../ranking/periodService';
++import { trackDeferredRatingWork } from '../ranking/ratingCutoverGate';
+ import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
+ import { getLegalMoves } from '../game/engine';
+ import { computePlayScore, getOpenEnds, simulatePlacement } from '../game/scoring';
+@@ -1160,7 +1161,10 @@ export async function completeGhostGame(params: {
+       glickoDelta = 0;
+     }
+ 
+-    void persistFritzGhostTrainingProfile({
++    // Counted until it settles so the cutover gate can prove no deferred
++    // training write is still pending; registered while the completion unit
++    // that owns it is still held, so there is no uncounted gap.
++    void trackDeferredRatingWork(persistFritzGhostTrainingProfile({
+       userId: params.userId,
+       profile,
+       finalScore: params.finalScore,
+@@ -1168,7 +1172,7 @@ export async function completeGhostGame(params: {
+       trainingMoveLog,
+       matchId: params.matchId,
+       applyGlicko: params.applyGlicko !== false,
+-    }).catch((error) => {
++    })).catch((error) => {
+       log.warn({
+         userId: params.userId,
+         error: error instanceof Error ? error.message : String(error),
+diff --git a/server/src/http/routes/ghost.ts b/server/src/http/routes/ghost.ts
+index 9362935f..783b67fe 100644
+--- a/server/src/http/routes/ghost.ts
++++ b/server/src/http/routes/ghost.ts
+@@ -19,6 +19,7 @@ import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlaye
+ import { setPublicShortCache } from './cacheControl';
+ import { verifyPlayerMoveLog } from '../../ghost/verifier';
+ import { withGhostCompletionLock } from '../../ghost/ghostCompletionLock';
++import { isRatingCutoverQuiescedError, withRatingCompletion } from '../../ranking/ratingCutoverGate';
+ 
+ export type GhostRouteDeps = {
+   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
+@@ -251,7 +252,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
+       // read-verifiedMatch.status-then-write-it-completed race a genuinely
+       // concurrent double-completion (double-submit, flaky retry, two tabs)
+       // could otherwise hit.
+-      await withGhostCompletionLock(matchId, async () => {
++      await withGhostCompletionLock(matchId, () => withRatingCompletion('ghost_http_complete', async () => {
+       const authenticatedUserId = await getAuthenticatedUserId(req);
+       if (!authenticatedUserId) {
+         res.status(401).json({ error: 'Unauthorized' });
+@@ -398,8 +399,14 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
+         }).catch(() => {});
+       }
+       res.json({ ok: true, result });
+-      });
++      }));
+     } catch (error) {
++      if (isRatingCutoverQuiescedError(error)) {
++        // Nothing was written: the client may retry the identical request.
++        res.setHeader?.('Retry-After', '5');
++        res.status(503).json({ error: error.code, retryable: true });
++        return;
++      }
+       res.status(500).json({
+         error: error instanceof Error ? error.message : 'Failed to complete ghost game.',
+       });
+diff --git a/server/src/http/routes/ghostCompletionCutoverGate.test.ts b/server/src/http/routes/ghostCompletionCutoverGate.test.ts
+new file mode 100644
+index 00000000..463d3327
+--- /dev/null
++++ b/server/src/http/routes/ghostCompletionCutoverGate.test.ts
+@@ -0,0 +1,103 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
++
++let gateClosed = true;
++vi.mock('../../supabaseUtils', () => ({
++  supabaseFetch: vi.fn(async (path: string) => {
++    if (String(path).includes('rating_cutover_gate')) {
++      return [{ quiesced: gateClosed, quiesced_at: null, enabled_boot_id: null, reason: null, ghost_expand_applied_at: null }];
++    }
++    return [];
++  }),
++}));
++
++import { registerGhostRoutes } from './ghost';
++import {
++  getRatingCutoverCountersForTests,
++  resetRatingCutoverGateForTests,
++  setLegacyRatingWritersEnforcedForTests,
++} from '../../ranking/ratingCutoverGate';
++
++const USER_ID = '11111111-1111-4111-8111-111111111111';
++const OPPONENT_ID = '22222222-2222-4222-8222-222222222222';
++const MATCH_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
++
++function harness() {
++  const routes = new Map<string, (req: any, res: any) => Promise<void>>();
++  const record: VerifiedSinglePlayerMatch = {
++    matchId: MATCH_ID, userId: USER_ID, localMatchId: null, mode: 'ghost', opponentUserId: OPPONENT_ID,
++    fritzTier: null, status: 'started', startedAt: '2026-10-05T00:00:00.000Z', completedAt: null,
++    completionHash: null, completionResult: null, dealSnapshot: null,
++  };
++  const completeGhostGame = vi.fn(async (params: { finalScore: number; opponentScore: number }) => ({
++    newRating: 812, ratingDelta: 12, glickoRating: null, glickoDelta: null,
++    playerScore: params.finalScore, ghostScore: params.opponentScore, playerWon: true,
++    compositeLog: { generatedAt: 'x', sourceGameIds: [], states: [], recentGameStyles: [] }, styleProfile: null,
++  }));
++  const persist = vi.fn(async (row: VerifiedSinglePlayerMatch) => row);
++  registerGhostRoutes({
++    get: (p: string, h: any) => routes.set(`GET ${p}`, h),
++    post: (p: string, h: any) => routes.set(`POST ${p}`, h),
++  } as any, {
++    getAuthenticatedUserId: async () => USER_ID,
++    isFritzId: () => false,
++    getVerifiedSinglePlayerMatch: async () => record,
++    persistVerifiedSinglePlayerMatch: persist,
++    startVerifiedSinglePlayerMatch: async () => record,
++    isSafeGhostMoveLog: (raw): raw is Array<Record<string, unknown>> => Array.isArray(raw) && raw.length > 0,
++    buildGhostCompletionHash: () => 'hash',
++    writeMatchActivity: async () => null,
++    formatFritzActivityOpponentLabel: () => 'Fritz',
++    supabaseFetch: async () => [] as never,
++    completeGhostGame: completeGhostGame as never,
++    getGhostProfileSummary: (async () => ({ compositeLog: null })) as never,
++  });
++  async function complete() {
++    let status = 200;
++    let body: any;
++    const headers: Record<string, string> = {};
++    const res = {
++      status: (c: number) => { status = c; return res; },
++      json: (p: unknown) => { body = p; return res; },
++      setHeader: (k: string, v: string) => { headers[k] = v; },
++    };
++    await routes.get('POST /api/ghost/complete')!({
++      headers: {},
++      body: { userId: USER_ID, matchId: MATCH_ID, opponentUserId: OPPONENT_ID, finalScore: 30, opponentScore: 12,
++        moveLog: [{ turn: 1, actor: 'you', board_state: 'b', tile_played: '1|1', branch: 'left', hand_before: ['1|1'], score_delta: 0 }] },
++    }, res);
++    return { status, body, headers };
++  }
++  return { complete, completeGhostGame, persist };
++}
++
++beforeEach(() => {
++  gateClosed = true;
++  resetRatingCutoverGateForTests();
++  setLegacyRatingWritersEnforcedForTests(true);
++});
++afterEach(() => resetRatingCutoverGateForTests());
++
++describe('POST /api/ghost/complete under the rating cutover gate (legacy build)', () => {
++  it('answers a retryable 503 before any rating or verified-match write while the gate is closed', async () => {
++    const h = harness();
++    const r = await h.complete();
++    expect(r.status).toBe(503);
++    expect(r.body).toEqual({ error: 'rating_cutover_quiesced', retryable: true });
++    expect(r.headers['Retry-After']).toBe('5');
++    expect(h.completeGhostGame).not.toHaveBeenCalled();
++    expect(h.persist).not.toHaveBeenCalled();
++    expect(getRatingCutoverCountersForTests().completions).toBe(0);
++  });
++
++  it('an identical retry after the gate reopens completes exactly once', async () => {
++    const h = harness();
++    expect((await h.complete()).status).toBe(503);
++    gateClosed = false;
++    const retry = await h.complete();
++    expect(retry.status).toBe(200);
++    expect(h.completeGhostGame).toHaveBeenCalledTimes(1);
++    expect(h.persist).toHaveBeenCalledTimes(1);
++    expect(getRatingCutoverCountersForTests().completions).toBe(0);
++  });
++});
+diff --git a/server/src/http/routes/ghostCompletionStorage.test.ts b/server/src/http/routes/ghostCompletionStorage.test.ts
+index b2bdc503..313e84c4 100644
+--- a/server/src/http/routes/ghostCompletionStorage.test.ts
++++ b/server/src/http/routes/ghostCompletionStorage.test.ts
+@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
+ import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
+ import type { GhostCompositeLog } from '../../ghost/service';
+ import { completionResultForStorage, registerGhostRoutes } from './ghost';
++import { setLegacyRatingWritersEnforcedForTests } from '../../ranking/ratingCutoverGate';
++
++// These tests exercise route behavior, not the bridge gate (covered by ratingCutover*.test.ts).
++setLegacyRatingWritersEnforcedForTests(false);
+ 
+ const USER_ID = '11111111-1111-4111-8111-111111111111';
+ const OPPONENT_ID = '22222222-2222-4222-8222-222222222222';
+diff --git a/server/src/http/routes/ghostRankedDeal.test.ts b/server/src/http/routes/ghostRankedDeal.test.ts
+index fd4bc1f6..5aa42286 100644
+--- a/server/src/http/routes/ghostRankedDeal.test.ts
++++ b/server/src/http/routes/ghostRankedDeal.test.ts
+@@ -9,6 +9,10 @@ import {
+   type RankedMoveSequenceEntry,
+ } from '../../ghost/rankedDealAuthority';
+ import { mutateOnePlayedTile, playHonestRankedGame } from '../../testing/rankedDealSelfPlay';
++import { setLegacyRatingWritersEnforcedForTests } from '../../ranking/ratingCutoverGate';
++
++// These tests exercise route behavior, not the bridge gate (covered by ratingCutover*.test.ts).
++setLegacyRatingWritersEnforcedForTests(false);
+ 
+ const USER_ID = '11111111-1111-4111-8111-111111111111';
+ const LOCAL_MATCH_ID = 'local-ranked-1';
+diff --git a/server/src/http/routes/ratingCutoverRoutes.test.ts b/server/src/http/routes/ratingCutoverRoutes.test.ts
+new file mode 100644
+index 00000000..6032fb54
+--- /dev/null
++++ b/server/src/http/routes/ratingCutoverRoutes.test.ts
+@@ -0,0 +1,79 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import type { Application } from 'express';
++
++const { statusMock, setMock } = vi.hoisted(() => ({ statusMock: vi.fn(), setMock: vi.fn() }));
++vi.mock('../../ranking/ratingCutoverGate', () => ({
++  getRatingCutoverStatus: (...a: unknown[]) => statusMock(...a),
++  setRatingCutoverQuiesced: (...a: unknown[]) => setMock(...a),
++}));
++
++import { registerRatingCutoverRoutes } from './ratingCutoverRoutes';
++
++type Handler = (req: unknown, res: unknown) => Promise<void>;
++
++function harness() {
++  const routes = new Map<string, Handler>();
++  registerRatingCutoverRoutes({
++    get: (p: string, h: Handler) => routes.set(`GET ${p}`, h),
++    post: (p: string, h: Handler) => routes.set(`POST ${p}`, h),
++  } as unknown as Application);
++  return async (key: string, secret: string | undefined, body: unknown = {}) => {
++    let code = 200;
++    let payload: unknown;
++    const headers: Record<string, string> = {};
++    const res = {
++      status(c: number) { code = c; return res; },
++      json(v: unknown) { payload = v; return res; },
++      setHeader(k: string, v: string) { headers[k] = v; },
++    };
++    await routes.get(key)!({ get: (n: string) => (n.toLowerCase() === 'x-admin-secret' ? secret : undefined), body }, res);
++    return { code, payload, headers };
++  };
++}
++
++describe('rating cutover operator routes', () => {
++  const original = process.env.ADMIN_SECRET;
++  beforeEach(() => {
++    process.env.ADMIN_SECRET = 'correct-horse-battery';
++    statusMock.mockReset().mockResolvedValue({ readyForExpand: true });
++    setMock.mockReset().mockResolvedValue({});
++  });
++  afterEach(() => { process.env.ADMIN_SECRET = original; });
++
++  it.each([
++    ['GET /api/ops/rating-cutover/status', undefined],
++    ['GET /api/ops/rating-cutover/status', 'wrong'],
++    ['POST /api/ops/rating-cutover/quiesce', undefined],
++    ['POST /api/ops/rating-cutover/quiesce', 'wrong'],
++  ])('%s rejects secret %s and changes nothing', async (key, secret) => {
++    const r = await harness()(key, secret, { enabled: true });
++    expect(r.code).toBe(401);
++    expect(setMock).not.toHaveBeenCalled();
++    expect(statusMock).not.toHaveBeenCalled();
++    expect(JSON.stringify(r.payload)).not.toContain('correct-horse');
++  });
++
++  it('rejects all access when ADMIN_SECRET is unset (no empty-secret bypass)', async () => {
++    delete process.env.ADMIN_SECRET;
++    const request = harness();
++    expect((await request('POST /api/ops/rating-cutover/quiesce', '', { enabled: true })).code).toBe(401);
++    expect((await request('GET /api/ops/rating-cutover/status', undefined)).code).toBe(401);
++    expect(setMock).not.toHaveBeenCalled();
++  });
++
++  it('toggles with the secret, validates the body, and returns no-store status', async () => {
++    const request = harness();
++    expect((await request('POST /api/ops/rating-cutover/quiesce', 'correct-horse-battery', { enabled: 'yes' })).code).toBe(400);
++    const ok = await request('POST /api/ops/rating-cutover/quiesce', 'correct-horse-battery', { enabled: true, reason: 'cutover' });
++    expect(ok.code).toBe(200);
++    expect(setMock).toHaveBeenCalledWith(true, 'cutover');
++    expect(ok.headers['Cache-Control']).toBe('no-store');
++    expect(ok.payload).toEqual({ readyForExpand: true });
++  });
++
++  it('reports 503 (not success) when the durable fence cannot be changed', async () => {
++    setMock.mockRejectedValue(new Error('db down'));
++    const r = await harness()('POST /api/ops/rating-cutover/quiesce', 'correct-horse-battery', { enabled: true });
++    expect(r.code).toBe(503);
++  });
++});
+diff --git a/server/src/http/routes/ratingCutoverRoutes.ts b/server/src/http/routes/ratingCutoverRoutes.ts
+new file mode 100644
+index 00000000..c36d9ba6
+--- /dev/null
++++ b/server/src/http/routes/ratingCutoverRoutes.ts
+@@ -0,0 +1,56 @@
++import type { Application, Request, Response } from 'express';
++import { childLogger } from '../../logger';
++import { isAdminSecret } from '../../platform/auth/adminSecret';
++import { resolveReleaseVersion } from '../../platform/health/releaseVersion';
++import { getRatingCutoverStatus, setRatingCutoverQuiesced } from '../../ranking/ratingCutoverGate';
++
++const log = childLogger('ranking:cutover-routes');
++
++/**
++ * Operator controls for the rating cutover gate. Both routes require the
++ * `x-admin-secret` header (the same header-only admin pattern as Daily Fritz);
++ * nothing here is reachable anonymously, the secret is never echoed, and the
++ * response carries only operational counters.
++ */
++function authorized(req: Request, res: Response): boolean {
++  if (!isAdminSecret(req.get('x-admin-secret'))) {
++    res.status(401).json({ error: 'Unauthorized' });
++    return false;
++  }
++  return true;
++}
++
++function noStore(res: Response): void {
++  res.setHeader('Cache-Control', 'no-store');
++}
++
++export function registerRatingCutoverRoutes(app: Application): void {
++  app.get('/api/ops/rating-cutover/status', async (req, res) => {
++    if (!authorized(req, res)) return;
++    noStore(res);
++    try {
++      res.json(await getRatingCutoverStatus(resolveReleaseVersion()));
++    } catch (error) {
++      log.error({ err: error }, 'rating cutover status failed');
++      res.status(503).json({ error: 'rating_cutover_status_unavailable' });
++    }
++  });
++
++  app.post('/api/ops/rating-cutover/quiesce', async (req, res) => {
++    if (!authorized(req, res)) return;
++    noStore(res);
++    const enabled = req.body?.enabled;
++    if (typeof enabled !== 'boolean') {
++      res.status(400).json({ error: '`enabled` must be a boolean.' });
++      return;
++    }
++    const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 200) : null;
++    try {
++      await setRatingCutoverQuiesced(enabled, reason);
++      res.json(await getRatingCutoverStatus(resolveReleaseVersion()));
++    } catch (error) {
++      log.error({ err: error }, 'rating cutover toggle failed');
++      res.status(503).json({ error: 'rating_cutover_toggle_failed' });
++    }
++  });
++}
+diff --git a/server/src/index.ts b/server/src/index.ts
+index 2554da22..3f81efa5 100644
+--- a/server/src/index.ts
++++ b/server/src/index.ts
+@@ -268,6 +268,7 @@ import { getFurthestPublishedDailyPuzzleDate } from './http/stores/dailyPuzzleSt
+ import { registerStatsRoutes } from './http/routes/stats';
+ import { registerRankingRoutes } from './http/routes/ranking';
+ import { registerGhostRoutes } from './http/routes/ghost';
++import { registerRatingCutoverRoutes } from './http/routes/ratingCutoverRoutes';
+ import { registerBotMatchesRoutes } from './http/routes/botMatches';
+ import { registerPuzzleRushRoutes } from './http/routes/puzzleRush';
+ import { registerDailyFritzRoutes } from './http/routes/dailyFritz';
+@@ -547,6 +548,8 @@ registerRankingRoutes(app, {
+   DEFAULT_RD,
+ });
+ 
++registerRatingCutoverRoutes(app);
++
+ registerGhostRoutes(app, {
+   getAuthenticatedUserId,
+   isFritzId,
+diff --git a/server/src/multiplayer/mpInvariantHarness.test.ts b/server/src/multiplayer/mpInvariantHarness.test.ts
+index 69fe2c87..a6a75061 100644
+--- a/server/src/multiplayer/mpInvariantHarness.test.ts
++++ b/server/src/multiplayer/mpInvariantHarness.test.ts
+@@ -113,6 +113,10 @@ import {
+   setRoomRoster,
+ } from './roomSession';
+ import { registerRoomSpectateHandlers } from './registerRoomSpectateHandlers';
++import { setLegacyRatingWritersEnforcedForTests } from '../ranking/ratingCutoverGate';
++
++// Invariant harness, not a gate test: gate behavior is covered by ratingCutover*.test.ts.
++setLegacyRatingWritersEnforcedForTests(false);
+ 
+ const io = { to: vi.fn(() => ({ emit: vi.fn() })) } as unknown as Server;
+ 
+diff --git a/server/src/ranking/cron.ts b/server/src/ranking/cron.ts
+index cdbd3fe2..348c68bc 100644
+--- a/server/src/ranking/cron.ts
++++ b/server/src/ranking/cron.ts
+@@ -2,6 +2,7 @@ import { childLogger } from '../logger';
+ 
+ import cron from 'node-cron';
+ import { decayInactivePlayers, processAllPendingRatingGames } from './periodService';
++import { beginDecayRun } from './ratingCutoverGate';
+ 
+ const log = childLogger('ranking:cron');
+ 
+@@ -50,6 +51,30 @@ async function runPendingRatingCatchUp(source: 'boot' | 'periodic' | 'weekly'):
+   }
+ }
+ 
++/** Weekly RD decay. Exported so the cutover-gate tests can drive the exact scheduled body. */
++export async function runWeeklyRdDecay(): Promise<void> {
++  try {
++    // Rating cutover gate: a decay run is counted from before its first
++    // read until its last write, and never starts while the gate is closed.
++    const decayRun = await beginDecayRun();
++    if (!decayRun) {
++      log.warn('weekly RD decay skipped: rating cutover gate is closed or unreadable');
++      return;
++    }
++    try {
++      const decayResult = await decayInactivePlayers();
++      log.info({ processed: decayResult.processed, aborted: decayResult.aborted }, 'processed RD decay for inactive players');
++      if (decayResult.errors.length > 0) {
++        log.error({ errors: decayResult.errors, count: decayResult.errors.length }, 'RD decay errors');
++      }
++    } finally {
++      decayRun.end();
++    }
++  } catch (err) {
++    log.error({ err }, 'failed to run weekly RD decay');
++  }
++}
++
+ let scheduled = false;
+ 
+ /** Weekly maintenance (Sundays 00:00 UTC) + boot sweep + periodic catch-up. Safe to call once at server start. */
+@@ -61,15 +86,7 @@ export function startRankingCron() {
+   cron.schedule('0 0 * * 0', async () => {
+     log.info('starting weekly ranking maintenance');
+     await runPendingRatingCatchUp('weekly');
+-    try {
+-      const decayResult = await decayInactivePlayers();
+-      log.info({ processed: decayResult.processed }, 'processed RD decay for inactive players');
+-      if (decayResult.errors.length > 0) {
+-        log.error({ errors: decayResult.errors, count: decayResult.errors.length }, 'RD decay errors');
+-      }
+-    } catch (err) {
+-      log.error({ err }, 'failed to run weekly RD decay');
+-    }
++    await runWeeklyRdDecay();
+   }, {
+     timezone: "UTC"
+   });
+diff --git a/server/src/ranking/periodService.ts b/server/src/ranking/periodService.ts
+index c3724da9..6d241627 100644
+--- a/server/src/ranking/periodService.ts
++++ b/server/src/ranking/periodService.ts
+@@ -1,5 +1,6 @@
+ 
+ import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFritzConfig, isFritzId, isProvisional, type MatchOutcome } from './glicko2';
++import { mayContinueDecay } from './ratingCutoverGate';
+ import { supabaseFetch } from '../supabaseUtils';
+ import { fetchAllPages } from '../supabasePagination';
+ 
+@@ -369,9 +370,16 @@ export async function decayInactivePlayers() {
+   );
+ 
+   let processed = 0;
++  let aborted = false;
+   const errors: string[] = [];
+ 
+   for (const user of users) {
++    // Rating cutover gate: this profile was read before the loop; stop before
++    // the write once the gate closes rather than apply a stale value.
++    if (!(await mayContinueDecay())) {
++      aborted = true;
++      break;
++    }
+     try {
+       // Hand over the profile we already read: four sequential round-trips
+       // per user becomes three.
+@@ -387,7 +395,7 @@ export async function decayInactivePlayers() {
+     }
+   }
+ 
+-  return { processed, errors };
++  return { processed, errors, aborted };
+ }
+ 
+ export async function getLeaderboard(limit: number = 50) {
+diff --git a/server/src/ranking/ratingCutoverDecay.test.ts b/server/src/ranking/ratingCutoverDecay.test.ts
+new file mode 100644
+index 00000000..2547294e
+--- /dev/null
++++ b/server/src/ranking/ratingCutoverDecay.test.ts
+@@ -0,0 +1,124 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++
++vi.hoisted(() => {
++  process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://example.supabase.co';
++  process.env.SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'test-service-key';
++});
++
++import { runWeeklyRdDecay } from './cron';
++import {
++  getRatingCutoverStatus,
++  resetRatingCutoverGateForTests,
++  setLegacyRatingWritersEnforcedForTests,
++  setRatingCutoverQuiesced,
++} from './ratingCutoverGate';
++import { handleFenceRequest, jsonResponse, newFenceStore } from '../../test/support/cutoverFenceStub';
++
++const USERS = ['a', 'b', 'c'].map((n) => `${n.repeat(8)}-0000-4000-8000-000000000000`);
++const profile = (id: string, rd: number) => ({
++  id, username: id, glicko_rating: 1500, glicko_rd: rd, glicko_vol: 0.06, glicko_last_period: null,
++  ranked_games_played: 30, peak_rating: 1600, provisional: false,
++});
++
++/** The OLD decay: reads RD, later PATCHes it unconditionally. */
++function install() {
++  const fence = newFenceStore();
++  const db = {
++    rd: new Map(USERS.map((id) => [id, 120])),
++    patches: [] as Array<{ id: string; rd: number }>,
++    listReads: 0,
++    holdFirstPatch: null as null | Promise<void>,
++  };
++  vi.stubGlobal('fetch', vi.fn(async (input: string | URL, init?: RequestInit) => {
++    const url = String(input);
++    const method = init?.method ?? 'GET';
++    const fenceResponse = handleFenceRequest(fence, url, init);
++    if (fenceResponse) return fenceResponse;
++    if (url.includes('/rest/v1/profiles') && method === 'GET' && url.includes('glicko_last_period')) {
++      db.listReads += 1;
++      return jsonResponse(USERS.map((id) => profile(id, db.rd.get(id)!)));
++    }
++    if (url.includes('/rest/v1/profiles') && method === 'GET') {
++      const id = /id=eq\.([^&]+)/.exec(url)?.[1] ?? USERS[0]!;
++      return jsonResponse([profile(id, db.rd.get(id)!)]);
++    }
++    if (url.includes('/rest/v1/ranked_games') && method === 'GET') return jsonResponse([]);
++    if (url.includes('/rest/v1/profiles') && method === 'PATCH') {
++      if (db.patches.length === 0 && db.holdFirstPatch) await db.holdFirstPatch;
++      const id = /id=eq\.([^&]+)/.exec(url)![1]!;
++      const body = JSON.parse(String(init?.body));
++      db.patches.push({ id, rd: body.glicko_rd });
++      db.rd.set(id, body.glicko_rd); // unconditional
++      return jsonResponse([]);
++    }
++    return jsonResponse([]);
++  }));
++  return db;
++}
++
++const settle = () => new Promise((r) => setTimeout(r, 10));
++
++beforeEach(() => {
++  resetRatingCutoverGateForTests();
++  setLegacyRatingWritersEnforcedForTests(true);
++});
++afterEach(() => {
++  vi.unstubAllGlobals();
++  resetRatingCutoverGateForTests();
++});
++
++describe('OLD weekly decay against the bridge gate', () => {
++  it('will not declare drain while a started decay can still PATCH a stale RD, and stops before the next one', async () => {
++    const db = install();
++    let release!: () => void;
++    db.holdFirstPatch = new Promise<void>((r) => { release = r; });
++    const decay = runWeeklyRdDecay();
++    await settle(); // old decay has read every RD and is about to write
++    expect(db.listReads).toBe(1);
++
++    await setRatingCutoverQuiesced(true, 'cutover');
++    const during = await getRatingCutoverStatus();
++    expect(during.decayInFlight).toBe(true);
++    expect(during.readyForExpand).toBe(false);
++
++    release();
++    await decay;
++    expect(db.patches).toHaveLength(1); // the already-started write; no later stale write
++    const after = await getRatingCutoverStatus();
++    expect(after.decayInFlight).toBe(false);
++    expect(after.readyForExpand).toBe(true);
++  });
++
++  it('a new ranked game committing after drain is never overwritten by the old decay', async () => {
++    const db = install();
++    await setRatingCutoverQuiesced(true, 'cutover');
++    db.rd.set(USERS[0]!, 95); // ranked cutover + new transactional game
++    await runWeeklyRdDecay();
++    expect(db.listReads).toBe(0);
++    expect(db.patches).toHaveLength(0);
++    expect(db.rd.get(USERS[0]!)).toBe(95);
++  });
++
++  it('control: without the gate the stale RD overwrites a newly committed ranked result', async () => {
++    const db = install();
++    setLegacyRatingWritersEnforcedForTests(false);
++    let release!: () => void;
++    db.holdFirstPatch = new Promise<void>((r) => { release = r; });
++    const decay = runWeeklyRdDecay();
++    await settle();
++    db.rd.set(USERS[0]!, 95); // new ranked game commits after the decay read
++    release();
++    await decay;
++    expect(db.rd.get(USERS[0]!)).not.toBe(95);
++  });
++
++  it('stays closed across a restart and when the fence is unreadable', async () => {
++    const db = install();
++    await setRatingCutoverQuiesced(true, 'cutover');
++    vi.resetModules();
++    const restarted = await import('./ratingCutoverGate');
++    restarted.setLegacyRatingWritersEnforcedForTests(true);
++    expect(await restarted.beginDecayRun()).toBeNull();
++    expect(db.listReads).toBe(0);
++  });
++});
+diff --git a/server/src/ranking/ratingCutoverGate.test.ts b/server/src/ranking/ratingCutoverGate.test.ts
+new file mode 100644
+index 00000000..0e35ef3f
+--- /dev/null
++++ b/server/src/ranking/ratingCutoverGate.test.ts
+@@ -0,0 +1,178 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++
++vi.hoisted(() => {
++  process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://example.supabase.co';
++  process.env.SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'test-service-key';
++});
++
++import { handleFenceRequest, newFenceStore, jsonResponse } from '../../test/support/cutoverFenceStub';
++
++type Gate = typeof import('./ratingCutoverGate');
++let store = newFenceStore();
++let gate: Gate;
++
++async function freshGate(legacy = true): Promise<Gate> {
++  vi.resetModules();
++  const mod = await import('./ratingCutoverGate');
++  mod.setLegacyRatingWritersEnforcedForTests(legacy);
++  return mod;
++}
++
++beforeEach(async () => {
++  store = newFenceStore();
++  vi.stubGlobal('fetch', vi.fn(async (input: string | URL, init?: RequestInit) =>
++    handleFenceRequest(store, String(input), init) ?? jsonResponse([], 404)));
++  gate = await freshGate();
++});
++afterEach(() => vi.unstubAllGlobals());
++
++describe('rating cutover gate — drain semantics', () => {
++  it('is ready immediately when enabled with zero operations in flight', async () => {
++    await gate.setRatingCutoverQuiesced(true, 'cutover');
++    const status = await gate.getRatingCutoverStatus('sha-old');
++    expect(status).toMatchObject({
++      quiesced: true, completionsInFlight: 0, deferredGhostWritesInFlight: 0, decayInFlight: false,
++      newUnsafeOperationsCanStart: false, readyForExpand: true, enforcement: 'legacy_writers', release: 'sha-old',
++    });
++  });
++
++  it('is not ready while the gate is open, even with nothing in flight', async () => {
++    const status = await gate.getRatingCutoverStatus();
++    expect(status.readyForExpand).toBe(false);
++    expect(status.newUnsafeOperationsCanStart).toBe(true);
++    expect(status.notReadyReasons).toContain('gate is not enabled');
++  });
++
++  it('with one operation in flight stays not-ready until that operation ends, and the in-flight unit is not interrupted', async () => {
++    let release!: () => void;
++    const held = new Promise<void>((resolve) => { release = resolve; });
++    let finished = false;
++    const op = gate.withRatingCompletion('one', async () => { await held; finished = true; return 'ok'; });
++    await Promise.resolve();
++
++    await gate.setRatingCutoverQuiesced(true, null);
++    const during = await gate.getRatingCutoverStatus();
++    expect(during.completionsInFlight).toBe(1);
++    expect(during.readyForExpand).toBe(false);
++    expect(during.notReadyReasons).toContain('1 completion(s) in flight');
++
++    release();
++    await expect(op).resolves.toBe('ok');
++    expect(finished).toBe(true);
++    expect((await gate.getRatingCutoverStatus()).readyForExpand).toBe(true);
++  });
++
++  it('drains several simultaneous completions, including ones that fail', async () => {
++    const releases: Array<() => void> = [];
++    const ops = [0, 1, 2].map((i) => gate.withRatingCompletion(`op${i}`, () =>
++      new Promise<void>((resolve, reject) => { releases.push(i === 1 ? () => reject(new Error('boom')) : resolve); })));
++    const settled = Promise.allSettled(ops);
++    await Promise.resolve();
++    await gate.setRatingCutoverQuiesced(true, null);
++
++    expect((await gate.getRatingCutoverStatus()).completionsInFlight).toBe(3);
++    releases[0]!();
++    expect((await gate.getRatingCutoverStatus()).completionsInFlight).toBe(2);
++    releases[1]!();
++    expect((await gate.getRatingCutoverStatus()).readyForExpand).toBe(false);
++    releases[2]!();
++    const results = await settled;
++    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
++    expect((await gate.getRatingCutoverStatus()).readyForExpand).toBe(true);
++  });
++
++  it('rejects a NEW completion after the gate is closed, before it runs anything, and does not count it', async () => {
++    await gate.setRatingCutoverQuiesced(true, null);
++    const work = vi.fn(async () => 'would-write');
++    await expect(gate.withRatingCompletion('late', work)).rejects.toMatchObject({
++      code: 'rating_cutover_quiesced', retryable: true,
++    });
++    expect(work).not.toHaveBeenCalled();
++    const status = await gate.getRatingCutoverStatus();
++    expect(status.completionsInFlight).toBe(0);
++    expect(status.rejectedSinceBoot).toBe(1);
++    expect(status.readyForExpand).toBe(true);
++  });
++
++  it('a unit that already read the open gate is visible in the count an operator reads after closing it', async () => {
++    let release!: () => void;
++    const op = gate.withRatingCompletion('racing', () => new Promise<void>((r) => { release = r; }));
++    // The fence read is still pending here: the count must already include it.
++    expect(gate.getRatingCutoverCountersForTests().completions).toBe(1);
++    await Promise.resolve();
++    await gate.setRatingCutoverQuiesced(true, null);
++    await new Promise((r) => setTimeout(r, 0));
++    expect((await gate.getRatingCutoverStatus()).completionsInFlight).toBe(1);
++    release();
++    await op;
++  });
++
++  it('counts a unit even if the HTTP/socket acknowledgement is lost after the work finished', async () => {
++    await expect(gate.withRatingCompletion('lost-ack', async () => {
++      await Promise.resolve();
++      throw new Error('socket hang up while writing response');
++    })).rejects.toThrow('socket hang up');
++    expect(gate.getRatingCutoverCountersForTests().completions).toBe(0);
++  });
++
++  it('fails closed when the durable fence cannot be read', async () => {
++    store.unreadable = true;
++    const work = vi.fn();
++    await expect(gate.withRatingCompletion('x', work)).rejects.toThrow();
++    expect(work).not.toHaveBeenCalled();
++    expect(gate.getRatingCutoverCountersForTests().completions).toBe(0);
++    expect(await gate.beginDecayRun()).toBeNull();
++    expect(await gate.mayContinueDecay()).toBe(false);
++  });
++});
++
++describe('rating cutover gate — restart and build behavior', () => {
++  it('the fence survives a process restart: a restarted legacy build stays closed and reports not-ready until re-enabled', async () => {
++    await gate.setRatingCutoverQuiesced(true, 'cutover');
++    const restarted = await freshGate(true);
++    await expect(restarted.withRatingCompletion('after-restart', async () => 'x')).rejects.toMatchObject({
++      code: 'rating_cutover_quiesced',
++    });
++    expect(await restarted.beginDecayRun()).toBeNull();
++    const status = await restarted.getRatingCutoverStatus();
++    expect(status.quiesced).toBe(true);
++    expect(status.newUnsafeOperationsCanStart).toBe(false);
++    // Drain evidence from before the restart is not evidence about this process.
++    expect(status.readyForExpand).toBe(false);
++    expect(status.notReadyReasons.join(' ')).toContain('different process');
++    await restarted.setRatingCutoverQuiesced(true, 'cutover');
++    expect((await restarted.getRatingCutoverStatus()).readyForExpand).toBe(true);
++  });
++
++  it('the remediated (atomic) build counts and reports but never blocks, and never reports ready for legacy expand', async () => {
++    const atomic = await freshGate(false);
++    await atomic.setRatingCutoverQuiesced(true, 'cutover');
++    await expect(atomic.withRatingCompletion('atomic', async () => 'ok')).resolves.toBe('ok');
++    expect(await atomic.mayContinueDecay()).toBe(true);
++    const status = await atomic.getRatingCutoverStatus();
++    expect(status.enforcement).toBe('atomic_writers');
++    expect(status.readyForExpand).toBe(false);
++    expect(status.newUnsafeOperationsCanStart).toBe(false);
++  });
++
++  it('keeps a deferred write counted past the end of its owning unit', async () => {
++    let release!: () => void;
++    await gate.withRatingCompletion('owner', async () => {
++      void gate.trackDeferredRatingWork(new Promise<void>((r) => { release = r; }));
++    });
++    await gate.setRatingCutoverQuiesced(true, null);
++    const during = await gate.getRatingCutoverStatus();
++    expect(during.completionsInFlight).toBe(0);
++    expect(during.deferredGhostWritesInFlight).toBe(1);
++    expect(during.readyForExpand).toBe(false);
++    release();
++    await new Promise((r) => setTimeout(r, 0));
++    expect((await gate.getRatingCutoverStatus()).readyForExpand).toBe(true);
++  });
++
++  it('counts a deferred write that rejects as finished', async () => {
++    const deferred = gate.trackDeferredRatingWork(Promise.reject(new Error('fenced')));
++    await expect(deferred).rejects.toThrow('fenced');
++    expect(gate.getRatingCutoverCountersForTests().deferredGhostWrites).toBe(0);
++  });
++});
+diff --git a/server/src/ranking/ratingCutoverGate.ts b/server/src/ranking/ratingCutoverGate.ts
+new file mode 100644
+index 00000000..c99fcdf5
+--- /dev/null
++++ b/server/src/ranking/ratingCutoverGate.ts
+@@ -0,0 +1,265 @@
++import { randomUUID } from 'node:crypto';
++import { childLogger } from '../logger';
++import { supabaseFetch } from '../supabaseUtils';
++
++const log = childLogger('ranking:cutover-gate');
++
++/**
++ * Rating cutover quiescence gate (senior-audit Ghost/Fritz + weekly decay).
++ *
++ * Why it exists: the pre-remediation ("legacy") server commits a Fritz ranked
++ * result, then separately and without awaiting writes the Ghost training
++ * profile; its weekly decay reads RD and later PATCHes it unconditionally. If
++ * the Ghost/ranked expand migrations land between those steps the legacy
++ * write is fenced and the other half is silently lost. This gate lets one
++ * operator stop NEW legacy rating-affecting work, then positively observe that
++ * all STARTED work has finished, before any expand migration runs.
++ *
++ * State lives in two places, on purpose:
++ *  - the intent (`quiesced`) is one row in `public.rating_cutover_gate`, so a
++ *    process restart can never reopen legacy writers;
++ *  - in-flight counters are in memory: this deployment is a single process, and
++ *    a unit is only ever "in flight" inside the process that is running it.
++ *
++ * `LEGACY_RATING_WRITERS_ENFORCED` is true only in the bridge build that runs
++ * on the OLD rating write paths. The remediated server writes through atomic
++ * RPCs that are safe to run while the row says quiesced (that is how it is
++ * smoke-tested before resuming), so it counts and reports but never blocks.
++ */
++export const LEGACY_RATING_WRITERS_ENFORCED = true;
++
++let legacyEnforced = LEGACY_RATING_WRITERS_ENFORCED;
++const bootId = randomUUID();
++const bootedAt = new Date().toISOString();
++
++const counters = { completions: 0, deferredGhostWrites: 0, decayRuns: 0, rejected: 0 };
++
++export class RatingCutoverQuiescedError extends Error {
++  readonly code = 'rating_cutover_quiesced';
++  readonly retryable = true;
++  constructor(operation: string) {
++    super(`rating_cutover_quiesced: ${operation} rejected while the rating cutover gate is closed`);
++    this.name = 'RatingCutoverQuiescedError';
++  }
++}
++
++export function isRatingCutoverQuiescedError(error: unknown): error is RatingCutoverQuiescedError {
++  return error instanceof RatingCutoverQuiescedError;
++}
++
++export type CutoverFence = {
++  quiesced: boolean;
++  quiescedAt: string | null;
++  enabledBootId: string | null;
++  reason: string | null;
++  ghostExpandAppliedAt: string | null;
++};
++
++type FenceRow = {
++  quiesced: boolean;
++  quiesced_at: string | null;
++  enabled_boot_id: string | null;
++  reason: string | null;
++  ghost_expand_applied_at: string | null;
++};
++
++const FENCE_PATH = '/rest/v1/rating_cutover_gate?id=eq.true';
++const FENCE_SELECT = 'quiesced,quiesced_at,enabled_boot_id,reason,ghost_expand_applied_at';
++
++function toFence(row: FenceRow): CutoverFence {
++  return {
++    quiesced: row.quiesced,
++    quiescedAt: row.quiesced_at,
++    enabledBootId: row.enabled_boot_id,
++    reason: row.reason,
++    ghostExpandAppliedAt: row.ghost_expand_applied_at,
++  };
++}
++
++/** Reads the durable fence. Throws when it cannot be read: callers fail closed. */
++export async function readCutoverFence(): Promise<CutoverFence> {
++  const rows = await supabaseFetch<FenceRow[]>(`${FENCE_PATH}&select=${FENCE_SELECT}`, { method: 'GET' });
++  const row = rows[0];
++  if (!row) throw new Error('rating_cutover_gate row is missing; apply 2026-10-13_rating_cutover_gate.sql');
++  return toFence(row);
++}
++
++export type CompletionUnit = { end(): void };
++
++function makeEnder(release: () => void): () => void {
++  let ended = false;
++  return () => {
++    if (ended) return;
++    ended = true;
++    release();
++  };
++}
++
++/**
++ * Starts one vulnerable completion unit. The in-flight count is raised
++ * BEFORE the fence is read, so a unit that has read "open" is always already
++ * visible in the count an operator reads after closing the gate.
++ */
++export async function beginRatingCompletion(operation: string): Promise<CompletionUnit> {
++  counters.completions += 1;
++  const end = makeEnder(() => { counters.completions -= 1; });
++  if (!legacyEnforced) return { end };
++  try {
++    const fence = await readCutoverFence();
++    if (fence.quiesced) {
++      counters.rejected += 1;
++      throw new RatingCutoverQuiescedError(operation);
++    }
++  } catch (error) {
++    end();
++    throw error;
++  }
++  return { end };
++}
++
++/** The whole vulnerable logical operation is one unit: ranked write through the last awaited step. */
++export async function withRatingCompletion<T>(operation: string, run: () => Promise<T>): Promise<T> {
++  const unit = await beginRatingCompletion(operation);
++  try {
++    return await run();
++  } finally {
++    unit.end();
++  }
++}
++
++/**
++ * Keeps a fire-and-forget part of a completion (the legacy deferred Ghost
++ * training write) counted until it settles. Must be called synchronously while
++ * the owning completion unit is still held so there is no uncounted gap.
++ */
++export function trackDeferredRatingWork<T>(work: Promise<T>): Promise<T> {
++  counters.deferredGhostWrites += 1;
++  const end = makeEnder(() => { counters.deferredGhostWrites -= 1; });
++  return work.finally(end);
++}
++
++export type DecayRun = { end(): void };
++
++/** Returns null (do not run) when a legacy decay run must not start. Fails closed. */
++export async function beginDecayRun(): Promise<DecayRun | null> {
++  counters.decayRuns += 1;
++  const end = makeEnder(() => { counters.decayRuns -= 1; });
++  if (!legacyEnforced) return { end };
++  try {
++    const fence = await readCutoverFence();
++    if (fence.quiesced) {
++      counters.rejected += 1;
++      end();
++      return null;
++    }
++  } catch (error) {
++    end();
++    log.error({ err: error }, 'rating cutover fence unreadable; weekly decay not started');
++    return null;
++  }
++  return { end };
++}
++
++/** Checked immediately before each unconditional decay write. Fails closed. */
++export async function mayContinueDecay(): Promise<boolean> {
++  if (!legacyEnforced) return true;
++  try {
++    const fence = await readCutoverFence();
++    if (fence.quiesced) counters.rejected += 1;
++    return !fence.quiesced;
++  } catch (error) {
++    log.error({ err: error }, 'rating cutover fence unreadable; stopping weekly decay');
++    return false;
++  }
++}
++
++export type RatingCutoverStatus = {
++  enforcement: 'legacy_writers' | 'atomic_writers';
++  quiesced: boolean;
++  quiescedAt: string | null;
++  reason: string | null;
++  release: string | null;
++  bootId: string;
++  bootedAt: string;
++  enabledInThisProcess: boolean;
++  completionsInFlight: number;
++  deferredGhostWritesInFlight: number;
++  decayInFlight: boolean;
++  rejectedSinceBoot: number;
++  newUnsafeOperationsCanStart: boolean;
++  drained: boolean;
++  readyForExpand: boolean;
++  notReadyReasons: string[];
++  ghostExpandAppliedAt: string | null;
++};
++
++export async function getRatingCutoverStatus(release: string | null = null): Promise<RatingCutoverStatus> {
++  const fence = await readCutoverFence();
++  const completionsInFlight = counters.completions;
++  const deferredGhostWritesInFlight = counters.deferredGhostWrites;
++  const decayInFlight = counters.decayRuns > 0;
++  const enabledInThisProcess = fence.enabledBootId === bootId;
++  const notReadyReasons: string[] = [];
++  if (!legacyEnforced) notReadyReasons.push('this build does not enforce the legacy-writer fence');
++  if (!fence.quiesced) notReadyReasons.push('gate is not enabled');
++  if (fence.quiesced && !enabledInThisProcess) {
++    notReadyReasons.push('gate was enabled by a different process; re-run enable so drain is observed here');
++  }
++  if (completionsInFlight > 0) notReadyReasons.push(`${completionsInFlight} completion(s) in flight`);
++  if (deferredGhostWritesInFlight > 0) notReadyReasons.push(`${deferredGhostWritesInFlight} deferred Ghost write(s) in flight`);
++  if (decayInFlight) notReadyReasons.push('weekly decay in flight');
++  const drained = completionsInFlight === 0 && deferredGhostWritesInFlight === 0 && !decayInFlight;
++  return {
++    enforcement: legacyEnforced ? 'legacy_writers' : 'atomic_writers',
++    quiesced: fence.quiesced,
++    quiescedAt: fence.quiescedAt,
++    reason: fence.reason,
++    release,
++    bootId,
++    bootedAt,
++    enabledInThisProcess,
++    completionsInFlight,
++    deferredGhostWritesInFlight,
++    decayInFlight,
++    rejectedSinceBoot: counters.rejected,
++    newUnsafeOperationsCanStart: legacyEnforced && !fence.quiesced,
++    drained,
++    readyForExpand: notReadyReasons.length === 0,
++    notReadyReasons,
++    ghostExpandAppliedAt: fence.ghostExpandAppliedAt,
++  };
++}
++
++/** Durable toggle. Enabling stamps this process so drain evidence is only valid from it. */
++export async function setRatingCutoverQuiesced(
++  enabled: boolean,
++  reason: string | null,
++): Promise<CutoverFence> {
++  const patch = enabled
++    ? { quiesced: true, quiesced_at: new Date().toISOString(), enabled_boot_id: bootId, reason }
++    : { quiesced: false, reason };
++  const rows = await supabaseFetch<FenceRow[]>(
++    `${FENCE_PATH}&select=${FENCE_SELECT}`,
++    { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) },
++  );
++  const row = rows[0];
++  if (!row) throw new Error('rating_cutover_gate row is missing; apply 2026-10-13_rating_cutover_gate.sql');
++  log.warn({ enabled, reason, bootId }, 'rating cutover gate changed');
++  return toFence(row);
++}
++
++export function getRatingCutoverCountersForTests(): Readonly<typeof counters> {
++  return { ...counters };
++}
++
++export function setLegacyRatingWritersEnforcedForTests(value: boolean): void {
++  legacyEnforced = value;
++}
++
++export function resetRatingCutoverGateForTests(): void {
++  legacyEnforced = LEGACY_RATING_WRITERS_ENFORCED;
++  counters.completions = 0;
++  counters.deferredGhostWrites = 0;
++  counters.decayRuns = 0;
++  counters.rejected = 0;
++}
+diff --git a/server/src/realtime/gameOverPersistence.test.ts b/server/src/realtime/gameOverPersistence.test.ts
+index fd338eea..f4e1e5a4 100644
+--- a/server/src/realtime/gameOverPersistence.test.ts
++++ b/server/src/realtime/gameOverPersistence.test.ts
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+ import type { Server } from 'socket.io';
+ import type { Room } from '../rooms';
+ import type { GameOverPersistInput } from '../multiplayer/roomSession';
+@@ -111,7 +111,11 @@ vi.mock('../operationalTelemetry', () => ({
+   recordOperationalFailure: (...args: unknown[]) => recordOperationalFailureMock(...args),
+ }));
+ 
+-import { createGameOverPersistScheduler } from './gameOverPersistence';
++import { createGameOverPersistScheduler, CUTOVER_GATE_WAIT_CEILING_MS } from './gameOverPersistence';
++import {
++  resetRatingCutoverGateForTests,
++  setLegacyRatingWritersEnforcedForTests,
++} from '../ranking/ratingCutoverGate';
+ 
+ const roomEmit = vi.fn();
+ const io = {
+@@ -175,6 +179,8 @@ async function runPersist(input: GameOverPersistInput): Promise<'succeeded' | 'f
+ 
+ describe('createGameOverPersistScheduler', () => {
+   beforeEach(() => {
++    // Bridge build: the gate is enforced by default; these tests are about persistence, not the gate.
++    setLegacyRatingWritersEnforcedForTests(false);
+     vi.clearAllMocks();
+     roomEmit.mockClear();
+     applyTournamentGameOverFromRoomMock.mockResolvedValue(false);
+@@ -812,3 +818,69 @@ describe('createGameOverPersistScheduler', () => {
+     });
+   });
+ });
++
++
++describe('createGameOverPersistScheduler — rating cutover gate (legacy build)', () => {
++  let gateClosed: boolean;
++
++  beforeEach(() => {
++    vi.clearAllMocks();
++    gateClosed = true;
++    resetRatingCutoverGateForTests();
++    setLegacyRatingWritersEnforcedForTests(true);
++    applyTournamentGameOverFromRoomMock.mockResolvedValue(false);
++    findTournamentMatchByRoomMock.mockResolvedValue(null);
++    getPendingFritzMatchContextMock.mockReturnValue(null);
++    appendMatchMock.mockResolvedValue(undefined);
++    writeMatchActivityMock.mockResolvedValue(undefined);
++    verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
++    supabaseFetchMock.mockImplementation(async (path: string) => {
++      if (path.includes('rating_cutover_gate')) {
++        return [{ quiesced: gateClosed, quiesced_at: null, enabled_boot_id: null, reason: null, ghost_expand_applied_at: null }];
++      }
++      return [{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }];
++    });
++    insertRankedGameIdempotentMock.mockResolvedValue({ isNew: false, game: null });
++  });
++
++  afterEach(() => {
++    vi.useRealTimers();
++    resetRatingCutoverGateForTests();
++  });
++
++  it('makes no durable write while the gate is closed, then completes once it reopens', async () => {
++    vi.useFakeTimers();
++    const input = buildInput();
++    const pending = runPersist(input);
++    await vi.advanceTimersByTimeAsync(10_000);
++    expect(appendMatchMock).not.toHaveBeenCalled();
++    expect(insertRankedGameIdempotentMock).not.toHaveBeenCalled();
++    expect(completeGhostGameMock).not.toHaveBeenCalled();
++    expect(input.room.matchLogged).toBe(false);
++
++    gateClosed = false;
++    await vi.advanceTimersByTimeAsync(5_000);
++    await expect(pending).resolves.toBe('succeeded');
++    expect(appendMatchMock).toHaveBeenCalledTimes(1);
++    expect(input.room.matchLogged).toBe(true);
++  });
++
++  it('fails visibly (never reports success, never writes) when the gate stays closed past the wait ceiling', async () => {
++    vi.useFakeTimers();
++    const input = buildInput();
++    const pending = runPersist(input);
++    await vi.advanceTimersByTimeAsync(CUTOVER_GATE_WAIT_CEILING_MS * 5);
++    await expect(pending).resolves.toBe('failed');
++    expect(appendMatchMock).not.toHaveBeenCalled();
++    expect(input.room.matchLogged).toBe(false);
++    expect(input.room.gameOverPersistStatus).toBe('failed');
++    expect(roomEmit).toHaveBeenCalledWith('match:result_persist_failed', expect.anything());
++  });
++
++  it('does not hold back tournament results (not a rating-affecting legacy path)', async () => {
++    applyTournamentGameOverFromRoomMock.mockResolvedValue(true);
++    const input = buildInput({ room: { scheduledTournamentMatchId: 'tm-1' } });
++    await expect(runPersist(input)).resolves.toBe('succeeded');
++    expect(appendMatchMock).not.toHaveBeenCalled();
++  });
++});
+diff --git a/server/src/realtime/gameOverPersistence.ts b/server/src/realtime/gameOverPersistence.ts
+index b8a517f6..a903b884 100644
+--- a/server/src/realtime/gameOverPersistence.ts
++++ b/server/src/realtime/gameOverPersistence.ts
+@@ -25,6 +25,7 @@ import {
+ import type { GameOverPersistInput } from '../multiplayer/roomSession';
+ import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
+ import { recordOperationalFailure } from '../operationalTelemetry';
++import { isRatingCutoverQuiescedError, withRatingCompletion } from '../ranking/ratingCutoverGate';
+ import { isAnyTournamentRoom } from '../multiplayer/roomKind';
+ import type { GhostMoveLogEntry } from '../ghost/service';
+ import type { GhostMoveLogVerificationResult } from '../ghost/verifier';
+@@ -169,7 +170,7 @@ function evaluateHumanMoveLogVerification(
+ }
+ 
+ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Promise<void> {
+-  const { room, sourceMatchId, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
++  const { room, a, b, scoreA, scoreB, winnerSeatId } = input;
+   const winnerUserId =
+     winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
+ 
+@@ -227,6 +228,16 @@ async function persistGameOverOnce(io: Server, input: GameOverPersistInput): Pro
+     throw new Error(TOURNAMENT_APPLY_FAILED_ERROR);
+   }
+ 
++  // Rating cutover gate: everything from here on is one vulnerable rating-
++  // affecting completion (ranked insert, Glicko, awaited Ghost write and the
++  // deferred Fritz training write). It is counted from this boundary, before
++  // any durable effect, and is rejected untouched while the gate is closed.
++  return withRatingCompletion('game_over_persist', () => persistRatedGameOverOnce(io, input));
++}
++
++async function persistRatedGameOverOnce(io: Server, input: GameOverPersistInput): Promise<void> {
++  const { room, sourceMatchId, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
++
+   if (getPendingFritzMatchContext(room)) {
+     await resolvePendingFritzMatch(room.code);
+   }
+@@ -521,6 +532,30 @@ function emitGameOverPersistFailed(io: Server, room: Room, sourceMatchId: string
+   );
+ }
+ 
++/**
++ * A game that ends while the rating cutover gate is closed has done nothing
++ * durable yet, so it can simply wait for the short drain window instead of
++ * burning its retry ceiling. Bounded: past the ceiling it fails visibly like
++ * any other persist failure and is never reported as saved.
++ */
++export const CUTOVER_GATE_WAIT_CEILING_MS = 120_000;
++export const CUTOVER_GATE_POLL_MS = 2_000;
++
++async function persistGameOverWaitingForCutoverGate(io: Server, input: GameOverPersistInput): Promise<void> {
++  const startedAt = Date.now();
++  for (;;) {
++    try {
++      await persistGameOverOnce(io, input);
++      return;
++    } catch (err) {
++      if (!isRatingCutoverQuiescedError(err) || Date.now() - startedAt >= CUTOVER_GATE_WAIT_CEILING_MS) {
++        throw err;
++      }
++      await sleep(CUTOVER_GATE_POLL_MS);
++    }
++  }
++}
++
+ /**
+  * Factory bound to the process `io` instance. Returns the scheduler used by `initRoomSession` `onGameOver`.
+  * Bounded retries; `matchLogged` is set only after a successful attempt.
+@@ -538,7 +573,7 @@ export function createGameOverPersistScheduler(io: Server) {
+           await sleep(delayMs);
+         }
+         try {
+-          await persistGameOverOnce(io, input);
++          await persistGameOverWaitingForCutoverGate(io, input);
+           markGameOverPersistSucceeded(room);
+           emitMpAuthorityFunnel('private_game_over_persist_succeeded', {
+             roomCode: room.code,
+diff --git a/server/test/support/cutoverFenceStub.ts b/server/test/support/cutoverFenceStub.ts
+new file mode 100644
+index 00000000..ab088713
+--- /dev/null
++++ b/server/test/support/cutoverFenceStub.ts
+@@ -0,0 +1,32 @@
++/** In-memory stand-in for the rating_cutover_gate PostgREST table, for fetch-stubbed tests. */
++export type FenceRowState = {
++  quiesced: boolean;
++  quiesced_at: string | null;
++  enabled_boot_id: string | null;
++  reason: string | null;
++  ghost_expand_applied_at: string | null;
++};
++
++export function newFenceStore(): { row: FenceRowState; unreadable: boolean } {
++  return {
++    row: { quiesced: false, quiesced_at: null, enabled_boot_id: null, reason: null, ghost_expand_applied_at: null },
++    unreadable: false,
++  };
++}
++
++export function jsonResponse(body: unknown, status = 200): Response {
++  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
++}
++
++/** Returns a Response when the request targets the fence table, otherwise null. */
++export function handleFenceRequest(
++  store: ReturnType<typeof newFenceStore>,
++  url: string,
++  init?: RequestInit,
++): Response | null {
++  if (!url.includes('/rest/v1/rating_cutover_gate')) return null;
++  if (store.unreadable) return jsonResponse({ message: 'fence unavailable' }, 500);
++  const method = init?.method ?? 'GET';
++  if (method === 'PATCH') Object.assign(store.row, JSON.parse(String(init?.body)));
++  return jsonResponse([{ ...store.row }]);
++}

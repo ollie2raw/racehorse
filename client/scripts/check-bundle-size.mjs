@@ -7,7 +7,11 @@ const LIMITS = {
   // A3 pulled reviewContracts into the match path via live snapshot capture.
   // +4 kB (2026-10-03): on-demand review start + funnel counter added 1.1 kB
   // when the chunk was already at 259.2 kB of 260 kB.
-  'BotMatchScreen': 264_000,
+  // +4 kB (2026-10-23): Journey attempt recording on the match path (useJourneyTrialAttempt -> journeyAttempts /
+  // journeyMatchOutcome / pending completions, plus the Journey HUD chip). Measured: the release branch tip was
+  // 263.4 kB of 264 kB; the Journey work adds ~2.5 kB. Lesson content, the resolver and the lesson controller are NOT in
+  // this chunk (journeyModuleBoundary.test.ts pins that).
+  'BotMatchScreen': 268_000,
   'index': 700_000,          // main bundle
   'lesson-v2': 1_400_000,    // huge lessonV2 chunk
 };

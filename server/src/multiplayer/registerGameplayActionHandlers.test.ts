@@ -122,7 +122,7 @@ describe('registerGameplayActionHandlers', () => {
 
     const cb = vi.fn();
     await handlers.get('game:action')?.(roomCode, { type: 'INVALID' }, cb);
-    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'Unknown action type.' });
+    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'Unknown action type.', code: 'malformed' });
     expect(maybeFinalizeTournamentMatch).not.toHaveBeenCalled();
   });
 
@@ -190,7 +190,7 @@ describe('registerGameplayActionHandlers', () => {
     const cb = vi.fn();
     await handlers.get('game:action')?.(roomCode, { type: 'PASS' }, cb);
 
-    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'Missing action requestId.' });
+    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'Missing action requestId.', code: 'malformed' });
     expect(actSpy).not.toHaveBeenCalled();
   });
 
@@ -296,7 +296,7 @@ describe('registerGameplayActionHandlers', () => {
 
     const cb = vi.fn();
     await handlers.get('game:action')?.(roomCode, { type: 'PASS', requestId: 'failed-pass' }, cb);
-    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'room_persistence_failed' });
+    expect(cb).toHaveBeenCalledWith({ ok: false, error: 'room_persistence_failed', code: 'not_active' });
   });
 
   it('blocks hand:ready when room persistence is degraded', async () => {

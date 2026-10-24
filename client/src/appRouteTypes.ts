@@ -71,6 +71,7 @@ export type AppRoutesAuthProps = {
   updatePassword: (password: string) => Promise<{ error: string | null; message?: string | null }>;
   updateEmail: (email: string) => Promise<{ error: string | null; message?: string | null }>;
   isAdmin: boolean;
+  authLoading?: boolean;
   authUser: User | null;
   authProfile: UserProfile | null;
   supabaseEnabled: boolean;

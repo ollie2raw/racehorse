@@ -10,6 +10,7 @@ import { executeBotTurn, finalizeBotTurnExecution } from './botTurnExecutor.ts';
 import { computeBotChainPaused } from './botChainPause.ts';
 import type { RunDrawSequence } from './drawSequence.ts';
 import {
+  buildEmbeddedPostPlayState,
   listEmbeddedForcedDrawTiles,
   presentEmbeddedForcedDraws,
 } from './embeddedForcedDrawPresentation.ts';
@@ -101,6 +102,20 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
   const [botTurnRetryNonce, setBotTurnRetryNonce] = useState(0);
   const botActionRetryRef = useRef({ key: '', attempts: 0 });
   const botActionRetryTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  // Outlives the tenure effect: an embedded forced-draw chain commits the human's turn
+  // (new schedule key -> cleanup) before its draws finish animating, and cleanup must
+  // not release the draw lock out from under that still-running presentation.
+  // Ownership is a generation id, not a boolean: a stale tenure's cleanup/finally/presentation
+  // may only release the lock if it is still the owner, so it can never clear a newer one.
+  const embeddedPresentationOwnerRef = useRef<number | null>(null);
+  const embeddedPresentationSeqRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Live inputs for the async tenure — updated every render, never in effect deps.
   const liveRef = useRef(args);
@@ -145,6 +160,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
     }
 
     let cancelled = false;
+    let myPresentationOwnerId: number | null = null;
+    const tenureLifecycleVersion = localRun.lifecycleVersionRef.current;
     const retryKey = botScheduleKey;
     if (botActionRetryRef.current.key !== retryKey) {
       botActionRetryRef.current = { key: retryKey, attempts: 0 };
@@ -332,6 +349,29 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           });
 
           const finalizeLive = live();
+          if (drawnTiles.length > 0 && execution.playBeforeState) {
+            // Raise the presentation lock and seed the overlay BEFORE the authoritative
+            // commit, so no render ever shows the final rack/boneyard or an enabled
+            // human turn ahead of the draws.
+            myPresentationOwnerId = ++embeddedPresentationSeqRef.current;
+            embeddedPresentationOwnerRef.current = myPresentationOwnerId;
+            finalizeLive.ports.setDrawSequenceActiveBoth(true);
+            finalizeLive.onDrawVisualStep?.(
+              'bot',
+              buildEmbeddedPostPlayState({
+                player: 'bot',
+                beforePlay: execution.playBeforeState,
+                afterPlay: execution.result.state,
+                drawnTiles,
+              }),
+            );
+            setPhase({
+              phase: 'drawing',
+              drawCount: 0,
+              turnScoreTotal,
+              lastScorePoints: scoredPoints,
+            });
+          }
           const finalized = finalizeBotTurnExecution({
             execution,
             ports: finalizeLive.ports,
@@ -366,6 +406,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
               lastScorePoints: scoredPoints,
             });
             const drawLive = live();
+            const ownerId = myPresentationOwnerId;
+            const startedLifecycleVersion = localRun.lifecycleVersionRef.current;
             await presentEmbeddedForcedDraws({
               player: 'bot',
               beforePlay: execution.playBeforeState,
@@ -374,9 +416,27 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
               setMatch: drawLive.setMatch,
               onDrawVisualStep: wrappedOnDrawVisualStep,
               triggerDrawStepAnimation: drawLive.triggerDrawStepAnimation,
-              setDrawSequenceActiveBoth: drawLive.ports.setDrawSequenceActiveBoth,
+              // Only the current owner may drop the lock (never a stale sequence).
+              setDrawSequenceActiveBoth: (active) => {
+                if (!active) {
+                  if (embeddedPresentationOwnerRef.current !== ownerId) return;
+                  embeddedPresentationOwnerRef.current = null;
+                  // A restart/unmount already reset the lock; don't clobber a newer run's.
+                  if (
+                    !mountedRef.current
+                    || localRun.lifecycleVersionRef.current !== startedLifecycleVersion
+                  ) {
+                    return;
+                  }
+                }
+                live().ports.setDrawSequenceActiveBoth(active);
+              },
               drawStepMs: drawLive.drawStepMs,
               isMuted: drawLive.isMuted,
+              shouldAbort: () =>
+                !mountedRef.current
+                || embeddedPresentationOwnerRef.current !== ownerId
+                || localRun.lifecycleVersionRef.current !== startedLifecycleVersion,
             });
             // Evidence already committed — cancel only skips settle/chain wait.
             if (cancelled || !isLocalRunCurrent(runToken)) break;
@@ -417,14 +477,26 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           }
         }
       } finally {
+        const ownerNow = embeddedPresentationOwnerRef.current;
+        // Another (newer) sequence owns presentation state: leave its lock/phase alone.
+        const supersededByNewer = ownerNow !== null && ownerNow !== myPresentationOwnerId;
+        if (ownerNow !== null && ownerNow === myPresentationOwnerId) {
+          embeddedPresentationOwnerRef.current = null;
+        }
         botTurnInFlightRef.current = false;
-        live().setFritzPresentation(IDLE_FRITZ_PRESENTATION);
-        // Tenure end / cancel must not leave a score toast on your-move.
-        live().ports.clearBoardToast();
         if (isLocalRunCurrent(runToken)) {
           finishLocalRun(runToken);
         }
-        live().ports.setDrawSequenceActiveBoth(false);
+        if (!supersededByNewer) {
+          live().setFritzPresentation(IDLE_FRITZ_PRESENTATION);
+          // Tenure end / cancel must not leave a score toast on your-move.
+          live().ports.clearBoardToast();
+          // After a restart (lifecycle bump) invalidateLocalRuns already reset the lock;
+          // a late finally must not release a newer run's.
+          if (localRun.lifecycleVersionRef.current === tenureLifecycleVersion) {
+            live().ports.setDrawSequenceActiveBoth(false);
+          }
+        }
       }
     })();
 
@@ -438,8 +510,11 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
       }
       botTurnInFlightRef.current = false;
       finishLocalRun(runToken);
-      // Don't leave draw lock stuck — that blocks the next schedule forever.
-      live().ports.setDrawSequenceActiveBoth(false);
+      // Don't leave draw lock stuck — that blocks the next schedule forever. Exception:
+      // an embedded forced-draw presentation owns the lock until its own finally.
+      if (embeddedPresentationOwnerRef.current === null) {
+        live().ports.setDrawSequenceActiveBoth(false);
+      }
     };
   // Intentionally schedule-key only — liveRef carries ports/callbacks without aborting tenure.
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,3 +1,4 @@
+import { processTimeout } from '../platform/processLifecycle';
 import { randomUUID } from 'crypto';
 import type { Server } from 'socket.io';
 import type { QueuedPlayer } from './types';
@@ -57,7 +58,7 @@ export function startSimOpponentLoop(
     const currentPlayerId = room.state.playerIds[room.state.currentPlayerIndex];
     if (currentPlayerId !== simSocketId) {
       // Not the sim's turn — peek again shortly.
-      setTimeout(() => { void tick(); }, 250);
+      processTimeout('sim', () => { return tick(); }, 250);
       return;
     }
 
@@ -88,8 +89,8 @@ export function startSimOpponentLoop(
     }
 
     const delay = SIM_MOVE_MIN_MS + Math.random() * (SIM_MOVE_MAX_MS - SIM_MOVE_MIN_MS);
-    setTimeout(() => { void tick(); }, delay);
+    processTimeout('sim', () => { return tick(); }, delay);
   };
 
-  setTimeout(() => { void tick(); }, SIM_JOIN_DELAY_MS);
+  processTimeout('sim', () => { return tick(); }, SIM_JOIN_DELAY_MS);
 }

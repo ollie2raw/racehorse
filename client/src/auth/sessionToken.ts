@@ -17,16 +17,20 @@ type CachedSession = { token: string | null; userId: string | null };
 
 let cached: CachedSession | null = null;
 let inFlight: Promise<CachedSession> | null = null;
+/** Bumped by every auth-driven write/clear so a slower in-flight load can tell it is stale. */
+let epoch = 0;
 
 /**
  * Record the session from an auth event. Called by the auth provider on every
  * `onAuthStateChange`, which is what keeps this authoritative.
  */
 export function setCachedSession(token: string | null, userId: string | null): void {
+  epoch += 1;
   cached = { token, userId };
 }
 
 export function clearCachedSession(): void {
+  epoch += 1;
   cached = null;
   inFlight = null;
 }
@@ -46,13 +50,17 @@ export async function getCachedSession(
   if (cached) return cached;
   if (inFlight) return inFlight;
 
-  inFlight = loadSession()
+  // A load that began before an auth event (sign-out, account switch) describes the PREVIOUS principal: its result
+  // is returned to the callers that asked, but never written into the cache over what the event established.
+  const startedAt = epoch;
+  const load: Promise<CachedSession> = loadSession()
     .then((session) => {
-      cached = session;
+      if (epoch === startedAt) cached = session;
       return session;
     })
     .catch(() => ({ token: null, userId: null }))
-    .finally(() => { inFlight = null; });
+    .finally(() => { if (inFlight === load) inFlight = null; });
+  inFlight = load;
 
-  return inFlight;
+  return load;
 }
