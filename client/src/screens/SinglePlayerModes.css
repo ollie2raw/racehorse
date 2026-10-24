@@ -348,6 +348,30 @@
   }
 }
 
+/* Desktop/tablet: the copy column and the hero art used to share the left half of
+   each card (art slot began at 0-28%, text ran to 55-62%), so the robot's hand, the
+   ghost and Journey's helmet sat on top of the description and stats. Give the art
+   the right-hand side of the card and the copy the left, so they never overlap. The
+   art subject is right-weighted, so cropping the slot keeps it in frame; phone
+   landscape (max-height 430px) and the stacked phone layouts keep their own framing. */
+@media (min-width: 769px) and (min-height: 431px) {
+  .home-main.sp-solo-main:not(.learn-hub-main) .sp-solo-grid .sp-solo-mode-card__text {
+    max-width: 54%;
+  }
+
+  .home-main.sp-solo-main:not(.learn-hub-main) .sp-solo-grid .sp-solo-mode-card__art-slot {
+    left: 54%;
+  }
+
+  .home-main.sp-solo-main:not(.learn-hub-main) .sp-solo-grid .sp-solo-mode-card__art-slot::after {
+    display: none;
+  }
+
+  .home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container .sp-solo-mode-card__art {
+    transform: scale(1.15) translate(0, -6%);
+  }
+}
+
 /* The Lab — match Ghost / Fritz hero scale and placement */
 .home-main.sp-solo-main:not(.learn-hub-main) .sp-lab-mode-card-container .sp-solo-mode-card__art-slot::after {
   width: 52%;
