@@ -30,7 +30,9 @@ for (const stateId of states) {
     if (stateId.startsWith('home/')) {
       setup.assertApiUsed('/api/home/daily-summary');
       setup.assertApiUsed('/api/daily-fritz/today');
-      setup.assertApiUsed('/api/ranking/profile/e2e-mobile-user');
+      // The e2e principal is not a registered-account UUID, so it has no ranked profile. Since 82418678 the client skips that
+      // request (the server answered 400) instead of making it; assert the guard holds rather than the old call.
+      expect(setup.seenApiCalls).not.toContain('GET /api/ranking/profile/e2e-mobile-user');
       if (stateId === 'home/completed') {
         const today = setup.fixture.apiResponses.find((response) => response.path === '/api/daily-fritz/today')?.body as {
           verification_status?: string;

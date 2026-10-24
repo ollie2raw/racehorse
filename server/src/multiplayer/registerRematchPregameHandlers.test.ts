@@ -10,6 +10,7 @@ import * as roomSession from './roomSession';
 import { registerRematchPregameHandlers } from './registerRematchPregameHandlers';
 import { comparePregameDrawTiles } from './preGameDraw';
 import { resetRoomGameplayLocksForTests } from './roomGameplayLock';
+import { MATCH_RESULT_RETRYING_MESSAGE } from './gameOverPersistPolicy';
 import { supabaseFetch } from '../supabaseUtils';
 
 async function flushPregameDrawHandler(): Promise<void> {
@@ -216,11 +217,35 @@ describe('registerRematchPregameHandlers', () => {
     });
   });
 
-  it('allows rematch after persist give-up (failed status) so seats are not stuck forever', async () => {
-    const roomCode = 'RMT_FAIL';
+  it('blocks rematch after persist give-up until the durable replay logs the result (terminal row is the replay source)', async () => {
+    const roomCode = 'RMT_FAIL_BLOCK';
     const room = seedGameOverRoom(roomCode);
     room.matchLogged = false;
     room.gameOverPersistStatus = 'failed';
+
+    const io = makeIo(roomCode);
+    const { socket: socket1, handlers: handlers1 } = makeSocket('sock-p1', 'p1');
+    const { socket: socket2, handlers: handlers2 } = makeSocket('sock-p2', 'p2');
+    ensureSocketDataSeat(socket1, 'p1');
+    ensureSocketDataSeat(socket2, 'p2');
+    registerRematchPregameHandlers(io, socket1, { handlerDeps });
+    registerRematchPregameHandlers(io, socket2, { handlerDeps });
+
+    await handlers1.get('game:rematch')?.(roomCode, vi.fn());
+    const cb2 = vi.fn();
+    await handlers2.get('game:rematch')?.(roomCode, cb2);
+
+    expect(cb2).toHaveBeenCalledWith({ ok: false, error: MATCH_RESULT_RETRYING_MESSAGE });
+    // the room was not reset: the unlogged terminal state (and its durable row) is untouched
+    expect(room.state?.gameOver).toBe(true);
+    expect(room.matchLogged).toBe(false);
+  });
+
+  it('allows rematch once the replay has logged a previously failed result', async () => {
+    const roomCode = 'RMT_FAIL';
+    const room = seedGameOverRoom(roomCode);
+    room.matchLogged = true;
+    room.gameOverPersistStatus = 'succeeded';
 
     const order: string[] = [];
     const io = makeIo(roomCode);

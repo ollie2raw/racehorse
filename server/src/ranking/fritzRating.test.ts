@@ -43,7 +43,7 @@ describe('Fritz rating processing', () => {
         ];
       }
 
-      if (path === '/rest/v1/ranked_games?player_id=eq.player-1&rating_after=is.null&order=played_at.asc,id.asc') {
+      if (path.startsWith('/rest/v1/ranked_games?') && path.includes('player_id=eq.player-1')) {
         return [
           {
             id: 'game-1',

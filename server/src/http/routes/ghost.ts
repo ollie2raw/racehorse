@@ -19,6 +19,7 @@ import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlaye
 import { setPublicShortCache } from './cacheControl';
 import { verifyPlayerMoveLog } from '../../ghost/verifier';
 import { withGhostCompletionLock } from '../../ghost/ghostCompletionLock';
+import { isRatingCutoverQuiescedError, withRatingCompletion } from '../../ranking/ratingCutoverGate';
 
 export type GhostRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
@@ -251,7 +252,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
       // read-verifiedMatch.status-then-write-it-completed race a genuinely
       // concurrent double-completion (double-submit, flaky retry, two tabs)
       // could otherwise hit.
-      await withGhostCompletionLock(matchId, async () => {
+      await withGhostCompletionLock(matchId, () => withRatingCompletion('ghost_http_complete', async () => {
       const authenticatedUserId = await getAuthenticatedUserId(req);
       if (!authenticatedUserId) {
         res.status(401).json({ error: 'Unauthorized' });
@@ -362,6 +363,10 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         matchId,
         applyGlicko,
       });
+      if (result.ghostDeferred) {
+        // Single-account solo matches cannot hit the two-account legacy constraint; never store a non-result.
+        throw new Error('ghost_completion_deferred_unexpected');
+      }
       verifiedMatch.status = 'completed';
       verifiedMatch.completedAt = new Date().toISOString();
       verifiedMatch.completionHash = completionHash;
@@ -398,8 +403,14 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         }).catch(() => {});
       }
       res.json({ ok: true, result });
-      });
+      }));
     } catch (error) {
+      if (isRatingCutoverQuiescedError(error)) {
+        // Nothing was written: the client may retry the identical request.
+        res.setHeader?.('Retry-After', '5');
+        res.status(503).json({ error: error.code, retryable: true });
+        return;
+      }
       res.status(500).json({
         error: error instanceof Error ? error.message : 'Failed to complete ghost game.',
       });

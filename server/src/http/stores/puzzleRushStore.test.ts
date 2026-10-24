@@ -26,6 +26,7 @@ const runRow = {
   client_reported_score: 0,
   invalidated_reason: null,
   config_version: 1,
+  assigned_puzzle_ids: ['pool-1'],
 };
 
 describe('createRushRun', () => {
@@ -35,7 +36,7 @@ describe('createRushRun', () => {
     mocks.supabaseFetch.mockResolvedValueOnce([runRow]);
 
     const result = await createRushRun({
-      userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true,
+      userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true, assignedPuzzleIds: ['pool-1'],
     });
 
     expect(result.created).toBe(true);
@@ -62,12 +63,30 @@ describe('createRushRun', () => {
       .mockResolvedValueOnce([{ ...runRow, id: 'run-winner' }]);
 
     const result = await createRushRun({
-      userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true,
+      userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true, assignedPuzzleIds: ['pool-1'],
     });
 
     expect(result.created).toBe(false);
     expect(result.run.id).toBe('run-winner');
     expect(mocks.supabaseFetch.mock.calls[1][0]).toContain('status=eq.in_progress');
+  });
+
+  it('closes an unassigned legacy run and retries an assigned start', async () => {
+    mocks.supabaseFetch
+      .mockRejectedValueOnce(new Error('duplicate key value violates unique constraint "rush_runs_one_open_per_user_idx"'))
+      .mockResolvedValueOnce([{ ...runRow, assigned_puzzle_ids: null }])
+      .mockResolvedValueOnce({ invalidated: true, run: {
+        ...runRow, status: 'invalidated', ended_at: '2026-08-20T20:01:00.000Z',
+        assigned_puzzle_ids: null, is_official: false,
+      } })
+      .mockResolvedValueOnce([{ ...runRow, id: 'assigned-replacement' }]);
+
+    const result = await createRushRun({
+      userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true,
+      assignedPuzzleIds: ['pool-1'],
+    });
+    expect(result).toMatchObject({ created: true, run: { id: 'assigned-replacement', assignedPuzzleIds: ['pool-1'] } });
+    expect(mocks.supabaseFetch.mock.calls[2][0]).toBe('/rest/v1/rpc/invalidate_unassigned_rush_run_v2');
   });
 
   it('two concurrent starts converge on one run rather than creating two', async () => {
@@ -80,8 +99,8 @@ describe('createRushRun', () => {
       .mockResolvedValueOnce([runRow]);
 
     const [a, b] = await Promise.all([
-      createRushRun({ userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true }),
-      createRushRun({ userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: false }),
+      createRushRun({ userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true, assignedPuzzleIds: ['pool-1'] }),
+      createRushRun({ userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: false, assignedPuzzleIds: ['pool-2'] }),
     ]);
 
     expect(a.run.id).toBe(b.run.id);
@@ -91,15 +110,27 @@ describe('createRushRun', () => {
   it('throws rather than inventing a run when recovery finds nothing', async () => {
     mocks.supabaseFetch.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     await expect(
-      createRushRun({ userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true }),
+      createRushRun({ userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true, assignedPuzzleIds: ['pool-1'] }),
     ).rejects.toThrow('Failed to create or recover puzzle rush run.');
   });
 
   it('stamps the config version the run was played under', async () => {
     mocks.supabaseFetch.mockResolvedValueOnce([runRow]);
-    await createRushRun({ userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true });
+    await createRushRun({ userId: 'user-1', username: 'Player', runDate: '2026-08-20', isOfficial: true, assignedPuzzleIds: ['pool-1'] });
     const body = JSON.parse((mocks.supabaseFetch.mock.calls[0][1] as { body: string }).body);
     expect(body[0].config_version).toBe(PUZZLE_RUSH_CONFIG.version);
+  });
+});
+
+describe('run assignment authority', () => {
+  beforeEach(() => mocks.supabaseFetch.mockReset());
+
+  it('rejects a different valid pool puzzle at an assigned ordinal', async () => {
+    mocks.supabaseFetch.mockRejectedValueOnce(new Error('rush_assignment_mismatch'));
+    await expect(recordReportedRushPuzzle({
+      runId: 'run-1', userId: 'user-1', puzzleId: 'valid-but-unassigned', ordinal: 1,
+      clientRawScore: 0, submittedLine: [{ tile: { low: 1, high: 1 }, position: 'left' }],
+    })).rejects.toThrow(/assignment/i);
   });
 });
 
@@ -149,7 +180,7 @@ describe('reporting and finalizing', () => {
   beforeEach(() => mocks.supabaseFetch.mockReset());
 
   it('records a reported puzzle without any engine work', async () => {
-    mocks.supabaseFetch.mockResolvedValueOnce([{
+    mocks.supabaseFetch.mockResolvedValueOnce({
       id: 'rp-1',
       run_id: 'run-1',
       puzzle_id: 'pool-1',
@@ -165,10 +196,11 @@ describe('reporting and finalizing', () => {
       client_reported_at: '2026-08-20T20:00:10.000Z',
       graded_at: null,
       grading_error: null,
-    }]);
+    });
 
     const recorded = await recordReportedRushPuzzle({
       runId: 'run-1',
+      userId: 'user-1',
       puzzleId: 'pool-1',
       ordinal: 3,
       clientRawScore: 42,
@@ -176,16 +208,16 @@ describe('reporting and finalizing', () => {
     });
 
     expect(recorded.ordinal).toBe(3);
-    expect(mocks.supabaseFetch.mock.calls[0][0]).toBe('/rest/v1/rush_run_puzzles?on_conflict=run_id,ordinal');
+    expect(mocks.supabaseFetch.mock.calls[0][0]).toBe('/rest/v1/rpc/record_rush_report_v2');
     const body = JSON.parse((mocks.supabaseFetch.mock.calls[0][1] as { body: string }).body);
     // No graded fields written at report time — grading happens once, at run end.
-    expect(body[0]).not.toHaveProperty('raw_score');
-    expect(body[0]).not.toHaveProperty('awarded_points');
-    expect(body[0].client_raw_score).toBe(42);
+    expect(body).not.toHaveProperty('raw_score');
+    expect(body).not.toHaveProperty('awarded_points');
+    expect(body.p_client_raw_score).toBe(42);
   });
 
   it('records stageReachedKey as observational telemetry on report', async () => {
-    mocks.supabaseFetch.mockResolvedValueOnce([{
+    mocks.supabaseFetch.mockResolvedValueOnce({
       id: 'rp-2',
       run_id: 'run-1',
       puzzle_id: 'pool-7',
@@ -202,10 +234,11 @@ describe('reporting and finalizing', () => {
       graded_at: null,
       grading_error: null,
       stage_reached_key: 'building',
-    }]);
+    });
 
     const recorded = await recordReportedRushPuzzle({
       runId: 'run-1',
+      userId: 'user-1',
       puzzleId: 'pool-7',
       ordinal: 7,
       clientRawScore: 30,
@@ -214,15 +247,15 @@ describe('reporting and finalizing', () => {
     });
 
     const body = JSON.parse((mocks.supabaseFetch.mock.calls[0][1] as { body: string }).body);
-    expect(body[0].stage_reached_key).toBe('building');
+    expect(body.p_stage_reached_key).toBe('building');
     expect(recorded.stageReachedKey).toBe('building');
     // Still no graded fields — telemetry did not turn this into a scoring write.
-    expect(body[0]).not.toHaveProperty('raw_score');
-    expect(body[0]).not.toHaveProperty('awarded_points');
+    expect(body).not.toHaveProperty('raw_score');
+    expect(body).not.toHaveProperty('awarded_points');
   });
 
   it('writes a null stage key when the client omits the telemetry', async () => {
-    mocks.supabaseFetch.mockResolvedValueOnce([{
+    mocks.supabaseFetch.mockResolvedValueOnce({
       id: 'rp-3',
       run_id: 'run-1',
       puzzle_id: 'pool-1',
@@ -239,10 +272,11 @@ describe('reporting and finalizing', () => {
       graded_at: null,
       grading_error: null,
       stage_reached_key: null,
-    }]);
+    });
 
     const recorded = await recordReportedRushPuzzle({
       runId: 'run-1',
+      userId: 'user-1',
       puzzleId: 'pool-1',
       ordinal: 1,
       clientRawScore: 0,
@@ -250,12 +284,12 @@ describe('reporting and finalizing', () => {
     });
 
     const body = JSON.parse((mocks.supabaseFetch.mock.calls[0][1] as { body: string }).body);
-    expect(body[0].stage_reached_key).toBeNull();
+    expect(body.p_stage_reached_key).toBeNull();
     expect(recorded.stageReachedKey).toBeNull();
   });
 
   it('normalizes an unrecognised stored stage key to null', async () => {
-    mocks.supabaseFetch.mockResolvedValueOnce([{
+    mocks.supabaseFetch.mockResolvedValueOnce({
       id: 'rp-4',
       run_id: 'run-1',
       puzzle_id: 'pool-1',
@@ -264,10 +298,11 @@ describe('reporting and finalizing', () => {
       submitted_line: [],
       client_reported_at: '2026-08-20T20:00:00.000Z',
       stage_reached_key: 'not_a_stage',
-    }]);
+    });
 
     const recorded = await recordReportedRushPuzzle({
       runId: 'run-1',
+      userId: 'user-1',
       puzzleId: 'pool-1',
       ordinal: 1,
       clientRawScore: 0,
@@ -277,7 +312,7 @@ describe('reporting and finalizing', () => {
   });
 
   it('writes the authoritative score and status on finalize', async () => {
-    mocks.supabaseFetch.mockResolvedValueOnce([{
+    mocks.supabaseFetch.mockResolvedValueOnce({ outcome: 'applied', run: {
       ...runRow,
       status: 'invalidated',
       ended_at: '2026-08-20T20:02:00.000Z',
@@ -285,21 +320,22 @@ describe('reporting and finalizing', () => {
       puzzles_solved: 4,
       client_reported_score: 9_999,
       invalidated_reason: 'client_score_mismatch',
-    }]);
+    } });
 
     const finalized = await finalizeRushRun({
       runId: 'run-1',
+      userId: 'user-1',
       status: 'invalidated',
       totalScore: 120,
       puzzlesSolved: 4,
-      clientReportedScore: 9_999,
       invalidatedReason: 'client_score_mismatch',
+      gradedPuzzles: [],
     });
 
-    expect(finalized.status).toBe('invalidated');
+    expect(finalized.run.status).toBe('invalidated');
     // The server total is recorded, not the inflated client number.
-    expect(finalized.totalScore).toBe(120);
-    expect(finalized.clientReportedScore).toBe(9_999);
-    expect(finalized.invalidatedReason).toBe('client_score_mismatch');
+    expect(finalized.run.totalScore).toBe(120);
+    expect(finalized.run.clientReportedScore).toBe(9_999);
+    expect(finalized.run.invalidatedReason).toBe('client_score_mismatch');
   });
 });

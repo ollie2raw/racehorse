@@ -9,6 +9,7 @@ import {
   buildLogEntriesSince,
   deleteLiveRoomSession,
   ensureRoomHydrated,
+  finalizeAndDeleteLiveRoomSession,
   LOG_ENTRIES_UNAVAILABLE_RETRY_MS,
   persistLiveRoomSessionNow,
   resetLiveRoomPersistenceForTests,
@@ -70,10 +71,17 @@ vi.mock('../supabaseUtils', () => ({
     }
     if (path.startsWith('/rest/v1/room_live_session_entries') && method === 'GET') {
       const code = decodeURIComponent(path.match(/room_code=eq\.([^&]+)/)?.[1] ?? '');
+      const params = new URL(path, 'https://local.invalid').searchParams;
+      const bounds = [...(params.get('or') ?? '').matchAll(/stream\.eq\."([^"]+)",idx\.lt\.(\d+)/g)];
+      const after = (params.get('and') ?? '').match(/stream\.gt\."([^"]+)".*idx\.gt\.(\d+)/);
       return [...db.entries.entries()]
         .filter(([key]) => key.startsWith(`${code}|`))
         .map(([, value]) => structuredClone(value))
-        .sort((a, b) => a.stream.localeCompare(b.stream) || a.idx - b.idx);
+        .filter((e) => bounds.length === 0 || bounds.some((b) => e.stream === b[1] && e.idx < Number(b[2])))
+        .filter((e) => !after || e.stream > after[1]! || (e.stream === after[1] && e.idx > Number(after[2])))
+        .sort((a, b) => a.stream.localeCompare(b.stream) || a.idx - b.idx)
+        // Model PostgREST's response cap; the former unpaged query loses logs.
+        .slice(0, Math.min(1000, Number(params.get('limit') ?? 1000)));
     }
     if (path.includes('/room_command_receipts') && method === 'GET') return [];
     if (path.includes('/mp_authority_events')) return undefined;
@@ -292,6 +300,70 @@ describe('LIVE_SESSION_LOG_ENTRIES=true', () => {
     play(back);
     await persistLiveRoomSessionNow(back, roster);
     expect(db.rpcCalls.at(-1)!.entries.map((e) => `${e.stream}:${e.idx}`)).toEqual(['events:5', 'ghost:seat-b:2']);
+  });
+
+  it('hydrates a long match across bounded pages after restart', async () => {
+    const room = mkRoom('LONG', 1200);
+    await persistLiveRoomSessionNow(room, roster);
+    resetRoomRuntimeForTests();
+    vi.mocked(supabaseFetch).mockClear();
+    expect((await ensureRoomHydrated('LONG')).kind).toBe('hydrated');
+    expect(peekRoom('LONG')!.events).toEqual(room.events);
+    expect(peekRoom('LONG')!.ghostMoveLogs).toEqual(room.ghostMoveLogs);
+    const reads = vi.mocked(supabaseFetch).mock.calls.filter(([path]) => path.startsWith('/rest/v1/room_live_session_entries'));
+    expect(reads).toHaveLength(5); // 2400 entries, pages <=500
+    for (const [path] of reads) expect(Number(new URL(path, 'https://local.invalid').searchParams.get('limit'))).toBeLessThanOrEqual(500);
+    expect(reads.slice(1).every(([path]) => new URL(path, 'https://local.invalid').searchParams.has('and'))).toBe(true);
+    // A second recovery sees the in-memory room, not another full log read.
+    await ensureRoomHydrated('LONG');
+    expect(vi.mocked(supabaseFetch).mock.calls.filter(([path]) => path.startsWith('/rest/v1/room_live_session_entries'))).toHaveLength(5);
+  });
+
+  it('excludes a large stale rematch tail before paging', async () => {
+    const room = mkRoom('TAIL', 1200);
+    await persistLiveRoomSessionNow(room, roster);
+    room.events = [];
+    room.ghostMoveLogs = { 'seat-a': [], 'seat-b': [] };
+    room.ghostTurnIndex = 0;
+    markRoomDurabilityPending(room);
+    play(room);
+    await persistLiveRoomSessionNow(room, roster);
+    resetRoomRuntimeForTests();
+    vi.mocked(supabaseFetch).mockClear();
+    expect((await ensureRoomHydrated('TAIL')).kind).toBe('hydrated');
+    expect(peekRoom('TAIL')!.ghostMoveLogs).toEqual(room.ghostMoveLogs);
+    expect(vi.mocked(supabaseFetch).mock.calls.filter(([path]) => path.startsWith('/rest/v1/room_live_session_entries'))).toHaveLength(1);
+  });
+
+  it.each([-1, 0.5, 100001, { valueOf: 'broken' }])('rejects invalid persisted counts (%j) without reading entries', async (count) => {
+    const room = mkRoom('BADCOUNT', 3);
+    await persistLiveRoomSessionNow(room, roster);
+    (db.sessions.get('BADCOUNT')!.room_shell as Record<string, unknown>).eventCount = count;
+    resetRoomRuntimeForTests();
+    vi.mocked(supabaseFetch).mockClear();
+    expect(await ensureRoomHydrated('BADCOUNT')).toEqual({ kind: 'snapshot_invalid', error: 'snapshot_log_counts_invalid' });
+    expect(vi.mocked(supabaseFetch).mock.calls.some(([path]) => path.startsWith('/rest/v1/room_live_session_entries'))).toBe(false);
+  });
+
+  it.each(['terminal-write', 'delete'])('restores a rejoined live session during %s', async (phase) => {
+    const room = mkRoom('REJOIN', 3);
+    await persistLiveRoomSessionNow(room, roster);
+    let retained = false;
+    const original = vi.mocked(supabaseFetch).getMockImplementation()!;
+    vi.mocked(supabaseFetch).mockImplementation(async (path, init) => {
+      const result = await original(path, init);
+      if (path.startsWith('/rest/v1/room_live_sessions') && init?.method === (phase === 'delete' ? 'DELETE' : 'POST')) retained = true;
+      return result;
+    });
+    const restore = vi.fn(async () => { await persistLiveRoomSessionNow(room, roster); });
+    await finalizeAndDeleteLiveRoomSession(room, 'abandoned', {
+      shouldFinalize: () => !retained,
+      restoreLiveSession: restore,
+    });
+    expect(restore).toHaveBeenCalledTimes(1);
+    expect(db.sessions.get('REJOIN')!.status).toBe('playing');
+    expect(db.sessions.get('REJOIN')!.game_state).toEqual(room.state);
+    vi.mocked(supabaseFetch).mockImplementation(original);
   });
 
   it('a missing entry makes the snapshot invalid instead of hydrating a short log', async () => {

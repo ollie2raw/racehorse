@@ -1,9 +1,12 @@
+import { processInterval, cancelProcessInterval, trackProcessWork, isProcessClosing, onProcessStop } from '../platform/processLifecycle';
 import type { Application, Request, Response } from 'express';
 import {
+  deriveReviewedMoveQuality,
   createReviewCompletionJob,
   InMemoryCheckpointStore,
   jobAuthoritativeComplete,
   runReviewCompletionPass,
+  sanitizeSnapshotForReview,
   reviewCompletionJobBackoffMs,
   REVIEW_COMPLETION_LEASE_MS,
   REVIEW_COMPLETION_SWEEP_INTERVAL_MS,
@@ -88,7 +91,7 @@ export function takeReviewFunnel(): { eligible: number; started: number; opened:
 
 function startReviewFunnelLog(): void {
   if (reviewFunnelTimer) return;
-  reviewFunnelTimer = setInterval(() => {
+  reviewFunnelTimer = processInterval('review', () => {
     log.info({ ...takeReviewFunnel(), windowMs: 3_600_000 }, 'review funnel');
   }, 3_600_000);
   reviewFunnelTimer.unref?.();
@@ -101,20 +104,42 @@ export async function enqueueReviewCompletionJob(input: {
   readonly snapshots: readonly ReviewPositionSnapshotV2[];
   readonly expectedDecisionIds: readonly string[];
   readonly captureFailures?: ReviewCompletionJobRecord['captureFailures'];
-  readonly liveResultsByDecisionId?: ReadonlyMap<string, ReviewEvaluationV1>;
 }): Promise<ReviewCompletionJobRecord> {
   const existing = await store.getByGameDigest(input.gameDigest, input.userId);
   if (existing && existing.userId === input.userId) {
     return existing;
   }
+  // Trust boundary: the caller supplies the recorded positions, never the candidate set or the results. The legal set is
+  // re-derived from the recorded state with the engine's own rules, positions that cannot be real decisions become explicit
+  // capture failures, and no client-computed evaluation is accepted (the server evaluates every decision itself).
+  const snapshots: ReviewPositionSnapshotV2[] = [];
+  const captureFailures = [...(input.captureFailures ?? [])];
+  const failed = new Set(captureFailures.map((failure) => failure.decisionId));
+  for (const raw of input.snapshots) {
+    const sanitized = sanitizeSnapshotForReview(raw);
+    if (sanitized.ok) {
+      snapshots.push(sanitized.snapshot);
+      continue;
+    }
+    const decisionId = raw?.identifiers?.decisionId;
+    log.warn({ decisionId, reason: sanitized.reason }, 'review snapshot rejected at the trust boundary');
+    if (typeof decisionId === 'string' && input.expectedDecisionIds.includes(decisionId) && !failed.has(decisionId)) {
+      failed.add(decisionId);
+      captureFailures.push({
+        decisionId,
+        handId: String(raw.identifiers.handId ?? ''),
+        sequence: Number.isFinite(raw.identifiers.actionNumber) ? raw.identifiers.actionNumber : 0,
+        reason: sanitized.reason,
+      });
+    }
+  }
   const job = createReviewCompletionJob({
     gameDigest: input.gameDigest,
     sourceMatchId: input.sourceMatchId,
     userId: input.userId,
-    snapshots: input.snapshots,
+    snapshots,
     expectedDecisionIds: input.expectedDecisionIds,
-    captureFailures: input.captureFailures,
-    liveResultsByDecisionId: input.liveResultsByDecisionId,
+    captureFailures: captureFailures.filter((failure) => !snapshots.some((s) => s.identifiers.decisionId === failure.decisionId)),
   });
   // Durable before acknowledgment.
   await store.put(job);
@@ -124,8 +149,8 @@ export async function enqueueReviewCompletionJob(input: {
     throw new Error('Failed to durably persist review completion job');
   }
   // The job stays queued when the sweep is off; it runs once the sweep is back on.
-  if (isReviewSweepEnabled()) {
-    void sweepReviewCompletionJobs().catch((error) => {
+  if (isReviewSweepEnabled() && !isProcessClosing()) {
+    void trackProcessWork('review-kick', () => sweepReviewCompletionJobs()).catch((error) => {
       log.warn({ err: error, jobId: job.jobId }, 'kick failed');
     });
   }
@@ -180,7 +205,7 @@ export function sweepReviewCompletionJobs(limit = 4): Promise<SweepResult> {
       total.ran += round.ran;
       total.completed += round.completed;
       total.recovered += round.recovered;
-    } while (sweepRequestedAgain);
+    } while (sweepRequestedAgain && !isProcessClosing());
     return total;
   })();
   sweepInFlight = run;
@@ -203,6 +228,7 @@ async function sweepOnce(limit: number): Promise<SweepResult> {
 
   // One job at a time: there is one search worker thread.
   for (const job of claimable) {
+    if (isProcessClosing()) break;
     const hadForeignClaim =
       job.claimToken != null
       && job.leaseExpiresAt != null
@@ -245,8 +271,8 @@ async function runJobPass(jobId: string, claimToken: string) {
       onClaimed: (claimed) => {
         if (!store.renewLease) return;
         const generation = claimed.claimGeneration ?? 1;
-        heartbeat = setInterval(() => {
-          void store.renewLease!(jobId, claimToken, generation, REVIEW_COMPLETION_LEASE_MS)
+        heartbeat = processInterval('review', () => {
+          return store.renewLease!(jobId, claimToken, generation, REVIEW_COMPLETION_LEASE_MS)
             .then((renewed) => {
               if (renewed || leaseLost) return;
               leaseLost = true;
@@ -262,7 +288,7 @@ async function runJobPass(jobId: string, claimToken: string) {
       },
     });
   } finally {
-    if (heartbeat) clearInterval(heartbeat);
+    if (heartbeat) cancelProcessInterval(heartbeat);
   }
 }
 
@@ -305,9 +331,10 @@ export function scheduleReviewCompletionSweep(): void {
   }
   log.info('review completion sweep ENABLED (REVIEW_SWEEP_ENABLED=true)');
   if (sweepTimer) return;
-  sweepTimer = setInterval(() => {
+  onProcessStop(() => searchRunner?.abort('process shutting down'));
+  sweepTimer = processInterval('review', () => {
     if (!shouldRunPeriodicSweep(Date.now())) return;
-    void sweepReviewCompletionJobs()
+    return sweepReviewCompletionJobs()
       .then((result) => notePeriodicSweep(Date.now(), result.ran))
       .catch((error) => {
         log.warn({ err: error }, 'periodic sweep failed');
@@ -318,7 +345,7 @@ export function scheduleReviewCompletionSweep(): void {
 
 /** Test seam: clear the periodic sweep timer and its idle state. */
 export function stopReviewCompletionSweepForTests(): void {
-  if (sweepTimer) clearInterval(sweepTimer);
+  if (sweepTimer) cancelProcessInterval(sweepTimer);
   sweepTimer = null;
   lastPeriodicSweepAt = 0;
   lastPeriodicSweepIdle = false;
@@ -365,13 +392,7 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       return;
     }
 
-    const live = new Map<string, ReviewEvaluationV1>();
-    if (Array.isArray(body.evaluations)) {
-      for (const row of body.evaluations as ReviewEvaluationV1[]) {
-        if (row && typeof row.snapshotId === 'string') live.set(row.snapshotId, row);
-      }
-    }
-
+    // `body.evaluations` (client-computed results) is deliberately ignored: only the server's own evaluation is stored.
     try {
       const job = await enqueueReviewCompletionJob({
         userId: authenticatedUserId,
@@ -382,7 +403,6 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
         captureFailures: Array.isArray(body.captureFailures)
           ? body.captureFailures as ReviewCompletionJobRecord['captureFailures']
           : [],
-        liveResultsByDecisionId: live,
       });
       const forced = job.decisions.filter((d) => d.lifecycle === 'FORCED').length;
       const scored = job.decisions.filter((d) => d.lifecycle === 'SCORED').length;
@@ -432,6 +452,9 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
         remaining: job.expectedDecisionIds.length - forced - scored,
       },
       accuracyModelResult: job.accuracyModelResult,
+      // OWNER-ONLY, not authoritative: candidates and evaluations are this server's, but the PLAYED action is the client's claim
+      // (see `provenance`). Returned to the job's owner only; never persist or share it (the review-engine shareability gate refuses).
+      reviewedMoveQuality: deriveReviewedMoveQuality(job),
       decisions: job.decisions.map((d) => ({
         decisionId: d.decisionId,
         positionHash: d.positionHash,
@@ -462,6 +485,7 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       jobId: job.jobId,
       status: job.status,
       complete: jobAuthoritativeComplete(job),
+      reviewedMoveQuality: deriveReviewedMoveQuality(job),
     });
   });
 }

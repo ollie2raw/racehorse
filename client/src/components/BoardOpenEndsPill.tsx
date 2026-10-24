@@ -1,3 +1,4 @@
+import { FeedbackNumber } from './FeedbackNumber';
 /** Open-end sum pill — always shows canonical geometry sum from board tiles. */
 
 import {
@@ -30,7 +31,7 @@ export function BoardOpenEndsPill({ board, openEndsSum, visible = true }: BoardO
   return (
     <div className="open-ends-pill board-corner-pill board-corner-pill--tl" aria-label={`${canonical} open ends`}>
       <span className="open-ends-pill__label">Open</span>
-      <span className="open-ends-count">{canonical}</span>
+      <FeedbackNumber value={canonical} className="open-ends-count" />
     </div>
   );
 }

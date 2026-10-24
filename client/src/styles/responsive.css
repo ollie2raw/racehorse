@@ -152,6 +152,9 @@
     min-width: 0;
   }
 
+  /* Portrait phones only. Racehorse ships landscape-only; in landscape at 667-768px wide these two rules made the stage 100dvh
+     tall and the board `height: auto`, collapsing the board to 0px (multiplayer, Daily Fritz, every non-bot match screen). */
+  @media (orientation: portrait) {
   .wl-stage-shell,
   .game-layout,
   .bot-match-layout {
@@ -180,7 +183,12 @@
     overflow: hidden;
     position: relative;
   }
+  }
 
+  /* Portrait phones only (same reason as the stage rules above): in landscape these pinned the tray to --tray-height (72px,
+     !important), dissolved the hand rows and clamped every tile to 21vw, so a two-row hand overflowed the bottom of a 667x375 or
+     740x360 screen while the identical hand grows the deck normally at 844+. */
+  @media (orientation: portrait) {
   .wl-hand-area,
   .hand-area,
   .hand-tray,
@@ -235,7 +243,11 @@
   .pip-half {
     padding: 2px !important;
   }
+  }
 
+  /* Portrait phones only: in landscape (667-768px) the 0.85 scale shrank the board controls to 24px on a 37px pitch and the
+     28px !important icon size undercut the 44pt target work in native-landscape.css. */
+  @media (orientation: portrait) {
   .board-zoom-tray,
   .wl-controls-tray {
     padding: 4px 6px !important;
@@ -251,6 +263,7 @@
     height: 28px !important;
     min-width: 28px !important;
     min-height: 28px !important;
+  }
   }
 
   .screen,

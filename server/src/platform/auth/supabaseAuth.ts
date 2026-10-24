@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import type express from 'express';
 import { config } from '../../config';
+import { findProductionSupabaseVars, isHostedProduction } from '../env/productionSupabaseGuard';
 
 const authenticatedUserIdCache = new Map<string, { userId: string | null; expiresAt: number }>();
 /**
@@ -61,11 +62,29 @@ export function authenticatedUserIdCacheSize(): number {
   return authenticatedUserIdCache.size;
 }
 
+/** Explicit per-process opt-in for the e2e identity shim; set only by the owned e2e harness (client/playwright.config.ts). */
+export const E2E_AUTH_SHIM_ENV = 'E2E_AUTH_SHIM';
+
+/**
+ * The e2e identity shim (`Bearer e2e-daily-fritz` + `x-e2e-daily-fritz-user`) authenticates as ANY uuid, so it fails
+ * closed. All of these must hold: an explicit `E2E_AUTH_SHIM=1` opt-in; not a hosted runtime (NODE_ENV=production, or
+ * Render/Vercel even with NODE_ENV unset or wrong); and no production Supabase project anywhere in the environment —
+ * deliberately NOT overridable by RACEHORSE_ALLOW_PRODUCTION_SUPABASE, which exists for throwaway-user scripts and must
+ * never also mean "anyone may impersonate any user".
+ */
+export function isE2eAuthBypassAllowed(env: Record<string, string | undefined> = process.env): boolean {
+  const optIn = env[E2E_AUTH_SHIM_ENV]?.trim().toLowerCase();
+  if (optIn !== '1' && optIn !== 'true') return false;
+  if (isHostedProduction(env)) return false;
+  if (findProductionSupabaseVars(env).length > 0) return false;
+  return true;
+}
+
 export async function getAuthenticatedUserId(req: express.Request): Promise<string | null> {
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   const token = match?.[1]?.trim();
-  if (process.env.NODE_ENV !== 'production' && token === 'e2e-daily-fritz') {
+  if (token === 'e2e-daily-fritz' && isE2eAuthBypassAllowed()) {
     const headerUser = req.headers['x-e2e-daily-fritz-user'];
     const fromHeader = typeof headerUser === 'string' ? headerUser.trim() : '';
     if (fromHeader) return fromHeader;
@@ -125,6 +144,7 @@ async function validateTokenUpstream(token: string, key: string): Promise<string
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      // eslint-disable-next-line no-console -- pre-existing operational warning; supabaseAuth deliberately has no logger dependency
       console.warn('[auth] token validation timed out', { authTimeoutMs });
       return null;
     }

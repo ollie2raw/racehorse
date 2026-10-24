@@ -1,3 +1,4 @@
+import { withRatingCompletion, isRatingCutoverQuiescedError } from '../../ranking/ratingCutoverGate';
 import type { Application, Request } from 'express';
 import { setPublicShortCache } from './cacheControl';
 import type { ProfileRow } from '../../supabaseTypes';
@@ -22,6 +23,17 @@ export type RankingRouteDeps = {
   DEFAULT_RD: number;
 };
 
+// Ranked profiles exist only for registered accounts, whose ids are Supabase
+// auth uuids. Guest seats carry a client-minted `guest_<…>` id and Fritz/bot
+// seats their own ids; none of those have a profile row, and passing them to a
+// uuid column makes PostgREST error (which used to surface as a 500).
+const PROFILE_USER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isProfileUserId(value: string): boolean {
+  return PROFILE_USER_ID_PATTERN.test(value);
+}
+
 export function registerRankingRoutes(app: Application, deps: RankingRouteDeps): void {
   const {
     supabaseFetch,
@@ -39,6 +51,10 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
     const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
     if (!userId) {
       res.status(400).json({ error: 'userId is required.' });
+      return;
+    }
+    if (!isProfileUserId(userId)) {
+      res.status(400).json({ error: 'userId must be a registered player id.' });
       return;
     }
 
@@ -96,11 +112,20 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
       res.status(400).json({ error: 'userId is required.' });
       return;
     }
+    if (!isProfileUserId(userId)) {
+      res.status(400).json({ error: 'userId must be a registered player id.' });
+      return;
+    }
 
     try {
       const authenticatedUserId = await getAuthenticatedUserId(req);
       if (!authenticatedUserId) {
         res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+      // Full per-game history (opponent ids, scores, rating deltas) is the caller's own durable record.
+      if (authenticatedUserId !== userId) {
+        res.status(403).json({ error: 'Forbidden' });
         return;
       }
       const profileData = await supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
@@ -155,9 +180,14 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
     }
 
     try {
-      const result = await processRatingPeriod(userId);
+      const result = await withRatingCompletion('ranking_admin_process', () => processRatingPeriod(userId));
       res.json({ ok: true, result });
     } catch (error) {
+      if (isRatingCutoverQuiescedError(error)) {
+        res.setHeader('Retry-After', '2');
+        res.status(503).json({ error: 'rating_cutover_quiesced' });
+        return;
+      }
       res.status(500).json({
         error: error instanceof Error ? error.message : 'Failed to process rating period.',
       });

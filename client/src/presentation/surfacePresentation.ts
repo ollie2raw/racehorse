@@ -21,6 +21,10 @@ const gameplay: SurfacePresentation = {
   shell: 'gameplay', primaryArea: null, chrome: 'none', scroll: 'none', account: 'hidden',
 };
 
+const legalPage: SurfacePresentation = {
+  shell: 'utility', primaryArea: null, chrome: 'contextual', parentMode: 'home', scroll: 'named-content', account: 'avatar',
+};
+
 /** Exhaustive presentation metadata; route, domain state and URL remain in their existing owners. */
 export const SURFACE_BY_MODE: Record<AppMode, SurfacePresentation> = {
   home: hub(null),
@@ -47,6 +51,11 @@ export const SURFACE_BY_MODE: Record<AppMode, SurfacePresentation> = {
   bot: gameplay,
   ghost: gameplay,
   settings: { shell: 'utility', primaryArea: null, chrome: 'contextual', parentMode: 'home', scroll: 'named-content', account: 'avatar' },
+  // Legal and support pages: long-form documents, reachable signed out, back
+  // returns through real history (Home, Settings or the sign-up modal's page).
+  privacy: legalPage,
+  terms: legalPage,
+  support: legalPage,
   dailyFritzHealthAdmin: { shell: 'utility', primaryArea: null, chrome: 'none', scroll: 'named-content', account: 'hidden' },
 };
 

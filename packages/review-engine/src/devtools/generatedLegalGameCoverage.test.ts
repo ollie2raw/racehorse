@@ -31,10 +31,36 @@ function dist(values: number[]) {
   };
 }
 
+// Each seeded game is its own test (~25 s), so no single test approaches the per-test cap and a failure names its seed. The
+// aggregate test below then applies exactly the same cross-game assertions as before; nothing is sampled or dropped.
+const gameResults: ReturnType<typeof analyzeGame>[] = [];
+
+function gameOptions(i: number): PlayOptions {
+  return ADVERSARIAL
+    ? {
+        preferDraw: i % 3 === 0,
+        preferPass: i % 5 === 0,
+        winningScore: i % 7 === 0 ? 30 : 50,
+      }
+    : {};
+}
+
 describe('generated legal-game coverage harness', () => {
+  for (let i = 0; i < CI_GAMES; i += 1) {
+    const seed = 1000 + i * 97;
+    it(
+      `analyzes seeded game ${i + 1}/${CI_GAMES} (seed ${seed}, maxTier=${MAX_TIER})`,
+      () => {
+        gameResults.push(analyzeGame(seed, gameOptions(i), MAX_TIER));
+      },
+      CI_GAMES > 100 ? 3_600_000 : 900_000,
+    );
+  }
+
   it(
     `completes ${CI_GAMES} seeded games with forced+scored==total (maxTier=${MAX_TIER})`,
     () => {
+      expect(gameResults.length, 'every seeded game must have been analyzed before aggregation').toBe(CI_GAMES);
       let totalForced = 0;
       let totalScored = 0;
       let totalDecisions = 0;
@@ -53,16 +79,7 @@ describe('generated legal-game coverage harness', () => {
       const feasibleStates: number[] = [];
       const failures: Array<{ seed: number; detail: string; positionHash?: string }> = [];
 
-      for (let i = 0; i < CI_GAMES; i += 1) {
-        const seed = 1000 + i * 97;
-        const opts: PlayOptions = ADVERSARIAL
-          ? {
-              preferDraw: i % 3 === 0,
-              preferPass: i % 5 === 0,
-              winningScore: i % 7 === 0 ? 30 : 50,
-            }
-          : {};
-        const r = analyzeGame(seed, opts, MAX_TIER);
+      for (const r of gameResults) {
         totalHands += r.hands;
         totalDecisions += r.decisions;
         totalForced += r.forced;
@@ -132,6 +149,6 @@ describe('generated legal-game coverage harness', () => {
         expect(evidenceInvalidations).toBeGreaterThan(0);
       }
     },
-    CI_GAMES > 100 ? 3_600_000 : 900_000,
+    60_000,
   );
 });

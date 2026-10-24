@@ -1,3 +1,5 @@
+@import '../ui/motion.css';
+
 /*
  * Canonical live-match visual theme (bot + multiplayer).
  * Target: walnut v3 layout + racehorse-matte recolor (Image 1 reference).
@@ -586,7 +588,7 @@
   .wl-hand-area
   .hand-container
   .domino-tile {
-  transition: transform 0.16s ease, filter 0.16s ease;
+  transition: transform var(--rh-motion-micro) var(--rh-motion-settle), filter var(--rh-motion-micro) var(--rh-motion-settle);
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
@@ -636,7 +638,7 @@
   .wl-hand-area
   .hand-container
   .domino-tile.new-draw {
-  animation: none !important;
+  animation: rh-hand-arrive var(--rh-motion-tile) var(--rh-motion-settle) !important;
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
@@ -785,17 +787,6 @@
   background: rgba(14, 12, 8, 0.92) !important;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.is-active-turn:not(.is-you)::before,
-  .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn:not(.is-you)::before {
-    animation: active-accent-pulse-opp 1.8s ease-in-out infinite !important;
-  }
-
-  .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.is-active-turn:not(.is-you),
-  .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn:not(.is-you) {
-    animation: active-pill-pulse-opp 1.8s ease-in-out infinite !important;
-  }
-}
 
 .screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .nbl-board-canvas {
   background-image:
@@ -825,6 +816,14 @@
     padding: 10px 20px !important;
     font-size: 0.76rem !important;
   }
+
+  /* Web only; the installed app's pill is deliberately left as it was. The pill sets no font and `.app` (App.css) resets the
+     inherited face to the OS font, so "Tap a tile to draw" fit its 88px of content by ~5px in San Francisco on a Mac but
+     wrapped to 3 lines in the wider system font on a Linux runner (844x390). HUD labels are Barlow Condensed (CLAUDE.md);
+     using it here removes the dependence on the platform font. */
+  :root:not(.rh-native) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-turn-label {
+    font-family: var(--font-display);
+  }
 }
 
 @media (max-height: 760px) {
@@ -843,29 +842,7 @@
    ───────────────────────────────────────────────────────────── */
 
 /* 1. Domino Placement & Landing Feel */
-@keyframes domino-drop {
-  0% {
-    transform: translate(-50%, -50%) scale(1.18);
-    opacity: 0.72;
-  }
-  45% {
-    transform: translate(-50%, -50%) scale(0.97);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
-  }
-}
-
-.board-tile-wrapper.is-last-played {
-  animation: domino-drop 0.32s cubic-bezier(0.25, 1, 0.5, 1.15) forwards;
-  z-index: 10;
-}
-
-.bot-match-screen .board-tile-wrapper.is-last-played {
-  animation: domino-drop 650ms cubic-bezier(0.25, 1, 0.5, 1.15) forwards;
-}
+.board-tile-wrapper.is-last-played { z-index: 10; }
 
 @keyframes last-played-neon-glow {
   0% {
@@ -936,111 +913,14 @@
   .domino-tile.highlight:not(.unplayable):active,
 .bot-match-screen .hand-container .domino-tile.highlight:not(.unplayable):active {
   transform: translateY(-2px) scale(0.97) !important;
-  transition: transform 0.06s cubic-bezier(0.25, 1, 0.5, 1) !important;
+  transition: transform var(--rh-motion-micro) var(--rh-motion-press) !important;
 }
 
-/* 4. Active Turn Indicator & Player Pill Glowing */
-@keyframes active-accent-pulse-you {
-  0%, 100% {
-    box-shadow: 0 0 12px rgba(231, 182, 74, 0.46);
-    background: #e7b64a;
-  }
-  50% {
-    box-shadow: 0 0 24px 4px rgba(231, 182, 74, 0.85);
-    background: #ffd67a;
-  }
-}
-
-@keyframes active-accent-pulse-opp {
-  0%, 100% {
-    box-shadow: 0 0 12px rgba(88, 166, 255, 0.58);
-    background: #58a6ff;
-  }
-  50% {
-    box-shadow: 0 0 24px 4px rgba(88, 166, 255, 0.95);
-    background: #8ec2ff;
-  }
-}
-
-@keyframes active-pill-pulse-you {
-  0%, 100% {
-    border-color: rgba(226, 176, 72, 0.2) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 14px 38px rgba(0, 0, 0, 0.28) !important;
-  }
-  50% {
-    border-color: rgba(231, 182, 74, 0.5) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 16px 2px rgba(231, 182, 74, 0.18), 0 14px 38px rgba(0, 0, 0, 0.28) !important;
-  }
-}
-
-@keyframes active-pill-pulse-opp {
-  0%, 100% {
-    border-color: rgba(88, 166, 255, 0.2) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 14px 38px rgba(0, 0, 0, 0.28) !important;
-  }
-  50% {
-    border-color: rgba(88, 166, 255, 0.5) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 16px 2px rgba(88, 166, 255, 0.18), 0 14px 38px rgba(0, 0, 0, 0.28) !important;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-active-turn.is-you::before,
-  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn.is-you::before {
-    animation: active-accent-pulse-you 2.2s infinite ease-in-out;
-  }
-
-  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-active-turn:not(.is-you)::before,
-  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn:not(.is-you)::before {
-    animation: active-accent-pulse-opp 2.2s infinite ease-in-out;
-  }
-
-  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-active-turn.is-you,
-  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn.is-you,
-  .bot-match-screen .wl-player-pill.is-active-turn.is-you,
-  .bot-match-screen .wl-player-pill-btn.is-active-turn.is-you {
-    animation: active-pill-pulse-you 2.2s infinite ease-in-out;
-  }
-
-  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-active-turn:not(.is-you),
-  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.is-active-turn:not(.is-you),
-  .bot-match-screen .wl-player-pill.is-active-turn:not(.is-you),
-  .bot-match-screen .wl-player-pill-btn.is-active-turn:not(.is-you) {
-    animation: active-pill-pulse-opp 2.2s infinite ease-in-out;
-  }
-}
-
-/* Turn bar label soft breathing highlight */
-@keyframes active-turn-glow-your {
-  0%, 100% {
-    box-shadow: 0 0 6px 1px rgba(149, 240, 202, 0.15);
-    border-color: rgba(149, 240, 202, 0.45);
-  }
-  50% {
-    box-shadow: 0 0 12px 3px rgba(149, 240, 202, 0.35);
-    border-color: rgba(149, 240, 202, 0.8);
-  }
-}
-
-@keyframes active-turn-glow-opp {
-  0%, 100% {
-    box-shadow: 0 0 6px 1px rgba(216, 181, 111, 0.15);
-    border-color: rgba(216, 181, 111, 0.45);
-  }
-  50% {
-    box-shadow: 0 0 12px 3px rgba(216, 181, 111, 0.35);
-    border-color: rgba(216, 181, 111, 0.8);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .wl-board-turn__label.your-turn {
-    animation: active-turn-glow-your 2s infinite ease-in-out;
-  }
-
-  .wl-board-turn__label.opp-turn {
-    animation: active-turn-glow-opp 2s infinite ease-in-out;
-  }
+/* Active ownership is a steady accent; TurnStatus supplies one finite handoff. */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-active-turn,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-active-turn::before,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-board-turn__label {
+  animation: none !important;
 }
 
 /* 5. Score Update Burst Effect */
@@ -1086,12 +966,12 @@
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.score-card.score-hit.is-you,
 .bot-match-screen .wl-player-pill.score-card.score-hit,
 .bot-match-screen .wl-player-pill-btn.score-card.score-hit {
-  animation: score-hit-pulse-you 0.45s cubic-bezier(0.25, 1, 0.5, 1.2) forwards !important;
+  animation: score-hit-pulse-you var(--rh-motion-reward) var(--rh-motion-settle) forwards !important;
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.score-card.score-hit:not(.is-you),
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.score-card.score-hit:not(.is-you) {
-  animation: score-hit-pulse-opp 0.45s cubic-bezier(0.25, 1, 0.5, 1.2) forwards !important;
+  animation: score-hit-pulse-opp var(--rh-motion-reward) var(--rh-motion-settle) forwards !important;
 }
 
 /* 6. Score Pill Button Hover & Pressed state */
@@ -1205,5 +1085,73 @@
     font-size: 0.72rem !important;
     padding: 4px 10px !important;
     min-width: 90px !important;
+  }
+}
+
+/* Stable selected lift: guided wrapper and button must not both translate. */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .hand-container .guided-tile-wrap:has(.domino-tile.selected) {
+  transform: none;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .hand-container .domino-tile:focus-visible {
+  outline: 2px solid #7dc0ff;
+  outline-offset: 4px;
+}
+
+@keyframes rh-hand-arrive {
+  from { opacity: 0.55; translate: 0 6px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) :is(.wl-hand-area, .rh-live-hand-deck) .hand-container .domino-tile.new-draw {
+    animation: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) :is(.wl-hand-area, .rh-live-hand-deck) .hand-container .domino-tile {
+    transition: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.score-card.score-hit.is-you,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.score-card.score-hit:not(.is-you) {
+    animation: none !important;
+  }
+}
+
+/*
+ * Compact landscape (iPhone SE/8 at 667, 12 mini at 740-812). The installed app gets its compact HUD from native-landscape.css
+ * (scoped to `.rh-native`); these three values mirror it for a phone browser, bounded below the 844px layout, which is unchanged:
+ * rack tiles 90x46 -> 74x38 (seven 90px tiles overflowed a 647px deck on both sides) and the opponent's tile strip 12x18 so it
+ * no longer runs under the status pill.
+ */
+@media (orientation: landscape) and (max-height: 430px) and (max-width: 843px) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-row .domino-tile {
+    zoom: 0.82;
+  }
+
+  /* !important: the base rack padding/gap are !important (native-landscape.css overrides them the same way). */
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack {
+    height: 32px !important;
+    padding: 0 2px !important;
+    gap: 3px !important;
+  }
+
+  /* Web only (the app's pill stays single-line, see native-landscape.css): cap the status pill so it plus the docked history
+     scrubber fit between the cards. 160px keeps "Fritz is thinking…" on two lines, as at 844. */
+  :root:not(.rh-native) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-center-status .wl-turn-label {
+    max-width: 160px;
+  }
+
+  /* !important only because TileRack sets these sizes inline (native-landscape.css does the same for the same reason). */
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack__tile {
+    width: 12px !important;
+    height: 18px !important;
+    border-radius: 3px;
   }
 }

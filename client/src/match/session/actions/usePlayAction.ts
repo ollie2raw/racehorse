@@ -4,7 +4,7 @@ import type { GameState, Move, PlacementPosition, Tile } from '../../../types';
 import { playTileSound } from '../../../utils/sound';
 import { mpPerfBeginAction, mpPerfMarkAck } from '../../../multiplayer/mpPerf';
 import { nextEndsForTile, toTileTuple } from '../../../game/moveLogger';
-import { emitGameAction } from '../../../multiplayer/roomTransport';
+import { currentRoomMatchId, emitGameAction } from '../../../multiplayer/roomTransport';
 import type { MoveEntry } from '../../../game/moveLogger';
 import type { FlyingTile } from '../liveMatchSessionTypes';
 import type { RoomRecoveryState } from '../../../multiplayer/protocol';
@@ -185,6 +185,7 @@ export function usePlayAction(
         baselineSequence,
         handNumber,
         signature,
+        matchId: currentRoomMatchId(),
       });
       logicalGameplayActionRef.current = logicalAction;
       const requestId = logicalAction.requestId;
@@ -210,6 +211,7 @@ export function usePlayAction(
         const resp = await emitGameAction(socket, joinedRoom, {
           type: 'MOVE',
           requestId,
+          matchId: logicalAction.matchId,
           move: { tile: tileToPlay, position },
         });
 

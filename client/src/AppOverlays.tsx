@@ -2,10 +2,12 @@ import React, { Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FriendInvitePopupBridge } from './multiplayer/FriendInvitePopupBridge';
 import type { FriendInviteState } from './multiplayer/runtime/friendInviteRuntime';
+import type { LegalMode } from './legal/legalModes';
 
 const AuthModal = React.lazy(() => import('./auth/AuthModal'));
 const UsernameModal = React.lazy(() => import('./auth/UsernameModal'));
 const ChangePasswordModal = React.lazy(() => import('./auth/ChangePasswordModal'));
+const RecoveryConfirmModal = React.lazy(() => import('./auth/RecoveryConfirmModal'));
 
 export type AuthModalsLayerProps = {
   authModalOpen: boolean;
@@ -22,6 +24,7 @@ export type AuthModalsLayerProps = {
     username?: string,
   ) => Promise<{ error: string | null; message?: string | null; pendingVerification?: boolean }>;
   onResetPassword: (email: string) => Promise<{ error: string | null; message?: string | null }>;
+  onOpenLegal?: (mode: LegalMode) => void;
   passwordRecoveryPending: boolean;
   onUpdatePassword: (password: string) => Promise<{ error: string | null; message?: string | null }>;
   onPasswordRecoveryClose: () => void;
@@ -41,6 +44,7 @@ export function AuthModalsLayer({
   onSignIn,
   onSignUp,
   onResetPassword,
+  onOpenLegal,
   passwordRecoveryPending,
   onUpdatePassword,
   onPasswordRecoveryClose,
@@ -66,12 +70,14 @@ export function AuthModalsLayer({
         onSignIn={onSignIn}
         onSignUp={onSignUp}
         onResetPassword={onResetPassword}
+        onOpenLegal={onOpenLegal}
       />
       <ChangePasswordModal
         open={passwordRecoveryPending}
         onUpdatePassword={onUpdatePassword}
         onClose={onPasswordRecoveryClose}
       />
+      <RecoveryConfirmModal />
       <UsernameModal
         open={usernameModalOpen}
         currentUsername={currentUsername}

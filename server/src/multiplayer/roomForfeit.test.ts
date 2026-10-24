@@ -7,8 +7,10 @@ import {
   setLiveRoomPersistenceShuttingDown,
 } from './roomLivePersistence';
 import { processRealtimeMultiplayerGame } from '../ranking/periodService';
+import { buildRankedGameInsertPayload } from '../ranking/rankedGamePayload';
 import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
 import { supabaseFetch } from '../supabaseUtils';
+import { resetRatingCutoverGateForTests, setLegacyRatingWritersEnforcedForTests } from '../ranking/ratingCutoverGate';
 
 const applyMatchResultMock = vi.fn();
 const fetchMatchByIdMock = vi.fn();
@@ -22,14 +24,15 @@ vi.mock('../ranking/periodService', () => ({
 }));
 
 vi.mock('../ranking/insertRankedGameIdempotent', () => ({
-  insertRankedGameIdempotent: vi.fn(async () => ({
+  insertRankedGameIdempotent: vi.fn(async (input) => ({
     isNew: true,
-    game: { id: 'game-123' },
+    game: { id: 'game-123', ...buildRankedGameInsertPayload({ ...input, playerState: { rating: input.ratingBefore, rd: input.rdBefore, vol: 0.06, gamesPlayed: 30, peakRating: 1600 } }) },
   })),
 }));
 
 vi.mock('../supabaseUtils', () => ({
   supabaseFetch: vi.fn(async (path) => {
+    if (path.includes('rating_cutover_gate')) return [{ quiesced: false }];
     if (path.includes('/profiles?id=eq.')) {
       const match = path.match(/eq\.([^&]+)/);
       const userId = match ? match[1] : 'unknown';
@@ -66,13 +69,14 @@ describe('applyActiveMatchForfeit', () => {
     resetLiveRoomPersistenceForTests();
     setLiveRoomPersistenceShuttingDown(true);
     resetRoomRuntimeForTests();
+    resetRatingCutoverGateForTests();
     persistRoomMatchLogMock.mockClear();
     vi.mocked(processRealtimeMultiplayerGame).mockClear();
     vi.mocked(insertRankedGameIdempotent).mockClear();
     vi.mocked(supabaseFetch).mockClear();
 
     initRoomSession({} as any, {
-      resolveSocketIdentity: async () => ({ username: 'Player', userId: 'u1' }),
+      resolveSocketIdentity: async () => ({ username: 'Player', userId: '11111111-1111-4111-8111-111111111111' }),
       normalizeUsername: (value) => (typeof value === 'string' && value.trim() ? value.trim() : 'Guest'),
       normalizeUserId: (value) => (typeof value === 'string' && value.trim() ? value.trim() : null),
       tryHydrateMatchmakingRoomShell: async () => 'skipped',
@@ -85,7 +89,24 @@ describe('applyActiveMatchForfeit', () => {
   });
 
   afterEach(() => {
+    resetRatingCutoverGateForTests();
     resetLiveRoomPersistenceForTests();
+  });
+
+  it('rejects a new rated forfeit before abandon or durable writes while quiesced', async () => {
+    setLegacyRatingWritersEnforcedForTests(true);
+    const roomCode = 'DRAIN1';
+    createReservedRoom(roomCode);
+    joinRoom(roomCode, 'p1'); joinRoom(roomCode, 'p2');
+    const a = { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: '11111111-1111-4111-8111-111111111111' };
+    setRoomRoster(roomCode, [a, { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: '22222222-2222-4222-8222-222222222222' }]);
+    vi.mocked(supabaseFetch).mockResolvedValueOnce([{ quiesced: true }] as never);
+    await expect(applyActiveMatchForfeit(makeIo(), { data: { userId: a.userId } } as any, roomCode, a))
+      .rejects.toMatchObject({ code: 'rating_cutover_quiesced', retryable: true });
+    expect(getRoom(roomCode).abandonedAt).toBeFalsy();
+    expect(insertRankedGameIdempotent).not.toHaveBeenCalled();
+    expect(processRealtimeMultiplayerGame).not.toHaveBeenCalled();
+    expect(persistRoomMatchLogMock).not.toHaveBeenCalled();
   });
 
   it('returns null without mutating when the room is already abandoned', async () => {
@@ -94,18 +115,18 @@ describe('applyActiveMatchForfeit', () => {
     joinRoom(roomCode, 'p1');
     joinRoom(roomCode, 'p2');
     setRoomRoster(roomCode, [
-      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
-      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: '11111111-1111-4111-8111-111111111111' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: '22222222-2222-4222-8222-222222222222' },
     ]);
     const room = getRoom(roomCode);
     room.abandonedAt = new Date().toISOString();
 
     const io = makeIo();
-    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const socket = { id: 'sock-p1', data: { userId: '11111111-1111-4111-8111-111111111111' } } as any;
     const result = await applyActiveMatchForfeit(io, socket, roomCode, {
       id: 'p1',
       username: 'P1',
-      userId: 'u1',
+      userId: '11111111-1111-4111-8111-111111111111',
     });
 
     expect(result).toBeNull();
@@ -119,8 +140,8 @@ describe('applyActiveMatchForfeit', () => {
     joinRoom(roomCode, 'p1');
     joinRoom(roomCode, 'p2');
     setRoomRoster(roomCode, [
-      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
-      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: '11111111-1111-4111-8111-111111111111' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: '22222222-2222-4222-8222-222222222222' },
     ]);
 
     const room = getRoom(roomCode);
@@ -134,18 +155,18 @@ describe('applyActiveMatchForfeit', () => {
     } as any;
 
     const io = makeIo();
-    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const socket = { id: 'sock-p1', data: { userId: '11111111-1111-4111-8111-111111111111' } } as any;
     await applyActiveMatchForfeit(io, socket, roomCode, {
       id: 'p1',
       username: 'P1',
-      userId: 'u1',
+      userId: '11111111-1111-4111-8111-111111111111',
     });
 
     expect(insertRankedGameIdempotent).toHaveBeenCalledTimes(2);
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledTimes(1);
     // p1 quit while ahead 5-0 and still takes the loss.
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
-      expect.objectContaining({ playerId: 'u1', outcome: 'loss' }),
+      expect.objectContaining({ playerId: '11111111-1111-4111-8111-111111111111', outcome: 'loss' }),
     );
   });
 
@@ -155,8 +176,8 @@ describe('applyActiveMatchForfeit', () => {
     joinRoom(roomCode, 'p1');
     joinRoom(roomCode, 'p2');
     setRoomRoster(roomCode, [
-      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
-      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: '11111111-1111-4111-8111-111111111111' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: '22222222-2222-4222-8222-222222222222' },
     ]);
 
     const room = getRoom(roomCode);
@@ -170,16 +191,16 @@ describe('applyActiveMatchForfeit', () => {
     } as any;
 
     const io = makeIo();
-    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const socket = { id: 'sock-p1', data: { userId: '11111111-1111-4111-8111-111111111111' } } as any;
     await applyActiveMatchForfeit(io, socket, roomCode, {
       id: 'p1',
       username: 'P1',
-      userId: 'u1',
+      userId: '11111111-1111-4111-8111-111111111111',
     }, 'manual');
 
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
-        ratingScale: 1.0,
+        playerAGame: expect.objectContaining({ rating_context: expect.objectContaining({ treatment: 'standard' }) }),
       })
     );
     expect(insertRankedGameIdempotent).toHaveBeenCalledTimes(2);
@@ -188,8 +209,8 @@ describe('applyActiveMatchForfeit', () => {
     // winner p2's actual room.state score (20) are used as-is.
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
       expect.objectContaining({
-        playerId: 'u1',
-        opponentId: 'u2',
+        playerId: '11111111-1111-4111-8111-111111111111',
+        opponentId: '22222222-2222-4222-8222-222222222222',
         playerScore: 15,
         opponentScore: 20,
       })
@@ -202,8 +223,8 @@ describe('applyActiveMatchForfeit', () => {
     joinRoom(roomCode, 'p1');
     joinRoom(roomCode, 'p2');
     setRoomRoster(roomCode, [
-      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
-      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: '11111111-1111-4111-8111-111111111111' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: '22222222-2222-4222-8222-222222222222' },
     ]);
 
     const room = getRoom(roomCode);
@@ -217,16 +238,16 @@ describe('applyActiveMatchForfeit', () => {
     } as any;
 
     const io = makeIo();
-    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const socket = { id: 'sock-p1', data: { userId: '11111111-1111-4111-8111-111111111111' } } as any;
     await applyActiveMatchForfeit(io, socket, roomCode, {
       id: 'p1',
       username: 'P1',
-      userId: 'u1',
+      userId: '11111111-1111-4111-8111-111111111111',
     }, 'disconnect_timeout');
 
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
-        ratingScale: 0.5,
+        playerAGame: expect.objectContaining({ rating_context: expect.objectContaining({ treatment: 'disconnect_forfeit', outcome: 'loss' }) }),
       })
     );
   });
@@ -237,8 +258,8 @@ describe('applyActiveMatchForfeit', () => {
     joinRoom(roomCode, 'p1');
     joinRoom(roomCode, 'p2');
     setRoomRoster(roomCode, [
-      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
-      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: '11111111-1111-4111-8111-111111111111' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: '22222222-2222-4222-8222-222222222222' },
     ]);
 
     const room = getRoom(roomCode);
@@ -252,11 +273,11 @@ describe('applyActiveMatchForfeit', () => {
     } as any;
 
     const io = makeIo();
-    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const socket = { id: 'sock-p1', data: { userId: '11111111-1111-4111-8111-111111111111' } } as any;
     await applyActiveMatchForfeit(io, socket, roomCode, {
       id: 'p1',
       username: 'P1',
-      userId: 'u1',
+      userId: '11111111-1111-4111-8111-111111111111',
     }, 'manual');
 
     // Old behavior would have written opponentScore: 60 (Math.max(60, 10))
@@ -264,8 +285,8 @@ describe('applyActiveMatchForfeit', () => {
     // below the old synthesized floor of 60 — it must be written honestly.
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
       expect.objectContaining({
-        playerId: 'u1',
-        opponentId: 'u2',
+        playerId: '11111111-1111-4111-8111-111111111111',
+        opponentId: '22222222-2222-4222-8222-222222222222',
         playerScore: 3,
         opponentScore: 10,
       })
@@ -279,13 +300,14 @@ describe('tournament forfeit apply durability (G2)', () => {
     resetLiveRoomPersistenceForTests();
     setLiveRoomPersistenceShuttingDown(true);
     resetRoomRuntimeForTests();
+    resetRatingCutoverGateForTests();
     persistRoomMatchLogMock.mockClear();
     applyMatchResultMock.mockReset();
     fetchMatchByIdMock.mockReset();
     emitMpAuthorityFunnelMock.mockClear();
 
     initRoomSession({} as any, {
-      resolveSocketIdentity: async () => ({ username: 'Player', userId: 'u1' }),
+      resolveSocketIdentity: async () => ({ username: 'Player', userId: '11111111-1111-4111-8111-111111111111' }),
       normalizeUsername: (value) => (typeof value === 'string' && value.trim() ? value.trim() : 'Guest'),
       normalizeUserId: (value) => (typeof value === 'string' && value.trim() ? value.trim() : null),
       tryHydrateMatchmakingRoomShell: async () => 'skipped',
@@ -298,6 +320,7 @@ describe('tournament forfeit apply durability (G2)', () => {
   });
 
   afterEach(() => {
+    resetRatingCutoverGateForTests();
     resetLiveRoomPersistenceForTests();
     vi.useRealTimers();
   });
@@ -307,8 +330,8 @@ describe('tournament forfeit apply durability (G2)', () => {
     joinRoom(roomCode, 'p1');
     joinRoom(roomCode, 'p2');
     setRoomRoster(roomCode, [
-      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
-      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: '11111111-1111-4111-8111-111111111111' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: '22222222-2222-4222-8222-222222222222' },
     ]);
     const room = getRoom(roomCode);
     room.scheduledTournamentId = 'tour-1';
@@ -327,8 +350,8 @@ describe('tournament forfeit apply durability (G2)', () => {
     fetchMatchByIdMock.mockResolvedValue({
       id: 'match-1',
       tournament_id: 'tour-1',
-      player1_id: 'u1',
-      player2_id: 'u2',
+      player1_id: '11111111-1111-4111-8111-111111111111',
+      player2_id: '22222222-2222-4222-8222-222222222222',
     });
     return room;
   }
@@ -338,31 +361,31 @@ describe('tournament forfeit apply durability (G2)', () => {
     applyMatchResultMock.mockResolvedValue(undefined);
 
     const io = makeIo();
-    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const socket = { id: 'sock-p1', data: { userId: '11111111-1111-4111-8111-111111111111' } } as any;
     const result = await applyActiveMatchForfeit(io, socket, 'TFOR1', {
       id: 'p1',
       username: 'P1',
-      userId: 'u1',
+      userId: '11111111-1111-4111-8111-111111111111',
     });
 
-    expect(result).toEqual({ winnerUserId: 'u2' });
+    expect(result).toEqual({ winnerUserId: '22222222-2222-4222-8222-222222222222' });
     expect(applyMatchResultMock).toHaveBeenCalledTimes(1);
     expect(applyMatchResultMock).toHaveBeenCalledWith(
       io,
       expect.objectContaining({
         matchId: 'match-1',
-        winnerId: 'u2',
+        winnerId: '22222222-2222-4222-8222-222222222222',
         winnerSource: 'forfeit',
-        forfeitUserId: 'u1',
+        forfeitUserId: '11111111-1111-4111-8111-111111111111',
       }),
     );
     expect(room.abandonedAt).toEqual(expect.any(String));
     expect(room.tournamentForfeitApplyStatus).toBe('succeeded');
-    expect(room.abandonedWinnerUserId).toBe('u2');
+    expect(room.abandonedWinnerUserId).toBe('22222222-2222-4222-8222-222222222222');
     expect(io.__emit).toHaveBeenCalledWith(
       'room:match_abandoned',
       expect.objectContaining({
-        winnerId: 'u2',
+        winnerId: '22222222-2222-4222-8222-222222222222',
         isTournament: true,
         scheduledTournamentMatchId: 'match-1',
       }),
@@ -378,11 +401,11 @@ describe('tournament forfeit apply durability (G2)', () => {
       .mockResolvedValue(undefined);
 
     const io = makeIo();
-    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const socket = { id: 'sock-p1', data: { userId: '11111111-1111-4111-8111-111111111111' } } as any;
     const pending = applyActiveMatchForfeit(io, socket, 'TFOR2', {
       id: 'p1',
       username: 'P1',
-      userId: 'u1',
+      userId: '11111111-1111-4111-8111-111111111111',
     });
 
     await vi.advanceTimersByTimeAsync(0);
@@ -393,13 +416,13 @@ describe('tournament forfeit apply durability (G2)', () => {
     await vi.runAllTimersAsync();
     const result = await pending;
 
-    expect(result).toEqual({ winnerUserId: 'u2' });
+    expect(result).toEqual({ winnerUserId: '22222222-2222-4222-8222-222222222222' });
     expect(applyMatchResultMock).toHaveBeenCalledTimes(2);
     expect(room.abandonedAt).toEqual(expect.any(String));
     expect(room.tournamentForfeitApplyStatus).toBe('succeeded');
     expect(io.__emit).toHaveBeenCalledWith(
       'room:match_abandoned',
-      expect.objectContaining({ winnerId: 'u2' }),
+      expect.objectContaining({ winnerId: '22222222-2222-4222-8222-222222222222' }),
     );
   });
 
@@ -409,11 +432,11 @@ describe('tournament forfeit apply durability (G2)', () => {
     applyMatchResultMock.mockRejectedValue(new Error('db_down'));
 
     const io = makeIo();
-    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const socket = { id: 'sock-p1', data: { userId: '11111111-1111-4111-8111-111111111111' } } as any;
     const pending = applyActiveMatchForfeit(io, socket, 'TFOR3', {
       id: 'p1',
       username: 'P1',
-      userId: 'u1',
+      userId: '11111111-1111-4111-8111-111111111111',
     });
     await vi.runAllTimersAsync();
     const result = await pending;
@@ -457,11 +480,11 @@ describe('tournament forfeit apply durability (G2)', () => {
     });
 
     const io = makeIo();
-    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const socket = { id: 'sock-p1', data: { userId: '11111111-1111-4111-8111-111111111111' } } as any;
     const pending = applyActiveMatchForfeit(io, socket, 'TFOR4', {
       id: 'p1',
       username: 'P1',
-      userId: 'u1',
+      userId: '11111111-1111-4111-8111-111111111111',
     });
 
     await applyEntered;
@@ -484,11 +507,12 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     resetLiveRoomPersistenceForTests();
     setLiveRoomPersistenceShuttingDown(true);
     resetRoomRuntimeForTests();
+    resetRatingCutoverGateForTests();
     vi.mocked(processRealtimeMultiplayerGame).mockClear();
     vi.mocked(insertRankedGameIdempotent).mockClear();
 
     initRoomSession({} as any, {
-      resolveSocketIdentity: async () => ({ username: 'Player', userId: 'u1' }),
+      resolveSocketIdentity: async () => ({ username: 'Player', userId: '11111111-1111-4111-8111-111111111111' }),
       normalizeUsername: (value) => (typeof value === 'string' && value.trim() ? value.trim() : 'Guest'),
       normalizeUserId: (value) => (typeof value === 'string' && value.trim() ? value.trim() : null),
       tryHydrateMatchmakingRoomShell: async () => 'skipped',
@@ -501,6 +525,7 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
   });
 
   afterEach(() => {
+    resetRatingCutoverGateForTests();
     resetLiveRoomPersistenceForTests();
   });
 
@@ -514,8 +539,8 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     joinRoom(roomCode, 'p1');
     joinRoom(roomCode, 'p2');
     setRoomRoster(roomCode, [
-      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
-      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: '11111111-1111-4111-8111-111111111111' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: '22222222-2222-4222-8222-222222222222' },
     ]);
     const room = getRoom(roomCode);
     room.state = {
@@ -528,12 +553,12 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     } as any;
 
     const io = makeIo();
-    const socket = { id: 'sock-p1', data: { userId: 'u1' } } as any;
+    const socket = { id: 'sock-p1', data: { userId: '11111111-1111-4111-8111-111111111111' } } as any;
     return applyActiveMatchForfeit(
       io,
       socket,
       roomCode,
-      { id: 'p1', username: 'P1', userId: 'u1' },
+      { id: 'p1', username: 'P1', userId: '11111111-1111-4111-8111-111111111111' },
       reason,
     );
   }
@@ -542,12 +567,12 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     const result = await forfeitWithScores('FSIGN1', 40, 20);
 
     // Match history already had this right; the rating write now agrees with it.
-    expect(result).toEqual({ winnerUserId: 'u2' });
+    expect(result).toEqual({ winnerUserId: '22222222-2222-4222-8222-222222222222' });
 
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
       expect.objectContaining({
-        playerId: 'u1',
-        opponentId: 'u2',
+        playerId: '11111111-1111-4111-8111-111111111111',
+        opponentId: '22222222-2222-4222-8222-222222222222',
         playerScore: 40,
         opponentScore: 20,
         outcome: 'loss',
@@ -555,8 +580,8 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     );
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
       expect.objectContaining({
-        playerId: 'u2',
-        opponentId: 'u1',
+        playerId: '22222222-2222-4222-8222-222222222222',
+        opponentId: '11111111-1111-4111-8111-111111111111',
         playerScore: 20,
         opponentScore: 40,
         outcome: 'win',
@@ -569,8 +594,8 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
 
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
-        playerAOutcome: 'loss',
-        playerBOutcome: 'win',
+        playerAGame: expect.objectContaining({ outcome: 'loss', rating_context: expect.objectContaining({ outcome: 'loss' }) }),
+        playerBGame: expect.objectContaining({ outcome: 'win', rating_context: expect.objectContaining({ outcome: 'win' }) }),
       }),
     );
   });
@@ -579,10 +604,10 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     await forfeitWithScores('FSIGN3', 20, 40);
 
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
-      expect.objectContaining({ playerId: 'u1', outcome: 'loss' }),
+      expect.objectContaining({ playerId: '11111111-1111-4111-8111-111111111111', outcome: 'loss' }),
     );
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
-      expect.objectContaining({ playerId: 'u2', outcome: 'win' }),
+      expect.objectContaining({ playerId: '22222222-2222-4222-8222-222222222222', outcome: 'win' }),
     );
   });
 
@@ -590,10 +615,10 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     await forfeitWithScores('FSIGN4', 30, 30);
 
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
-      expect.objectContaining({ playerId: 'u1', outcome: 'loss' }),
+      expect.objectContaining({ playerId: '11111111-1111-4111-8111-111111111111', outcome: 'loss' }),
     );
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
-      expect.objectContaining({ playerId: 'u2', outcome: 'win' }),
+      expect.objectContaining({ playerId: '22222222-2222-4222-8222-222222222222', outcome: 'win' }),
     );
   });
 
@@ -602,9 +627,8 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
 
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
-        ratingScale: 0.5,
-        playerAOutcome: 'loss',
-        playerBOutcome: 'win',
+        playerAGame: expect.objectContaining({ outcome: 'loss', rating_context: expect.objectContaining({ treatment: 'disconnect_forfeit', outcome: 'loss' }) }),
+        playerBGame: expect.objectContaining({ outcome: 'win', rating_context: expect.objectContaining({ outcome: 'win' }) }),
       }),
     );
   });
@@ -615,8 +639,8 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     joinRoom(roomCode, 'p1');
     joinRoom(roomCode, 'p2');
     setRoomRoster(roomCode, [
-      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: 'u1' },
-      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: 'u2' },
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: '11111111-1111-4111-8111-111111111111' },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: '22222222-2222-4222-8222-222222222222' },
     ]);
     const room = getRoom(roomCode);
     room.state = {
@@ -629,24 +653,111 @@ describe('forfeit rating outcome is decided by who quit, not by the scoreboard',
     } as any;
 
     const io = makeIo();
-    const socket = { id: 'sock-p2', data: { userId: 'u2' } } as any;
+    const socket = { id: 'sock-p2', data: { userId: '22222222-2222-4222-8222-222222222222' } } as any;
     await applyActiveMatchForfeit(
       io,
       socket,
       roomCode,
-      { id: 'p2', username: 'P2', userId: 'u2' },
+      { id: 'p2', username: 'P2', userId: '22222222-2222-4222-8222-222222222222' },
       'manual',
     );
 
     // Seat A is p1 (the stayer) — playerA is the seat, not the abandoner.
     expect(processRealtimeMultiplayerGame).toHaveBeenCalledWith(
       expect.objectContaining({
-        playerAOutcome: 'win',
-        playerBOutcome: 'loss',
+        playerAGame: expect.objectContaining({ outcome: 'win' }),
+        playerBGame: expect.objectContaining({ outcome: 'loss' }),
       }),
     );
     expect(insertRankedGameIdempotent).toHaveBeenCalledWith(
-      expect.objectContaining({ playerId: 'u2', outcome: 'loss' }),
+      expect.objectContaining({ playerId: '22222222-2222-4222-8222-222222222222', outcome: 'loss' }),
     );
+  });
+});
+
+describe('forfeit completion durability (terminal-completion R1)', () => {
+  const U1 = '11111111-1111-4111-8111-111111111111';
+  const U2 = '22222222-2222-4222-8222-222222222222';
+
+  beforeEach(() => {
+    resetLiveRoomPersistenceForTests();
+    resetRoomRuntimeForTests();
+    resetRatingCutoverGateForTests();
+    persistRoomMatchLogMock.mockClear();
+    vi.mocked(insertRankedGameIdempotent).mockClear();
+    vi.mocked(supabaseFetch).mockClear();
+    initRoomSession({} as any, {
+      resolveSocketIdentity: async () => ({ username: 'Player', userId: U1 }),
+      normalizeUsername: (value) => (typeof value === 'string' && value.trim() ? value.trim() : 'Guest'),
+      normalizeUserId: (value) => (typeof value === 'string' && value.trim() ? value.trim() : null),
+      tryHydrateMatchmakingRoomShell: async () => 'skipped',
+      waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+      onAfterMatchStarted: async () => undefined,
+      notifyRoomPlayersInGame: () => undefined,
+      persistRoomMatchLog: persistRoomMatchLogMock,
+      onGameOver: () => null,
+    });
+  });
+
+  afterEach(() => {
+    resetRatingCutoverGateForTests();
+    resetLiveRoomPersistenceForTests();
+  });
+
+  function seed(roomCode: string) {
+    createReservedRoom(roomCode);
+    joinRoom(roomCode, 'p1');
+    joinRoom(roomCode, 'p2');
+    setRoomRoster(roomCode, [
+      { id: 'p1', socketId: 'sock-p1', username: 'P1', userId: U1 },
+      { id: 'p2', socketId: 'sock-p2', username: 'P2', userId: U2 },
+    ]);
+    const room = getRoom(roomCode);
+    room.state = {
+      config: { scoringMultiple: 5, winningScore: 60, deadTileCount: 2, maxPips: 6, tilesPerPlayer: 7 },
+      playerIds: ['p1', 'p2'],
+      players: { p1: { id: 'p1', hand: [], score: 3 }, p2: { id: 'p2', hand: [], score: 10 } },
+      boneyard: [], deadTiles: [], board: null, sequence: 1,
+    } as any;
+    return room;
+  }
+  const leaver = { id: 'p1', username: 'P1', userId: U1 };
+  const socket = { id: 'sock-p1', data: { userId: U1 } } as any;
+
+  it('makes the abandoned intent durable BEFORE any ranked row, carrying the reason a restart replay needs', async () => {
+    const room = seed('WAHEAD');
+    await applyActiveMatchForfeit(makeIo(), socket, 'WAHEAD', leaver, 'disconnect_timeout');
+    const snapshotCall = vi.mocked(supabaseFetch).mock.calls.findIndex(
+      ([path, init]) => String(path).includes('/room_live_sessions') && (init as RequestInit | undefined)?.method === 'POST',
+    );
+    expect(snapshotCall).toBeGreaterThanOrEqual(0);
+    const snapshotOrder = vi.mocked(supabaseFetch).mock.invocationCallOrder[snapshotCall]!;
+    expect(snapshotOrder).toBeLessThan(vi.mocked(insertRankedGameIdempotent).mock.invocationCallOrder[0]!);
+    const body = JSON.parse(String((vi.mocked(supabaseFetch).mock.calls[snapshotCall]![1] as RequestInit).body))[0];
+    expect(body.status).toBe('abandoned');
+    expect(body.room_shell).toMatchObject({
+      completionPending: true,
+      matchLogged: false,
+      abandonedReason: 'forfeit',
+      abandonedForfeitReason: 'disconnect_timeout',
+      abandonedByUserId: U1,
+    });
+    expect(room.abandonedForfeitReason).toBe('disconnect_timeout');
+  });
+
+  it('marks the completion logged only when the rated rows were written', async () => {
+    const room = seed('WLOGGED');
+    await applyActiveMatchForfeit(makeIo(), socket, 'WLOGGED', leaver, 'manual');
+    expect(room.matchLogged).toBe(true);
+  });
+
+  it('a failed rating write leaves the completion owed (not logged) while the abandon still completes', async () => {
+    const room = seed('WOWED');
+    vi.mocked(insertRankedGameIdempotent).mockRejectedValueOnce(new Error('db down'));
+    const result = await applyActiveMatchForfeit(makeIo(), socket, 'WOWED', leaver, 'manual');
+    expect(result).toEqual({ winnerUserId: U2 });
+    expect(room.matchLogged).toBe(false);
+    expect(room.abandonedAt).toBeTruthy();
+    expect(persistRoomMatchLogMock).toHaveBeenCalledWith(room, 'abandoned');
   });
 });

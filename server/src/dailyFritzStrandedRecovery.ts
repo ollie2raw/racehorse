@@ -1,3 +1,4 @@
+import { processTimeout, processInterval } from './platform/processLifecycle';
 import { childLogger } from './logger';
 import { withDailyFritzAttemptLock } from './dailyFritzAttemptLock';
 import {
@@ -40,11 +41,19 @@ export const DAILY_FRITZ_STRANDED_RECOVERY_BOOT_DELAY_MS = 20_000;
 type StrandedOutcome = 'finalized' | 'skipped';
 let scanAfterId: string | undefined;
 let sweepRunning = false;
+const failedAttempts = new Map<string, { attempts: number; retryAt: number }>();
+function deferFailedAttempt(id: string, now: number): void {
+  const attempts = Math.min(6, (failedAttempts.get(id)?.attempts ?? 0) + 1);
+  failedAttempts.delete(id);
+  failedAttempts.set(id, { attempts, retryAt: now + Math.min(6 * 60 * 60_000, 30 * 60_000 * 2 ** (attempts - 1)) });
+  if (failedAttempts.size > 1000) failedAttempts.delete(failedAttempts.keys().next().value!);
+}
 
 /** Test seam; production resets the cursor only on restart or page wrap. */
 export function resetDailyFritzRecoveryScanForTests(): void {
   scanAfterId = undefined;
   sweepRunning = false;
+  failedAttempts.clear();
 }
 
 /**
@@ -64,16 +73,24 @@ export async function recoverStrandedDailyFritzAttempts(options?: {
   minAgeMs?: number;
   now?: number;
 }): Promise<{ scanned: number; finalized: number; skipped: number }> {
-  if (sweepRunning) return { scanned: 0, finalized: 0, skipped: 0 };
+  if (sweepRunning) {
+    log.info({ outcome: 'already_running' }, 'sweep skipped');
+    return { scanned: 0, finalized: 0, skipped: 0 };
+  }
   sweepRunning = true;
+  const startedAt = Date.now();
   try {
     return await runStrandedSweep(options);
+  } catch (error) {
+    log.warn({ durationMs: Date.now() - startedAt, outcome: 'failed', error: msg(error) }, 'sweep failed');
+    throw error;
   } finally {
     sweepRunning = false;
   }
 }
 
 async function runStrandedSweep(options?: { minAgeMs?: number; now?: number }): Promise<{ scanned: number; finalized: number; skipped: number }> {
+  const sweepStartedAt = Date.now();
   const minAgeMs = options?.minAgeMs ?? DAILY_FRITZ_STRANDED_ATTEMPT_MIN_AGE_MS;
   const now = options?.now ?? Date.now();
   const startedBeforeIso = new Date(now - minAgeMs).toISOString();
@@ -88,6 +105,8 @@ async function runStrandedSweep(options?: { minAgeMs?: number; now?: number }): 
 
   let finalized = 0;
   let skipped = 0;
+  let failed = 0;
+  let backedOff = 0;
   for (const candidate of candidates) {
     // Incomplete and ambiguous rows remain untouched/resumable. They cause no
     // full-row refetch, write or per-row event on any subsequent sweep.
@@ -108,11 +127,19 @@ async function runStrandedSweep(options?: { minAgeMs?: number; now?: number }): 
       skipped += 1;
       continue;
     }
+    if ((failedAttempts.get(candidate.id)?.retryAt ?? 0) > now) {
+      skipped += 1;
+      backedOff += 1;
+      continue;
+    }
     try {
       if ((await finalizeOneStrandedAttempt(candidate)) === 'finalized') finalized += 1;
       else skipped += 1;
     } catch (error) {
+      if (/Supabase request (?:failed: (?:401|403|404|429|5\d\d)|timed out)|fetch failed|ECONN|ETIMEDOUT/i.test(msg(error))) throw error;
       skipped += 1;
+      failed += 1;
+      deferFailedAttempt(candidate.id, now);
       log.error({ attemptId: candidate.id, error: msg(error) }, 'finalize failed');
       await recordDailyFritzEventBestEffort({
         attemptId: candidate.id,
@@ -127,9 +154,8 @@ async function runStrandedSweep(options?: { minAgeMs?: number; now?: number }): 
 
   scanAfterId = candidates.length === DAILY_FRITZ_STRANDED_SCAN_LIMIT ? candidates[candidates.length - 1]!.id : undefined;
 
-  if (candidates.length > 0) {
-    log.info({ scanned: candidates.length, finalized, skipped }, 'sweep complete');
-  }
+  log.info({ durationMs: Date.now() - sweepStartedAt, scanned: candidates.length, finalized, skipped,
+    failed, backedOff, nextPage: scanAfterId !== undefined, outcome: failed ? 'partial' : 'success' }, 'sweep complete');
   return { scanned: candidates.length, finalized, skipped };
 }
 
@@ -228,10 +254,10 @@ let scheduled = false;
 export function scheduleStrandedDailyFritzRecovery(): void {
   if (scheduled) return;
   scheduled = true;
-  setTimeout(() => {
-    void recoverStrandedDailyFritzAttempts().catch((error) => log.warn({ error: msg(error) }, 'boot sweep failed'));
+  processTimeout('daily-fritz-recovery', () => {
+    return recoverStrandedDailyFritzAttempts().catch((error) => log.warn({ error: msg(error) }, 'boot sweep failed'));
   }, DAILY_FRITZ_STRANDED_RECOVERY_BOOT_DELAY_MS);
-  setInterval(() => {
-    void recoverStrandedDailyFritzAttempts().catch((error) => log.warn({ error: msg(error) }, 'periodic sweep failed'));
+  processInterval('daily-fritz-recovery', () => {
+    return recoverStrandedDailyFritzAttempts().catch((error) => log.warn({ error: msg(error) }, 'periodic sweep failed'));
   }, DAILY_FRITZ_STRANDED_RECOVERY_INTERVAL_MS);
 }

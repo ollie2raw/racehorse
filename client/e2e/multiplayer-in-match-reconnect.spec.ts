@@ -19,6 +19,7 @@ import {
   attachServerStateProbe,
   readLastServerStateSnapshot,
   readServerStateLog,
+  shareGuestSeatCredentials,
   wipeNonIdentityLocalStorage,
   installStaleMoveProbe,
   readStaleMoveAck,
@@ -104,6 +105,7 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
 
     const secondaryContext = await browser.newContext();
     await seedPlayerIdentity(secondaryContext, identity);
+    await shareGuestSeatCredentials(primaryPage, secondaryContext);
     await secondaryContext.addInitScript((code) => {
       window.localStorage.setItem('racehorse_last_room_code', code);
     }, roomCode);
@@ -186,6 +188,7 @@ test.describe('Multiplayer in-match reconnect E2E', () => {
 
     const secondaryContext = await browser.newContext();
     await seedPlayerIdentity(secondaryContext, identity);
+    await shareGuestSeatCredentials(primaryPage, secondaryContext);
     await secondaryContext.addInitScript((code) => {
       window.localStorage.setItem('racehorse_last_room_code', code);
     }, roomCode);

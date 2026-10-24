@@ -17,6 +17,7 @@ import { withDailyFritzAttemptLock } from '../../dailyFritzAttemptLock';
 import {
   buildRecordedDailyFritzAttemptResult,
   classifyDailyFritzGameRecordingPosition,
+  isDailyFritzVerifierProtocolAttempt,
   isIdenticalDailyFritzGameReplay,
   readAuthorityLedger,
 } from './dailyFritzVerificationPolicy';
@@ -362,6 +363,17 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
       res.status(400).json({ error: 'Daily Fritz games cannot be recorded with tied scores.' });
       return;
     }
+    if (!parsedTranscript && isDailyFritzVerifierProtocolAttempt(attempt.result)) {
+      // Saved (never-strand) but recorded as advanced without a receipt, exactly like a rejected transcript: it must not
+      // become indistinguishable from a pre-verifier legacy finish and earn streak credit on a fabricated score.
+      attempt.result = writeUnverifiedDailyFritzHand(attempt.result, {
+        gameNumber,
+        handIndex: attempt.currentHandIndex,
+        verifierCode: 'missing_transcript',
+        playerScoreAfter: playerScore,
+        fritzScoreAfter: fritzScore,
+      });
+    }
     const playerWon = playerScore > fritzScore;
     const gameResult: DailyFritzSetGameResult = {
       gameNumber,
@@ -464,7 +476,9 @@ export function registerDailyFritzRecordGameRoute(app: Application): void {
     const recordedGame = (savedSetResult ?? setResult).games.find(
       (game: DailyFritzSetGameResult) => game.gameNumber === gameNumber,
     );
-    if (recordedGame) {
+    // Public surface: publish only a result the verifier derived (`terminalHandReceipt`, whose scores replace the claim above).
+    // A score-only or rejected game is still saved (never-strand) but, like the leaderboard and streak, never reaches friends' feeds.
+    if (recordedGame && terminalHandReceipt) {
       void writeDailyFritzGameActivity({
         userId: authenticatedUserId,
         gameNumber: recordedGame.gameNumber,

@@ -63,8 +63,9 @@ export async function recordMatchStart(params: {
       await sleep(delayMs);
     }
     try {
-      await supabaseFetch('/rest/v1/matchmaking_matches', {
+      await supabaseFetch('/rest/v1/matchmaking_matches?on_conflict=id', {
         method: 'POST',
+        headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' },
         body: JSON.stringify({
           id,
           room_code: params.roomCode,
@@ -100,6 +101,7 @@ export async function recordMatchEnd(params: {
   playerARatingChange: number | null;
   playerBRatingChange: number | null;
   isSim?: boolean;
+  throwOnError?: boolean;
 }): Promise<void> {
   if (params.isSim) return;
   const endedAt = new Date().toISOString();
@@ -123,6 +125,7 @@ export async function recordMatchEnd(params: {
       },
     );
   } catch (err) {
+    if (params.throwOnError) throw err;
     console.warn('[matchmaking] recordMatchEnd failed', err instanceof Error ? err.message : err);
   }
 }

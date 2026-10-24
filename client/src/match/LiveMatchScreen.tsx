@@ -1,3 +1,4 @@
+import { TurnStatus } from '../components/TurnStatus';
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import {
   AnimatedScore,
@@ -788,9 +789,7 @@ export function LiveMatchScreen({
                       opponent={tournamentOpponent}
                     />
                   ) : isHandActive ? (
-                    <span className={`wl-turn-label rh-hud-turn ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
-                      {isMyTurn ? 'Your move' : 'Opponent thinking'}
-                    </span>
+                    <TurnStatus label={isMyTurn ? 'Your move' : 'Opponent thinking'} isYourTurn={isMyTurn} />
                   ) : null}
                   {scrubberActive && !tournamentMatch && (
                     <MatchHistoryScrubber scrubber={historyScrubber} />
@@ -962,6 +961,8 @@ export function LiveMatchScreen({
                       ref={boardRef}
                       showZoomTray={false}
                       board={shownBoard}
+                      feedbackScope={state.handNumber}
+                      placementFeedback={!viewingHistory && roomRecoveryState === 'idle' && !opponentDisconnected && isHandActive}
                       legalMoves={shownLegalMoves}
                       selectedTile={shownSelectedTile}
                       lastPlayedTile={shownLastPlayedTile}

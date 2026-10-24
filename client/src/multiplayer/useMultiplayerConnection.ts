@@ -31,6 +31,7 @@ import {
 import {
   createLifecycleHiddenTracker,
   evaluateLifecycleResumeResync,
+  LIFECYCLE_HEARTBEAT_MS,
 } from './multiplayerLifecycleRecovery';
 import {
   recordJoinLatency,
@@ -50,6 +51,7 @@ import {
   isCurrentRoomOperation,
 } from './roomOperationEpoch';
 import { publicPlayerName } from '../identity/publicPlayerName';
+import { presenceIdentifyForAuthChange } from './presenceIdentifyOnAuthChange';
 
 type SocketWithPing = Socket & { __mpPingTimer?: ReturnType<typeof setInterval> };
 
@@ -299,8 +301,13 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('pageshow', onPageShow);
+    // Native WKWebView: JS is suspended while hidden and the hide event may only arrive at resume, so also measure
+    // suspension as a gap in this heartbeat (see LIFECYCLE_SUSPEND_GAP_MS).
+    hiddenTracker.markAlive(Date.now());
+    const heartbeat = window.setInterval(() => hiddenTracker.markAlive(Date.now()), LIFECYCLE_HEARTBEAT_MS);
 
     return () => {
+      window.clearInterval(heartbeat);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('pageshow', onPageShow);
@@ -641,16 +648,17 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     const socket = scope.socket.socketRef?.current;
     if (!socket?.connected) return;
 
-    const userId = scope.auth.authUserRef.current?.id;
-    if (!userId) return;
-
-    const username = publicPlayerName(scope.auth.authProfileRef.current?.username);
-
-    void scope.config.emitWithAck<RoomAckResponse>(socket, 'presence:identify', {
-      userId,
-      username,
+    // Signed out (or expired/revoked in another tab) while connected downgrades the socket to a guest identify, so it
+    // stops acting, and appearing online, as the previous account.
+    const identifyPayload = presenceIdentifyForAuthChange({
+      previousFingerprint: prev,
+      userId: scope.auth.authUserRef.current?.id ?? null,
+      username: publicPlayerName(scope.auth.authProfileRef.current?.username),
       authToken: scope.auth.authAccessTokenRef.current,
-    }).catch((error) => {
+    });
+    if (!identifyPayload) return;
+
+    void scope.config.emitWithAck<RoomAckResponse>(socket, 'presence:identify', identifyPayload).catch((error) => {
       if (import.meta.env.DEV) {
         logger.operational('presence', 're-identify on auth change failed', {
           error: error instanceof Error ? error.message : error,

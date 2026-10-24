@@ -102,6 +102,8 @@ export { solveExactEndgame, EXACT_ENDGAME_DEFAULT_WALL_CLOCK_CEILING_MS } from '
 export type { ExactEndgameBudget, ExactEndgameResult } from './solveExactEndgame';
 export { solveMidgameDeterminization } from './solveMidgameDeterminization';
 export type { MidgameConvergence, MidgameDeterminizationResult } from './solveMidgameDeterminization';
+export { deriveLegalActionsFromSnapshot, sanitizeSnapshotForReview } from './deriveReviewLegalActions';
+export type { SanitizedSnapshot } from './deriveReviewLegalActions';
 export { solveHeuristicOpening } from './solveHeuristicOpening';
 export type { HandPhase } from './solveHeuristicOpening';
 export { accuracyFromEvaluations, isScorable, ACCURACY_MODEL_VERSION, UNCALIBRATED_DEFAULT_K } from './reviewAccuracy';
@@ -121,6 +123,9 @@ export type { CalibratedLossBandBoundaries } from './accuracyModelCalibration';
 export { gradeFromAccuracy } from './accuracyGrade';
 export { computeGameAccuracyModel, MINIMUM_COVERAGE_FLOOR } from './gameAccuracyModel';
 export type { GameAccuracyModelResult } from './gameAccuracyModel';
+// OWNER-ONLY move quality: the played action is client-asserted, so this must not be persisted or shared (see the module header).
+export { deriveReviewedMoveQuality, assertMoveQualityShareable, MoveQualityNotShareableError } from './reviewedMoveQuality';
+export type { ReviewedMoveQuality, ShareableMoveQuality, MoveQualityProvenance } from './reviewedMoveQuality';
 export {
   serializeReviewCaptureRecordsToJsonl,
   deserializeReviewCaptureRecordsFromJsonl,

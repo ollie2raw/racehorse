@@ -33,10 +33,16 @@ describe('completeGhostGame — non-Fritz applyGlicko gating', () => {
           { user_id: USER_ID, ghost_rating: 800, last_updated: null, composite_log: null, style_profile: null, games_played: 5 },
         ]);
       }
-      if (url.includes('/rest/v1/ghost_profiles') && method === 'POST') {
-        const sent = JSON.parse(String(init?.body))[0];
+      if (url.includes('/rest/v1/ghost_profiles') && (method === 'POST' || method === 'PATCH')) {
+        const body = JSON.parse(String(init?.body));
+        const sent = Array.isArray(body) ? body[0] : body;
         profileUpsertBodies.push(sent);
         return jsonResponse([sent]);
+      }
+      if (url.includes('/rest/v1/rpc/complete_ghost_rating_v2')) {
+        const body = JSON.parse(String(init?.body));
+        return jsonResponse({ isNewGame: true, newRating: body.p_apply_rating ? 827 : 800,
+          ratingDelta: body.p_apply_rating ? 27 : 0 });
       }
       if (url.includes('/rest/v1/ghost_games') && method === 'POST') {
         return jsonResponse([{ id: 'game-1', xmax: '0' }]);
@@ -48,7 +54,7 @@ describe('completeGhostGame — non-Fritz applyGlicko gating', () => {
         return jsonResponse([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200 }]);
       }
       if (url.includes('/rest/v1/ranked_games') && method === 'POST') {
-        return jsonResponse([{ id: 'rg-1', player_id: USER_ID }]);
+        return jsonResponse([{ id: 'rg-1', ...JSON.parse(String(init?.body)) }]);
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
@@ -72,7 +78,7 @@ describe('completeGhostGame — non-Fritz applyGlicko gating', () => {
 
     expect(result.ratingDelta).not.toBe(0);
     const finalUpsert = profileUpsertBodies[profileUpsertBodies.length - 1];
-    expect(finalUpsert.ghost_rating).not.toBe(800);
+    expect(finalUpsert).not.toHaveProperty('ghost_rating');
   });
 
   it('writes NO rating change when applyGlicko is false — the score stays exactly what it was, not a fabricated delta', async () => {
@@ -89,8 +95,43 @@ describe('completeGhostGame — non-Fritz applyGlicko gating', () => {
     expect(result.ratingDelta).toBe(0);
     expect(result.newRating).toBe(800);
     const finalUpsert = profileUpsertBodies[profileUpsertBodies.length - 1];
-    expect(finalUpsert.ghost_rating).toBe(800);
-    expect(finalUpsert.games_played).toBe(5);
+    expect(finalUpsert).not.toHaveProperty('ghost_rating');
+    expect(finalUpsert).not.toHaveProperty('games_played');
+  });
+
+  it('does not rate the same verified Ghost match twice after a later completion write fails', async () => {
+    let rating = 800;
+    let gamesPlayed = 0;
+    let inserted = false;
+    fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.includes('/rest/v1/ghost_profiles') && method === 'GET') {
+        return jsonResponse([{
+          user_id: USER_ID, ghost_rating: rating, games_played: gamesPlayed,
+          recentGameStyles: null, composite_log: null, style_profile: null,
+        }]);
+      }
+      if (url.includes('/rest/v1/ghost_profiles') && method === 'PATCH') return jsonResponse([]);
+      if (url.includes('/rest/v1/rpc/complete_ghost_rating_v2')) {
+        const isNew = !inserted;
+        inserted = true;
+        if (isNew) {
+          rating = 827;
+          gamesPlayed += 1;
+        }
+        return jsonResponse({ isNewGame: isNew, newRating: 827, ratingDelta: 27 });
+      }
+      if (url.includes('/rest/v1/ghost_games') && method === 'GET') return jsonResponse([]);
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    const input = { userId: USER_ID, opponentUserId: OPPONENT_ID, finalScore: 60,
+      opponentScore: 10, moveLog: [], matchId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', applyGlicko: true };
+    const first = await completeGhostGame(input);
+    // A later verified-match persistence step failed. The same completion is retried.
+    const retry = await completeGhostGame(input);
+    expect(retry.newRating).toBe(first.newRating);
+    expect(gamesPlayed).toBe(1);
   });
 });
 
@@ -109,10 +150,16 @@ describe('completeGhostGame — Fritz branch ghost_rating (training profile) sid
           { user_id: USER_ID, ghost_rating: 800, last_updated: null, composite_log: null, style_profile: null, games_played: 5 },
         ]);
       }
-      if (url.includes('/rest/v1/ghost_profiles') && method === 'POST') {
-        const sent = JSON.parse(String(init?.body))[0];
+      if (url.includes('/rest/v1/ghost_profiles') && (method === 'POST' || method === 'PATCH')) {
+        const body = JSON.parse(String(init?.body));
+        const sent = Array.isArray(body) ? body[0] : body;
         profileUpsertBodies.push(sent);
         return jsonResponse([sent]);
+      }
+      if (url.includes('/rest/v1/rpc/complete_ghost_rating_v2')) {
+        const body = JSON.parse(String(init?.body));
+        return jsonResponse({ isNewGame: true, newRating: body.p_apply_rating ? 827 : 800,
+          ratingDelta: body.p_apply_rating ? 27 : 0 });
       }
       if (url.includes('/rest/v1/ghost_games') && method === 'POST') {
         return jsonResponse([{ id: 'game-1', xmax: '0' }]);
@@ -155,8 +202,8 @@ describe('completeGhostGame — Fritz branch ghost_rating (training profile) sid
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const finalUpsert = profileUpsertBodies[profileUpsertBodies.length - 1];
-    expect(finalUpsert.ghost_rating).toBe(800);
-    expect(finalUpsert.games_played).toBe(5);
+    expect(finalUpsert).not.toHaveProperty('ghost_rating');
+    expect(finalUpsert).not.toHaveProperty('games_played');
   });
 });
 
@@ -178,6 +225,10 @@ describe('completeGhostGame — Fritz branch ranked_games idempotency (RK-2, HAR
       if (url.includes('/rest/v1/ghost_profiles') && method === 'POST') {
         return jsonResponse([JSON.parse(String(init?.body))[0]]);
       }
+      if (url.includes('/rest/v1/ghost_profiles') && method === 'PATCH') return jsonResponse([]);
+      if (url.includes('/rest/v1/rpc/complete_ghost_rating_v2')) {
+        return jsonResponse({ isNewGame: true, newRating: 827, ratingDelta: 27 });
+      }
       if (url.includes('/rest/v1/ghost_games') && method === 'POST') {
         return jsonResponse([{ id: 'game-1', xmax: '0' }]);
       }
@@ -188,11 +239,11 @@ describe('completeGhostGame — Fritz branch ranked_games idempotency (RK-2, HAR
         // Non-legacy shape (ranked_games_played/peak_rating already set) so
         // periodService's normalizeLegacyStartingProfile doesn't fire an
         // extra PATCH this stub doesn't otherwise handle.
-        return jsonResponse([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200, ranked_games_played: 30, peak_rating: 1600, provisional: false }]);
+        return jsonResponse([{ id: USER_ID, glicko_rating: 1500, glicko_rd: 200, glicko_vol: 0.06, ranked_games_played: 30, peak_rating: 1600, provisional: false }]);
       }
       if (url.includes('/rest/v1/ranked_games') && method === 'POST') {
         rankedGamesCalls.push({ path: url, body: JSON.parse(String(init?.body)) });
-        return jsonResponse(rankedGamesResponse);
+        return jsonResponse(rankedGamesResponse.map((row) => ({ ...(row as object), ...JSON.parse(String(init?.body)) })));
       }
       if (url.includes('/rest/v1/ranked_games') && method === 'GET') {
         // processRatingPeriod's getPendingGames sweep. Only a genuinely new

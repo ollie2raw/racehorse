@@ -10,11 +10,9 @@ import {
   getRoomRoster,
   requireRoomSessionHandlerDeps,
 } from './roomSession';
-import { processRealtimeMultiplayerGame, type RealtimeRatingResult, type Profile } from '../ranking/periodService';
-import type { MatchOutcome } from '../ranking/glicko2';
-import { insertRankedGameIdempotent } from '../ranking/insertRankedGameIdempotent';
-import { supabaseFetch } from '../supabaseUtils';
-import type { ProfileRow } from '../supabaseTypes';
+import type { RealtimeRatingResult } from '../ranking/periodService';
+import { completeRatedForfeit } from './ratedForfeitCompletion';
+import { persistLiveRoomSessionNow } from './roomLivePersistence';
 import { childLogger } from '../logger';
 import {
   GAME_OVER_PERSIST_MAX_ATTEMPTS,
@@ -22,6 +20,8 @@ import {
   TOURNAMENT_FORFEIT_RESULT_PERSIST_FAILED_MESSAGE,
 } from './gameOverPersistPolicy';
 import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
+import { withRatingCompletion } from '../ranking/ratingCutoverGate';
+import { isAnyTournamentRoom } from './roomKind';
 
 const log = childLogger('room-forfeit');
 
@@ -78,7 +78,26 @@ function emitTournamentForfeitApplyFailed(
  *
  * Tournament (G2): `abandonedAt` is latched only after durable applyMatchResult.
  */
+function accountId(id: string | null): string | null {
+  return id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : null;
+}
+
 export async function applyActiveMatchForfeit(
+  ...args: Parameters<typeof applyActiveMatchForfeitOnce>
+): Promise<{ winnerUserId: string | null } | null> {
+  const room = getRoom(args[2]);
+  const roster = getRoomRoster(room.code);
+  const rated = room.players.length === 2 && room.players.every((seatId) =>
+    accountId(roster.find((player) => player.id === seatId)?.userId ?? null));
+  if (!isAnyTournamentRoom(room) && rated && !room.abandonedAt && !room.state?.gameOver) {
+    // Forfeit is also a completion. Enter before latching abandon state or
+    // inserting ranked rows, so drain cannot miss an active legacy writer.
+    return withRatingCompletion('room_forfeit', () => applyActiveMatchForfeitOnce(...args));
+  }
+  return applyActiveMatchForfeitOnce(...args);
+}
+
+async function applyActiveMatchForfeitOnce(
   io: Server,
   socket: Socket,
   roomCode: string,
@@ -221,6 +240,7 @@ export async function applyActiveMatchForfeit(
     room.abandonedAt = nowIso;
     room.abandonedByUserId = authenticatedUserId;
     room.abandonedReason = 'forfeit';
+    room.abandonedForfeitReason = forfeitReason;
     room.tournamentForfeitApplyStatus = 'succeeded';
     log.info(
       {
@@ -236,6 +256,7 @@ export async function applyActiveMatchForfeit(
     room.abandonedAt = nowIso;
     room.abandonedByUserId = authenticatedUserId;
     room.abandonedReason = 'forfeit';
+    room.abandonedForfeitReason = forfeitReason;
   }
 
   // Calculate forfeit scores and run Glicko-2 updates for ranked multiplayer games
@@ -256,98 +277,53 @@ export async function applyActiveMatchForfeit(
   const scoreA = abandonerIsSeatA ? loserActualScore : winnerActualScore;
   const scoreB = abandonerIsSeatA ? winnerActualScore : loserActualScore;
 
-  // The player who quit is the loser, whatever the scoreboard said when they
-  // left. Without this the Glicko term falls back to comparing scores, and a
-  // player who abandons while ahead is rated as the winner — disagreeing with
-  // the `winnerUserId` that match history records. Rating and history must tell
-  // the same story.
-  const outcomeA: MatchOutcome = abandonerIsSeatA ? 'loss' : 'win';
-  const outcomeB: MatchOutcome = abandonerIsSeatA ? 'win' : 'loss';
-
   // Every forfeit is rated. There is deliberately no minimum-score threshold:
   // one was here before and it meant a player who quit early recorded nothing
   // at all, which is a free way to dodge a bad deal. A forfeit at 5-0 is a real
   // loss; Glicko already scales the delta by how expected that result was, so a
   // short match does not need a separate escape hatch.
-  if (isPrivate && a.userId && b.userId) {
-    try {
-      const [profilesA, profilesB] = await Promise.all([
-        supabaseFetch<ProfileRow[]>(`/rest/v1/profiles?id=eq.${a.userId}`),
-        supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${b.userId}`),
-      ]);
-      const profileA = profilesA?.[0];
-      const profileB = profilesB?.[0];
-
-      if (profileA && profileB) {
-        const sourceMatchId = room.matchId ?? `forfeit-${room.code}-${Date.now()}`;
-
-        const [insertA, insertB] = await Promise.all([
-          insertRankedGameIdempotent({
-            playerId: a.userId,
-            opponentId: b.userId,
-            playerScore: scoreA,
-            opponentScore: scoreB,
-            gameType: 'multiplayer',
-            ratingBefore: profileA.glicko_rating ?? 0,
-            rdBefore: profileA.glicko_rd ?? 0,
-            playedAt: nowIso,
-            outcome: outcomeA,
-            source: { sourceType: 'live_room', sourceMatchId },
-          }),
-          insertRankedGameIdempotent({
-            playerId: b.userId,
-            opponentId: a.userId,
-            playerScore: scoreB,
-            opponentScore: scoreA,
-            gameType: 'multiplayer',
-            ratingBefore: profileB.glicko_rating ?? 0,
-            rdBefore: profileB.glicko_rd ?? 0,
-            playedAt: nowIso,
-            outcome: outcomeB,
-            source: { sourceType: 'live_room', sourceMatchId },
-          }),
-        ]);
-
-        if (insertA.isNew && insertB.isNew && insertA.game && insertB.game) {
-          const ratingScale = forfeitReason === 'disconnect_timeout' ? 0.5 : 1.0;
-          ratingResult = await processRealtimeMultiplayerGame({
-            playerAProfile: profileA as Profile,
-            playerBProfile: profileB as Profile,
-            playerAGame: insertA.game,
-            playerBGame: insertB.game,
-            ratingScale,
-            playerAOutcome: outcomeA,
-            playerBOutcome: outcomeB,
-          });
-
-          log.info(
-            {
-              roomCode: room.code,
-              loserId: abandoningPlayer.userId,
-              winnerId: winnerUserId,
-              forfeitReason,
-              ratingScale,
-              outcomeA,
-              outcomeB,
-              deltaA: ratingResult.playerA.delta,
-              deltaB: ratingResult.playerB.delta,
-            },
-            'forfeit rating update complete',
-          );
-        }
-      }
-    } catch (err) {
-      log.error({ err }, 'forfeit rating update failed');
+  const ratedForfeit =
+    isPrivate && a.userId && b.userId && accountId(a.userId) && accountId(b.userId);
+  if (ratedForfeit) {
+    // Write-ahead intent (terminal-completion R1): the abandoned snapshot, carrying
+    // `completionPending` and the forfeit reason, is durable BEFORE any ranked row is
+    // written, so a crash anywhere below leaves a replayable owner instead of a row that
+    // still says "playing". If the write fails we still try the completion in-process.
+    const intentDurable = await persistLiveRoomSessionNow(room, [
+      ...roster.map((p) => ({ seatId: p.id, userId: p.userId, username: p.username })),
+    ]).catch(() => false);
+    if (!intentDurable) {
+      log.warn({ roomCode: room.code }, 'forfeit completion intent could not be made durable before rating');
     }
-  }
-
-  if (room.matchmakingMatchId) {
+    try {
+      const completion = await completeRatedForfeit({
+        roomCode: room.code,
+        sourceMatchId: room.matchId ?? `forfeit-${room.code}-${Date.now()}`,
+        a: { seatId: a.id, userId: a.userId! },
+        b: { seatId: b.id, userId: b.userId! },
+        scoreA,
+        scoreB,
+        abandonerSeatId: abandoningPlayer.id,
+        forfeitReason,
+        playedAt: nowIso,
+        matchmakingMatchId: room.matchmakingMatchId ?? null,
+        winnerUserId,
+      });
+      ratingResult = completion.status === 'logged' ? completion.ratingResult : null;
+      // Logged (or deliberately unrated): nothing is owed, so cleanup may delete the row.
+      room.matchLogged = true;
+    } catch (err) {
+      // Completion stays owed: matchLogged remains false, the abandoned row is retained at
+      // cleanup, and the restart-time sweep replays it idempotently.
+      log.error({ err }, 'forfeit rating update failed; completion left pending for replay');
+    }
+  } else if (room.matchmakingMatchId) {
     await recordMatchEnd({
       matchId: room.matchmakingMatchId,
       status: 'forfeit',
       winnerId: winnerUserId,
-      playerARatingChange: ratingResult?.playerA?.delta ?? null,
-      playerBRatingChange: ratingResult?.playerB?.delta ?? null,
+      playerARatingChange: null,
+      playerBRatingChange: null,
       isSim: false,
     });
   }

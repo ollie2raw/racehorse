@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Server } from 'socket.io';
 import type { Room } from '../rooms';
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
@@ -111,7 +111,11 @@ vi.mock('../operationalTelemetry', () => ({
   recordOperationalFailure: (...args: unknown[]) => recordOperationalFailureMock(...args),
 }));
 
-import { createGameOverPersistScheduler } from './gameOverPersistence';
+import { createGameOverPersistScheduler, CUTOVER_GATE_WAIT_CEILING_MS } from './gameOverPersistence';
+import {
+  resetRatingCutoverGateForTests,
+  setLegacyRatingWritersEnforcedForTests,
+} from '../ranking/ratingCutoverGate';
 
 const roomEmit = vi.fn();
 const io = {
@@ -121,8 +125,8 @@ const schedule = createGameOverPersistScheduler(io);
 
 function buildInput(overrides: Partial<GameOverPersistInput> & { room?: Partial<Room> } = {}): GameOverPersistInput {
   const { room: roomOverrides, ...restOverrides } = overrides;
-  const a = { id: 'seat-a', userId: 'user-a', username: 'A', socketId: 'sock-a' };
-  const b = { id: 'seat-b', userId: 'user-b', username: 'B', socketId: 'sock-b' };
+  const a = { id: 'seat-a', userId: '11111111-1111-4111-8111-111111111111', username: 'A', socketId: 'sock-a' };
+  const b = { id: 'seat-b', userId: '22222222-2222-4222-8222-222222222222', username: 'B', socketId: 'sock-b' };
   const room = {
     code: 'ROOM1',
     players: ['seat-a', 'seat-b'],
@@ -186,13 +190,13 @@ describe('createGameOverPersistScheduler', () => {
     // Default: healthy ranking path — a profile exists and the ranked insert
     // writes a fresh row. Tests that exercise the failure/dormancy paths
     // override these.
-    supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
+    supabaseFetchMock.mockResolvedValue([{ id: '11111111-1111-4111-8111-111111111111', glicko_rating: 1500, glicko_rd: 200 }]);
     insertRankedGameIdempotentMock.mockResolvedValue({
       isNew: true,
       game: {
         id: 'ranked-default',
-        player_id: 'user-a',
-        opponent_id: 'user-b',
+        player_id: '11111111-1111-4111-8111-111111111111',
+        opponent_id: '22222222-2222-4222-8222-222222222222',
         player_score: 1,
         opponent_score: 1,
         played_at: 't',
@@ -478,7 +482,7 @@ describe('createGameOverPersistScheduler', () => {
     const callOrder: string[] = [];
     getPendingFritzMatchContextMock.mockImplementation(() => {
       callOrder.push('getPendingFritz');
-      return { realPlayer: { id: 'seat-a', userId: 'user-a', username: 'A', socketId: 'sock-a' }, fritzTier: 'elite' };
+      return { realPlayer: { id: 'seat-a', userId: '11111111-1111-4111-8111-111111111111', username: 'A', socketId: 'sock-a' }, fritzTier: 'elite' };
     });
     resolvePendingFritzMatchMock.mockImplementation(async () => {
       callOrder.push('resolvePendingFritz');
@@ -495,14 +499,14 @@ describe('createGameOverPersistScheduler', () => {
   });
 
   it('calls processRealtimeMultiplayerGame when both ranked inserts are new', async () => {
-    const profileA = { id: 'user-a', glicko_rating: 1500, glicko_rd: 200 };
-    const profileB = { id: 'user-b', glicko_rating: 1500, glicko_rd: 200 };
-    const gameA = { id: 'g-a', player_id: 'user-a', opponent_id: 'user-b', player_score: 30, opponent_score: 10, played_at: 't' };
-    const gameB = { id: 'g-b', player_id: 'user-b', opponent_id: 'user-a', player_score: 10, opponent_score: 30, played_at: 't' };
+    const profileA = { id: '11111111-1111-4111-8111-111111111111', glicko_rating: 1500, glicko_rd: 200 };
+    const profileB = { id: '22222222-2222-4222-8222-222222222222', glicko_rating: 1500, glicko_rd: 200 };
+    const gameA = { id: 'g-a', player_id: '11111111-1111-4111-8111-111111111111', opponent_id: '22222222-2222-4222-8222-222222222222', player_score: 30, opponent_score: 10, played_at: 't' };
+    const gameB = { id: 'g-b', player_id: '22222222-2222-4222-8222-222222222222', opponent_id: '11111111-1111-4111-8111-111111111111', player_score: 10, opponent_score: 30, played_at: 't' };
 
     supabaseFetchMock.mockImplementation(async (path: string) => {
-      if (path.includes('/rest/v1/profiles?id=eq.user-a')) return [profileA];
-      if (path.includes('/rest/v1/profiles?id=eq.user-b')) return [profileB];
+      if (path.includes('/rest/v1/profiles?id=eq.11111111-1111-4111-8111-111111111111')) return [profileA];
+      if (path.includes('/rest/v1/profiles?id=eq.22222222-2222-4222-8222-222222222222')) return [profileB];
       return [];
     });
     insertRankedGameIdempotentMock
@@ -520,13 +524,13 @@ describe('createGameOverPersistScheduler', () => {
   });
 
   it('skips processRealtimeMultiplayerGame with warn when either insert is not new', async () => {
-    const profileA = { id: 'user-a', glicko_rating: 1500, glicko_rd: 200 };
-    const profileB = { id: 'user-b', glicko_rating: 1500, glicko_rd: 200 };
-    const gameA = { id: 'g-a', player_id: 'user-a', opponent_id: 'user-b', player_score: 30, opponent_score: 10, played_at: 't' };
+    const profileA = { id: '11111111-1111-4111-8111-111111111111', glicko_rating: 1500, glicko_rd: 200 };
+    const profileB = { id: '22222222-2222-4222-8222-222222222222', glicko_rating: 1500, glicko_rd: 200 };
+    const gameA = { id: 'g-a', player_id: '11111111-1111-4111-8111-111111111111', opponent_id: '22222222-2222-4222-8222-222222222222', player_score: 30, opponent_score: 10, played_at: 't' };
 
     supabaseFetchMock.mockImplementation(async (path: string) => {
-      if (path.includes('/rest/v1/profiles?id=eq.user-a')) return [profileA];
-      if (path.includes('/rest/v1/profiles?id=eq.user-b')) return [profileB];
+      if (path.includes('/rest/v1/profiles?id=eq.11111111-1111-4111-8111-111111111111')) return [profileA];
+      if (path.includes('/rest/v1/profiles?id=eq.22222222-2222-4222-8222-222222222222')) return [profileB];
       return [];
     });
     insertRankedGameIdempotentMock
@@ -564,7 +568,7 @@ describe('createGameOverPersistScheduler', () => {
 
   describe('live in-room Fritz completion — the category-1 side door', () => {
     function buildFritzInput(overrides: Partial<GameOverPersistInput> & { room?: Partial<Room> } = {}) {
-      const a = { id: 'seat-a', userId: 'user-a', username: 'A', socketId: 'sock-a' };
+      const a = { id: 'seat-a', userId: '11111111-1111-4111-8111-111111111111', username: 'A', socketId: 'sock-a' };
       const b = { id: 'bot:fritz:elite', userId: null, username: 'Fritz', socketId: '' };
       return buildInput({
         a,
@@ -586,19 +590,19 @@ describe('createGameOverPersistScheduler', () => {
       // (ranked_games?player_id=eq...&rating_after=is.null) has no sourceType
       // filter, so it would pick up and apply BOTH rows' scores as separate
       // Glicko deltas for the same real match.
-      supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
+      supabaseFetchMock.mockResolvedValue([{ id: '11111111-1111-4111-8111-111111111111', glicko_rating: 1500, glicko_rd: 200 }]);
       verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
 
       await runPersist(buildFritzInput());
 
       expect(insertRankedGameIdempotentMock).not.toHaveBeenCalled();
       expect(completeGhostGameMock).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'user-a', applyGlicko: true }),
+        expect.objectContaining({ userId: '11111111-1111-4111-8111-111111111111', applyGlicko: true }),
       );
     });
 
     it('is the function that determines the final Glicko input for a Fritz completion: verifyPlayerMoveLog gates completeGhostGame.applyGlicko', async () => {
-      supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
+      supabaseFetchMock.mockResolvedValue([{ id: '11111111-1111-4111-8111-111111111111', glicko_rating: 1500, glicko_rd: 200 }]);
       verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
 
       await runPersist(buildFritzInput());
@@ -607,12 +611,12 @@ describe('createGameOverPersistScheduler', () => {
         strictHandContinuity: true,
       });
       expect(completeGhostGameMock).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'user-a', applyGlicko: true }),
+        expect.objectContaining({ userId: '11111111-1111-4111-8111-111111111111', applyGlicko: true }),
       );
     });
 
     it('closes the side door: an unverifiable in-room Fritz move log still completes the match but writes no Glicko', async () => {
-      supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
+      supabaseFetchMock.mockResolvedValue([{ id: '11111111-1111-4111-8111-111111111111', glicko_rating: 1500, glicko_rd: 200 }]);
       verifyPlayerMoveLogMock.mockReturnValue({ ok: false, reason: 'fabricated board_state', entryIndex: 0 });
 
       await runPersist(buildFritzInput());
@@ -636,7 +640,7 @@ describe('createGameOverPersistScheduler', () => {
             entryIndex: 0,
             // H2: userId on the persisted row so the alert can count per user,
             // and the opponent so a Fritz failure isn't confused with a human one.
-            userId: 'user-a',
+            userId: '11111111-1111-4111-8111-111111111111',
             opponent: 'fritz',
           }),
         }),
@@ -647,7 +651,7 @@ describe('createGameOverPersistScheduler', () => {
         expect.stringContaining('move log failed verification'),
         expect.objectContaining({
           level: 'warning',
-          fingerprint: ['mp-move-log-verification-failed', 'user-a'],
+          fingerprint: ['mp-move-log-verification-failed', '11111111-1111-4111-8111-111111111111'],
           tags: expect.objectContaining({ mp_alert: 'move_log_verification_failed', opponent: 'fritz' }),
           extra: expect.objectContaining({ userRecentMoveLogFailures: 0 }),
         }),
@@ -655,7 +659,7 @@ describe('createGameOverPersistScheduler', () => {
     });
 
     it('escalates the move-log alert to error + a repeat tag past the threshold', async () => {
-      supabaseFetchMock.mockResolvedValue([{ id: 'user-a', glicko_rating: 1500, glicko_rd: 200 }]);
+      supabaseFetchMock.mockResolvedValue([{ id: '11111111-1111-4111-8111-111111111111', glicko_rating: 1500, glicko_rd: 200 }]);
       verifyPlayerMoveLogMock.mockReturnValue({ ok: false, reason: 'fabricated', entryIndex: 0 });
       countRecentMoveLogFailuresMock.mockResolvedValue(4);
 
@@ -692,14 +696,14 @@ describe('createGameOverPersistScheduler', () => {
     }
 
     function mockHumanProfilesAndInserts() {
-      const profileA = { id: 'user-a', glicko_rating: 1500, glicko_rd: 200 };
-      const profileB = { id: 'user-b', glicko_rating: 1500, glicko_rd: 200 };
-      const gameA = { id: 'g-a', player_id: 'user-a', opponent_id: 'user-b', player_score: 30, opponent_score: 10, played_at: 't' };
-      const gameB = { id: 'g-b', player_id: 'user-b', opponent_id: 'user-a', player_score: 10, opponent_score: 30, played_at: 't' };
+      const profileA = { id: '11111111-1111-4111-8111-111111111111', glicko_rating: 1500, glicko_rd: 200 };
+      const profileB = { id: '22222222-2222-4222-8222-222222222222', glicko_rating: 1500, glicko_rd: 200 };
+      const gameA = { id: 'g-a', player_id: '11111111-1111-4111-8111-111111111111', opponent_id: '22222222-2222-4222-8222-222222222222', player_score: 30, opponent_score: 10, played_at: 't' };
+      const gameB = { id: 'g-b', player_id: '22222222-2222-4222-8222-222222222222', opponent_id: '11111111-1111-4111-8111-111111111111', player_score: 10, opponent_score: 30, played_at: 't' };
 
       supabaseFetchMock.mockImplementation(async (path: string) => {
-        if (path.includes('/rest/v1/profiles?id=eq.user-a')) return [profileA];
-        if (path.includes('/rest/v1/profiles?id=eq.user-b')) return [profileB];
+        if (path.includes('/rest/v1/profiles?id=eq.11111111-1111-4111-8111-111111111111')) return [profileA];
+        if (path.includes('/rest/v1/profiles?id=eq.22222222-2222-4222-8222-222222222222')) return [profileB];
         return [];
       });
       insertRankedGameIdempotentMock
@@ -726,10 +730,10 @@ describe('createGameOverPersistScheduler', () => {
         playerBGame: gameB,
       });
       expect(completeGhostGameMock).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'user-a', applyGlicko: undefined }),
+        expect.objectContaining({ userId: '11111111-1111-4111-8111-111111111111', applyGlicko: undefined }),
       );
       expect(completeGhostGameMock).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'user-b', applyGlicko: undefined }),
+        expect.objectContaining({ userId: '22222222-2222-4222-8222-222222222222', applyGlicko: undefined }),
       );
       expect(input.room.rankingOutcome).toEqual({
         glickoEligible: true,
@@ -778,10 +782,10 @@ describe('createGameOverPersistScheduler', () => {
         }),
       );
       expect(completeGhostGameMock).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'user-a', applyGlicko: false }),
+        expect.objectContaining({ userId: '11111111-1111-4111-8111-111111111111', applyGlicko: false }),
       );
       expect(completeGhostGameMock).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'user-b', applyGlicko: false }),
+        expect.objectContaining({ userId: '22222222-2222-4222-8222-222222222222', applyGlicko: false }),
       );
     });
 
@@ -810,5 +814,90 @@ describe('createGameOverPersistScheduler', () => {
         playerBGame: gameB,
       });
     });
+  });
+});
+
+
+describe('createGameOverPersistScheduler — rating cutover gate (legacy build)', () => {
+  let gateClosed: boolean;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    gateClosed = true;
+    resetRatingCutoverGateForTests();
+    setLegacyRatingWritersEnforcedForTests(true);
+    applyTournamentGameOverFromRoomMock.mockResolvedValue(false);
+    findTournamentMatchByRoomMock.mockResolvedValue(null);
+    getPendingFritzMatchContextMock.mockReturnValue(null);
+    appendMatchMock.mockResolvedValue(undefined);
+    writeMatchActivityMock.mockResolvedValue(undefined);
+    verifyPlayerMoveLogMock.mockReturnValue({ ok: true });
+    supabaseFetchMock.mockImplementation(async (path: string) => {
+      if (path.includes('rating_cutover_gate')) {
+        return [{ quiesced: gateClosed, quiesced_at: null, enabled_boot_id: null, reason: null, ghost_expand_applied_at: null }];
+      }
+      return [{ id: '11111111-1111-4111-8111-111111111111', glicko_rating: 1500, glicko_rd: 200 }];
+    });
+    insertRankedGameIdempotentMock.mockResolvedValue({ isNew: false, game: null });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetRatingCutoverGateForTests();
+  });
+
+  it('makes no durable write while the gate is closed, then completes once it reopens', async () => {
+    vi.useFakeTimers();
+    const input = buildInput();
+    const pending = runPersist(input);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(appendMatchMock).not.toHaveBeenCalled();
+    expect(insertRankedGameIdempotentMock).not.toHaveBeenCalled();
+    expect(completeGhostGameMock).not.toHaveBeenCalled();
+    expect(input.room.matchLogged).toBe(false);
+
+    gateClosed = false;
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(pending).resolves.toBe('succeeded');
+    expect(appendMatchMock).toHaveBeenCalledTimes(1);
+    expect(input.room.matchLogged).toBe(true);
+  });
+
+  it('fails visibly (never reports success, never writes) when the gate stays closed past the wait ceiling', async () => {
+    vi.useFakeTimers();
+    const input = buildInput();
+    const pending = runPersist(input);
+    await vi.advanceTimersByTimeAsync(CUTOVER_GATE_WAIT_CEILING_MS * 5);
+    await expect(pending).resolves.toBe('failed');
+    expect(appendMatchMock).not.toHaveBeenCalled();
+    expect(input.room.matchLogged).toBe(false);
+    expect(input.room.gameOverPersistStatus).toBe('failed');
+    expect(roomEmit).toHaveBeenCalledWith('match:result_persist_failed', expect.anything());
+  });
+
+  it('persists real guest identities without account writes or waiting for the rating gate', async () => {
+    vi.useFakeTimers();
+    const input = buildInput({
+      a: { id: 'seat-a', userId: 'guest_mabc123_x7y8z9q0', username: 'Guest A', socketId: 'sock-a' },
+      b: { id: 'seat-b', userId: 'guest_mabc456_x7y8z9q1', username: 'Guest B', socketId: 'sock-b' },
+    });
+    const pending = runPersist(input);
+    await vi.runAllTimersAsync();
+    await expect(pending).resolves.toBe('succeeded');
+    // No account/profile/ranking writes: the only DB traffic is the terminal-session marker.
+    expect(supabaseFetchMock.mock.calls.every(([path]) => String(path).includes('/room_live_sessions'))).toBe(true);
+    expect(insertRankedGameIdempotentMock).not.toHaveBeenCalled();
+    expect(completeGhostGameMock).not.toHaveBeenCalled();
+    expect(appendMatchMock).toHaveBeenCalledWith(expect.objectContaining({
+      a: expect.objectContaining({ userId: null }), b: expect.objectContaining({ userId: null }),
+    }));
+    expect(input.a.userId).toBe('guest_mabc123_x7y8z9q0');
+  });
+
+  it('does not hold back tournament results (not a rating-affecting legacy path)', async () => {
+    applyTournamentGameOverFromRoomMock.mockResolvedValue(true);
+    const input = buildInput({ room: { scheduledTournamentMatchId: 'tm-1' } });
+    await expect(runPersist(input)).resolves.toBe('succeeded');
+    expect(appendMatchMock).not.toHaveBeenCalled();
   });
 });

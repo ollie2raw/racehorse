@@ -1,13 +1,15 @@
 import { identifyUser, resetAnalytics } from '../lib/analytics';
 import { isUsernamePolicyDbError, usernamePolicyMessage, usernamePolicyViolation } from './usernamePolicy';
-import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
-import { formatAuthErrorMessage } from './authErrors';
+import { formatAuthErrorMessage, passwordResetSentMessage } from './authErrors';
 import { clearCachedSession, setCachedSession } from './sessionToken';
+import { clearAccountBoundLocalState } from './accountBoundLocalState';
 import { getAuthEmailRedirectTo } from './authRedirect';
 import { evaluateAuthTimeoutSessionFallback, AUTH_TIMEOUT_FALLBACK_ERROR } from './authTimeoutSessionFallback';
-import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
+import { PASSWORD_RECOVERY_PENDING_KEY, rememberPasswordResetRequest } from './recoveryHash';
 import { readE2eDevAuth, readMobileVisualIdentity } from './e2eDevAuth';
 import { EMAIL_CHANGE_PENDING_MESSAGE, resolveEmailChange } from './emailChange';
 import { ANONYMOUS_PLAYER_NAME } from '../identity/publicPlayerName';
@@ -210,18 +212,37 @@ function consumeEmailVerificationPending(email: string | null | undefined): bool
 }
 
 function useAuthInternal() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUserState] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [justVerified, setJustVerified] = useState(false);
   const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(false);
 
+  // The principal the auth state currently belongs to, updated synchronously with every setUser. Async work started
+  // for one account (profile hydration) compares against it before writing, so a slow response for A can never land
+  // after B is active.
+  const principalIdRef = useRef<string | null>(null);
+  // Principal change (sign-out, session expiry/revocation, A -> B): drop state bound to the previous account in the
+  // SAME tick the new principal is set — before React can render, or any effect can read, B alongside A's state.
+  const setUser = useCallback((next: User | null) => {
+    const previous = principalIdRef.current;
+    const nextId = next?.id ?? null;
+    principalIdRef.current = nextId;
+    if (previous !== nextId) {
+      if (previous) clearAccountBoundLocalState(previous, nextId);
+      setProfile((current) => (current && current.id === nextId ? current : null));
+    }
+    setUserState(next);
+  }, []);
+
   const fallbackProfile = useCallback((sessionUser: User): UserProfile => fallbackProfileFor(sessionUser), []);
 
   const refreshProfile = useCallback(async (sessionUser: User) => {
+    // Every write below is dropped once another principal is active (sign-out or A -> B while this was in flight).
+    const isCurrentPrincipal = () => principalIdRef.current === sessionUser.id;
     if (!supabase) {
-      setProfile(fallbackProfile(sessionUser));
+      if (isCurrentPrincipal()) setProfile(fallbackProfile(sessionUser));
       return;
     }
     const client = supabase;
@@ -263,6 +284,7 @@ function useAuthInternal() {
         } catch {
           ghostRating = null;
         }
+        if (!isCurrentPrincipal()) return;
         setProfile((prev) => {
           if (prev && prev.id === sessionUser.id) {
             return {
@@ -302,20 +324,20 @@ function useAuthInternal() {
             console.warn('[auth] late refreshProfile resolution failed', err);
           },
         );
-        setProfile((prev) => (prev && prev.id === sessionUser.id ? prev : fallbackProfile(sessionUser)));
+        if (isCurrentPrincipal()) setProfile((prev) => (prev && prev.id === sessionUser.id ? prev : fallbackProfile(sessionUser)));
         return;
       }
       if (result.error || !result.data) {
         if (result.error) {
           console.warn('[auth] refreshProfile failed; preserving current profile', result.error);
         }
-        setProfile((prev) => (prev && prev.id === sessionUser.id ? prev : fallbackProfile(sessionUser)));
+        if (isCurrentPrincipal()) setProfile((prev) => (prev && prev.id === sessionUser.id ? prev : fallbackProfile(sessionUser)));
         return;
       }
       await applyResolvedProfile(result.data as Record<string, unknown>);
     } catch (err) {
       console.warn('[auth] refreshProfile errored; preserving current profile', err);
-      setProfile((prev) => (prev && prev.id === sessionUser.id ? prev : fallbackProfile(sessionUser)));
+      if (isCurrentPrincipal()) setProfile((prev) => (prev && prev.id === sessionUser.id ? prev : fallbackProfile(sessionUser)));
     }
   }, [fallbackProfile]);
 
@@ -384,6 +406,8 @@ function useAuthInternal() {
       }
 
       setUser(sessionUser);
+      // A recovery session adopted after mount (confirmed link) arrives as SIGNED_IN with the marker already set.
+      if (event === 'SIGNED_IN' && hasPasswordRecoveryPendingMarker()) setPasswordRecoveryPending(true);
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecoveryPending(true);
         try {
@@ -521,6 +545,7 @@ function useAuthInternal() {
           .getSession()
           .then(({ data: { session } }) => {
             const nextUser = session?.user ?? null;
+            setAccessToken(session?.access_token ?? null);
             setUser(nextUser);
             if (nextUser) {
               void hydrateProfile(nextUser);
@@ -541,7 +566,7 @@ function useAuthInternal() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       subscription.unsubscribe();
     };
-  }, [hydrateProfile]);
+  }, [hydrateProfile, setUser]);
 
   const signUp = useCallback(
     async (email: string, password: string, username?: string): Promise<AuthResult> => {
@@ -693,6 +718,7 @@ function useAuthInternal() {
     // SIGNED_OUT event lands a stale token would still be attached to requests.
     clearCachedSession();
     setProfile(null);
+    setAccessToken(null);
     setUser(null);
 
     try {
@@ -736,7 +762,7 @@ function useAuthInternal() {
     }
 
     return { error: errorMessage };
-  }, []);
+  }, [setUser]);
 
   const updateUsername = useCallback(
     async (username: string): Promise<AuthResult> => {
@@ -806,7 +832,8 @@ function useAuthInternal() {
         AUTH_REQUEST_TIMEOUT_MS,
       );
       if (error) return { error: formatAuthErrorMessage(error) };
-      return { error: null, message: 'If that email has an account, we sent a reset link.' };
+      rememberPasswordResetRequest(normalizedEmail);
+      return { error: null, message: passwordResetSentMessage(Capacitor.isNativePlatform()) };
     } catch (err) {
       return {
         error: formatAuthErrorMessage(
@@ -850,7 +877,11 @@ function useAuthInternal() {
       // the emailed link is followed. `user.email` deliberately is not patched.
       return { error: null, message: EMAIL_CHANGE_PENDING_MESSAGE(resolved.email) };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : 'Unable to change your email.' };
+      return {
+        error: formatAuthErrorMessage(
+          err instanceof Error ? { message: err.message } : { message: 'Unable to change your email.' },
+        ),
+      };
     }
   }, [user]);
 

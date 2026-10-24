@@ -1,7 +1,6 @@
 import {
   boardTileCount,
   computePlayScore,
-  DEFAULT_CONFIG,
   getOpenEnds,
   simulatePlacement,
   type Tile,
@@ -9,6 +8,7 @@ import {
 import type { ReviewAction, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { Config } from '@racehorse/game-core/types';
 import { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
+import { resolveReviewConfig } from './reviewRuleset';
 import {
   computeEndControlScore,
   computeEndDangerPenalty,
@@ -241,7 +241,7 @@ export function computePositionalFeatures(
     holdWeights.set(tileKey(tile), excludedPips.has(tile.low) || excludedPips.has(tile.high) ? 0.05 : 1.0);
   }
   const missingWeights = computeMissingWeightByPip(knownMissingPipEvidence);
-  const config: Config = { ...DEFAULT_CONFIG, maxPips, winningScore: snapshot.preAction.winningTarget };
+  const config: Config = resolveReviewConfig(snapshot, maxPips);
 
   const endsBeforeValues = getOpenEnds(board).map((e) => e.matchValue);
   const tilesOnBoardBefore = boardTileCount(board);

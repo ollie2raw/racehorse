@@ -46,4 +46,15 @@ describe('prerendered shells are reachable', () => {
   it('keeps the catch-all last, so it cannot shadow a shell', () => {
     expect(vercel.rewrites.at(-1)!.source).toBe('/(.*)');
   });
+
+  it.each([
+    ['/privacy', '/privacy.html'],
+    ['/terms', '/terms.html'],
+    ['/support', '/support.html'],
+  ])('serves %s from its prerendered shell (%s), ahead of the catch-all', (source, destination) => {
+    const index = vercel.rewrites.findIndex((rule) => rule.source === source);
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(vercel.rewrites[index]!.destination).toBe(destination);
+    expect(index).toBeLessThan(vercel.rewrites.length - 1);
+  });
 });

@@ -7,6 +7,9 @@ vi.mock('./roomCommandReceiptStore', () => ({
 
 import {
   clearGameActionIdempotencyForRoom,
+  fingerprintGameCommand,
+  lookupGameActionReceipt,
+  REQUEST_ID_CONFLICT_ERROR,
   GAME_ACTION_IDEMPOTENCY_TTL_MS,
   getGameActionIdempotencyCacheSize,
   hydrateGameActionReceiptsForRoom,
@@ -164,5 +167,83 @@ describe('gameActionIdempotency', () => {
     });
     expect(mutations).toBe(0);
     expect(ack).toEqual({ ok: true, sequence: 44, duplicate: true });
+  });
+
+  describe('command identity (request id + payload fingerprint)', () => {
+    const fpA = fingerprintGameCommand('game:action', { type: 'MOVE', move: { tile: { high: 6, low: 5 }, position: 'left' }, requestId: 'r1' });
+    const fpB = fingerprintGameCommand('game:action', { type: 'MOVE', move: { tile: { high: 6, low: 4 }, position: 'left' }, requestId: 'r1' });
+
+    it('digests the command, not the request id', () => {
+      expect(fingerprintGameCommand('game:action', { type: 'PASS', requestId: 'a' })).toBe(
+        fingerprintGameCommand('game:action', { type: 'PASS', requestId: 'b' }),
+      );
+      expect(fpA).not.toBe(fpB);
+      expect(fingerprintGameCommand('hand:ready', { handNumber: 1 })).not.toBe(fingerprintGameCommand('hand:ready', { handNumber: 2 }));
+    });
+
+    it('the legacy `end` alias is fingerprinted with the engine\'s precedence', () => {
+      const viaEnd = (end: string) => fingerprintGameCommand('game:action', { type: 'MOVE', move: { tile: { high: 6, low: 5 }, end } });
+      expect(viaEnd('left')).not.toBe(viaEnd('right'));
+      expect(viaEnd('left')).toBe(fingerprintGameCommand('game:action', { type: 'MOVE', move: { tile: { high: 6, low: 5 }, position: 'left' } }));
+    });
+
+    it('same id + same payload replays the original result; same id + different payload fails closed without executing', async () => {
+      let runs = 0;
+      const exec = async () => { runs += 1; return { ok: true, sequence: 7 }; };
+      const first = await withGameActionIdempotency('FP1', 's1', 'r1', exec, { fingerprint: fpA });
+      const again = await withGameActionIdempotency('FP1', 's1', 'r1', exec, { fingerprint: fpA });
+      const altered = await withGameActionIdempotency('FP1', 's1', 'r1', exec, { fingerprint: fpB });
+      expect(first).toEqual({ ok: true, sequence: 7 });
+      expect(again).toMatchObject({ ok: true, sequence: 7, duplicate: true });
+      expect(again).not.toHaveProperty('fp');
+      expect(altered).toEqual({ ok: false, error: REQUEST_ID_CONFLICT_ERROR });
+      expect(runs).toBe(1);
+    });
+
+    it('conflict is detected against an in-flight execution too', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      let runs = 0;
+      const exec = async () => { runs += 1; await gate; return { ok: true, sequence: 1 }; };
+      const p1 = withGameActionIdempotency('FP2', 's1', 'r1', exec, { fingerprint: fpA });
+      const altered = await withGameActionIdempotency('FP2', 's1', 'r1', exec, { fingerprint: fpB });
+      expect(altered).toEqual({ ok: false, error: REQUEST_ID_CONFLICT_ERROR });
+      const p2 = withGameActionIdempotency('FP2', 's1', 'r1', exec, { fingerprint: fpA });
+      release();
+      expect(await p1).toMatchObject({ ok: true });
+      expect(await p2).toMatchObject({ ok: true, duplicate: true });
+      expect(runs).toBe(1);
+    });
+
+    it('the fingerprint survives restart: snapshot -> hydrate keeps rejecting an altered payload', async () => {
+      await withGameActionIdempotency('FP3', 's1', 'r1', async () => ({ ok: true, sequence: 3 }), { fingerprint: fpA });
+      const snapshot = snapshotGameActionReceiptsForRoom('FP3');
+      expect(snapshot[0]?.ack.fp).toBe(fpA);
+      resetGameActionIdempotencyForTests();
+      expect(hydrateGameActionReceiptsForRoom('FP3', snapshot)).toBe(1);
+      expect(lookupGameActionReceipt('FP3', 's1', 'r1', fpB)).toEqual({ ok: false, error: REQUEST_ID_CONFLICT_ERROR });
+      expect(lookupGameActionReceipt('FP3', 's1', 'r1', fpA)).toMatchObject({ ok: true, sequence: 3, duplicate: true });
+    });
+
+    it('receipts written before fingerprints existed keep the id-only behavior', () => {
+      hydrateGameActionReceiptsForRoom('FP4', [
+        { playerSeatId: 's1', requestId: 'old', ack: { ok: true, sequence: 2 }, expiresAt: Date.now() + 60_000 },
+      ]);
+      expect(lookupGameActionReceipt('FP4', 's1', 'old', fpB)).toMatchObject({ ok: true, duplicate: true });
+    });
+
+    it('a valid no-op consumes no receipt (no cache entry, no durable row)', async () => {
+      vi.mocked(persistRoomCommandReceipt).mockClear();
+      const ack = await withGameActionIdempotency('FP5', 's1', 'noop-1', async () => ({ ok: true, noop: true }), { fingerprint: fpA });
+      expect(ack).toEqual({ ok: true });
+      expect(getGameActionIdempotencyCacheSize('FP5')).toBe(0);
+      expect(persistRoomCommandReceipt).not.toHaveBeenCalled();
+    });
+
+    it('receipts persist the match they belong to', async () => {
+      vi.mocked(persistRoomCommandReceipt).mockClear();
+      await withGameActionIdempotency('FP6', 's1', 'r1', async () => ({ ok: true, sequence: 1 }), { fingerprint: fpA, matchId: 'match-A' });
+      expect(persistRoomCommandReceipt).toHaveBeenCalledWith(expect.objectContaining({ matchId: 'match-A', ack: expect.objectContaining({ fp: fpA }) }));
+    });
   });
 });

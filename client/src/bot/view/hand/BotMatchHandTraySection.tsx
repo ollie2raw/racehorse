@@ -60,7 +60,7 @@ export function BotMatchHandTraySection({
           drawSequenceActive,
         });
       }
-      if (!handActive || botTurn) return;
+      if (!handActive || botTurn || drawSequenceActive) return;
       if (!playable) return;
       setSelectedTile(tile);
       setSelectedController('you');

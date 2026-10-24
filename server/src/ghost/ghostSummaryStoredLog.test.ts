@@ -185,10 +185,14 @@ describe('stored composite log stamp (E2)', () => {
         if (url.includes('/rest/v1/ghost_profiles') && method === 'GET') {
           return json([{ user_id: USER, ghost_rating: 800, last_updated: null, composite_log: storedWithStamp, style_profile: null, games_played: 5 }]);
         }
-        if (url.includes('/rest/v1/ghost_profiles') && method === 'POST') {
-          const sent = JSON.parse(String(init?.body))[0];
+        if (url.includes('/rest/v1/ghost_profiles') && (method === 'POST' || method === 'PATCH')) {
+          const body = JSON.parse(String(init?.body));
+          const sent = Array.isArray(body) ? body[0] : body;
           upserts.push(sent);
           return json([sent]);
+        }
+        if (url.includes('/rest/v1/rpc/complete_ghost_rating_v2')) {
+          return json({ isNewGame: true, newRating: 800, ratingDelta: 0 });
         }
         if (url.includes('/rest/v1/ghost_games') && method === 'POST') return json([{ id: 'game-new', xmax: '0' }]);
         if (url.includes('/rest/v1/ghost_games') && method === 'GET') return json(GAMES);
@@ -228,10 +232,14 @@ describe('stored composite log stamp (E2)', () => {
         if (url.includes('/rest/v1/ghost_profiles') && method === 'GET') {
           return json([{ user_id: USER, ghost_rating: 800, last_updated: null, composite_log: null, style_profile: null, games_played: 5 }]);
         }
-        if (url.includes('/rest/v1/ghost_profiles') && method === 'POST') {
-          const sent = JSON.parse(String(init?.body))[0];
+        if (url.includes('/rest/v1/ghost_profiles') && (method === 'POST' || method === 'PATCH')) {
+          const body = JSON.parse(String(init?.body));
+          const sent = Array.isArray(body) ? body[0] : body;
           upserts.push(sent);
           return json([sent]);
+        }
+        if (url.includes('/rest/v1/rpc/complete_ghost_rating_v2')) {
+          return json({ isNewGame: true, newRating: 827, ratingDelta: 27 });
         }
         if (url.includes('/rest/v1/ghost_games') && method === 'POST') return json([{ id: 'game-new', xmax: '0' }]);
         if (url.includes('/rest/v1/ghost_games') && method === 'GET') return json(GAMES);

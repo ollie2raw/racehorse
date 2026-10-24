@@ -1,3 +1,4 @@
+import { processTimeout, cancelProcessTimeout } from '../platform/processLifecycle';
 import { childLogger } from '../logger';
 const log = childLogger('room-session');
 import { randomUUID } from 'crypto';
@@ -27,6 +28,9 @@ import { serverNow } from '../scheduledTournament/serverNow';
 import {
   configureLiveRoomPersistence,
   schedulePersistLiveRoomSessionForRoom,
+  markLiveRoomSessionRestoreIntent,
+  flushScheduledLiveRoomPersistence,
+  type RoomArchiveGuard,
 } from './roomLivePersistence';
 import type { MatchStartDeps } from './matchStartReady';
 import { drawAudit } from './drawAudit';
@@ -67,7 +71,7 @@ const reconnectSeatsByCode = new Map<string, ReconnectSeat[]>();
 const roomCleanupTimersByCode = new Map<string, ReturnType<typeof setTimeout>>();
 
 export type RoomPlayer = { id: string; socketId: string; username: string; userId: string | null };
-export type RoomJoinConfig = { username?: string; userId?: string | null; authToken?: string | null };
+export type RoomJoinConfig = { username?: string; userId?: string | null; authToken?: string | null; guestReconnectToken?: string | null };
 export type AckFn = (payload: unknown) => void;
 
 const roomPlayersByCode = new Map<string, RoomPlayer[]>();
@@ -87,6 +91,11 @@ export type GameOverPersistInput = {
   scoreA: number;
   scoreB: number;
   winnerSeatId: string;
+  /**
+   * Terminal-completion replay only: the durable roster of a room that is not in memory.
+   * Absent for foreground completions (the live roster is used).
+   */
+  replayRoster?: RoomPlayer[];
 };
 
 export type RoomSessionHandlerDeps = {
@@ -115,7 +124,7 @@ export type RoomSessionHandlerDeps = {
   onAfterMatchStarted: (room: Room) => Promise<void>;
   notifyRoomPlayersInGame: (roomCode: string) => void;
   maybeFinalizeTournamentMatch?: (room: Room) => void;
-  persistRoomMatchLog: (room: Room, status: PersistedRoomMatchLogStatus) => Promise<void>;
+  persistRoomMatchLog: (room: Room, status: PersistedRoomMatchLogStatus, guard?: RoomArchiveGuard) => Promise<void>;
 };
 
 export type RoomSessionDeps = RoomSessionHandlerDeps & {
@@ -161,11 +170,11 @@ export function resetRoomSessionStoresForTests(): void {
   roomPlayersByCode.clear();
   reconnectSeatsByCode.clear();
   for (const timer of botTurnTimersByRoom.values()) {
-    clearTimeout(timer);
+    cancelProcessTimeout(timer);
   }
   botTurnTimersByRoom.clear();
   for (const timer of roomCleanupTimersByCode.values()) {
-    clearTimeout(timer);
+    cancelProcessTimeout(timer);
   }
   roomCleanupTimersByCode.clear();
 }
@@ -284,7 +293,7 @@ export function clearRoomMetadata(roomCode: string): void {
 export function cancelRoomCleanup(roomCode: string): void {
   const timer = roomCleanupTimersByCode.get(roomCode);
   if (timer) {
-    clearTimeout(timer);
+    cancelProcessTimeout(timer);
     roomCleanupTimersByCode.delete(roomCode);
   }
 }
@@ -292,7 +301,7 @@ export function cancelRoomCleanup(roomCode: string): void {
 export function scheduleRoomCleanup(roomCode: string): void {
   if (!roomCode || roomCleanupTimersByCode.has(roomCode)) return;
   const io = requireIo();
-  const timer = setTimeout(async () => {
+  const timer = processTimeout('room', async () => {
     roomCleanupTimersByCode.delete(roomCode);
     let room;
     try {
@@ -307,12 +316,37 @@ export function scheduleRoomCleanup(roomCode: string): void {
     });
     if (activePlayers.length > 0) return;
     try {
-      await requireDeps().persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned');
+      await requireDeps().persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned', {
+        shouldFinalize: () => {
+          let latest: Room;
+          try { latest = getRoom(roomCode); } catch { return true; }
+          return latest === room && !latest.players.some((seatId) => {
+            const socketId = getSocketForSeat(roomCode, seatId);
+            return Boolean(socketId && io.sockets.sockets.has(socketId));
+          });
+        },
+        restoreLiveSession: async () => {
+          let latest: Room;
+          try { latest = getRoom(roomCode); } catch { return; }
+          // The archive just deleted the row: this snapshot legitimately re-creates the room's newest match.
+          markLiveRoomSessionRestoreIntent(roomCode);
+          schedulePersistLiveRoomSessionForRoom(latest);
+          await flushScheduledLiveRoomPersistence(roomCode);
+        },
+      });
     } catch (error) {
       log.error({ err: error }, '[room-match-logs] failed to archive room before cleanup');
     }
+    // Archiving yields to reconnects and room replacement. Never tear down
+    // a room a player rejoined while that database request was in flight.
+    let currentRoom: Room;
+    try { currentRoom = getRoom(roomCode); } catch { return; }
+    if (currentRoom !== room || currentRoom.players.some((seatId) => {
+      const socketId = getSocketForSeat(roomCode, seatId);
+      return Boolean(socketId && io.sockets.sockets.has(socketId));
+    })) return;
     const botTimer = botTurnTimersByRoom.get(roomCode);
-    if (botTimer) clearTimeout(botTimer);
+    if (botTimer) cancelProcessTimeout(botTimer);
     botTurnTimersByRoom.delete(roomCode);
     deleteRoom(roomCode);
     clearRoomMetadata(roomCode);
@@ -606,7 +640,7 @@ export function scheduleBotTurn(roomCode: string): void {
   }
 
   const delayMs = 800 + Math.floor(Math.random() * 701);
-  const timer = setTimeout(async () => {
+  const timer = processTimeout('room', async () => {
     botTurnTimersByRoom.delete(roomCode);
     try {
       const latest = getRoom(roomCode);
@@ -972,7 +1006,7 @@ export function broadcastStateUpdate(roomCode: string): void {
   if (roomAfter?.state?.handOver && !roomAfter.state.gameOver) {
     for (const pid of roomAfter.players) {
       if (pid.startsWith('bot:fritz:') && !roomAfter.nextHandReady.has(pid)) {
-        setTimeout(async () => {
+        processTimeout('room', async () => {
           try {
             const result = await readyForNextHand(roomCode, pid, io);
             if (result.started) {

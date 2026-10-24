@@ -121,10 +121,19 @@ function onceWithTimeout(socket, event, predicate = () => true, timeoutMs = TIME
   });
 }
 
+const guestSeatCapabilities = new Map();
+const capabilityKey = (roomCode, userId) => `${String(roomCode).toUpperCase()}:${userId ?? ''}`;
+
 async function emitAck(socket, event, ...args) {
   let finalArgs = args;
   if (event === 'room:create' && args[0] && typeof args[0] === 'object') {
     finalArgs = [{ skipPregameDraw: true, ...args[0] }, ...args.slice(1)];
+  }
+  if (event === 'room:join' && typeof args[0] === 'string' && args[1] && typeof args[1] === 'object') {
+    const stored = guestSeatCapabilities.get(capabilityKey(args[0], args[1].userId));
+    if (stored && !Object.prototype.hasOwnProperty.call(args[1], 'guestReconnectToken')) {
+      finalArgs = [args[0], { ...args[1], guestReconnectToken: stored }, ...args.slice(2)];
+    }
   }
   if (event === 'game:action' && args.length >= 2 && args[1] && typeof args[1] === 'object') {
     const action = args[1];
@@ -141,6 +150,11 @@ async function emitAck(socket, event, ...args) {
     const timer = setTimeout(() => reject(new Error(`${event} ack timeout`)), TIMEOUT_MS);
     socket.emit(event, ...finalArgs, (resp) => {
       clearTimeout(timer);
+      if (resp?.ok && typeof resp.guestReconnectToken === 'string' &&
+          (event === 'room:create' || event === 'room:join')) {
+        const userId = event === 'room:create' ? args[0]?.userId : args[1]?.userId;
+        guestSeatCapabilities.set(capabilityKey(resp.roomCode, userId), resp.guestReconnectToken);
+      }
       resolve(resp);
     });
   });
@@ -731,7 +745,8 @@ async function scenarioLifecycleReconnect() {
         roomCode,
         { username: spectator.state.username, userId: spectator.state.userId },
       );
-      assert(spectateBeforeStartResp?.ok, 'spectator failed to spectate room before start');
+      assert(spectateBeforeStartResp?.ok === false && spectateBeforeStartResp.error === 'not_spectatable',
+        'private room allowed a spectator without opt-in');
 
       const spectatorStart = await emitAck(spectator.socket, 'game:start', roomCode);
       assert(
@@ -749,16 +764,11 @@ async function scenarioLifecycleReconnect() {
 
       await startTwoPlayerGame(alpha, bravo, roomCode);
 
-      await waitForStateCount(spectator, 1, 'state:spectate');
-      const initialSpectatorState = latestState(spectator, 'state:spectate');
-      assert(initialSpectatorState?.state, 'spectator did not receive initial state snapshot');
-
       const currentFor = await waitForPlayableClient([alpha, bravo], roomCode);
       assert(currentFor, 'could not identify active player');
       const playMove = getPlayableMove(currentFor);
       assert(playMove, 'no playable move found for active player');
 
-      const preSpectateCount = spectator.state.spectateUpdates.length;
       const moveResp = await emitAck(currentFor.socket, 'game:action', roomCode, {
         type: 'MOVE',
         move: {
@@ -767,7 +777,8 @@ async function scenarioLifecycleReconnect() {
         },
       });
       assert(moveResp?.ok, `game:action failed: ${moveResp?.error ?? 'unknown'}`);
-      await waitForStateCount(spectator, preSpectateCount + 1, 'state:spectate');
+      assert(spectator.state.spectateUpdates.length === 0,
+        'private spectator received a match update after rejection');
 
       const bravoDisconnectedStateCount = bravo.state.stateUpdates.length;
       bravo.disconnect();
@@ -802,7 +813,7 @@ async function scenarioLifecycleReconnect() {
           'alpha roster did not migrate reconnect socket onto stable seat',
         );
         assert(
-          alpha.state.stateUpdates.length > 0 && spectator.state.spectateUpdates.length > 0,
+          alpha.state.stateUpdates.length > 0,
           'expected ongoing state updates during lifecycle scenario',
         );
 
@@ -814,7 +825,7 @@ async function scenarioLifecycleReconnect() {
             spectatorStartRejected: true,
             nonHostStartRejected: true,
             startGame: true,
-            spectateUpdates: spectator.state.spectateUpdates.length > 0,
+            privateSpectateRejected: spectator.state.spectateUpdates.length === 0,
             reconnectMigration: true,
             bravoStateUpdatesBeforeDisconnect: bravoDisconnectedStateCount,
           },
@@ -931,7 +942,8 @@ async function scenarioSeatMigrationAndSpectatorRejection() {
         roomCode,
         { username: spectator.state.username, userId: spectator.state.userId },
       );
-      assert(spectatorJoin?.ok, 'spectator failed to join as spectator');
+      assert(spectatorJoin?.ok === false && spectatorJoin.error === 'not_spectatable',
+        'private room allowed a spectator without opt-in');
 
       const spectatorAction = await emitAck(spectator.socket, 'game:action', roomCode, {
         type: 'MOVE',
@@ -1642,10 +1654,12 @@ async function scenarioStartAndHandReadyGuards() {
       assert(firstReady?.ok && firstReady.started === false, 'first hand:ready should not start next hand alone');
 
       const secondReady = await emitAck(bravo.socket, 'hand:ready', roomCode, handOverHandNumber);
-      assert(secondReady?.ok && secondReady.started === false, 'second current hand:ready should schedule next hand');
+      // The ack waits for the scheduled advance to finish; it reports the
+      // newly started hand rather than an intermediate scheduled state.
+      assert(secondReady?.ok && secondReady.started === true, 'second current hand:ready did not start next hand');
       assert(
-        typeof secondReady.waitMs === 'number' && secondReady.waitMs >= 2000,
-        `hand:ready did not report a meaningful server-side hold, got ${secondReady.waitMs}`,
+        typeof secondReady.waitMs === 'number' && secondReady.waitMs >= 0 && secondReady.waitMs <= 2500,
+        `hand:ready reported an invalid server-side hold, got ${secondReady.waitMs}`,
       );
       await waitForAllConnectedClientsSequence([alpha, bravo], handOverState.sequence + 1);
       const nextState = latestState(alpha)?.state;
@@ -2236,6 +2250,8 @@ async function scenarioPrivateRematchAfterShortMatch() {
       const terminal = await playUntilGameOver([alpha, bravo], roomCode, 20);
       assert(terminal?.gameOver, 'short-match cert path did not reach gameOver');
 
+      const alphaBeforeRematch = alpha.state.stateUpdates.length;
+      const bravoBeforeRematch = bravo.state.stateUpdates.length;
       const rematchStarted = onceWithTimeout(bravo.socket, 'game:rematch:started');
       const first = await emitAck(alpha.socket, 'game:rematch', roomCode);
       assert(first?.ok, `alpha rematch failed: ${first?.error ?? 'unknown'}`);
@@ -2243,8 +2259,8 @@ async function scenarioPrivateRematchAfterShortMatch() {
       assert(second?.ok, `bravo rematch failed: ${second?.error ?? 'unknown'}`);
       await rematchStarted;
 
-      await waitForStateCount(alpha, alpha.state.stateUpdates.length + 1);
-      await waitForStateCount(bravo, bravo.state.stateUpdates.length + 1);
+      await waitForStateCount(alpha, alphaBeforeRematch + 1);
+      await waitForStateCount(bravo, bravoBeforeRematch + 1);
       const after = latestState(alpha)?.state;
       assert(after && !after.gameOver, 'rematch did not reset gameOver');
       assert((after.handNumber ?? 0) >= 1, 'rematch missing active hand');
@@ -2330,6 +2346,53 @@ async function scenarioPrivateCreateJoinStartMove() {
   );
 }
 
+async function scenarioGuestSeatCapabilityAttack() {
+  return withClients(
+    [
+      { label: 'host', userId: 'cap-host', username: 'CapHost' },
+      { label: 'guest', userId: 'cap-guest', username: 'CapGuest' },
+      { label: 'attacker', userId: 'cap-attacker', username: 'Attacker' },
+    ],
+    async ({ host, guest, attacker }) => {
+      const created = await emitAck(host.socket, 'room:create', {
+        username: host.state.username, userId: host.state.userId,
+      });
+      assert(created?.ok && created.roomCode, 'host failed to create capability test room');
+      const roomCode = created.roomCode;
+      const joined = await emitAck(guest.socket, 'room:join', roomCode, {
+        username: guest.state.username, userId: guest.state.userId,
+      });
+      assert(joined?.ok && joined.you && joined.guestReconnectToken,
+        'guest did not receive its private reconnect capability');
+      assert(!JSON.stringify(joined.players).includes(joined.guestReconnectToken),
+        'guest reconnect capability leaked into room roster');
+      await waitForRoomCount(host, 2);
+
+      const forged = await emitAck(attacker.socket, 'room:join', roomCode, {
+        username: guest.state.username,
+        userId: guest.state.userId,
+        guestReconnectToken: null,
+      });
+      assert(forged?.ok === false && /guest_reconnect_denied/.test(String(forged.error)),
+        'visible guest ID was accepted as seat ownership');
+      assert(guest.socket.connected, 'attacker displaced the original guest');
+
+      const secondTab = createClient('guestSecondTab', guest.state.userId, guest.state.username);
+      try {
+        await secondTab.connectAndIdentify();
+        const legitimate = await emitAck(secondTab.socket, 'room:join', roomCode, {
+          username: guest.state.username, userId: guest.state.userId,
+        });
+        assert(legitimate?.ok && legitimate.you === joined.you,
+          `valid guest capability failed to reclaim seat: ${legitimate?.error ?? 'unknown'}`);
+        return { roomCode, checks: { forgedSeatRejected: true, legitimateSecondTabAccepted: true } };
+      } finally {
+        secondTab.disconnect();
+      }
+    },
+  );
+}
+
 const scenarios = [
   { name: 'private-create-join-start-move', run: scenarioPrivateCreateJoinStartMove },
   { name: 'private-midmatch-leave-forfeit', run: scenarioPrivateMidMatchLeaveForfeit },
@@ -2345,6 +2408,7 @@ const scenarios = [
   { name: 'post-move-stability', run: scenarioPostMoveStability },
   { name: 'start-and-hand-ready-guards', run: scenarioStartAndHandReadyGuards },
   { name: 'guest-seat-reconnect', run: scenarioGuestSeatReconnect },
+  { name: 'guest-seat-capability-attack', run: scenarioGuestSeatCapabilityAttack },
   { name: 'tokenless-uuid-claim-rejected', run: scenarioTokenlessUuidClaimRejected },
   { name: 'hand-ended-replay', run: scenarioHandEndedReplay },
   { name: 'identity-freeze', run: scenarioIdentityFreeze },

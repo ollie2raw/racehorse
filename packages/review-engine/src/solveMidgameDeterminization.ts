@@ -1,6 +1,5 @@
 import {
   applyGameCommand,
-  DEFAULT_CONFIG,
   computePlayScore,
   simulatePlacement,
   type Config,
@@ -10,6 +9,7 @@ import {
 import type { ReviewAction, ReviewCandidateEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { ReviewSearchBudget } from './evaluateReviewPosition';
 import { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
+import { resolveReviewConfig } from './reviewRuleset';
 import { sampleHiddenAllocation } from './sampleHiddenAllocation';
 import { commandForAction, searchGameTree, type GameTreeWalkConfig, type NodeBudget } from './searchGameTree';
 
@@ -208,9 +208,7 @@ export function solveMidgameDeterminization(
   if (totalOpponentHandCombinations === 0) return null;
 
   const config: Config = {
-    ...DEFAULT_CONFIG,
-    maxPips,
-    winningScore: snapshot.preAction.winningTarget,
+    ...resolveReviewConfig(snapshot, maxPips),
     deadTileCount: snapshot.preAction.boneyard.deadCount,
   };
 

@@ -66,6 +66,7 @@ function makeHarness() {
       json(value: unknown) { body = value; return res; },
       setHeader() { return res; },
       set() { return res; },
+      vary() { return res; },
       once() { return res; },
     };
     await handler({ headers: {}, params: {}, query, body: {}, method, path, get() { return undefined; } }, res);

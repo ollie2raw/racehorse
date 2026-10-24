@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { PrivateMatchLobbyControlPanelProps } from './PrivateMatchLobbyControlPanel';
 
@@ -93,5 +93,23 @@ describe('PrivateMatchLobbyControlPanel — redesigned panel', () => {
     rerender(<PrivateMatchLobbyControlPanel {...baseProps()} />);
     screen.getByRole('tab', { name: /Join lobby/i }).click();
     expect(await screen.findByPlaceholderText('ROOM CODE')).toBeInTheDocument();
+  });
+
+  it('iOS keyboard: the room-code field does not autocorrect/lowercase the code, and Return joins (once, never while pending)', async () => {
+    const onJoinRoom = vi.fn();
+    const { rerender } = render(<PrivateMatchLobbyControlPanel {...baseProps({ onJoinRoom, roomCode: 'AB12CD' })} />);
+    screen.getByRole('tab', { name: /Join lobby/i }).click();
+    const input = await screen.findByPlaceholderText('ROOM CODE');
+    expect(input).toHaveAttribute('autocapitalize', 'characters');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+    expect(input).toHaveAttribute('spellcheck', 'false');
+    expect(input).toHaveAttribute('enterkeyhint', 'go');
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onJoinRoom).toHaveBeenCalledTimes(1);
+
+    rerender(<PrivateMatchLobbyControlPanel {...baseProps({ onJoinRoom, roomCode: 'AB12CD', pendingLobbyAction: 'join' })} />);
+    fireEvent.keyDown(await screen.findByPlaceholderText('ROOM CODE'), { key: 'Enter' });
+    expect(onJoinRoom).toHaveBeenCalledTimes(1);   // pending join: a second Return cannot double-submit
   });
 });

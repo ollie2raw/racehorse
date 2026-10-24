@@ -102,6 +102,7 @@ export interface BotMatchState {
   dealSeed?: string | null;
   /** Local fallback deck if ranked /start fails after the pre-game draw. */
   pendingDrawDeck?: Tile[] | null;
+  initializationError?: string;
   /** Hand-1 starter from pre-game draw; odd hands use this player, even hands alternate. */
   matchStarter?: BotPlayerId;
   // Opponent hand inference

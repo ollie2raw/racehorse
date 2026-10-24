@@ -217,6 +217,7 @@ export function usePostGamePivotalReview({
         tierPlayed: fritzTier,
         winningScore,
         reviewSnapshots,
+        finalScores: { you: match.players.you.score, opponent: match.players.bot.score },
       }),
     ).then((analysis) => {
       if (cancelled) return;
@@ -246,6 +247,8 @@ export function usePostGamePivotalReview({
     winningScore,
     reviewSnapshotRecorder,
     reviewCaptureEnabled,
+    match.players.you.score,
+    match.players.bot.score,
   ]);
 
   // Production Game Review is owned by the durable server job.
@@ -621,6 +624,8 @@ export function usePostGamePivotalReview({
               mode: 'pvf',
               sourceMatchId,
               replayArtifact,
+            }, (message) => {
+              setCalibratedHandsAnalysis((current) => current ? { ...current, reviewPersistenceError: message } : current);
             });
           })
           .catch((error) => {

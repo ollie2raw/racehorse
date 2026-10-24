@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { snapshotBoardState } from '../../game/moveLogger';
 import type { MoveEntry } from '../../game/moveLogger';
 import type { ReviewAction, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { buildDecisionIdByMoveNumber, correlateSnapshotsToMoveLog } from './correlateSnapshotsToMoveLog';
@@ -291,4 +292,35 @@ describe('buildDecisionIdByMoveNumber', () => {
     expect(byMoveNumber.has(1)).toBe(false);
     expect(byMoveNumber.size).toBe(0);
   });
+});
+
+it('preserves coverage after one-draw and consecutive multi-draw turns through the endgame and next hand', () => {
+  const steps: Array<{ actor: 'you' | 'bot'; action: ReviewAction; represented: boolean; hand?: number }> = [
+    { actor: 'you', action: playAction(6, 6), represented: true },
+    { actor: 'bot', action: { kind: 'draw' }, represented: true },
+    { actor: 'bot', action: { kind: 'draw' }, represented: false },
+    { actor: 'bot', action: { kind: 'draw' }, represented: false },
+    { actor: 'bot', action: playAction(5, 6), represented: true },
+    { actor: 'you', action: { kind: 'draw' }, represented: true },
+    { actor: 'you', action: playAction(4, 6), represented: true },
+    { actor: 'bot', action: { kind: 'draw' }, represented: true },
+    { actor: 'bot', action: { kind: 'draw' }, represented: false },
+    { actor: 'bot', action: { kind: 'pass' }, represented: true },
+    { actor: 'you', action: { kind: 'pass' }, represented: true },
+    { actor: 'you', action: playAction(6, 6), represented: true, hand: 2 },
+  ];
+  const snapshots: ReviewPositionSnapshotV2[] = [];
+  const log: MoveEntry[] = [];
+  let board: import('../../types').BoardState | null = null;
+  let hand = 1;
+  for (const [index, step] of steps.entries()) {
+    if (step.hand) { hand = step.hand; board = null; }
+    const snapshot = makeSnapshot(index + 1, step.actor, step.action);
+    snapshots.push({ ...snapshot, identifiers: { ...snapshot.identifiers, handNumber: hand }, preAction: { ...snapshot.preAction, board } });
+    if (step.represented) log.push(makeMoveEntry({ moveNumber: log.length + 1, handNumber: hand, player: step.actor === 'you' ? 'you' : 'opponent', action: step.action.kind === 'play' ? 'place' : step.action.kind, tile: step.action.kind === 'play' ? [step.action.tile.low, step.action.tile.high] : undefined, position: step.action.kind === 'play' ? step.action.position : undefined, boardState: snapshotBoardState(board) }));
+    if (step.action.kind === 'play') board = { mainLine: [...((board as import('../../types').BoardState | null)?.mainLine ?? []), { tile: step.action.tile, orientation: 'horizontal-normal' }], leftEnd: step.action.tile.low, rightEnd: step.action.tile.high, leftEndIsDouble: false, rightEndIsDouble: false, hubDoubles: [] };
+  }
+  const mapping = buildDecisionIdByMoveNumber(snapshots, log);
+  expect(mapping.size).toBe(log.length);
+  expect([...mapping.values()]).toEqual(snapshots.filter((_, index) => steps[index].represented).map((snapshot) => snapshot.identifiers.decisionId));
 });

@@ -1,0 +1,10 @@
+/* Presentation vocabulary; matching JS values: ui/motion.ts. */
+:root {
+  --rh-motion-micro: 120ms;
+  --rh-motion-state: 180ms;
+  --rh-motion-tile: 220ms;
+  --rh-motion-result: 300ms;
+  --rh-motion-reward: 360ms;
+  --rh-motion-settle: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --rh-motion-press: cubic-bezier(0.4, 0, 1, 1);
+}

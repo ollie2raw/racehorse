@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && node scripts/prerender.mjs",
-    "build:ios": "node scripts/iosReleaseGuard.mjs env && tsc -b && VITE_APP_VERSION=${VITE_APP_VERSION:-ios-$(git rev-parse --short HEAD)} vite build --mode ios && node scripts/prerender.mjs && find dist -name '*.map' -delete && node scripts/iosReleaseGuard.mjs bundle && cap sync ios",
+    "build": "node scripts/legalReleaseGuard.mjs production && tsc -b && vite build && node scripts/prerender.mjs",
+    "build:ios": "node scripts/legalReleaseGuard.mjs ios && node scripts/iosReleaseGuard.mjs env && tsc -b && VITE_APP_VERSION=${VITE_APP_VERSION:-ios-$(git rev-parse --short HEAD)} vite build --mode ios && RACEHORSE_BUILD_MODE=ios node scripts/prerender.mjs && find dist -name '*.map' -delete && node scripts/iosReleaseGuard.mjs bundle && cap sync ios",
     "typecheck": "tsc -b --noEmit",
     "qa:capture-auth": "node scripts/captureAuthenticatedQaFixture.mjs",
     "qa:journey-content": "node scripts/validateJourneyContent.mjs",
@@ -58,6 +58,7 @@
     "@capacitor/core": "^8.5.2",
     "@capacitor/ios": "^8.5.2",
     "@capacitor/preferences": "^8.0.1",
+    "@racehorse/capacitor-keychain-storage": "*",
     "@racehorse/game-core": "*",
     "@racehorse/match-protocol": "*",
     "@racehorse/review-engine": "*",

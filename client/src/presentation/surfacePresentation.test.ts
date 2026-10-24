@@ -8,6 +8,7 @@ const modes: AppMode[] = [
   'puzzleRush', 'noBrainer', 'guidedMatchRecorder', 'guidedMatchAnnotator',
   'friends', 'stats', 'ratingHistory', 'leaderboard', 'profile', 'live',
   'bot', 'ghost', 'settings', 'dailyFritzHealthAdmin',
+  'privacy', 'terms', 'support',
 ];
 
 const context = (mode: AppMode) => ({

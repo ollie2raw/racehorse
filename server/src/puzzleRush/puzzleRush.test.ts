@@ -856,16 +856,13 @@ describe('stage-reached telemetry', () => {
     expect(gradingSource).not.toContain('stageReached');
     expect(gradingSource).not.toContain('stage_reached');
 
-    // And the graded write-back does not carry the column, so its upsert
-    // preserves whatever the report recorded.
+    // The transactional finalization call carries only server grades; it does
+    // not replace the report's observational stage telemetry.
     const storeSource = readFileSync(
       resolve(__dirname, '../http/stores/puzzleRushStore.ts'),
       'utf8',
     );
-    const persistBlock = storeSource.slice(
-      storeSource.indexOf('export async function persistGradedRushPuzzles'),
-      storeSource.indexOf('export async function finalizeRushRun'),
-    );
+    const persistBlock = storeSource.slice(storeSource.indexOf('export async function finalizeRushRun'));
     expect(persistBlock.length).toBeGreaterThan(0);
     expect(persistBlock).not.toContain('stage_reached_key');
   });

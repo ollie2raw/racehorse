@@ -36,6 +36,7 @@ export type ResolveInitialBotMatchStateInput = {
     moveLog?: MoveEntry[];
   } | null;
   preGameDrawEligible: boolean;
+  awaitingAuthoritativeStart?: boolean;
   dailyFritzPackage: DailyFritzStartResponse | null;
   guidedInitSourceRef: { current: 'full-matchStateJson' | 'reduced-snapshot' | 'seeded-deal' | 'random' | null };
   matchRuleOverrides?: MatchRuleOverrides;
@@ -96,7 +97,7 @@ export function resolveInitialBotMatchState(input: ResolveInitialBotMatchStateIn
 
   return (
     resumablePersistedDailyFritzMatch?.match
-    ?? (preGameDrawEligible
+    ?? (preGameDrawEligible || input.awaitingAuthoritativeStart
       ? createPreGameDrawShellMatch(winningScore, dealSize)
       : mode === 'daily-fritz' && dailyFritzPackage
         ? createDailyFritzOfficialMatch(dailyFritzPackage, winningScore)

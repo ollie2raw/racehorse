@@ -139,7 +139,7 @@ security definer
 set search_path = public
 as $$
 declare
-  fallback_username text := 'user_' || left(replace(new.id::text, '-', ''), 8);
+  fallback_username text := 'user_' || replace(new.id::text, '-', '');
   desired_username text;
 begin
   desired_username := lower(trim(coalesce(

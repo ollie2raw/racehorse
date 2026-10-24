@@ -69,23 +69,7 @@ create policy "daily_puzzles_select_all"
   using (true);
 
 drop policy if exists "daily_puzzles_insert_admin" on public.daily_puzzles;
-create policy "daily_puzzles_insert_admin"
-  on public.daily_puzzles
-  for insert
-  to authenticated
-  with check ((auth.jwt() ->> 'email') = 'admin@example.com');
 
 drop policy if exists "daily_puzzles_update_admin" on public.daily_puzzles;
-create policy "daily_puzzles_update_admin"
-  on public.daily_puzzles
-  for update
-  to authenticated
-  using ((auth.jwt() ->> 'email') = 'admin@example.com')
-  with check ((auth.jwt() ->> 'email') = 'admin@example.com');
 
 drop policy if exists "daily_puzzles_delete_admin" on public.daily_puzzles;
-create policy "daily_puzzles_delete_admin"
-  on public.daily_puzzles
-  for delete
-  to authenticated
-  using ((auth.jwt() ->> 'email') = 'admin@example.com');

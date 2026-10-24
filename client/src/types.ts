@@ -109,4 +109,7 @@ export type AppMode =
   | 'feed'
   | 'live'
   | 'settings'
+  | 'privacy'
+  | 'terms'
+  | 'support'
   | 'dailyFritzHealthAdmin';

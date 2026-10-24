@@ -104,6 +104,10 @@
   --rh-settings-accent: var(--accent-danger);
 }
 
+.rh-settings-section--steel {
+  --rh-settings-accent: var(--accent-steel);
+}
+
 .rh-settings-section-eyebrow {
   margin: 0;
   color: var(--rh-settings-accent);
@@ -254,6 +258,66 @@
   border-color: color-mix(in srgb, var(--accent-danger) 70%, transparent);
 }
 
+/* ── Legal and support ──────────────────────────────────────────── */
+
+.rh-settings-legal-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rh-settings-legal-list li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.rh-settings-legal-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 4px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.rh-settings-legal-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rh-settings-legal-label {
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.rh-settings-legal-note {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.rh-settings-legal-chevron {
+  flex-shrink: 0;
+  color: var(--rh-settings-accent);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.rh-settings-legal-link:hover .rh-settings-legal-label,
+.rh-settings-legal-link:focus-visible .rh-settings-legal-label {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 @media (min-width: 769px) and (min-height: 600px) {
   .rh-settings {
     padding: var(--space-lg) var(--space-md) 96px;
@@ -285,5 +349,20 @@
   /* Second row: Sound, then the danger zone across the other two columns. */
   .rh-settings-section--danger {
     grid-column: span 2;
+  }
+
+  /* Third row: legal and support across the page, links side by side. */
+  .rh-settings-section--steel {
+    grid-column: 1 / -1;
+  }
+
+  .rh-settings-legal-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .rh-settings-legal-list li + li {
+    border-top: 0;
   }
 }

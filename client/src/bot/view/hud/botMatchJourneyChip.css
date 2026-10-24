@@ -1,0 +1,36 @@
+/* Journey match context — sits in the top-left of the board canvas (`.nbl-board-canvas` is position: relative).
+   Non-interactive and below the board toolbar (z-index 12) so it can never intercept a play. */
+.rh-journey-chip {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 11;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  max-width: calc(100% - 24px);
+  padding: 4px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-control);
+  background: rgba(10, 16, 28, 0.82);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.rh-journey-chip__stage {
+  color: var(--text-primary);
+}
+
+.rh-journey-chip__head-start {
+  padding: 1px 6px;
+  border: 1px solid var(--tier-elite);
+  border-radius: var(--radius-control);
+  color: var(--tier-elite);
+}

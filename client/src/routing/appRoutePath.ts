@@ -41,6 +41,9 @@ const STATIC_PATHS: Record<string, AppRouteResolution> = {
   '/multiplayer/private': { mode: 'multiplayer', multiplayerView: 'private' },
   '/social': { mode: 'feed' },
   '/settings': { mode: 'settings' },
+  '/privacy': { mode: 'privacy' },
+  '/terms': { mode: 'terms' },
+  '/support': { mode: 'support' },
   '/admin/daily-fritz-health': { mode: 'dailyFritzHealthAdmin' },
 };
 
@@ -119,6 +122,9 @@ export function buildAppPath(state: AppPathState): string {
     feed: '/social',
     leaderboard: '/social',
     settings: '/settings',
+    privacy: '/privacy',
+    terms: '/terms',
+    support: '/support',
     dailyFritzHealthAdmin: '/admin/daily-fritz-health',
   };
 

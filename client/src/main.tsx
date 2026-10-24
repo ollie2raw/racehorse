@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/react';
 import { createSentryVolumeGuard } from './lib/sentryVolumeGuard';
+import { redactAuthUrlsInSentryEvent } from './lib/redactAuthUrl';
 
 // One runaway error must not exhaust the 5k/mo event quota and blind us to
 // everything else (PRE_LAUNCH_HARDENING.md §3.1).
@@ -12,7 +13,7 @@ Sentry.init({
   integrations: [Sentry.browserTracingIntegration()],
   tracesSampleRate: 0.1,
   release: import.meta.env.VITE_APP_VERSION ?? 'unknown',
-  beforeSend: (event) => (sentryVolumeGuard.shouldForward(event) ? event : null),
+  beforeSend: (event) => (sentryVolumeGuard.shouldForward(event) ? redactAuthUrlsInSentryEvent(event) : null),
 });
 
 if (import.meta.env.DEV && !import.meta.env.VITE_SENTRY_DSN) {

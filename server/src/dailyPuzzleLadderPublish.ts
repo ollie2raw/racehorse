@@ -48,7 +48,7 @@ async function postgrestFetch(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, {
+    const response = await fetch(url, {
       ...init,
       headers: {
         apikey: serviceKey,
@@ -57,8 +57,17 @@ async function postgrestFetch(
         Prefer: 'resolution=merge-duplicates,return=representation',
         ...(init?.headers ?? {}),
       },
-      signal: init?.signal ?? controller.signal,
+      signal: controller.signal,
     });
+    // A headers-only timeout does not bound a scheduled range scan: consume
+    // the body before releasing the deadline, then expose repeatable readers.
+    const body = await response.text();
+    return {
+      ok: response.ok,
+      status: response.status,
+      text: async () => body,
+      json: async () => JSON.parse(body) as unknown,
+    };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error(`Supabase request timed out after ${timeoutMs}ms: ${path}`);

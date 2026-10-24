@@ -1,3 +1,4 @@
+import { processInterval, cancelProcessInterval } from '../platform/processLifecycle';
 import { childLogger } from '../logger';
 import type { MatchedPair, QueuedPlayer, QueueStatusEvent } from './types';
 import { findPairs, ratingWindowMsAt } from './pairing';
@@ -45,12 +46,12 @@ export class QueueService {
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => this.tick(), this.opts.tickIntervalMs);
+    this.timer = processInterval('matchmaking', () => this.tick(), this.opts.tickIntervalMs);
   }
 
   stop(): void {
     if (this.timer) {
-      clearInterval(this.timer);
+      cancelProcessInterval(this.timer);
       this.timer = null;
     }
   }

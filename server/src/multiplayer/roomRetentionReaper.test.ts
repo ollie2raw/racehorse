@@ -45,18 +45,24 @@ describe('runRoomRetention', () => {
   it('deletes live sessions idle 7 days and guest-only abandoned logs older than 30 days', async () => {
     supabaseFetch
       .mockResolvedValueOnce([{ room_code: 'A1' }, { room_code: 'B2' }])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ room_code: 'C3' }]);
 
     const result = await runRoomRetention(NOW);
 
     expect(result).toEqual({ liveSessionsDeleted: 2, guestMatchLogsDeleted: 1 });
-    expect(supabaseFetch).toHaveBeenCalledTimes(2);
+    expect(supabaseFetch).toHaveBeenCalledTimes(3);
 
-    const [live, logs] = supabaseFetch.mock.calls;
+    const [live, liveLogged, logs] = supabaseFetch.mock.calls;
     expect(tableOf(live)).toBe('/rest/v1/room_live_sessions');
     expect(live[1]).toEqual({ method: 'DELETE' });
     expect(params(live).get('updated_at')).toBe(`lt.${new Date(NOW - ROOM_LIVE_SESSION_RETENTION_MS).toISOString()}`);
     expect(params(live).has('room_code')).toBe(false);
+    // Terminal rows that still owe a completion are never reaped: only rows with no flag, or
+    // an explicit completionPending=false, are eligible (two simple filters, no `or=`).
+    expect(params(live).get('room_shell->>completionPending')).toBe('is.null');
+    expect(params(liveLogged).get('room_shell->>completionPending')).toBe('eq.false');
+    expect(params(live).has('or')).toBe(false);
 
     expect(tableOf(logs)).toBe('/rest/v1/room_match_logs');
     expect(logs[1]).toEqual({ method: 'DELETE' });
@@ -85,6 +91,7 @@ describe('runRoomRetention', () => {
 
   it('one failing table does not stop the other, and nothing throws', async () => {
     supabaseFetch.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce([{ room_code: 'X' }]);
+    // (the failing live-session DELETE aborts both flag passes; the log DELETE still runs)
 
     await expect(runRoomRetention(NOW)).resolves.toEqual({ liveSessionsDeleted: null, guestMatchLogsDeleted: 1 });
   });
@@ -104,10 +111,10 @@ describe('scheduleRoomRetention', () => {
     expect(supabaseFetch).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(supabaseFetch).toHaveBeenCalledTimes(2);
+    expect(supabaseFetch).toHaveBeenCalledTimes(3);
 
     await vi.advanceTimersByTimeAsync(ROOM_RETENTION_INTERVAL_MS);
-    expect(supabaseFetch).toHaveBeenCalledTimes(4);
+    expect(supabaseFetch).toHaveBeenCalledTimes(6);
   });
 
   it('is idempotent', async () => {
@@ -115,7 +122,7 @@ describe('scheduleRoomRetention', () => {
     scheduleRoomRetention();
     scheduleRoomRetention();
     await vi.advanceTimersByTimeAsync(ROOM_RETENTION_BOOT_DELAY_MS);
-    expect(supabaseFetch).toHaveBeenCalledTimes(2);
+    expect(supabaseFetch).toHaveBeenCalledTimes(3);
   });
 
   it('does nothing when ROOM_RETENTION_REAPER_ENABLED is "false"', async () => {

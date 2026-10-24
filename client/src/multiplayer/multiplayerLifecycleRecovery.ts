@@ -55,13 +55,26 @@ export function evaluateLifecycleResumeResync(
   return { shouldResync: true, reason: 'hidden_stale' };
 }
 
+/**
+ * A gap between two liveness ticks this long means the page's JS did not run: the OS suspended the app/webview. In a Capacitor
+ * WKWebView the "hidden" transition is NOT reliably delivered before suspension (observed on the iOS simulator: only
+ * blur/focus/pageshow/visibilitychange(visible) arrive, at resume), so suspension must be measured by the heartbeat, not only by
+ * a hidden event.
+ */
+export const LIFECYCLE_SUSPEND_GAP_MS = 5_000;
+export const LIFECYCLE_HEARTBEAT_MS = 1_000;
+
 export function createLifecycleHiddenTracker(): {
   markHidden: (now: number) => void;
+  /** Liveness tick: called from a short interval while the page's JS is running. */
+  markAlive: (now: number) => void;
+  /** When this resume began being "stale": the earliest of the hidden event and the last liveness tick before a suspension gap. */
   consumeHiddenSince: (now: number) => number | null;
   getHiddenSince: () => number | null;
   reset: () => void;
 } {
   let hiddenSinceMs: number | null = null;
+  let lastAliveMs: number | null = null;
 
   return {
     markHidden(now: number) {
@@ -69,16 +82,25 @@ export function createLifecycleHiddenTracker(): {
         hiddenSinceMs = now;
       }
     },
-    consumeHiddenSince(_now: number) {
-      const since = hiddenSinceMs;
+    markAlive(now: number) {
+      lastAliveMs = now;
+    },
+    consumeHiddenSince(now: number) {
+      const hidden = hiddenSinceMs;
       hiddenSinceMs = null;
-      return since;
+      const alive = lastAliveMs;
+      lastAliveMs = now; // resuming counts as alive
+      const suspended = alive !== null && now - alive >= LIFECYCLE_SUSPEND_GAP_MS ? alive : null;
+      if (hidden === null) return suspended;
+      if (suspended === null) return hidden;
+      return Math.min(hidden, suspended);
     },
     getHiddenSince() {
       return hiddenSinceMs;
     },
     reset() {
       hiddenSinceMs = null;
+      lastAliveMs = null;
     },
   };
 }

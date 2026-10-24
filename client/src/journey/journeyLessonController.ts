@@ -287,6 +287,11 @@ function isInteractive(stage: JourneyLessonStage): stage is Exclude<JourneyLesso
   return stage.kind !== 'frame' && stage.kind !== 'board_demo';
 }
 
+/** Whether the controller counts `outcome` as passing `stage` (proof/review stages need `passed`). */
+export function isJourneyStageOutcomeAccepted(stage: JourneyLessonStage, outcome: JourneyStageOutcome): boolean {
+  return isAcceptedOutcome(stage, outcome);
+}
+
 function isAcceptedOutcome(stage: JourneyLessonStage, outcome: JourneyStageOutcome): boolean {
   if (outcome === 'abandoned' || outcome === 'failed') return false;
   if (stage.evidenceRole === 'proof' || stage.evidenceRole === 'review') return outcome === 'passed';

@@ -1,7 +1,9 @@
+import { processTimeout, processInterval, onProcessStop, isProcessClosing, trackProcessWork } from '../platform/processLifecycle';
 import { childLogger } from '../logger';
 
 import cron from 'node-cron';
 import { decayInactivePlayers, processAllPendingRatingGames } from './periodService';
+import { beginDecayRun, withRatingCompletion, isRatingCutoverQuiescedError } from './ratingCutoverGate';
 
 const log = childLogger('ranking:cron');
 
@@ -38,15 +40,55 @@ export const RANKING_CATCHUP_BOOT_DELAY_MS = 20_000;
  */
 async function runPendingRatingCatchUp(source: 'boot' | 'periodic' | 'weekly'): Promise<void> {
   try {
-    const pendingResult = await processAllPendingRatingGames();
+    const pendingResult = await withRatingCompletion('ranked catch-up', processAllPendingRatingGames);
     if (pendingResult.processed > 0 || pendingResult.errors.length > 0 || source === 'weekly') {
       log.info({ source, processed: pendingResult.processed }, 'processed missed ranked game updates');
     }
     if (pendingResult.errors.length > 0) {
-      log.error({ source, errors: pendingResult.errors, count: pendingResult.errors.length }, 'rating processing errors');
+      log.error({ source, errors: pendingResult.errors.slice(0, 5), count: pendingResult.errors.length }, 'rating processing errors');
     }
   } catch (err) {
+    if (isRatingCutoverQuiescedError(err)) {
+      log.info({ source }, 'pending-rating catch-up skipped while quiesced');
+      return;
+    }
     log.error({ source, err }, 'pending-rating catch-up sweep failed');
+  }
+}
+
+let weeklyDecayRunning = false;
+
+/** Weekly RD decay. Exported so the cutover-gate tests can drive the exact scheduled body. */
+export async function runWeeklyRdDecay(): Promise<void> {
+  if (isProcessClosing()) return;
+  if (weeklyDecayRunning) {
+    log.info({ outcome: 'already_running' }, 'weekly RD decay');
+    return;
+  }
+  weeklyDecayRunning = true;
+  const startedAt = Date.now();
+  try {
+    // Rating cutover gate: a decay run is counted from before its first
+    // read until its last write, and never starts while the gate is closed.
+    const decayRun = await beginDecayRun();
+    if (!decayRun) {
+      log.warn('weekly RD decay skipped: rating cutover gate is closed or unreadable');
+      return;
+    }
+    try {
+      const decayResult = await decayInactivePlayers();
+      log.info({ processed: decayResult.processed, scanned: decayResult.scanned, pages: decayResult.pages, failed: decayResult.failed, aborted: decayResult.aborted }, 'processed RD decay for inactive players');
+      if (decayResult.errors.length > 0) {
+        log.error({ errors: decayResult.errors, count: decayResult.errors.length }, 'RD decay errors');
+      }
+    } finally {
+      decayRun.end();
+    }
+  } catch (err) {
+    log.error({ err }, 'failed to run weekly RD decay');
+  } finally {
+    weeklyDecayRunning = false;
+    log.info({ durationMs: Date.now() - startedAt }, 'weekly RD decay finished');
   }
 }
 
@@ -58,28 +100,24 @@ export function startRankingCron() {
   scheduled = true;
 
   // Schedule: every Sunday at midnight UTC ('0 0 * * 0')
-  cron.schedule('0 0 * * 0', async () => {
+  const weekly = cron.schedule('0 0 * * 0', async () => {
+    if (isProcessClosing()) return;
+    await trackProcessWork('weekly-ranking', async () => {
     log.info('starting weekly ranking maintenance');
     await runPendingRatingCatchUp('weekly');
-    try {
-      const decayResult = await decayInactivePlayers();
-      log.info({ processed: decayResult.processed }, 'processed RD decay for inactive players');
-      if (decayResult.errors.length > 0) {
-        log.error({ errors: decayResult.errors, count: decayResult.errors.length }, 'RD decay errors');
-      }
-    } catch (err) {
-      log.error({ err }, 'failed to run weekly RD decay');
-    }
+    await runWeeklyRdDecay();
+    });
   }, {
     timezone: "UTC"
   });
+  onProcessStop(() => weekly.stop());
 
   // RK-6: boot sweep + periodic catch-up so a pending game doesn't wait for Sunday.
-  setTimeout(() => {
-    void runPendingRatingCatchUp('boot');
+  processTimeout('ranking', () => {
+    return runPendingRatingCatchUp('boot');
   }, RANKING_CATCHUP_BOOT_DELAY_MS);
-  setInterval(() => {
-    void runPendingRatingCatchUp('periodic');
+  processInterval('ranking', () => {
+    return runPendingRatingCatchUp('periodic');
   }, RANKING_CATCHUP_INTERVAL_MS);
 
   log.info(

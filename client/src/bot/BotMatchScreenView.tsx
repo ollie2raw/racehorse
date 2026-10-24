@@ -1,3 +1,4 @@
+import { ScreenLoader } from '../ui/ScreenLoader';
 import { RotateOverlay } from '../components';
 import type { BotMatchScreenViewProps } from './botMatchScreenViewTypes';
 import { BotMatchBoardStage } from './view/board/BotMatchBoardStage.tsx';
@@ -8,12 +9,14 @@ import { BotMatchLiveLayoutSection } from './view/layouts/BotMatchLiveLayoutSect
 import { BotMatchLiveHudLeft, BotMatchLiveHudRight } from './view/hud/BotMatchLiveHud.tsx';
 import { BotMatchLiveTurnHud } from './view/hud/BotMatchLiveTurnHud.tsx';
 import { BotMatchPreGameDrawHud } from './view/hud/BotMatchPreGameDrawHud.tsx';
+import { BotMatchJourneyChip } from './view/hud/BotMatchJourneyChip.tsx';
 import { BotMatchInGameOverlays } from './view/overlays/BotMatchInGameOverlays.tsx';
 import { BotMatchModalLayer } from './view/overlays/BotMatchModalLayer.tsx';
 import { BotMatchScreenShell } from './view/shell/BotMatchScreenShell.tsx';
 import { BotMatchGuidedV2BootErrorView } from './view/states/BotMatchGuidedV2BootErrorView.tsx';
 import { BotMatchMalformedStateView } from './view/states/BotMatchMalformedStateView.tsx';
 import { computeNormalHandRows } from './view/utils/botMatchHandLayout.ts';
+import { compactSingleRowLimit } from '../match/compactLandscape.ts';
 import { selectTurnLabel } from './view/utils/botMatchHudLabels.ts';
 import '../match/match-live.css';
 import './PlayVsFritz.css';
@@ -51,16 +54,31 @@ export function BotMatchScreenView({
     );
   }
 
+  if (match.handNumber === 0 && !hand.preGameDrawActive) {
+    return match.initializationError ? (
+      <div className="rh-screen-loader" role="alert">
+        <div className="rh-screen-loader__panel">
+          <p className="rh-screen-loader__label">{match.initializationError}</p>
+          <button type="button" className="dfd__btn" onClick={navigation.exitMatch}>Back to Play vs Fritz</button>
+        </div>
+      </div>
+    ) : <ScreenLoader label="Preparing your match…" />;
+  }
+
   const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 600;
   const isShortLandscape =
     typeof window !== 'undefined' &&
     !!window.matchMedia &&
     window.matchMedia('(orientation: landscape) and (max-height: 430px)').matches;
+  // Compact landscape: the fixed 8-tile limit overflowed a 667px screen, so below 844px split as soon as one more tile would not
+  // fit (see match/compactLandscape.ts); 844+ keeps the existing limit.
+  const maxSingleRow = typeof window !== 'undefined' ? compactSingleRowLimit(window.innerWidth, isShortLandscape) : undefined;
   const normalHandRows = computeNormalHandRows(match.players.you.hand, {
     isLessonLayoutMode: layout.isLessonLayoutMode,
     lessonHandRowCount: hand.lessonHandRowCount,
     isMobileViewport,
     isShortLandscape,
+    maxSingleRow,
   });
   const handCompactStacked = normalHandRows.length > 1;
 
@@ -114,6 +132,7 @@ export function BotMatchScreenView({
       isLessonLayoutMode={layout.isLessonLayoutMode}
       openEndsSum={board.openEndsSum}
       boneyardRef={board.boneyardRef}
+      boneyardDisplayCount={board.boneyardDisplayCount}
       isGhostMode={board.isGhostMode}
       ghostAgreementType={board.ghostAgreementType}
       ghostPlayedTile={board.ghostPlayedTile}
@@ -221,6 +240,8 @@ export function BotMatchScreenView({
             setScoreTrackOpen={layout.setScoreTrackOpen}
             opponentLabel={hud.opponentLabel}
             match={match}
+            fritzTileCount={hud.drawStepBotHandCount}
+            boneyardCount={board.boneyardDisplayCount}
             botTurn={hud.botTurn}
             turnLabel={turnLabel}
             openEndsSum={board.openEndsSum}
@@ -232,7 +253,12 @@ export function BotMatchScreenView({
           <BotMatchLiveLayoutSection
             boardStageRef={layout.boardStageRef}
             ghostBoardPulse={board.ghostBoardPulse}
-            boardStageInner={boardStageInner}
+            boardStageInner={layout.journeyContext ? (
+              <>
+                <BotMatchJourneyChip context={layout.journeyContext} />
+                {boardStageInner}
+              </>
+            ) : boardStageInner}
             handTray={handTray}
             hudLeft={(
               <BotMatchLiveHudLeft

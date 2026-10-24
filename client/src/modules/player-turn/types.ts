@@ -105,6 +105,8 @@ export type UsePlayerTurnOrchestrationArgs = {
   fritzDifficulty: BotDifficulty;
   moveCounterRef: React.MutableRefObject<number>;
   drawSequenceActiveRef: React.MutableRefObject<boolean>;
+  /** Render-visible mirror of the ref: lets effects re-evaluate when the draw lock releases. */
+  drawSequenceActive?: boolean;
   setDrawSequenceActiveBoth: (val: boolean) => void;
   isTransitioningRef: React.MutableRefObject<boolean>;
   localRun: {

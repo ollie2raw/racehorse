@@ -53,15 +53,17 @@ export function StatsIdentityHero({ username, competitive }: Props) {
             <dd>{competitive.peakRating == null ? DASH : Math.round(competitive.peakRating).toLocaleString()}</dd>
           </div>
           <div>
-            <dt>Ranked games</dt>
+            <dt>Rated games</dt>
             <dd>{competitive.rankedGames == null ? DASH : competitive.rankedGames.toLocaleString()}</dd>
           </div>
         </dl>
       </div>
 
+      <p className="rh-stats-note">Rated games include Play vs Fritz and ranked human-v-human matches. The multiplayer record below counts human opponents only.</p>
+
       {form && (
         <div className="rh-stats-form">
-          <span className="rh-stats-figure-label">Recent form</span>
+          <span className="rh-stats-figure-label">Human-v-human recent form</span>
           <div className="rh-stats-form-rail" role="img" aria-label={`Recent form: ${form.label}`}>
             {squares.map((result, index) => (
               <span

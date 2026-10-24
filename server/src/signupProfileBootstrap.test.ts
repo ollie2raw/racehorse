@@ -18,12 +18,17 @@ function compactSql(sql: string): string {
  * player is prompted to pick a handle they already chose.
  */
 describe('signup profile bootstrap', () => {
-  const files = [
-    'supabase/schema.sql',
-    'supabase/migrations/2026-08-26_signup_profile_username_from_metadata.sql',
+  const FULL_ID_FALLBACK = "'user_' || replace(new.id::text, '-', '')";
+  const LEGACY_FALLBACK = "'user_' || left(replace(new.id::text, '-', ''), 8)";
+  // The 08-26 migration is history and keeps its original (8-hex) text; schema.sql and the later migration use the
+  // full id so two ids sharing a prefix cannot collide on profiles_username_key.
+  const files: Array<[string, string]> = [
+    ['supabase/schema.sql', FULL_ID_FALLBACK],
+    ['supabase/migrations/2026-08-26_signup_profile_username_from_metadata.sql', LEGACY_FALLBACK],
+    ['supabase/migrations/2026-10-16_signup_fallback_username_full_uuid.sql', FULL_ID_FALLBACK],
   ];
 
-  for (const file of files) {
+  for (const [file, expectedFallback] of files) {
     describe(file, () => {
       const sql = compactSql(readRepoFile(file));
       const trigger = sql.slice(sql.indexOf('function public.handle_new_user()'));
@@ -42,7 +47,8 @@ describe('signup profile bootstrap', () => {
 
       it('never lets a taken or invalid handle abort the signup transaction', () => {
         expect(trigger).toContain('select 1 from public.profiles');
-        expect(trigger).toContain("'user_' || left(replace(new.id::text, '-', ''), 8)");
+        expect(trigger).toContain(expectedFallback);
+        if (expectedFallback === FULL_ID_FALLBACK) expect(trigger).not.toContain('left(replace(new.id');
       });
 
       it('does not hand out the reserved placeholder namespace as a real handle', () => {

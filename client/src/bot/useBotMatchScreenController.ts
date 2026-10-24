@@ -16,6 +16,7 @@ import { useReviewRuntime } from '../modules/review/useReviewRuntime.ts';
 import { useFritzRatingDisplay } from '../modules/fritz/useFritzRatingDisplay.ts';
 import { useReplayRecorder, useMatchHistoryScrubber } from '../modules/replay/index.ts';
 import { useLocalRunSession } from '../modules/bot-turn/index.ts';
+import { isFritzTurnHeldByPresentation } from '../modules/bot-turn/fritzPresentation.ts';
 
 export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatchScreenViewProps {
   const {
@@ -36,9 +37,6 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
   });
 
   const bootstrap = useBotMatchBootstrap({ props, guidedBoot });
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- the effect reads props.mode once on the relevant transition; keying on the whole props object would refire it every render
-  useEffect(() => { if (props.mode === 'daily-fritz') props.onPublicStateChange?.(bootstrap.match); }, [bootstrap.match, props.mode, props.onPublicStateChange]);
-
   const refs = useBotMatchRefs({
     initialMoveLog: bootstrap.resumablePersistedDailyFritzMatch?.moveLog,
   });
@@ -120,6 +118,18 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
       setShowFullCoachTip: chrome.setShowFullCoachTip,
     },
   });
+
+  // Spectators get the same presented state as the player: hold the public snapshot while
+  // Fritz's committed turn is still being drawn out, then publish the latest on release.
+  const fritzTurnHeld = isFritzTurnHeldByPresentation({
+    handActive: presentation.handActive,
+    presentation: turns.fritzPresentation,
+    drawSequenceActive: refs.drawSequenceActive,
+  });
+  useEffect(() => {
+    if (props.mode === 'daily-fritz' && !fritzTurnHeld) props.onPublicStateChange?.(bootstrap.match);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the effect reads props.mode once on the relevant transition; keying on the whole props object would refire it every render
+  }, [bootstrap.match, fritzTurnHeld, props.mode, props.onPublicStateChange]);
 
   const rating = useFritzRatingDisplay({
     props,

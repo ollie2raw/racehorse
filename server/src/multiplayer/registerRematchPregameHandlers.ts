@@ -1,3 +1,4 @@
+import { processTimeout, cancelProcessTimeout } from '../platform/processLifecycle';
 import type { Server, Socket } from 'socket.io';
 import { appendRoomEvent, resetRoomEventLog } from '../roomEvents';
 import {
@@ -18,8 +19,8 @@ import {
 import { comparePregameDrawTiles } from './preGameDraw';
 import { emitMpAuthorityFunnel } from './mpAuthorityTelemetry';
 import { isAnyTournamentRoom } from './roomKind';
-import { clearGameActionIdempotencyForRoom } from './gameActionIdempotency';
-import { MATCH_RESULT_STILL_SAVING_MESSAGE } from './gameOverPersistPolicy';
+import { staleMatchAck } from './commandMatchBinding';
+import { MATCH_RESULT_RETRYING_MESSAGE, MATCH_RESULT_STILL_SAVING_MESSAGE } from './gameOverPersistPolicy';
 
 export type RegisterRematchPregameHandlersParams = {
   handlerDeps: RoomSessionHandlerDeps;
@@ -32,10 +33,15 @@ export function registerRematchPregameHandlers(
 ): void {
   const { handlerDeps } = params;
 
-  socket.on('game:rematch', async (code: unknown, cb?: AckFn) => {
+  socket.on('game:rematch', async (code: unknown, arg2?: unknown, arg3?: unknown) => {
     const roomCode = String(code ?? '').trim().toUpperCase();
+    const cb = (typeof arg2 === 'function' ? arg2 : typeof arg3 === 'function' ? arg3 : undefined) as AckFn | undefined;
+    const claimedMatchId =
+      arg2 && typeof arg2 === 'object' && !Array.isArray(arg2) ? (arg2 as { matchId?: unknown }).matchId : undefined;
     try {
       const room = getRoom(roomCode);
+      const staleRematch = staleMatchAck(room, claimedMatchId);
+      if (staleRematch) return cb?.(staleRematch);
       assertRoomDurabilityOperationAllowed(room, 'rematch');
 
       // Both tournament systems: a rematch would start a fresh game in a room
@@ -95,7 +101,15 @@ export function registerRematchPregameHandlers(
           error: MATCH_RESULT_STILL_SAVING_MESSAGE,
         });
       }
-      // succeeded | failed: rematch allowed (failed = give-up ceiling, not forever-blocked).
+      // A give-up is not an excuse to destroy the replay source: the terminal row is keyed by
+      // room code and a rematch overwrites it, so the rematch waits for the durable replay
+      // (restart-time/periodic sweep) to log the result. succeeded: rematch allowed.
+      if (persistOutcome === 'failed' && !liveRoom.matchLogged) {
+        return cb?.({
+          ok: false,
+          error: MATCH_RESULT_RETRYING_MESSAGE,
+        });
+      }
 
       room.rematchReady.clear();
 
@@ -140,7 +154,8 @@ export function registerRematchPregameHandlers(
       io.to(roomAfterRematch.code).emit('game:rematch:started', { roomCode: roomAfterRematch.code });
       broadcastStateUpdate(roomAfterRematch.code);
       emitRematchStatus(roomAfterRematch.code);
-      clearGameActionIdempotencyForRoom(roomAfterRematch.code);
+      // Receipts are deliberately NOT cleared here: a request id from the finished game must keep
+      // resolving to its original result (TTL-bounded) instead of executing in the new game.
       emitMpAuthorityFunnel('private_rematch_started', {
         roomCode: roomAfterRematch.code,
         seatId: playerSeatId,
@@ -197,9 +212,9 @@ export function registerRematchPregameHandlers(
           broadcastStateUpdate(roomCode);
 
           // Schedule tie-hold redraw
-          if (room.preGameDrawTimer) clearTimeout(room.preGameDrawTimer);
-          room.preGameDrawTimer = setTimeout(() => {
-            withRoomGameplayLock(roomCode, async () => {
+          if (room.preGameDrawTimer) cancelProcessTimeout(room.preGameDrawTimer);
+          room.preGameDrawTimer = processTimeout('room-timer', () => {
+            return withRoomGameplayLock(roomCode, async () => {
               const innerRoom = getRoom(roomCode);
               const innerDraw = innerRoom.preGameDraw;
               if (!innerDraw || innerDraw.phase !== 'showing-tie') return;
@@ -224,9 +239,9 @@ export function registerRematchPregameHandlers(
           broadcastStateUpdate(roomCode);
 
           // Stagger timeouts to resolved then done/startGame
-          if (room.preGameDrawTimer) clearTimeout(room.preGameDrawTimer);
-          room.preGameDrawTimer = setTimeout(() => {
-            withRoomGameplayLock(roomCode, async () => {
+          if (room.preGameDrawTimer) cancelProcessTimeout(room.preGameDrawTimer);
+          room.preGameDrawTimer = processTimeout('room-timer', () => {
+            return withRoomGameplayLock(roomCode, async () => {
               const innerRoom = getRoom(roomCode);
               const innerDraw = innerRoom.preGameDraw;
               if (!innerDraw || innerDraw.phase !== 'showing-reveal') return;
@@ -234,9 +249,9 @@ export function registerRematchPregameHandlers(
               innerDraw.phase = 'showing-result';
               broadcastStateUpdate(roomCode);
 
-              if (innerRoom.preGameDrawTimer) clearTimeout(innerRoom.preGameDrawTimer);
-              innerRoom.preGameDrawTimer = setTimeout(() => {
-                withRoomGameplayLock(roomCode, async () => {
+              if (innerRoom.preGameDrawTimer) cancelProcessTimeout(innerRoom.preGameDrawTimer);
+              innerRoom.preGameDrawTimer = processTimeout('room-timer', () => {
+                return withRoomGameplayLock(roomCode, async () => {
                   const finalRoom = getRoom(roomCode);
                   const finalDraw = finalRoom.preGameDraw;
                   if (!finalDraw || finalDraw.phase !== 'showing-result') return;
@@ -248,7 +263,7 @@ export function registerRematchPregameHandlers(
 
                   // Clear preGameDraw properties before starting game to avoid loops
                   if (finalRoom.preGameDrawTimer) {
-                    clearTimeout(finalRoom.preGameDrawTimer);
+                    cancelProcessTimeout(finalRoom.preGameDrawTimer);
                     finalRoom.preGameDrawTimer = null;
                   }
                   finalRoom.preGameDraw = null;

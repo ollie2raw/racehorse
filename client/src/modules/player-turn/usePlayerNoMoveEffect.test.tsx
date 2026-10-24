@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { createFixedBotHand } from '../match/runtime/botEngine.ts';
+import { applyPlayMove, createFixedBotHand, getLegalMoves } from '../match/runtime/botEngine.ts';
+import { asPlayMoves } from '../../game/tileUtils.ts';
+import { buildEmbeddedChainFixture, POOL_TILES } from '../bot-turn/embeddedChainFixture.ts';
 import { usePlayerNoMoveEffect } from './usePlayerNoMoveEffect.ts';
 
 function makeStablePorts(overrides: Record<string, unknown> = {}) {
@@ -247,4 +249,51 @@ describe('usePlayerNoMoveEffect Ghost mode draw logging (RT-2, HARDENING_PLAN §
     // (both using the stale pre-sequence snapshot) is exactly the bug.
     expect(ghostDrawCalls[0].hand_before).not.toEqual(ghostDrawCalls[1].hand_before);
   });
+});
+
+describe('usePlayerNoMoveEffect while Fritz\'s embedded draws are being presented', () => {
+  function blockedHumanAfterEmbeddedChain() {
+    const P = (a: number, b: number) =>
+      POOL_TILES.find((t) => t.low === Math.min(a, b) && t.high === Math.max(a, b))!;
+    const start = buildEmbeddedChainFixture({
+      fritzPool: [P(0, 2), P(0, 3)],
+      boneyardPool: [P(0, 4), P(2, 2), P(2, 4)],
+    });
+    const play = asPlayMoves(getLegalMoves(start, 'bot')).find((m) => m.position === 'right')!;
+    const after = applyPlayMove(start, 'bot', play).state;
+    expect(after.currentPlayer).toBe('you');
+    return after;
+  }
+
+  it.each([true, false])(
+    'waits for the draw lock, then resolves the human forced pass once the lock releases (daily=%s)',
+    async (daily) => {
+      const match = blockedHumanAfterEmbeddedChain();
+      const stable = makeStablePorts({ isDailyFritzMode: daily });
+      stable.drawSequenceActiveRef.current = true; // Fritz's presentation owns the lock
+      stable.runDrawSequence = vi.fn(async (state: typeof match) => {
+        const { passTurn } = await import('../match/runtime/botEngine.ts');
+        return passTurn(state, 'you');
+      }) as never;
+      const { rerender } = renderHook(
+        ({ locked }) =>
+          usePlayerNoMoveEffect({ ...stable, match, drawSequenceActive: locked } as never),
+        { initialProps: { locked: true } },
+      );
+      await act(async () => {});
+      expect(stable.applyAndNotify).not.toHaveBeenCalled();
+      expect(stable.runDrawSequence).not.toHaveBeenCalled();
+      expect(stable.localRun.beginLocalRun).not.toHaveBeenCalled();
+
+      // presentation completes: ref and its render-visible mirror flip together; nothing else changes
+      stable.drawSequenceActiveRef.current = false;
+      await act(async () => {
+        rerender({ locked: false });
+      });
+      await waitFor(() => expect(stable.applyAndNotify).toHaveBeenCalledTimes(1));
+      const applied = stable.applyAndNotify.mock.calls[0]![0] as { state: { handOver: boolean }; handEnded?: { reason: string } };
+      expect(applied.handEnded?.reason).toBe('blocked');
+      expect(applied.state.handOver).toBe(true);
+    },
+  );
 });

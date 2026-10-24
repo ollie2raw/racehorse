@@ -60,3 +60,26 @@ describe('MatchFoundOverlay — record accessible name (S2)', () => {
     ).toBeTruthy();
   });
 });
+
+describe('MatchFoundOverlay — head-to-head placeholder (nativeAppSurface)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchRankingProfile.mockResolvedValue({ data: null });
+    fetchUserStatsByUserId.mockResolvedValue({ data: null });
+  });
+
+  it('keeps the head-to-head panel on the website', async () => {
+    render(<MatchFoundOverlay {...props} />);
+    await waitFor(() => expect(fetchUserStatsByUserId).toHaveBeenCalled());
+    expect(screen.getByLabelText('Head to head')).toBeTruthy();
+  });
+
+  it('leaves out the data-less head-to-head panel in the iOS app', async () => {
+    render(<MatchFoundOverlay {...props} hideComingSoon />);
+    await waitFor(() => expect(fetchUserStatsByUserId).toHaveBeenCalled());
+    expect(screen.queryByLabelText('Head to head')).toBeNull();
+    expect(screen.queryByText(/coming soon/i)).toBeNull();
+    // The real per-seat records still render.
+    expect(await screen.findAllByLabelText('Win–loss–draw record: not available')).toHaveLength(2);
+  });
+});

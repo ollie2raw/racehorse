@@ -63,4 +63,11 @@ describe('crawl navigation', () => {
     expect(isIndexable(settings as Route)).toBe(false);
     expect(crawlTargets(PRERENDER_ROUTES as Route[], '/').map((r) => r.path)).not.toContain('/settings');
   });
+
+  it.each(['/privacy', '/terms', '/support'])('prerenders %s and keeps it indexable', (path) => {
+    const route = (PRERENDER_ROUTES as Route[]).find((r) => r.path === path);
+    expect(route).toBeDefined();
+    expect(isIndexable(route as Route)).toBe(true);
+    expect(crawlTargets(PRERENDER_ROUTES as Route[], '/').map((r) => r.path)).toContain(path);
+  });
 });

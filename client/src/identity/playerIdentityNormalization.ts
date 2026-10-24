@@ -87,7 +87,8 @@ export function applyPublicProfile(
       wins,
       losses,
       winRate: deriveWinRate(wins, losses),
-      bestStreak: nonNegativeOrNull(profile.best_streak),
+      // Public best_streak is the puzzle day streak, not a human match streak.
+      bestStreak: null,
       recentForm: normalizeRecentForm(profile.recent_matches),
       recentMatches: (profile.recent_matches ?? []).map((match) => ({ opponentUsername: match.opponent_username, result: match.result, score: numberOrNull(match.score), opponentScore: numberOrNull(match.opponent_score), mode: match.mode, playedAt: match.played_at })),
     },
@@ -129,7 +130,7 @@ export function applyPersonalInsights(model: PlayerIdentityModel, insights: Pers
       wins: nonNegativeOrNull(base.wins),
       losses: nonNegativeOrNull(base.losses),
       winRate: deriveWinRate(nonNegativeOrNull(base.wins), nonNegativeOrNull(base.losses)),
-      currentStreak: nonNegativeOrNull(ranking?.currentWinStreak) ?? nonNegativeOrNull(base.currentWinStreak),
+      currentStreak: nonNegativeOrNull(base.currentWinStreak),
       bestStreak: nonNegativeOrNull(base.longestWinStreak),
     },
     fritz: {

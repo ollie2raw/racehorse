@@ -5,22 +5,21 @@ import { StatsFigure, StatsFigureGrid, StatsModeCard } from './StatsModeCard';
 const DASH = '—';
 
 /**
- * The ranked record. Rating, rank and peak live in the hero above — this is
- * what produced them.
+ * Human-v-human results only. The shared rating above also includes Fritz.
  */
 export function RankedPerformanceSection({
   competitive,
 }: {
   competitive: PlayerIdentityModel['competitive'];
 }) {
-  const played = hasModeActivity([competitive.rankedGames, competitive.wins, competitive.losses]);
+  const played = hasModeActivity([competitive.wins, competitive.losses]);
 
   return (
     <StatsModeCard
       accent="gold"
-      eyebrow="Ranked"
-      title="The record behind the rating"
-      empty={played ? null : 'Play a ranked match to start a record here.'}
+      eyebrow="Human-v-human"
+      title="Your multiplayer record"
+      empty={played ? null : 'Play a human-v-human match to start a record here.'}
     >
       <StatsFigureGrid>
         <StatsFigure

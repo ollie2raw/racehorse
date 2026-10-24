@@ -20,7 +20,7 @@ import type { GradedPuzzle } from '../../puzzleRush/grading';
 const POOL_SELECT =
   'id,source,source_puzzle_id,starting_board,starting_hand,max_moves,puzzle_type,tier,deal_size,target_score,best_possible_score,difficulty_score,play_count,enabled';
 const RUN_SELECT =
-  'id,user_id,username,status,started_at,ended_at,total_score,puzzles_solved,client_reported_score,invalidated_reason,config_version,run_date,is_official';
+  'id,user_id,username,status,started_at,ended_at,total_score,puzzles_solved,client_reported_score,invalidated_reason,config_version,run_date,is_official,assigned_puzzle_ids,completion_claimed_at,completion_client_score';
 const RUN_PUZZLE_SELECT =
   'id,run_id,puzzle_id,ordinal,raw_score,awarded_points,client_raw_score,solved,perfect,moves_used,bonus_seconds,submitted_line,client_reported_at,graded_at,grading_error,stage_reached_key';
 
@@ -137,7 +137,18 @@ export async function createRushRun(params: {
   runDate: string;
   /** First run of the day for this user. Daily leaderboard only. */
   isOfficial: boolean;
-}): Promise<{ run: PuzzleRushRun; created: boolean }> {
+  assignedPuzzleIds: string[];
+}, legacyRetry = 0): Promise<{ run: PuzzleRushRun; created: boolean }> {
+  const recoverOpenRun = async (): Promise<{ run: PuzzleRushRun; created: boolean }> => {
+    const existing = await getOpenRushRunForUser(params.userId);
+    if (!existing) throw new Error('Failed to create or recover puzzle rush run.');
+    if (existing.assignedPuzzleIds.length > 0) return { run: existing, created: false };
+    // An old server may have created this after the expand migration. Its
+    // served puzzles were never recorded, so close it and retry a new start.
+    await invalidateUnassignedRushRun(existing.id, params.userId);
+    if (legacyRetry >= 2) throw new Error('Legacy Puzzle Rush run kept racing start; retry shortly.');
+    return createRushRun(params, legacyRetry + 1);
+  };
   /**
    * A plain INSERT — deliberately no `on_conflict`.
    *
@@ -173,6 +184,7 @@ export async function createRushRun(params: {
           config_version: params.configVersion ?? PUZZLE_RUSH_CONFIG.version,
           run_date: params.runDate,
           is_official: isOfficial,
+          assigned_puzzle_ids: params.assignedPuzzleIds,
         }]),
       },
     );
@@ -182,15 +194,16 @@ export async function createRushRun(params: {
     rows = await insert(params.isOfficial);
   } catch (error) {
     if (isOpenRunConflict(error)) {
-      // This user already has a run in flight: replay it rather than starting
-      // a second one. This is the phase-1 idempotent-start behaviour.
-      const existing = await getOpenRushRunForUser(params.userId);
-      if (!existing) throw new Error('Failed to create or recover puzzle rush run.');
-      return { run: existing, created: false };
+      return recoverOpenRun();
     }
     if (params.isOfficial && isOfficialConflict(error)) {
       // Lost the race for today's official slot; run as unofficial instead.
-      rows = await insert(false);
+      try {
+        rows = await insert(false);
+      } catch (retryError) {
+        if (!isOpenRunConflict(retryError)) throw retryError;
+        return recoverOpenRun();
+      }
     } else {
       throw error;
     }
@@ -199,9 +212,20 @@ export async function createRushRun(params: {
   const row = rows?.[0];
   if (row) return { run: normalizeRushRun(row), created: true };
 
-  const existing = await getOpenRushRunForUser(params.userId);
-  if (!existing) throw new Error('Failed to create or recover puzzle rush run.');
-  return { run: existing, created: false };
+  return recoverOpenRun();
+}
+
+export async function invalidateUnassignedRushRun(
+  runId: string,
+  userId: string,
+): Promise<{ invalidated: boolean; run: PuzzleRushRun }> {
+  const result = await supabaseFetch<{ invalidated: boolean; run: RushRunRow }>(
+    '/rest/v1/rpc/invalidate_unassigned_rush_run_v2', {
+      method: 'POST',
+      body: JSON.stringify({ p_run_id: runId, p_user_id: userId }),
+    },
+  );
+  return { invalidated: result.invalidated, run: normalizeRushRun(result.run) };
 }
 
 export async function getOpenRushRunForUser(userId: string): Promise<PuzzleRushRun | null> {
@@ -227,6 +251,7 @@ export async function getRushRunById(runId: string, userId: string): Promise<Puz
  */
 export async function recordReportedRushPuzzle(input: {
   runId: string;
+  userId: string;
   puzzleId: string;
   ordinal: number;
   clientRawScore: number;
@@ -234,25 +259,18 @@ export async function recordReportedRushPuzzle(input: {
   /** Observational telemetry; not read by grading. */
   stageReachedKey?: PuzzleRushStageKey | null;
 }): Promise<PuzzleRushRunPuzzle> {
-  const rows = await supabaseFetch<RushRunPuzzleRow[]>(
-    '/rest/v1/rush_run_puzzles?on_conflict=run_id,ordinal',
-    {
-      method: 'POST',
-      headers: {
-        Prefer: 'return=representation,resolution=merge-duplicates',
-      },
-      body: JSON.stringify([{
-        run_id: input.runId,
-        puzzle_id: input.puzzleId,
-        ordinal: input.ordinal,
-        client_raw_score: Math.max(0, Math.round(input.clientRawScore || 0)),
-        submitted_line: input.submittedLine,
-        client_reported_at: new Date().toISOString(),
-        stage_reached_key: input.stageReachedKey ?? null,
-      }]),
-    },
-  );
-  const row = rows?.[0];
+  const row = await supabaseFetch<RushRunPuzzleRow>('/rest/v1/rpc/record_rush_report_v2', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_run_id: input.runId,
+      p_user_id: input.userId,
+      p_puzzle_id: input.puzzleId,
+      p_ordinal: input.ordinal,
+      p_client_raw_score: Math.max(0, Math.round(input.clientRawScore || 0)),
+      p_submitted_line: input.submittedLine,
+      p_stage_reached_key: input.stageReachedKey ?? null,
+    }),
+  });
   if (!row) throw new Error('Failed to record puzzle rush report.');
   return normalizeRushRunPuzzle(row);
 }
@@ -264,66 +282,48 @@ export async function listRushRunPuzzles(runId: string): Promise<PuzzleRushRunPu
   return (rows ?? []).map(normalizeRushRunPuzzle);
 }
 
-/** Write the authoritative grade back onto each puzzle row. */
-export async function persistGradedRushPuzzles(
-  runId: string,
-  graded: GradedPuzzle[],
-): Promise<void> {
-  if (graded.length === 0) return;
-  const gradedAt = new Date().toISOString();
-  await supabaseFetch('/rest/v1/rush_run_puzzles?on_conflict=run_id,ordinal', {
-    method: 'POST',
-    headers: {
-      Prefer: 'return=minimal,resolution=merge-duplicates',
+export async function claimRushRunCompletion(input: {
+  runId: string;
+  userId: string;
+  clientReportedScore: number;
+}): Promise<{ outcome: 'claimed' | 'resuming' | 'already_completed'; run: PuzzleRushRun }> {
+  const result = await supabaseFetch<{ outcome: 'claimed' | 'resuming' | 'already_completed'; run: RushRunRow }>(
+    '/rest/v1/rpc/claim_rush_completion_v2', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_run_id: input.runId,
+        p_user_id: input.userId,
+        p_client_reported_score: Math.max(0, Math.round(input.clientReportedScore || 0)),
+      }),
     },
-    body: JSON.stringify(
-      graded.map((puzzle) => ({
-        run_id: runId,
-        puzzle_id: puzzle.puzzleId,
-        ordinal: puzzle.ordinal,
-        raw_score: puzzle.rawScore,
-        awarded_points: puzzle.awardedPoints,
-        client_raw_score: puzzle.clientRawScore,
-        solved: puzzle.solved,
-        perfect: puzzle.perfect,
-        moves_used: puzzle.movesUsed,
-        bonus_seconds: puzzle.bonusSeconds,
-        submitted_line: puzzle.submittedLine,
-        graded_at: gradedAt,
-        grading_error: puzzle.gradingError,
-      })),
-    ),
-  });
+  );
+  return { outcome: result.outcome, run: normalizeRushRun(result.run) };
 }
 
 export async function finalizeRushRun(params: {
   runId: string;
+  userId: string;
   status: 'completed' | 'invalidated';
   totalScore: number;
   puzzlesSolved: number;
-  clientReportedScore: number;
   invalidatedReason: string | null;
-  endedAt?: string;
-}): Promise<PuzzleRushRun> {
-  const rows = await supabaseFetch<RushRunRow[]>(
-    `/rest/v1/rush_runs?id=eq.${encodeURIComponent(params.runId)}&select=${RUN_SELECT}`,
-    {
-      method: 'PATCH',
-      headers: { Prefer: 'return=representation' },
+  gradedPuzzles: GradedPuzzle[];
+}): Promise<{ run: PuzzleRushRun; applied: boolean }> {
+  const result = await supabaseFetch<{ outcome: 'applied' | 'already_completed'; run: RushRunRow }>(
+    '/rest/v1/rpc/finalize_rush_run_v2', {
+      method: 'POST',
       body: JSON.stringify({
-        status: params.status,
-        ended_at: params.endedAt ?? new Date().toISOString(),
-        total_score: params.totalScore,
-        puzzles_solved: params.puzzlesSolved,
-        client_reported_score: params.clientReportedScore,
-        invalidated_reason: params.invalidatedReason,
-        updated_at: new Date().toISOString(),
+        p_run_id: params.runId,
+        p_user_id: params.userId,
+        p_status: params.status,
+        p_total_score: params.totalScore,
+        p_puzzles_solved: params.puzzlesSolved,
+        p_invalidated_reason: params.invalidatedReason,
+        p_graded_puzzles: params.gradedPuzzles,
       }),
     },
   );
-  const row = rows?.[0];
-  if (!row) throw new Error('Failed to finalize puzzle rush run.');
-  return normalizeRushRun(row);
+  return { run: normalizeRushRun(result.run), applied: result.outcome === 'applied' };
 }
 
 /** Best-effort usage counter; never blocks a run. */

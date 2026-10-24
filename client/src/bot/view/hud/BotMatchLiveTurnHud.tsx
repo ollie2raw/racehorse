@@ -1,3 +1,4 @@
+import { TurnStatus } from '../../../components/TurnStatus';
 import type { DailyFritzStartResponse } from '../../../dailyFritz/api.ts';
 import { MatchHistoryScrubber } from '../../../modules/replay/index.ts';
 import type { MatchHistoryScrubberState } from '../../../modules/replay/index.ts';
@@ -30,7 +31,7 @@ export function BotMatchLiveTurnHud({
         </div>
       )}
       {turnLabel && (
-        <span className={`wl-turn-label rh-hud-turn ${botTurn ? 'opp-turn' : 'your-turn'}`}>{turnLabel}</span>
+        <TurnStatus label={turnLabel} isYourTurn={!botTurn} />
       )}
       {historyScrubber && historyScrubber.total > 0 && (
         <MatchHistoryScrubber scrubber={historyScrubber} />

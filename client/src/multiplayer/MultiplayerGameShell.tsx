@@ -32,6 +32,8 @@ import { isRenderableMultiplayerSnapshot } from './boardSnapshotGuards';
 import { useRoomSocketSync } from './useRoomSocketSync';
 import { useMultiplayerPresentation } from './useMultiplayerPresentation';
 import { useLiveMatchSession } from '../match/session/useLiveMatchSession';
+import { compactSingleRowLimit } from '../match/compactLandscape';
+import { isNativeShell, measureRack, resolveLandscapeRackHalfWidth } from '../match/rackTileSizing';
 import {
   findPlacedTile,
   getBoardEnds,
@@ -535,6 +537,21 @@ function MultiplayerGameShellComponent({
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, myHand.length);
       const isLandscape = window.innerWidth > window.innerHeight;
+      if (isLandscape) {
+        // Landscape: size from the real tray, gap and zoom (see rackTileSizing.ts), not a fixed cap.
+        const isShortLandscape = window.matchMedia?.('(orientation: landscape) and (max-height: 430px)').matches ?? false;
+        setHandTileSize(
+          resolveLandscapeRackHalfWidth({
+            tileCount,
+            rowLimit: compactSingleRowLimit(window.innerWidth, isShortLandscape) ?? 8,
+            innerWidth: window.innerWidth,
+            isNative: isNativeShell(),
+            ...measureRack(trayCenterRef.current, window.innerWidth - 56),
+            caps: { few: 68, many: 50 },
+          }),
+        );
+        return;
+      }
       const isMobileWidth = window.innerWidth <= 900;
       const forceTwoRows = tileCount > 9;
       const maxTileSize = isLandscape && isMobileWidth ? 42 : tileCount > 9 ? 50 : 68;
@@ -774,36 +791,28 @@ function MultiplayerGameShellComponent({
     const winnerScore = finalState.players[winnerSocketId]?.score ?? null;
     const loserScore = finalState.players[loserSocketId]?.score ?? null;
 
-    void Promise.all([import('../analyzer/moveAnalyzer'), import('../stats/statsApi')])
-      .then(([{ analyzeMoveLogDeferred }, { recordMatchResult }]) =>
-        analyzeMoveLogDeferred(multiplayerMoveLog, true, { oracleMode: 'tier', tierPlayed: 'standard' }).then(
-          (matchAnalysis) => {
-            const avgMoveQuality =
-              matchAnalysis.analyzedMoves.length > 0 && matchAnalysis.accuracy > 0
-                ? matchAnalysis.accuracy
-                : undefined;
-
-            return recordMatchResult({
-              mode: 'online',
-              opponentType: 'online',
-              winnerUserId,
-              loserUserId,
-              winnerScore,
-              loserScore,
-              avgMoveQuality,
-              moveCount: null,
-              roomCode: joinedRoom,
-              metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
-            });
-          },
-        ),
+    // No move quality here: it used to be a browser-computed number (the legacy wall-clock analyzer) sent as a claim, and the
+    // match record must not carry one. The only move quality that exists is owner-only data on the review job read (not
+    // authoritative: the played action is client-asserted); it must not be recorded on the match or shown to anyone else.
+    void import('../stats/statsApi')
+      .then(({ recordMatchResult }) =>
+        recordMatchResult({
+          mode: 'online',
+          opponentType: 'online',
+          winnerUserId,
+          loserUserId,
+          winnerScore,
+          loserScore,
+          moveCount: null,
+          roomCode: joinedRoom,
+          metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
+        }),
       )
       .catch(() => {});
   }, [
     authUser,
     isMutedRef,
     joinedRoom,
-    multiplayerMoveLog,
     players,
     state,
     supabaseEnabled,
@@ -867,8 +876,19 @@ function MultiplayerGameShellComponent({
 
   const openMultiplayerAnalyzer = useCallback(() => {
     if (!canOpenPostGameReview) return;
+    // Hand verdicts come from the engine scoreboard (the move log omits end-of-hand awards); this does not change grading mode.
+    const opponentSeat = state?.playerIds.find((pid) => pid !== you);
+    const finalScores = state && opponentSeat && state.players[you] && state.players[opponentSeat]
+      ? { you: state.players[you].score, opponent: state.players[opponentSeat].score }
+      : undefined;
     void import('../analyzer/moveAnalyzer').then(({ analyzeMoveLogDeferred, saveGameAnalysis }) => {
-      void analyzeMoveLogDeferred(multiplayerMoveLog, true, { oracleMode: 'tier', tierPlayed: 'standard' }).then(
+      void analyzeMoveLogDeferred(multiplayerMoveLog, true, {
+        oracleMode: 'tier',
+        tierPlayed: 'standard',
+        scoreboardSnapshots: multiplayerReviewSnapshots,
+        youActorId: you,
+        finalScores,
+      }).then(
         (analysis) => {
           setCurrentAnalysis(analysis);
           saveGameAnalysis('multiplayer', analysis);
@@ -877,10 +897,14 @@ function MultiplayerGameShellComponent({
       );
     })
       .catch((error) => reportOptionalChunkFailure('analyzer/moveAnalyzer', error));
-  }, [canOpenPostGameReview, multiplayerMoveLog]);
+  }, [canOpenPostGameReview, multiplayerMoveLog, multiplayerReviewSnapshots, state, you]);
 
   const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;
-  const handCompactStacked = myHand.length > 8;
+  // Compact landscape (667-843px): split as soon as one more tile would not fit one row; 844+ keeps the fixed limit of 8.
+  const compactRowLimit = typeof window !== 'undefined'
+    ? compactSingleRowLimit(window.innerWidth, window.matchMedia?.('(orientation: landscape) and (max-height: 430px)').matches ?? false)
+    : undefined;
+  const handCompactStacked = myHand.length > (compactRowLimit ?? 8);
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
   const myScore = state?.players[you]?.score ?? 0;
   const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;
