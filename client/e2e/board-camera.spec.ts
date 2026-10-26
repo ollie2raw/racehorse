@@ -13,7 +13,7 @@ import { expect, test, type Page } from '@playwright/test';
  *   1. auto-fit re-centres the board after each placement
  *   2. a drag-pan moves the board and does NOT snap back
  *   3. the zoom-tray buttons change the camera scale
- *   4. double-click re-fits (translate back to origin)
+ *   4. double-click re-fits (back to the fitted camera)
  *
  * The camera is `transform: translate(Xpx, Ypx) scale(S)` on `.board-canvas`
  * inside `.board-container`; every assertion reads that inline transform.
@@ -122,23 +122,49 @@ test('board auto-fits after placement and its pan/zoom controls behave', async (
   await completePreGameDraw(page);
   await expect(page.locator('.board-container')).toBeVisible({ timeout: 15_000 });
 
+  // Motion probe: from the first tile on, sample one already-placed tile's on-screen centre every animation
+  // frame while more tiles arrive. The camera must glide; it used to snap, which moved every tile tens of px
+  // in a single frame on each placement.
+  await page.evaluate(() => {
+    const w = window as unknown as { __camProbe?: { key: string | null; last: [number, number] | null; maxFramePx: number; frames: number } };
+    const probe = (w.__camProbe = { key: null, last: null, maxFramePx: 0, frames: 0 });
+    const tick = () => {
+      const wrappers = document.querySelectorAll<HTMLElement>('.board-tile-wrapper');
+      if (probe.key === null && wrappers.length > 0) probe.key = wrappers[0].dataset.layoutKey ?? null;
+      const el = probe.key ? document.querySelector<HTMLElement>(`.board-tile-wrapper[data-layout-key="${probe.key}"]`) : null;
+      if (el) {
+        const r = el.getBoundingClientRect();
+        const c: [number, number] = [r.left + r.width / 2, r.top + r.height / 2];
+        if (probe.last) probe.maxFramePx = Math.max(probe.maxFramePx, Math.hypot(c[0] - probe.last[0], c[1] - probe.last[1]));
+        probe.last = c;
+        probe.frames += 1;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
   // Get a few tiles on the board (ours + Fritz's).
   const placed = await placeTiles(page, 3);
   await expect(page.locator('.board-tile-wrapper').first()).toBeVisible();
   await page.waitForTimeout(1_200); // let the post-placement auto-fit settle
 
+  const motion = await page.evaluate(() => (window as unknown as { __camProbe: { maxFramePx: number; frames: number } }).__camProbe);
+  expect(motion.frames, 'the probe should have sampled many frames').toBeGreaterThan(30);
+  // The spring's peak is a few px per frame; a snap on a placement moves a tile 30-100 px at once.
+  expect(motion.maxFramePx, 'a placed tile must not jump between frames when later tiles arrive').toBeLessThan(20);
+  await expect(page.locator('.board-canvas')).toHaveAttribute('data-camera-settled', 'true');
+
   // ── 1. Framing: auto-fit keeps the board group centred in the container ──
   const framed = await readFraming(page);
   expect(framed.tileCount).toBeGreaterThan(0);
-  // The tile-group centre sits near the container centre (auto-fit pins x/y to 0
-  // with transform-origin: center). Allow a generous half-viewport of slack.
-  expect(Math.abs(framed.tileGroup.cx - framed.container.cx)).toBeLessThan(framed.container.w * 0.5);
-  expect(Math.abs(framed.tileGroup.cy - framed.container.cy)).toBeLessThan(framed.container.h * 0.5);
+  // The tile group is centred in the container. Centring is carried by the camera translate (tiles are
+  // positioned against a world origin that moves with them), so this checks the rendered result, not x/y.
+  expect(Math.abs(framed.tileGroup.cx - framed.container.cx)).toBeLessThan(framed.container.w * 0.15);
+  expect(Math.abs(framed.tileGroup.cy - framed.container.cy)).toBeLessThan(framed.container.h * 0.15);
   // And it is not scaled into oblivion or off the edge entirely.
   const fitCam = await readCamera(page);
   expect(fitCam.scale).toBeGreaterThan(0);
-  expect(Math.abs(fitCam.x)).toBeLessThan(2); // fit pins translate to origin
-  expect(Math.abs(fitCam.y)).toBeLessThan(2);
 
   // ── 2. Pan: dragging the board moves it and it does NOT snap back ──
   const box = (await page.locator('.board-container').boundingBox())!;
@@ -173,13 +199,15 @@ test('board auto-fits after placement and its pan/zoom controls behave', async (
   const zoomedOut = await readCamera(page);
   expect(zoomedOut.scale).toBeLessThan(base.scale);
 
-  // ── 4. Double-click re-fits: translate returns to origin ──
+  // ── 4. Double-click re-fits: the camera returns to the fitted position ──
   await page.locator('.board-container').dblclick({ position: { x: box.width * 0.5, y: box.height * 0.5 } });
   await page.waitForTimeout(1_200);
   const refit = await readCamera(page);
-  expect(Math.abs(refit.x)).toBeLessThan(20);
-  expect(Math.abs(refit.y)).toBeLessThan(20);
   expect(refit.scale).toBeGreaterThan(0);
+  // (Fritz may have moved since the first fit, so compare the framing, not the earlier camera numbers.)
+  const reframed = await readFraming(page);
+  expect(Math.abs(reframed.tileGroup.cx - reframed.container.cx)).toBeLessThan(reframed.container.w * 0.15);
+  expect(Math.abs(reframed.tileGroup.cy - reframed.container.cy)).toBeLessThan(reframed.container.h * 0.15);
 
   expect(placed, 'expected to place at least one tile').toBeGreaterThan(0);
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);

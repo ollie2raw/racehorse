@@ -80,6 +80,8 @@ describe('boardQualityMetrics: summarize', () => {
     reflowedTiles: 0,
     scaleStepPct: 0,
     bends: 0,
+    peakFramePx: 0,
+    settleMs: 0,
     ...over,
   });
 
@@ -197,6 +199,7 @@ describe.skipIf(!env.BOARD_CAMERA_REPORT)('board camera baseline report', () => 
           `cannotBeWholeAndReadable(<18px)=${pct(s.unreadableShare)} (byHeight=${pct(s.unreadableByHeight)} byWidth=${pct(s.unreadableByWidth)})`,
           `jumpPx p50/p95/max=${fmt(s.jumpP50)}/${fmt(s.jumpP95)}/${fmt(s.jumpMax)} bigJump(>40px)=${pct(s.bigJumpShare)}`,
           `reflow=${pct(s.reflowShare)}`,
+          `SPRING peakFramePx p50/p95/max=${fmt(s.peakFrameP50)}/${fmt(s.peakFrameP95)}/${fmt(s.peakFrameMax)} abrupt(>8px/frame)=${pct(s.abruptShare)} settleMs p50/p95=${s.settleP50Ms}/${s.settleP95Ms}`,
           `scaleStep% p95/max=${fmt(s.scaleStepP95)}/${fmt(s.scaleStepMax)}`,
         ].join(' | '),
       );
