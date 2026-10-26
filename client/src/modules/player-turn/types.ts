@@ -85,7 +85,7 @@ export type DrawAnimationDeps = {
   flyingTileIdRef: React.MutableRefObject<number>;
   setDrawPulseIndex: React.Dispatch<React.SetStateAction<number | null>>;
   setFlyingTiles: React.Dispatch<
-    React.SetStateAction<{ x: number; y: number; toX: number; toY: number; id: number }[]>
+    React.SetStateAction<{ x: number; y: number; toX: number; toY: number; id: number; ms?: number }[]>
   >;
 };
 

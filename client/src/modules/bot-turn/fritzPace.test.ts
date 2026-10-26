@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   BOT_CHAIN_CONTINUE_DELAY_MS,
+  BOT_DRAW_STEP_MS,
+  BOT_FLY_TILE_MS,
+  FAST_DRAW_SCALE,
+  FLY_TILE_CSS_BASE_MS,
+  flyTileCssMs,
   BOT_FORCED_DRAW_THINK_DELAY_MS,
   BOT_OPENING_THINK_DELAY_MS,
   BOT_PLACE_SETTLE_MS,
@@ -8,7 +13,10 @@ import {
   BOT_POST_DRAW_PLAY_DELAY_MS,
   BOT_SCORE_HOLD_MS,
   FAST_PACE_SCALE,
+  paceDrawMs,
   paceMs,
+  resolveBotDrawStepMs,
+  resolveBotFlyTileMs,
   resolveBotChainContinueDelayMs,
   resolveBotHandoffDelayMs,
   resolveBotOpeningDelayMs,
@@ -75,5 +83,38 @@ describe('Fritz pace: Daily Fritz is always normal', () => {
   it('honours the preference everywhere else', () => {
     expect(resolveFritzPace(false, 'fast')).toBe('fast');
     expect(resolveFritzPace(false, 'normal')).toBe('normal');
+  });
+});
+
+describe('Fritz pace: his draw animation', () => {
+  it('normal pace is the original 861 ms step and flying tile, untouched', () => {
+    expect(resolveBotDrawStepMs()).toBe(BOT_DRAW_STEP_MS);
+    expect(resolveBotDrawStepMs('normal')).toBe(861);
+    expect(resolveBotFlyTileMs('normal')).toBe(BOT_FLY_TILE_MS);
+  });
+
+  it('fast scales the step and the flying tile together, so the step still waits for the tile to land', () => {
+    expect(resolveBotDrawStepMs('fast')).toBe(Math.round(BOT_DRAW_STEP_MS * FAST_DRAW_SCALE));
+    expect(resolveBotDrawStepMs('fast')).toBe(resolveBotFlyTileMs('fast'));
+  });
+
+  it('is scaled less than the pauses: an animation shrunk as hard as a pause reads as a flicker', () => {
+    expect(FAST_DRAW_SCALE).toBeGreaterThan(FAST_PACE_SCALE);
+    expect(resolveBotDrawStepMs('fast')).toBeGreaterThan(paceMs(BOT_DRAW_STEP_MS, 'fast'));
+    expect(resolveBotDrawStepMs('fast')).toBeLessThan(BOT_DRAW_STEP_MS);
+    expect(paceDrawMs(1000, 'fast')).toBe(600);
+    expect(paceDrawMs(1000)).toBe(1000);
+  });
+});
+
+describe('flying tile CSS length keeps the normal-pace shape', () => {
+  it('at normal pace the CSS length is the 1138 ms base that the 861 ms cleanup has always cut at ~76%', () => {
+    expect(flyTileCssMs(BOT_FLY_TILE_MS)).toBe(FLY_TILE_CSS_BASE_MS);
+  });
+
+  it('a faster flight is cut at the same fraction of its animation, just sooner', () => {
+    const fast = resolveBotFlyTileMs('fast');
+    expect(fast / flyTileCssMs(fast)).toBeCloseTo(BOT_FLY_TILE_MS / FLY_TILE_CSS_BASE_MS, 2);
+    expect(flyTileCssMs(fast)).toBeLessThan(FLY_TILE_CSS_BASE_MS);
   });
 });

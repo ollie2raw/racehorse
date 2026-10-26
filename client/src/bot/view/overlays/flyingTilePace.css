@@ -1,0 +1,8 @@
+/* The flying tile for one of Fritz's draws at fast pace (useBotTurnEffect / usePlayerDrawAnimation): its CSS length comes
+   from the entry, as --fly-ms (flyTileCssMs keeps the shape of the normal-pace animation). The base length lives in
+   walnut-live.css (protected); this is a higher-specificity override that applies only to tiles carrying data-fly-ms, so
+   normal pace renders exactly as before. The overlay is portaled to <body>, outside .bot-match-screen, so the selector
+   must not depend on an ancestor. */
+.flying-tile-overlay[data-fly-ms] {
+  animation-duration: var(--fly-ms);
+}

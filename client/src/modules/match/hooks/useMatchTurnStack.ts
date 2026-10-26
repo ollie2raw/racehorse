@@ -12,6 +12,7 @@ import { useApplyAndNotify } from '../../player-turn/useApplyAndNotify.ts';
 import { usePlayerDrawAnimation } from '../../player-turn/usePlayerDrawAnimation.ts';
 import { usePlayerTurnOrchestration } from '../../player-turn/index.ts';
 import { useBotTurnOrchestration } from '../../bot-turn/index.ts';
+import { resolveFritzPace } from '../../bot-turn/botTurnGuards.ts';
 import { useDailyFritzDiagnostics } from '../../daily/index.ts';
 import { DRAW_STEP_MS } from './useBotMatchBootstrap.ts';
 import { useGameSpeedPreference } from '../../../utils/useGameSpeedPreference.ts';
@@ -130,7 +131,9 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
     (message) => presentation.showBoardToast(message, 'you'),
   );
 
+  const [gameSpeed] = useGameSpeedPreference();
   const { triggerDrawStepAnimation, scheduleDrawStepAnimation } = usePlayerDrawAnimation({
+    fritzPace: resolveFritzPace(bootstrap.isDailyFritzMode, gameSpeed),
     drawAnimation: {
       boneyardRef: refs.boneyardRef,
       handAreaRef: refs.handAreaRef,
@@ -240,7 +243,6 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
     ],
   );
 
-  const [gameSpeed] = useGameSpeedPreference();
   const botTurn = useBotTurnOrchestration(
     buildBotTurnArgs(
       sources,

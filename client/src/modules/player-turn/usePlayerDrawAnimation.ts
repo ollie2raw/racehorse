@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { BOT_FLY_TILE_MS } from '../bot-turn/botTurnGuards.ts';
+import { BOT_FLY_TILE_MS, resolveBotFlyTileMs, type FritzPace } from '../bot-turn/botTurnGuards.ts';
 import { logDailyFritzHandBreadcrumb } from '../match/hand-lifecycle/handLifecycleRules.ts';
 import { logLayoutDebug } from '../../match/layoutDebug.ts';
 import type { BotMatchState, BotPlayerId } from '../match/runtime/botEngine.ts';
@@ -7,9 +7,11 @@ import type { DrawAnimationDeps } from './types.ts';
 
 type UsePlayerDrawAnimationArgs = {
   drawAnimation: DrawAnimationDeps;
+  /** The pace this match runs at (Daily Fritz is always normal). Only Fritz's draws follow it. */
+  fritzPace?: FritzPace;
 };
 
-export function usePlayerDrawAnimation({ drawAnimation }: UsePlayerDrawAnimationArgs) {
+export function usePlayerDrawAnimation({ drawAnimation, fritzPace = 'normal' }: UsePlayerDrawAnimationArgs) {
   const {
     boneyardRef,
     handAreaRef,
@@ -50,6 +52,9 @@ export function usePlayerDrawAnimation({ drawAnimation }: UsePlayerDrawAnimation
     const from = boneyardEl.getBoundingClientRect();
     const to = targetEl.getBoundingClientRect();
     const id = ++flyingTileIdRef.current;
+    // Only Fritz's draws speed up, and only off normal pace: at normal pace the entry carries no `ms` and the CSS
+    // keeps its own duration, exactly as before.
+    const flyMs = drawer === 'bot' ? resolveBotFlyTileMs(fritzPace) : BOT_FLY_TILE_MS;
     setFlyingTiles((prev) => [
       ...prev,
       {
@@ -58,9 +63,10 @@ export function usePlayerDrawAnimation({ drawAnimation }: UsePlayerDrawAnimation
         toX: to.left + to.width / 2,
         toY: to.top + to.height / 2,
         id,
+        ...(flyMs !== BOT_FLY_TILE_MS ? { ms: flyMs } : null),
       },
     ]);
-    setTimeout(() => setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id)), BOT_FLY_TILE_MS);
+    setTimeout(() => setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id)), flyMs);
     logLayoutDebug(drawer === 'you' ? 'player-draw' : 'fritz-draw', {
       rootRef,
       boardStageRef,
@@ -80,6 +86,7 @@ export function usePlayerDrawAnimation({ drawAnimation }: UsePlayerDrawAnimation
     setFlyingTiles,
     rootRef,
     boardStageRef,
+    fritzPace,
   ]);
 
   const scheduleDrawStepAnimation = useCallback(

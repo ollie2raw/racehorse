@@ -17,6 +17,7 @@ import {
 import type { LocalRunSession } from './localRunSession.ts';
 import {
   resolveBotChainContinueDelayMs,
+  resolveBotDrawStepMs,
   resolveBotHandoffDelayMs,
   resolveBotOpeningDelayMs,
   BOT_SCORE_HOLD_MS,
@@ -285,7 +286,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
                 }
                 onStep?.(step);
               },
-              drawStepMsOverride,
+              // At fast pace Fritz's own draws are quicker; every other draw keeps the caller's cadence.
+              player === 'bot' && paceNow() === 'fast' ? resolveBotDrawStepMs('fast') : drawStepMsOverride,
             );
           };
 
@@ -438,7 +440,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
                 }
                 live().ports.setDrawSequenceActiveBoth(active);
               },
-              drawStepMs: drawLive.drawStepMs,
+              drawStepMs: paceNow() === 'fast' ? resolveBotDrawStepMs('fast') : drawLive.drawStepMs,
               isMuted: drawLive.isMuted,
               shouldAbort: () =>
                 !mountedRef.current

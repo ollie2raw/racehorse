@@ -1,3 +1,5 @@
+import './flyingTilePace.css';
+import { flyTileCssMs } from '../../../modules/bot-turn/botTurnGuards.ts';
 import { lazy, Suspense, type CSSProperties } from 'react';
 
 const GameReviewer = lazy(() => import('../../../analyzer/GameReviewer.tsx'));
@@ -47,11 +49,13 @@ export function BotMatchInGameOverlays({
             <div
               key={ft.id}
               className="flying-tile-overlay"
+              data-fly-ms={ft.ms}
               style={{
                 '--fly-from-x': `${ft.x}px`,
                 '--fly-from-y': `${ft.y}px`,
                 '--fly-to-x': `${ft.toX}px`,
                 '--fly-to-y': `${ft.toY}px`,
+                ...(ft.ms ? { '--fly-ms': `${flyTileCssMs(ft.ms)}ms` } : null),
               } as CSSProperties}
             />
           ))}
