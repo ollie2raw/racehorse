@@ -73,9 +73,9 @@ export function computeBoundedLayout(
   const { exactBoundsMarginUnits = 0, ...routing } = options;
   const layout = layoutFn(board, validPositions, routing);
   const everyZone = allOpenEndPositions(board);
-  const bounds = envelopeOf(
-    [false, true].map((pendingTileIsDouble) => layoutFn(board, everyZone, { ...routing, pendingTileIsDouble })),
-    exactBoundsMarginUnits,
+  const passes = [false, true].map((pendingTileIsDouble) =>
+    layoutFn(board, everyZone, { ...routing, pendingTileIsDouble }),
   );
-  return { ...layout, ...bounds };
+  const bounds = envelopeOf(passes, exactBoundsMarginUnits);
+  return { ...layout, ...bounds, dropZoneFootprints: passes.flatMap((pass) => pass.zones) };
 }

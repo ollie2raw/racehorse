@@ -1,6 +1,6 @@
 // client/src/components/board/boardCameraReserve.ts
 //
-// Keep placed tiles clear of the overlays that sit on top of the board container (the
+// Keep placed tiles AND drop zones clear of the overlays that sit on top of the board container (the
 // zoom/controls tray and the corner pills). A fit that only looks at the container is
 // fine while the board is small; once the board is allowed to fill the container (short
 // phone viewports, boardBounds.ts) its edge tiles can run under an overlay and become
@@ -10,6 +10,9 @@
 // Pure: no DOM. `collectReservedRects` is the one DOM-reading helper, kept separate so the
 // geometry stays testable.
 import type { BoardLayout } from './boardLayoutTypes';
+
+/** Board renders each drop zone nudged outward by this many layout units (tileSize * 0.16 in Board.tsx). */
+const ZONE_OUTWARD_UNITS = 0.16;
 
 /** Overlays that sit on the board container and must stay clear of tiles. */
 export const BOARD_RESERVED_SELECTOR = '.rh-board-controls, .board-corner-pill';
@@ -41,7 +44,7 @@ export function collectReservedRects(container: HTMLElement): ReservedRect[] {
 }
 
 export interface ClearScaleInput {
-  layout: Pick<BoardLayout, 'tiles' | 'minX' | 'maxX' | 'minY' | 'maxY'>;
+  layout: Pick<BoardLayout, 'tiles' | 'minX' | 'maxX' | 'minY' | 'maxY' | 'dropZoneFootprints'>;
   /** Pixels per layout unit at camera scale 1. */
   unitPx: number;
   containerWidth: number;
@@ -56,7 +59,8 @@ export interface ClearScaleInput {
   clearancePx?: number;
 }
 
-function tilesTouchReserved(input: ClearScaleInput, scale: number): boolean {
+/** True if any tile or drop-zone footprint of the layout touches a reserved rect at this camera scale. */
+export function touchesReserved(input: ClearScaleInput, scale: number): boolean {
   const { layout, unitPx, containerWidth, containerHeight, cameraX, cameraY, reserved } = input;
   const clearance = input.clearancePx ?? RESERVED_CLEARANCE_PX;
   const layoutCx = (layout.minX + layout.maxX) / 2;
@@ -67,15 +71,32 @@ function tilesTouchReserved(input: ClearScaleInput, scale: number): boolean {
     const halfH = (tile.rotation === 0 ? 0.5 : 1) * unitPx * scale;
     const cx = containerWidth / 2 + (tile.x - layoutCx) * unitPx * scale + cameraX;
     const cy = containerHeight / 2 + (tile.y - layoutCy) * unitPx * scale + cameraY;
-    for (const r of reserved) {
-      if (
-        cx + halfW + clearance > r.left &&
-        cx - halfW - clearance < r.right &&
-        cy + halfH + clearance > r.top &&
-        cy - halfH - clearance < r.bottom
-      ) {
-        return true;
-      }
+    if (boxTouches(cx, cy, halfW, halfH, clearance, reserved)) return true;
+  }
+  // Drop zones too: a valid placement must stay tappable, not hidden under the tray or a pill.
+  for (const zone of layout.dropZoneFootprints ?? []) {
+    const cx =
+      containerWidth / 2 + (zone.x + zone.dirX * ZONE_OUTWARD_UNITS - layoutCx) * unitPx * scale + cameraX;
+    const cy =
+      containerHeight / 2 + (zone.y + zone.dirY * ZONE_OUTWARD_UNITS - layoutCy) * unitPx * scale + cameraY;
+    if (boxTouches(cx, cy, (zone.width / 2) * unitPx * scale, (zone.height / 2) * unitPx * scale, clearance, reserved)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function boxTouches(
+  cx: number,
+  cy: number,
+  halfW: number,
+  halfH: number,
+  clearance: number,
+  reserved: readonly ReservedRect[],
+): boolean {
+  for (const r of reserved) {
+    if (cx + halfW + clearance > r.left && cx - halfW - clearance < r.right && cy + halfH + clearance > r.top && cy - halfH - clearance < r.bottom) {
+      return true;
     }
   }
   return false;
@@ -84,14 +105,14 @@ function tilesTouchReserved(input: ClearScaleInput, scale: number): boolean {
 /** Largest scale in [minScale, fitScale] at which no tile touches a reserved rect. */
 export function clearScaleForReserved(input: ClearScaleInput): number {
   const { fitScale, minScale, reserved } = input;
-  if (reserved.length === 0 || !tilesTouchReserved(input, fitScale)) return fitScale;
-  if (tilesTouchReserved(input, minScale)) return minScale;
+  if (reserved.length === 0 || !touchesReserved(input, fitScale)) return fitScale;
+  if (touchesReserved(input, minScale)) return minScale;
   // Shrinking toward the centre only pulls tiles away from the edges, so touching is monotonic in scale.
   let lo = minScale;
   let hi = fitScale;
   for (let i = 0; i < 14; i += 1) {
     const mid = (lo + hi) / 2;
-    if (tilesTouchReserved(input, mid)) hi = mid;
+    if (touchesReserved(input, mid)) hi = mid;
     else lo = mid;
   }
   return lo;

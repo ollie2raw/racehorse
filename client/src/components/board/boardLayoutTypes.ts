@@ -47,6 +47,12 @@ export interface BoardLayout {
   maxY: number;
   /** Every arm corner the routing produced (empty when all arms are straight). */
   bends: BoardLayoutBend[];
+  /**
+   * Present with `exactBoundsMarginUnits`: every drop zone the board could show (all open ends, ordinary and
+   * double pending tile), whatever is selected. The camera keeps these clear of overlays (boardCameraReserve.ts)
+   * so a valid placement is never hidden under the controls tray or a corner pill.
+   */
+  dropZoneFootprints?: LayoutZone[];
 }
 
 export interface BoardLayoutOptions {

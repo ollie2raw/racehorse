@@ -6,8 +6,11 @@ import {
   type Policy,
 } from '../../../../packages/game-core/src/__tests__/support/engineHarness';
 import { FIXTURES } from './boardRoutingFixtures.ts';
+import { touchesReserved } from './boardCameraReserve.ts';
 import { computeBoardLayout } from './boardLayout.ts';
 import {
+  BOARD_UNIT_PX,
+  cameraFloorFor,
   READABILITY_CANDIDATES_PX,
   VIEWPORT_PROFILES,
   countBoardTiles,
@@ -28,12 +31,13 @@ const profile = (name: string): ViewportProfile => {
 describe('boardQualityMetrics: the model matches the browser', () => {
   // Scale the real camera produced for the `longBoth` fixture (19 tiles) in the browser
   // geometry report (e2e/board-routing-geometry.spec.ts, BOARD_GEOMETRY_REPORT=1). Phones were
-  // 0.17 / 0.14 before Pass 1a (bend after 1 tile + exact drop-zone bounds).
+  // 0.17 / 0.14 before Pass 1a (bend after 1 tile + exact drop-zone bounds), then 0.30 / 0.26 with the
+  // camera clear of overlays by tiles only, and 0.25 / 0.21 once drop zones are kept clear too.
   const measuredInBrowser: Array<[string, number]> = [
     ['desktop-1512x982', 0.29],
     ['laptop-1280x720', 0.28],
-    ['phone-932x430', 0.3],
-    ['phone-844x390', 0.26],
+    ['phone-932x430', 0.25],
+    ['phone-844x390', 0.21],
   ];
   for (const [name, browserScale] of measuredInBrowser) {
     it(`longBoth at ${name} fits at ~${browserScale}`, () => {
@@ -137,6 +141,37 @@ function* hands(): Generator<BoardState[]> {
     }
   }
 }
+
+describe('overlay clearance on phones', () => {
+  it('keeps every tile and drop zone clear of the tray and pills wherever the camera is above its floor', () => {
+    let checked = 0;
+    for (const p of VIEWPORT_PROFILES.filter((x) => x.phoneLandscape)) {
+      const options = layoutOptionsFor(p);
+      for (const hand of hands()) {
+        for (const board of hand) {
+          const layout = computeBoardLayout(board, [], options);
+          const fit = modelCameraFit(layout, countBoardTiles(board), p);
+          const input = {
+            layout,
+            unitPx: BOARD_UNIT_PX,
+            containerWidth: p.containerWidth,
+            containerHeight: p.containerHeight,
+            cameraX: 0,
+            cameraY: 0,
+            fitScale: fit.scale,
+            minScale: cameraFloorFor(p),
+            reserved: p.reserved,
+          };
+          // At the floor the camera cannot shrink further (the board is then reported as overflowing);
+          // anywhere above it, nothing may sit under an overlay.
+          if (fit.scale > cameraFloorFor(p) + 1e-9) expect(touchesReserved(input, fit.scale)).toBe(false);
+          checked += 1;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
+  });
+});
 
 const fmt = (n: number, d = 1) => n.toFixed(d);
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;

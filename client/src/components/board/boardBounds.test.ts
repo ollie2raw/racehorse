@@ -3,7 +3,7 @@ import type { BoardState } from '../../types.ts';
 import { playGame, VARIANTS, type Policy } from '../../../../packages/game-core/src/__tests__/support/engineHarness';
 import { allOpenEndPositions, envelopeOf } from './boardBounds.ts';
 import { computeBoardLayout } from './boardLayout.ts';
-import { clearScaleForReserved } from './boardCameraReserve.ts';
+import { clearScaleForReserved, touchesReserved } from './boardCameraReserve.ts';
 import { FIXTURES } from './boardRoutingFixtures.ts';
 import { countBoardTiles } from './boardQualityMetrics.ts';
 
@@ -33,6 +33,15 @@ describe('exact layout bounds', () => {
     expect(exact.tiles).toEqual(flat.tiles);
     expect(exact.zones).toEqual(flat.zones);
     expect(exact.bends).toEqual(flat.bends);
+  });
+
+  it('expose every drop-zone footprint the board could show, and only with exact bounds', () => {
+    const board = FIXTURES.longBoth();
+    const flat = computeBoardLayout(board, [], { maxVerticalArmTiles: 1 });
+    const exact = computeBoardLayout(board, [], PHONE);
+    expect(flat.dropZoneFootprints).toBeUndefined();
+    // Zones exist for the left/right ends and both arms of the hub even though nothing is selected.
+    expect((exact.dropZoneFootprints ?? []).length).toBeGreaterThanOrEqual(4);
   });
 
   it('envelopeOf spans tiles and zones plus the margin', () => {
@@ -131,6 +140,24 @@ describe('clearScaleForReserved', () => {
     expect(s).toBeGreaterThanOrEqual(0.1);
     const rightEdge = 400 + 4 * 84 * s + 84 * s + 4; // + clearance
     expect(rightEdge).toBeLessThanOrEqual(600 + 0.5);
+  });
+
+  it('keeps a DROP ZONE clear of an overlay too, not just tiles (a valid placement must stay tappable)', () => {
+    // Tiles sit well inside; a zone just past the right tip would be under the overlay.
+    const withZone = {
+      ...layout,
+      dropZoneFootprints: [
+        { position: 'right' as const, x: 7, y: 0, width: 2, height: 1, dirX: 1, dirY: 0, lane: 'horizontal' as const, key: 'zone-right' },
+      ],
+    };
+    const reserved = [{ left: 640, top: 0, right: 800, bottom: 200 }];
+    const input = { ...base, layout: withZone, reserved };
+    expect(touchesReserved(input, 0.5)).toBe(true);
+    const s = clearScaleForReserved(input);
+    expect(s).toBeLessThan(0.5);
+    expect(touchesReserved(input, s)).toBe(false);
+    // Without the zone, the tiles alone do not touch, so the fit scale stands.
+    expect(clearScaleForReserved({ ...base, reserved })).toBe(0.5);
   });
 
   it('never goes below the camera floor even if an overlay cannot be cleared', () => {

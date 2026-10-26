@@ -54,8 +54,8 @@ Same 454 hands / 7,459 placements; overlays (controls tray, corner pills) are mo
 
 | Phone | Median tile edge | Cannot be whole and readable (<18 px) | Overflows container | Under 12 px |
 |---|---|---|---|---|
-| 844×390 | 20.4 → **27.5 px** | 41.3 % → **16.2 %** | 7.5 % → **0.7 %** | 11.2 % → **0.8 %** |
-| 932×430 | 24.4 → **30.7 px** | 27.5 % → **6.1 %** | 1.2 % → **0.2 %** | 1.8 % → **0.2 %** |
+| 844×390 | 20.4 → **24.4 px** | 41.3 % → **19.7 %** | 7.5 % → **0.9 %** | 11.2 % → **1.1 %** |
+| 932×430 | 24.4 → **27.3 px** | 27.5 % → **7.6 %** | 1.2 % → **0.2 %** | 1.8 % → **0.2 %** |
 
 Desktop and laptop are unchanged (0 % cannot-be-readable; their code paths are untouched).
 
@@ -64,8 +64,12 @@ What changed, phone-landscape only:
 1. Vertical arms turn after **one** tile instead of two (`SHORT_BOARD_MAX_VERTICAL_ARM_TILES`).
 2. The flat 2.5-unit bounds pad is replaced by the **exact envelope** of every tile and every possible drop-zone footprint plus 0.4 units (`boardBounds.ts`). A corpus test asserts no zone is ever clipped and that selecting a tile never moves the bounds.
 3. Large boards may fill 97 % of the container instead of 92 % (`TIGHT_FIT_FILL`).
-4. The camera picks the largest scale at which no tile touches the controls tray or a corner pill (`boardCameraReserve.ts`). Without this the larger board ran under the tray.
+4. The camera picks the largest scale at which no tile **and no drop zone** touches the controls tray or a corner pill (`boardCameraReserve.ts`). Without this the larger board ran under the tray.
 
-**Cost, and why Pass 2 is next:** bigger tiles mean bigger steps. Phone placements that move a tile more than 40 px went from 4 % to 22 % (844×390) and 7 % to 27 % (932×430), and the p95 scale step from ~19 % to ~35-42 %. A spring camera is what turns that into smooth motion.
+**Found by CI, and why zones are in the clearance.** The first version of (4) only cleared tiles. `web-rack-breakpoint.spec.ts` (932×430) then got stuck at a 10-tile hand: the drop zone past an arm tip had ended up under the tray, so a valid placement could not be tapped. Zones are now kept clear too (`BoardLayout.dropZoneFootprints`, every open end whatever is selected). It costs ~3 px of tile size at 844×390 (27.5 → 24.4 px median) and is the reason the numbers above are lower than the first Pass 1a measurement. A corpus test asserts that on every phone placement above the camera floor, no tile or zone touches an overlay.
 
-**What remains:** 16.2 % (844×390) and 6.1 % (932×430) of placements still cannot be both whole and 18 px readable; they are the largest multi-hub boards. Closing that gap needs one of: further layout compaction for the worst boards, more board height on phones, or accepting a lower floor on the smallest phone. That is a product decision, recorded separately.
+**Follow-up that gives the size back:** the tray and pills sit on the board. Moving them off it (or collapsing the tray) lets the board use the full height; that is a chrome decision for Pass 3/4.
+
+**Cost, and why Pass 2 is next:** bigger tiles mean bigger steps. Phone placements that move a tile more than 40 px went from 4 % to 20 % (844×390) and 7 % to 26 % (932×430), and the p95 scale step from ~19 % to ~35-42 %. A spring camera is what turns that into smooth motion.
+
+**What remains:** 19.7 % (844×390) and 7.6 % (932×430) of placements still cannot be both whole and 18 px readable; they are the largest multi-hub boards. Closing that gap needs one of: further layout compaction for the worst boards, more board height on phones, or accepting a lower floor on the smallest phone. That is a product decision, recorded separately.
