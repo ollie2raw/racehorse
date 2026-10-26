@@ -3,6 +3,7 @@ import {
   forwardRef,
   memo,
   useImperativeHandle,
+  useRef,
   useState,
   type ForwardedRef,
 } from 'react';
@@ -18,6 +19,8 @@ import { useRenderProfiler } from '../debug/renderProfiler';
 import { recordDailyFritzBoardMetric, traceDailyFritzBoardEvent } from './boardDiagnostics';
 import { useBoardRenderLayout } from './board/useBoardRenderLayout';
 import { useBoardCamera } from './board/useBoardCamera';
+import { useBoardCameraSpring } from './board/useBoardCameraSpring';
+import { useBoardWorldFrame } from './board/useBoardWorldFrame';
 import { useBoardContainerHeight } from './board/useBoardContainerHeight';
 import { useBoardPointerControls } from './board/useBoardPointerControls';
 import { useShortBoardViewport } from './board/useShortBoardViewport';
@@ -147,6 +150,13 @@ function BoardComponent(
   // Convert layout units to pixels
   const unitToPixels = tileSize;
 
+  // Tiles are positioned against a world origin that moves with them (boardWorldFrame.ts), so a placement never
+  // shifts a placed tile in canvas space; the camera carries all recentring and is animated by the spring below.
+  const worldOrigin = useBoardWorldFrame(layout, resetSignature, staticView);
+  const worldOffsetUnits = staticView
+    ? { x: 0, y: 0 }
+    : { x: (layout.minX + layout.maxX) / 2 - worldOrigin.x, y: (layout.minY + layout.maxY) / 2 - worldOrigin.y };
+
   const {
     viewportSize,
     manualCameraRef,
@@ -161,6 +171,7 @@ function BoardComponent(
     boardTileCount,
     staticView,
     tightFit: shortViewport && !staticView,
+    worldOffsetUnits,
     unitToPixels,
     minCameraScale,
     staticFitMainline,
@@ -169,10 +180,19 @@ function BoardComponent(
     containerRef,
   });
 
-  // Calculate board center offset
-  const centerX = (layout.minX + layout.maxX) / 2;
-  const centerY =
-    staticView && staticFitMainline ? 0 : (layout.minY + layout.maxY) / 2;
+  // Tile positions are relative to the world origin (the bounds centre for static boards, as before).
+  const centerX = worldOrigin.x;
+  const centerY = staticView && staticFitMainline ? 0 : worldOrigin.y;
+
+  const canvasRef = useRef<HTMLDivElement>(null);
+  useBoardCameraSpring({
+    canvasRef,
+    camera,
+    enabled: !staticView,
+    motionAllowed,
+    snapKey: `${resetSignature}|${Math.round(viewportSize.width)}x${Math.round(viewportSize.height)}`,
+    manualCameraRef,
+  });
 
   const {
     isDragging,
@@ -224,14 +244,20 @@ function BoardComponent(
       }}
     >
       <div
+        ref={canvasRef}
         className="board-canvas"
         style={{
           width: isMobile ? '100%' : viewportSize.width > 0 ? `${viewportSize.width}px` : '100%',
           height: isMobile ? '100%' : viewportSize.height > 0 ? `${viewportSize.height}px` : '100%',
-          transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
           transformOrigin: 'center center',
-          // Lets CSS size placement-zone hit slop in screen pixels despite the camera scale.
-          ['--rh-camera-scale' as string]: camera.scale,
+          // Live boards: useBoardCameraSpring owns the transform and --rh-camera-scale (it writes them per frame).
+          // Static boards keep the plain React-rendered transform.
+          ...(staticView
+            ? {
+                transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
+                ['--rh-camera-scale' as string]: camera.scale,
+              }
+            : null),
         }}
       >
         {layout.tiles.map((lt) => {

@@ -23,6 +23,8 @@ import type { BoardState } from '../../types';
 import { resolveBoardFitTargets } from './boardCameraFit';
 import { calculateBoardFitScale, computeBoardLayout, type BoardLayout, type BoardLayoutOptions } from './boardLayout';
 import { clearScaleForReserved, type ReservedRect } from './boardCameraReserve';
+import { cameraOf, createCameraSpring, isCameraSettled, stepCameraSpring, type CameraTarget } from './cameraSpring';
+import { advanceWorldOrigin, boundsCenter, type WorldOrigin } from './boardWorldFrame';
 import { resolveVerticalArmExtent } from './boardRouting';
 import { SHORT_BOARD_EXACT_BOUNDS_MARGIN_UNITS, SHORT_BOARD_MAX_VERTICAL_ARM_TILES } from './useBoardRenderLayout';
 
@@ -127,6 +129,38 @@ export function modelCameraFit(layout: BoardLayout, tileCount: number, profile: 
   return { scale, rawScale, overflowed: rawScale < floor - 1e-9, targetFill };
 }
 
+const FRAME_S = 1 / 60;
+const MAX_SIM_FRAMES = 240;
+
+/**
+ * Plays the spring camera from one placement's camera to the next at 60 fps and reports the largest
+ * per-frame screen move of any tile that exists in both layouts (peak speed, the thing that reads as
+ * "jerky"), plus how long the camera takes to settle. Tiles are positioned in the stable world frame,
+ * so the camera alone moves them: screen = camera.xy + scale * world.
+ */
+export function simulateSpring(
+  from: CameraTarget,
+  to: CameraTarget,
+  worldOfSurvivors: ReadonlyArray<{ x: number; y: number }>,
+): { peakFramePx: number; settleMs: number } {
+  let state = createCameraSpring(from);
+  const at = (camera: CameraTarget) => worldOfSurvivors.map((w) => ({ x: camera.x + camera.scale * w.x, y: camera.y + camera.scale * w.y }));
+  let previous = at(cameraOf(state));
+  let peak = 0;
+  let frames = 0;
+  while (frames < MAX_SIM_FRAMES) {
+    state = stepCameraSpring(state, to, FRAME_S);
+    frames += 1;
+    const current = at(cameraOf(state));
+    for (let i = 0; i < current.length; i += 1) {
+      peak = Math.max(peak, Math.hypot(current[i].x - previous[i].x, current[i].y - previous[i].y));
+    }
+    previous = current;
+    if (isCameraSettled(state, to)) break;
+  }
+  return { peakFramePx: peak, settleMs: Math.round(frames * FRAME_S * 1000) };
+}
+
 export function countBoardTiles(board: BoardState | null): number {
   if (!board) return 0;
   return (
@@ -158,6 +192,10 @@ export interface PlacementSample {
   reflowedTiles: number;
   scaleStepPct: number;
   bends: number;
+  /** Largest per-frame (60 fps) screen move of any already-placed tile while the spring camera travels. */
+  peakFramePx: number;
+  /** Time for the spring camera to settle after this placement. */
+  settleMs: number;
 }
 
 const EPS = 1e-6;
@@ -210,26 +248,46 @@ export function measureHand(
   options: BoardLayoutOptions = layoutOptionsFor(profile),
 ): PlacementSample[] {
   const samples: PlacementSample[] = [];
-  let prev: { layout: BoardLayout; scale: number; count: number } | null = null;
+  let prev: { layout: BoardLayout; scale: number; count: number; origin: WorldOrigin } | null = null;
   for (const board of boards) {
     const count = countBoardTiles(board);
     if (count === 0) continue;
     if (prev && count <= prev.count) continue;
     const layout = computeBoardLayout(board, [], options);
     const fit = modelCameraFit(layout, count, profile);
+    const origin: WorldOrigin = prev ? advanceWorldOrigin(prev.layout, prev.origin, layout) : boundsCenter(layout);
+    const centre = boundsCenter(layout);
+    const camera: CameraTarget = {
+      x: -fit.scale * (centre.x - origin.x) * BOARD_UNIT_PX,
+      y: -fit.scale * (centre.y - origin.y) * BOARD_UNIT_PX,
+      scale: fit.scale,
+    };
     let maxTileJumpPx = 0;
     let reflowedTiles = 0;
+    let motion = { peakFramePx: 0, settleMs: 0 };
     if (prev) {
       const before = screenPositions(prev.layout, prev.scale);
       const after = screenPositions(layout, fit.scale);
       const prevTiles = new Map(prev.layout.tiles.map((t) => [t.key, t]));
       reflowedTiles = countReflowed(prev.layout, layout);
+      const survivors: Array<{ x: number; y: number }> = [];
       for (const t of layout.tiles) {
         if (!prevTiles.has(t.key)) continue;
+        survivors.push({ x: (t.x - origin.x) * BOARD_UNIT_PX, y: (t.y - origin.y) * BOARD_UNIT_PX });
         const a = before.get(t.key);
         const b = after.get(t.key);
         if (a && b) maxTileJumpPx = Math.max(maxTileJumpPx, Math.hypot(a.x - b.x, a.y - b.y));
       }
+      const prevCentre = boundsCenter(prev.layout);
+      motion = simulateSpring(
+        {
+          x: -prev.scale * (prevCentre.x - prev.origin.x) * BOARD_UNIT_PX,
+          y: -prev.scale * (prevCentre.y - prev.origin.y) * BOARD_UNIT_PX,
+          scale: prev.scale,
+        },
+        camera,
+        survivors,
+      );
     }
     const widthPx = (layout.maxX - layout.minX) * BOARD_UNIT_PX * fit.scale;
     const heightPx = (layout.maxY - layout.minY) * BOARD_UNIT_PX * fit.scale;
@@ -247,8 +305,10 @@ export function measureHand(
       reflowedTiles,
       scaleStepPct: prev ? (Math.abs(fit.scale - prev.scale) / prev.scale) * 100 : 0,
       bends: layout.bends.length,
+      peakFramePx: motion.peakFramePx,
+      settleMs: motion.settleMs,
     });
-    prev = { layout, scale: fit.scale, count };
+    prev = { layout, scale: fit.scale, count, origin };
   }
   return samples;
 }
@@ -283,10 +343,20 @@ export interface QualitySummary {
   reflowShare: number;
   scaleStepP95: number;
   scaleStepMax: number;
+  /** Spring camera: per-frame tile move at 60 fps. A snap moves the whole jump in one frame (jumpP50/P95/Max). */
+  peakFrameP50: number;
+  peakFrameP95: number;
+  peakFrameMax: number;
+  /** Share of placements whose peak per-frame move exceeds ABRUPT_FRAME_PX. */
+  abruptShare: number;
+  settleP50Ms: number;
+  settleP95Ms: number;
 }
 
 export const READABILITY_CANDIDATES_PX = [12, 16, 18, 20, 24] as const;
 const BIG_JUMP_PX = 40;
+/** A tile moving more than this per 60 fps frame (480 px/s) reads as a jump, not as motion. */
+export const ABRUPT_FRAME_PX = 8;
 
 export function summarize(samples: readonly PlacementSample[]): QualitySummary {
   const n = samples.length;
@@ -294,6 +364,8 @@ export function summarize(samples: readonly PlacementSample[]): QualitySummary {
   const edges = samples.map((s) => s.tileShortEdgePx).sort((a, b) => a - b);
   const jumps = samples.map((s) => s.maxTileJumpPx).sort((a, b) => a - b);
   const steps = samples.map((s) => s.scaleStepPct).sort((a, b) => a - b);
+  const frames = samples.map((s) => s.peakFramePx).sort((a, b) => a - b);
+  const settles = samples.map((s) => s.settleMs).sort((a, b) => a - b);
   return {
     placements: n,
     tileEdgeP5: percentile(edges, 5),
@@ -317,5 +389,11 @@ export function summarize(samples: readonly PlacementSample[]): QualitySummary {
     reflowShare: share(samples.filter((s) => s.reflowedTiles > 0).length),
     scaleStepP95: percentile(steps, 95),
     scaleStepMax: steps[steps.length - 1] ?? 0,
+    peakFrameP50: percentile(frames, 50),
+    peakFrameP95: percentile(frames, 95),
+    peakFrameMax: frames[frames.length - 1] ?? 0,
+    abruptShare: share(samples.filter((s) => s.peakFramePx > ABRUPT_FRAME_PX).length),
+    settleP50Ms: percentile(settles, 50),
+    settleP95Ms: percentile(settles, 95),
   };
 }

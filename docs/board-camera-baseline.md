@@ -69,3 +69,30 @@ What changed, phone-landscape only:
 **Cost, and why Pass 2 is next:** bigger tiles mean bigger steps. Phone placements that move a tile more than 40 px went from 4 % to 22 % (844×390) and 7 % to 27 % (932×430), and the p95 scale step from ~19 % to ~35-42 %. A spring camera is what turns that into smooth motion.
 
 **What remains:** 16.2 % (844×390) and 6.1 % (932×430) of placements still cannot be both whole and 18 px readable; they are the largest multi-hub boards. Closing that gap needs one of: further layout compaction for the worst boards, more board height on phones, or accepting a lower floor on the smallest phone. That is a product decision, recorded separately.
+
+## Pass 2 result: a camera that glides
+
+**Why the board felt rough.** Two things changed in the same frame on every placement. (1) The camera scale snapped to a new fit. (2) Every tile jumped in canvas space, because tiles were positioned from the *bounds centre* (`(tile - boundsCentre) * unit`), and the bounds centre changes on every placement. A spring on the scale alone would have left (2) as a teleport.
+
+**What changed** (all live boards; static diagrams and lessons keep the old behaviour):
+
+1. **Stable world frame** (`boardWorldFrame.ts`, `useBoardWorldFrame.ts`). Tiles are positioned against an origin that moves *with* the tiles: when the next layout is the previous one plus a uniform shift, the origin shifts by the same vector, so a placed tile keeps exactly the same canvas position. A corpus test over real games asserts a tile only ever moves in the world frame if routing moved it.
+2. **The camera carries all recentring.** The fit now sets the camera translate as well as scale (`screen = centre + camera + scale * (tile - origin)`), so the whole transition is one animatable transform.
+3. **Critically damped spring** (`cameraSpring.ts`, `useBoardCameraSpring.ts`). x, y and ln(scale) glide to the target: no overshoot, frame-rate independent, interruptible (a placement mid-glide keeps its velocity), scale animated in log space so zooming in and out feel the same. It writes the canvas transform imperatively per frame, so React does not re-render at 60 fps.
+4. **Snaps where gliding would be wrong:** the first fit and the short warm-up window after mount or a reset (the camera fits several times in the first frames), a new hand, a container resize (dragging a window edge tracks 1:1), manual pan/zoom (gestures stay direct), and `useMotionAllowed()` false (reduced motion or a hidden tab).
+5. `data-camera-settled` on the canvas, so tests and tools wait for the glide to finish.
+
+**Measured** (same 454 hands; spring simulated at 60 fps over the real camera targets). Before = the old snap, which moved tiles by the full jump in one frame:
+
+| Profile | One-frame jump p95 / max (before) | Peak per-frame move p95 / max (after) | Over 8 px/frame | Settle p50 / p95 |
+|---|---|---|---|---|
+| Desktop 1512×982 | 95.0 / 101.8 px | 6.5 / 7.0 px | 0.0 % | 683 / 767 ms |
+| Laptop 1280×720 | 73.1 / 353.6 px | 5.0 / 19.9 px | 0.0 % | 667 / 750 ms |
+| Phone 932×430 | 91.6 / 450.0 px | 6.2 / 12.8 px | 1.9 % | 667 / 850 ms |
+| Phone 844×390 | 86.2 / 386.3 px | 5.5 / 11.4 px | 1.8 % | 650 / 850 ms |
+
+That removes the cost Pass 1a introduced (phone jumps went from 4 % to 22 % over 40 px) and then some: the worst frame is now a fraction of what the typical frame was.
+
+**Tuning notes.** `CAMERA_SMOOTH_TIME_S = 0.18`. Most of the move is done by ~0.3 s; the settle time above uses a strict 0.2 px criterion, so it overstates how long the board *looks* like it is moving. A lower value (0.14) is snappier but raises the peak per-frame move ~28 %, which would push phones' over-8-px share up.
+
+**Verified in the real browser:** a per-frame probe tracks one already-placed tile while later tiles arrive (`e2e/board-camera.spec.ts`); it must never move more than 20 px between frames. The geometry and routing specs are unchanged and still pass.
