@@ -25,6 +25,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { calculateBoardFitScale, type BoardLayout } from './boardLayout';
 import { traceCameraDebug } from '../boardDiagnostics';
+import { resolveBoardFitTargets } from './boardCameraFit';
 
 export type BoardCameraState = { x: number; y: number; scale: number };
 
@@ -141,46 +142,14 @@ export function useBoardCamera({
 
     // Calculate scale to fit
     const layoutSpanUnits = Math.max(layout.maxX - layout.minX, layout.maxY - layout.minY);
-    const targetFill =
-      containFullBoard
-        ? 0.78
-        : resolvedFitMode === 'guided'
-        ? layoutSpanUnits <= 3
-          ? 1.08
-          : layoutSpanUnits <= 5
-            ? 0.94
-            : layoutSpanUnits <= 8
-              ? 0.88
-              : layoutSpanUnits >= 10
-                ? 0.93
-                : 0.9
-        : layoutSpanUnits <= 3
-          ? 0.52
-          : layoutSpanUnits <= 5
-            ? 0.65
-            : layoutSpanUnits <= 8
-              ? 0.82
-              : layoutSpanUnits >= 10
-                ? 0.92
-                : 0.9;
-    let maxFitScale =
-      containFullBoard
-        ? 1.8
-        : resolvedFitMode === 'guided'
-        ? boardTileCount <= 1
-          ? 4.4
-          : boardTileCount <= 4
-            ? 3.2
-            : boardTileCount <= 8
-              ? 2.2
-              : 1.6
-        : boardTileCount <= 1
-          ? 2.4
-          : boardTileCount <= 4
-            ? 2.1
-            : boardTileCount <= 8
-              ? 1.8
-              : 1.65;
+    const fitTargets = resolveBoardFitTargets({
+      containFullBoard,
+      resolvedFitMode,
+      layoutSpanUnits,
+      boardTileCount,
+    });
+    const targetFill = fitTargets.targetFill;
+    let maxFitScale = fitTargets.maxFitScale;
 
     if (staticView) {
       const diagramFill = 1.04;
