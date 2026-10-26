@@ -30,6 +30,7 @@ import {
   winnerDisplayLabel,
 } from '../components/handOver/handOverCopy';
 import TileRack from '../components/TileRack';
+import { useTileDrag } from '../components/handDrag/useTileDrag';
 import GameOverModal from '../components/GameOverModal';
 import { PreGameTileDrawBoard } from './preGameDraw/PreGameTileDrawBoard';
 import { RoomReactions } from '../components/RoomReactions';
@@ -78,6 +79,7 @@ const HandView = React.memo(function HandView({
   drawPulseIndex,
 }: HandViewProps) {
   useRenderProfiler('HandView');
+  const tileDrag = useTileDrag();
   const playableTileKeys = useMemo(() => buildPlayableTileKeys(legalMoves), [legalMoves]);
 
   const renderTile = (tile: Tile, idx: number) => {
@@ -119,7 +121,12 @@ const HandView = React.memo(function HandView({
     const firstRow = hand.slice(0, splitAt);
     const secondRow = hand.slice(splitAt);
     return (
-      <div role="group" aria-label="Your hand" className="hand-container is-stacked has-multiple-rows">
+      <div
+        role="group"
+        aria-label="Your hand"
+        onPointerDown={tileDrag.onPointerDown}
+        className="hand-container is-stacked has-multiple-rows"
+      >
         <div className="hand-row">{firstRow.map((tile, idx) => renderTile(tile, idx))}</div>
         <div className="hand-row">{secondRow.map((tile, idx) => renderTile(tile, splitAt + idx))}</div>
       </div>
@@ -127,7 +134,12 @@ const HandView = React.memo(function HandView({
   }
 
   return (
-    <div role="group" aria-label="Your hand" className="hand-container has-single-row">
+    <div
+      role="group"
+      aria-label="Your hand"
+      onPointerDown={tileDrag.onPointerDown}
+      className="hand-container has-single-row"
+    >
       <div className="hand-row">{hand.map((tile, idx) => renderTile(tile, idx))}</div>
     </div>
   );
