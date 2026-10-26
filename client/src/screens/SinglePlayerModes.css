@@ -379,12 +379,16 @@
     transform: none;
   }
 
-  /* Ghost's art carries its own opaque teal background, which showed as a lighter rectangle on the card
-     (and the brightness boost made it worse). Feather the image's edges into the card; a mask, not a fill. */
+  /* Ghost: its art has a TRANSPARENT background (a clean cut-out with a glowing edge), so there is no rectangle to hide.
+     An earlier version feathered its edges with a mask and lowered the brightness boost; that faded the very glow that
+     makes it look like a ghost and left it dull and small. It keeps the original vivid filter, no mask, and a slightly
+     wider slot so the whole figure can be large without touching the copy. */
+  .home-main.sp-solo-main:not(.learn-hub-main) .sp-solo-grid .daily-puzzle-card-container .sp-solo-mode-card__art-slot {
+    left: 48%;
+  }
+
   .home-main.sp-solo-main:not(.learn-hub-main) .daily-puzzle-card-container .sp-solo-mode-card__art {
-    filter: brightness(1.1) contrast(1.05) saturate(1.15);
-    -webkit-mask-image: radial-gradient(ellipse 62% 60% at 50% 50%, #000 55%, transparent 100%);
-    mask-image: radial-gradient(ellipse 62% 60% at 50% 50%, #000 55%, transparent 100%);
+    filter: brightness(1.44) contrast(1.08) saturate(1.18);
   }
 
   /* Journey's art is LANDSCAPE (900x675) on a black background, and its subject (the helmet) is ~70% as wide as the
