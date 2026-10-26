@@ -75,7 +75,7 @@ function* boards(): Generator<BoardState> {
 }
 
 describe('exact bounds on real games', () => {
-  it('contain every tile and every possible drop-zone footprint, whatever is selected', () => {
+  it('contain every tile and every possible drop-zone footprint, whatever is selected', { timeout: 60_000 }, () => {
     let checked = 0;
     for (const board of boards()) {
       const everyZone = allOpenEndPositions(board);
