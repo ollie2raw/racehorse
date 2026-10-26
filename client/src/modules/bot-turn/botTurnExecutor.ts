@@ -1,3 +1,4 @@
+import type { FritzPace } from './botTurnGuards.ts';
 import {
   getLegalMoves,
   type BotActionResult,
@@ -31,6 +32,7 @@ export type BotTurnExecutionInput = {
   ghostProfile: GhostProfileSummary | null;
   fritzDifficulty: BotDifficulty;
   isDailyFritzMode: boolean;
+  pace?: FritzPace;
   fritzPolicyVersion?: number;
   isMuted: boolean;
   moveCounter: number;
@@ -82,6 +84,7 @@ export async function executeBotTurn(
       ghostProfile: input.ghostProfile,
       fritzDifficulty: input.fritzDifficulty,
       isDailyFritzMode: input.isDailyFritzMode,
+      pace: input.pace,
       fritzPolicyVersion: input.fritzPolicyVersion,
       isMuted: input.isMuted,
       moveCounter: input.moveCounter,

@@ -1,5 +1,6 @@
 import type { BotChoice } from '../../fritz/botHeuristics.ts';
 import type { BotTurnPorts } from '../../bot-turn/types.ts';
+import type { FritzPace } from '../../bot-turn/botTurnGuards.ts';
 import type { UseBotTurnOrchestrationArgs } from '../../bot-turn/useBotTurnOrchestration.ts';
 import type { UsePlayerTurnOrchestrationResult } from '../../player-turn/types.ts';
 import type { UseGuidedMatchRuntimeBaseResult } from '../../guided/useGuidedMatchRuntimeTypes.ts';
@@ -15,6 +16,7 @@ export function buildBotTurnArgs(
   drawPresentation: {
     triggerDrawStepAnimation: UseBotTurnOrchestrationArgs['triggerDrawStepAnimation'];
     drawStepMs: number;
+    fritzPace: FritzPace;
   },
 ): UseBotTurnOrchestrationArgs {
   const { bootstrap, refs, guidedBoot, chrome, ghostProfile, localRun } = sources;
@@ -28,6 +30,7 @@ export function buildBotTurnArgs(
     runDrawSequence: playerTurn.runDrawSequence,
     fritzDifficulty: bootstrap.fritzConfig.difficulty,
     isDailyFritzMode: bootstrap.isDailyFritzMode,
+    fritzPace: drawPresentation.fritzPace,
     dailyFritzPackage: bootstrap.dailyFritzPackage,
     isGuidedTranscriptMode,
     isGuidedV2Mode,

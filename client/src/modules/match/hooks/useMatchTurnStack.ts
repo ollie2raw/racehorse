@@ -14,6 +14,7 @@ import { usePlayerTurnOrchestration } from '../../player-turn/index.ts';
 import { useBotTurnOrchestration } from '../../bot-turn/index.ts';
 import { useDailyFritzDiagnostics } from '../../daily/index.ts';
 import { DRAW_STEP_MS } from './useBotMatchBootstrap.ts';
+import { useGameSpeedPreference } from '../../../utils/useGameSpeedPreference.ts';
 import { assembleMatchTurnStackResult } from '../match-turn-stack/assembleMatchTurnStackResult.ts';
 import { countAuthoringV2PlayerPlays } from '../match-turn-stack/authoringV2Metrics.ts';
 import { buildBotTurnArgs } from '../match-turn-stack/buildBotTurnArgs.ts';
@@ -239,6 +240,7 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
     ],
   );
 
+  const [gameSpeed] = useGameSpeedPreference();
   const botTurn = useBotTurnOrchestration(
     buildBotTurnArgs(
       sources,
@@ -250,6 +252,7 @@ export function useMatchTurnStack(args: UseMatchTurnStackArgs) {
       {
         triggerDrawStepAnimation,
         drawStepMs: DRAW_STEP_MS,
+        fritzPace: gameSpeed,
       },
     ),
   );

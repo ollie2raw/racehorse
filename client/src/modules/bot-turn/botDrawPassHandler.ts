@@ -12,7 +12,7 @@ import { buildBotGhostDrawEntry, buildBotGhostPassEntry } from './botGhostSync.t
 import { executeBotPlayMove, resolveBotMoveChoice } from './botMoveResolution.ts';
 import { collectBotTurnSnapshot, type BotTurnSnapshot } from './botMoveSnapshot.ts';
 import type { BotTurnPorts } from './types.ts';
-import { BOT_POST_DRAW_PLAY_DELAY_MS, waitMs } from './botTurnGuards.ts';
+import { resolveBotPostDrawPlayDelayMs, waitMs, type FritzPace } from './botTurnGuards.ts';
 
 export type BotDrawPassOutcome = {
   working: BotMatchState;
@@ -46,6 +46,8 @@ export async function runBotDrawPassSequence(input: {
   ghostProfile: GhostProfileSummary | null;
   fritzDifficulty: BotDifficulty;
   isDailyFritzMode: boolean;
+  /** Fast pace shortens the beat after a draw; undefined = normal. */
+  pace?: FritzPace;
   fritzPolicyVersion?: number;
   isMuted: boolean;
   moveCounter: number;
@@ -143,7 +145,7 @@ export async function runBotDrawPassSequence(input: {
   } else {
     // Draw-until-legal found a play — pause so the tile does not slam in.
     if (drawPass.drew && !input.cancelled()) {
-      await waitMs(BOT_POST_DRAW_PLAY_DELAY_MS);
+      await waitMs(resolveBotPostDrawPlayDelayMs(input.pace));
       if (input.cancelled() || !input.isLocalRunCurrent(input.runToken)) {
         return {
           working,
