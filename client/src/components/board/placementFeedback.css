@@ -14,3 +14,19 @@
 @media (prefers-reduced-motion: reduce) {
   .board-container .board-tile-wrapper[data-placement-feedback='arrive'] > .domino-tile { animation: none; }
 }
+
+/* A placed tile travels to its place (useTileFlight.ts): the real tile waits, hidden, while a copy flies. */
+.board-container .board-tile-wrapper[data-flight='active'] > .domino-tile {
+  visibility: hidden;
+  animation: none;
+}
+.tile-flight-clone {
+  position: fixed;
+  top: 0;
+  left: 0;
+  margin: 0;
+  z-index: 2147482000;
+  pointer-events: none;
+  will-change: transform;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.45));
+}

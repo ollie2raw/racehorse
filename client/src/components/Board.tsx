@@ -20,6 +20,7 @@ import { recordDailyFritzBoardMetric, traceDailyFritzBoardEvent } from './boardD
 import { useBoardRenderLayout } from './board/useBoardRenderLayout';
 import { useBoardCamera } from './board/useBoardCamera';
 import { useBoardCameraSpring } from './board/useBoardCameraSpring';
+import { useTileFlight } from './board/useTileFlight';
 import { useBoardWorldFrame } from './board/useBoardWorldFrame';
 import { useBoardContainerHeight } from './board/useBoardContainerHeight';
 import { useBoardPointerControls } from './board/useBoardPointerControls';
@@ -141,11 +142,14 @@ function BoardComponent(
   });
 
   const motionAllowed = useMotionAllowed();
+  const placementFeedbackOn = placementFeedback && motionAllowed && !staticView && !handOver && !gameOver;
   const arrivingTile = usePlacementFeedback(
     layout.tiles.flatMap((entry) => entry.tile ? [entry.tile] : []),
     feedbackScope ?? handNumber,
-    placementFeedback && motionAllowed && !staticView && !handOver && !gameOver,
+    placementFeedbackOn,
   );
+  // A newly placed tile travels from where it came from (hand, drag release, Fritz's rack) to its place.
+  useTileFlight(containerRef, arrivingTile, placementFeedbackOn);
 
   // Convert layout units to pixels
   const unitToPixels = tileSize;
