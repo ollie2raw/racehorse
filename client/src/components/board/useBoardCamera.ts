@@ -30,6 +30,8 @@ import { clearScaleForReserved, collectReservedRects } from './boardCameraReserv
 
 export type BoardCameraState = { x: number; y: number; scale: number };
 
+const ZERO_OFFSET = { x: 0, y: 0 } as const;
+
 function cameraStatesEqual(a: BoardCameraState, b: BoardCameraState): boolean {
   return (
     Math.abs(a.x - b.x) < 0.5 &&
@@ -54,6 +56,12 @@ export interface UseBoardCameraParams {
   staticView: boolean;
   /** Bounds are exact (phone-landscape): let a large board fill more of the container. */
   tightFit?: boolean;
+  /**
+   * How far the bounds centre sits from the world origin tiles are positioned against, in layout units
+   * (boardWorldFrame.ts). The camera carries it as a translation so the bounds stay centred on screen.
+   * Zero for static boards.
+   */
+  worldOffsetUnits?: { x: number; y: number };
   unitToPixels: number;
   minCameraScale: number;
   staticFitMainline: boolean;
@@ -83,6 +91,7 @@ export function useBoardCamera({
   boardTileCount,
   staticView,
   tightFit = false,
+  worldOffsetUnits = ZERO_OFFSET,
   unitToPixels,
   minCameraScale,
   staticFitMainline,
@@ -211,14 +220,19 @@ export function useBoardCamera({
 
       traceCameraDebug('[camera-debug] setCamera', {
         reason,
-        x: 0,
+        x: Number((-nextScale * worldOffsetUnits.x * unitToPixels).toFixed(1)),
         y: Number(cameraY.toFixed(1)),
         scale: Number(nextScale.toFixed(3)),
       });
-      const nextCamera = { x: 0, y: cameraY, scale: nextScale };
+      // Recentre in the camera, not by moving tiles: screen = centre + camera + scale * (tile - origin).
+      const nextCamera = {
+        x: -nextScale * worldOffsetUnits.x * unitToPixels,
+        y: staticView ? cameraY : cameraY - nextScale * worldOffsetUnits.y * unitToPixels,
+        scale: nextScale,
+      };
       setCamera((prev) => (cameraStatesEqual(prev, nextCamera) ? prev : nextCamera));
     }
-  }, [containerRef, layout, containFullBoard, resolvedFitMode, boardTileCount, staticView, tightFit, unitToPixels, minCameraScale, staticFitMainline, staticSpineAnchor, setCamera]);
+  }, [containerRef, layout, containFullBoard, resolvedFitMode, boardTileCount, staticView, tightFit, worldOffsetUnits.x, worldOffsetUnits.y, unitToPixels, minCameraScale, staticFitMainline, staticSpineAnchor, setCamera]);
 
   useEffect(() => {
     fitCameraToContainerRef.current = fitCameraToContainer;
