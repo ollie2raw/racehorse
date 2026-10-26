@@ -26,6 +26,7 @@ import {
   type DropZoneRect,
   type PointerKind,
 } from './tileDragGesture';
+import { recordFlightSource } from '../board/tileFlight';
 import './tileDrag.css';
 
 const ZONE_SELECTOR = '.placement-zone.active[data-position]';
@@ -185,6 +186,11 @@ export function useTileDrag(): UseTileDragResult {
         if (e.pointerId !== drag.pointerId) return;
         const wasDragging = drag.phase === 'dragging';
         const target = place && wasDragging ? drag.overZone : null;
+        // The tile about to be placed was last seen here, held under the pointer: it flies to its place from this spot.
+        if (target && drag.ghost) {
+          const r = drag.ghost.getBoundingClientRect();
+          recordFlightSource({ left: r.left, top: r.top, width: r.width, height: r.height });
+        }
         teardown();
         if (!wasDragging) return; // a plain tap: the browser's click does the work
         // Place through the zone's own handler, the same call a tap makes.
