@@ -3,6 +3,7 @@ import DominoTile from '../components/DominoTile';
 import { tileEquals } from '../game/tileUtils';
 import { toTileKey } from '../ghost/logic';
 import { getHandTileLegality } from '../utils/handTileLegality';
+import { useTileDrag } from '../components/handDrag/useTileDrag';
 import type { Tile } from '../types';
 
 export interface BotHandTrayProps {
@@ -42,6 +43,7 @@ export const BotHandTray: React.FC<BotHandTrayProps> = ({
   onTileClick,
   playerHand,
 }) => {
+  const tileDrag = useTileDrag();
   return (
     <div
       className="hand-area wl-hand-area"
@@ -54,6 +56,7 @@ export const BotHandTray: React.FC<BotHandTrayProps> = ({
           <div
             role="group"
             aria-label="Your hand"
+            onPointerDown={tileDrag.onPointerDown}
             className={`hand-container ${
               handCompactStacked ? 'is-stacked' : ''
             } ${normalHandRows.length > 1 ? 'has-multiple-rows' : 'has-single-row'}`}
