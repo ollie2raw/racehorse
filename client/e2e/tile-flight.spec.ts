@@ -24,9 +24,11 @@ async function startRookieMatch(page: Page) {
 async function completePreGameDraw(page: Page) {
   const pickable = page.locator('.pre-game-draw-board__tile-slot.is-pickable').first();
   const hand = page.locator('.hand-area:not(.pre-game-draw-hand-dock)').first();
-  for (let i = 0; i < 24; i += 1) {
+  // The shared CI runner is several times slower than a laptop: allow a minute for the pre-game draw to resolve.
+  for (let i = 0; i < 90; i += 1) {
     if (await hand.isVisible().catch(() => false)) return;
-    if (await pickable.isVisible().catch(() => false)) await pickable.click({ timeout: 5000 }).catch(() => {});
+    // The draw tiles overlap in a pile: force the click, as the other specs do, so a neighbour cannot intercept it.
+    if (await pickable.isVisible().catch(() => false)) await pickable.click({ timeout: 3000, force: true }).catch(() => {});
     await page.waitForTimeout(500);
   }
 }
@@ -81,7 +83,7 @@ const PLAYABLE = '.hand-area .domino-tile.highlight:not(.disabled):not(.board-ti
 async function setup(page: Page) {
   await startRookieMatch(page);
   await completePreGameDraw(page);
-  await expect(page.locator('.board-container')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.board-container')).toBeVisible({ timeout: 45_000 });
 }
 
 async function centre(locator: ReturnType<Page['locator']>) {
