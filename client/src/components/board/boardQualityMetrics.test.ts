@@ -27,12 +27,13 @@ const profile = (name: string): ViewportProfile => {
 
 describe('boardQualityMetrics: the model matches the browser', () => {
   // Scale the real camera produced for the `longBoth` fixture (19 tiles) in the browser
-  // geometry report (e2e/board-routing-geometry.spec.ts, BOARD_GEOMETRY_REPORT=1).
+  // geometry report (e2e/board-routing-geometry.spec.ts, BOARD_GEOMETRY_REPORT=1). Phones were
+  // 0.17 / 0.14 before Pass 1a (bend after 1 tile + exact drop-zone bounds).
   const measuredInBrowser: Array<[string, number]> = [
     ['desktop-1512x982', 0.29],
     ['laptop-1280x720', 0.28],
-    ['phone-932x430', 0.17],
-    ['phone-844x390', 0.14],
+    ['phone-932x430', 0.3],
+    ['phone-844x390', 0.26],
   ];
   for (const [name, browserScale] of measuredInBrowser) {
     it(`longBoth at ${name} fits at ~${browserScale}`, () => {
@@ -66,6 +67,9 @@ describe('boardQualityMetrics: summarize', () => {
     tileCount: 5,
     scale: 0.3,
     tileShortEdgePx: 21.6,
+    rawTileEdgePx: 21.6,
+    widthNeedAtFloor: 0.5,
+    heightNeedAtFloor: 0.5,
     overflowed: false,
     fillRatio: 0.8,
     maxTileJumpPx: 0,
@@ -153,6 +157,7 @@ describe.skipIf(!env.BOARD_CAMERA_REPORT)('board camera baseline report', () => 
           `late(>=14 tiles) p5/p50=${fmt(late.tileEdgeP5)}/${fmt(late.tileEdgeP50)}`,
           `under ${READABILITY_CANDIDATES_PX.map((px) => `${px}px:${pct(s.underPx[px])}`).join(' ')}`,
           `overflow=${pct(s.overflowShare)}`,
+          `cannotBeWholeAndReadable(<18px)=${pct(s.unreadableShare)} (byHeight=${pct(s.unreadableByHeight)} byWidth=${pct(s.unreadableByWidth)})`,
           `jumpPx p50/p95/max=${fmt(s.jumpP50)}/${fmt(s.jumpP95)}/${fmt(s.jumpMax)} bigJump(>40px)=${pct(s.bigJumpShare)}`,
           `reflow=${pct(s.reflowShare)}`,
           `scaleStep% p95/max=${fmt(s.scaleStepP95)}/${fmt(s.scaleStepMax)}`,

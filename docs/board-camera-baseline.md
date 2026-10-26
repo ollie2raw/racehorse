@@ -38,6 +38,34 @@ Tile edge = on-screen short edge of a tile (px); pips are drawn inside it. "Late
 3. **The board jumps because the camera moves, not because routing moves tiles.** Routing almost never repositions a placed tile (0.0 % desktop/laptop, 0.7 % phone). But about half of all desktop placements move some tile by more than 40 px, because the fit scale changes 13–19 % on a typical placement (p95) and the board re-centres. Occasional spikes of 280–350 px come from bend events and floor clamp transitions.
 4. **Implication for the plan.** Freezing placed tiles (Pass 2) is mostly already true; its value is a guarantee, not a visible improvement. The visible improvement is the camera (Pass 1: spring motion, a readable-size floor, and smaller steps), and on phones the layout has to compact further to keep the whole board visible and readable.
 
-## Readability floor: open question
+## Readability floor (was an open question)
 
 The programme's rule is "the entire board is always visible and readable". The metric above lets that be a number. A candidate floor is 16–20 px for the tile's short edge; the baseline shows phones cannot meet it with today's layout, which is what Pass 1 has to solve (denser routing on short viewports, not a smaller camera).
+
+## Readability floor: decided
+
+The product floor is **18 px** for a tile's short edge (decided 2026-10-26); `READABLE_FLOOR_PX` in `boardQualityMetrics.ts`. The report adds a column for "cannot be whole and readable": placements where the fit would need a tile edge under 18 px, split by which axis binds.
+
+At the baseline (above), that was 41.3 % of placements at 844×390 and 27.5 % at 932×430, and **96 % of those were height-bound** (the board area on a phone is only ~200-250 px tall; width was nearly free).
+
+## Pass 1a result: phone layout
+
+Same 454 hands / 7,459 placements; overlays (controls tray, corner pills) are modelled with rectangles measured in the browser.
+
+| Phone | Median tile edge | Cannot be whole and readable (<18 px) | Overflows container | Under 12 px |
+|---|---|---|---|---|
+| 844×390 | 20.4 → **27.5 px** | 41.3 % → **16.2 %** | 7.5 % → **0.7 %** | 11.2 % → **0.8 %** |
+| 932×430 | 24.4 → **30.7 px** | 27.5 % → **6.1 %** | 1.2 % → **0.2 %** | 1.8 % → **0.2 %** |
+
+Desktop and laptop are unchanged (0 % cannot-be-readable; their code paths are untouched).
+
+What changed, phone-landscape only:
+
+1. Vertical arms turn after **one** tile instead of two (`SHORT_BOARD_MAX_VERTICAL_ARM_TILES`).
+2. The flat 2.5-unit bounds pad is replaced by the **exact envelope** of every tile and every possible drop-zone footprint plus 0.4 units (`boardBounds.ts`). A corpus test asserts no zone is ever clipped and that selecting a tile never moves the bounds.
+3. Large boards may fill 97 % of the container instead of 92 % (`TIGHT_FIT_FILL`).
+4. The camera picks the largest scale at which no tile touches the controls tray or a corner pill (`boardCameraReserve.ts`). Without this the larger board ran under the tray.
+
+**Cost, and why Pass 2 is next:** bigger tiles mean bigger steps. Phone placements that move a tile more than 40 px went from 4 % to 22 % (844×390) and 7 % to 27 % (932×430), and the p95 scale step from ~19 % to ~35-42 %. A spring camera is what turns that into smooth motion.
+
+**What remains:** 16.2 % (844×390) and 6.1 % (932×430) of placements still cannot be both whole and 18 px readable; they are the largest multi-hub boards. Closing that gap needs one of: further layout compaction for the worst boards, more board height on phones, or accepting a lower floor on the smallest phone. That is a product decision, recorded separately.

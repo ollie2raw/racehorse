@@ -26,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { calculateBoardFitScale, type BoardLayout } from './boardLayout';
 import { traceCameraDebug } from '../boardDiagnostics';
 import { resolveBoardFitTargets } from './boardCameraFit';
+import { clearScaleForReserved, collectReservedRects } from './boardCameraReserve';
 
 export type BoardCameraState = { x: number; y: number; scale: number };
 
@@ -51,6 +52,8 @@ export interface UseBoardCameraParams {
   resolvedFitMode: 'default' | 'guided';
   boardTileCount: number;
   staticView: boolean;
+  /** Bounds are exact (phone-landscape): let a large board fill more of the container. */
+  tightFit?: boolean;
   unitToPixels: number;
   minCameraScale: number;
   staticFitMainline: boolean;
@@ -79,6 +82,7 @@ export function useBoardCamera({
   resolvedFitMode,
   boardTileCount,
   staticView,
+  tightFit = false,
   unitToPixels,
   minCameraScale,
   staticFitMainline,
@@ -147,6 +151,7 @@ export function useBoardCamera({
       resolvedFitMode,
       layoutSpanUnits,
       boardTileCount,
+      tightFit,
     });
     const targetFill = fitTargets.targetFill;
     let maxFitScale = fitTargets.maxFitScale;
@@ -179,7 +184,23 @@ export function useBoardCamera({
       maxScale: maxFitScale,
     });
 
-    applyFitCamera(fitScale);
+    // A board allowed to fill the container (tightFit) can run under the controls tray or a corner pill:
+    // take the largest scale at which no tile touches one.
+    applyFitCamera(
+      tightFit
+        ? clearScaleForReserved({
+            layout,
+            unitPx: unitToPixels,
+            containerWidth,
+            containerHeight,
+            cameraX: 0,
+            cameraY: 0,
+            fitScale,
+            minScale: minCameraScale,
+            reserved: collectReservedRects(container),
+          })
+        : fitScale,
+    );
 
     function applyFitCamera(nextScale: number) {
       let cameraY = 0;
@@ -197,7 +218,7 @@ export function useBoardCamera({
       const nextCamera = { x: 0, y: cameraY, scale: nextScale };
       setCamera((prev) => (cameraStatesEqual(prev, nextCamera) ? prev : nextCamera));
     }
-  }, [containerRef, layout, containFullBoard, resolvedFitMode, boardTileCount, staticView, unitToPixels, minCameraScale, staticFitMainline, staticSpineAnchor, setCamera]);
+  }, [containerRef, layout, containFullBoard, resolvedFitMode, boardTileCount, staticView, tightFit, unitToPixels, minCameraScale, staticFitMainline, staticSpineAnchor, setCamera]);
 
   useEffect(() => {
     fitCameraToContainerRef.current = fitCameraToContainer;

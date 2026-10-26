@@ -101,7 +101,8 @@ describe('Board routing integration', () => {
     mockShortViewport(true);
     const { container } = renderBoard();
     const xs = armXs(tileXs(container), 0);
-    expect(new Set(xs.slice(0, 2)).size).toBe(1); // two tiles straight
-    expect(xs[2]).toBeGreaterThan(xs[1]); // third turns
+    // One tile straight, then the arm turns: a phone's board area is ~200-250px tall, so every
+    // extra vertical tile costs the whole board its tile size.
+    expect(xs[1]).toBeGreaterThan(xs[0]);
   });
 });

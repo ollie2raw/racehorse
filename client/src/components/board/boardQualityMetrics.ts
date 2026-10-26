@@ -22,7 +22,12 @@
 import type { BoardState } from '../../types';
 import { resolveBoardFitTargets } from './boardCameraFit';
 import { calculateBoardFitScale, computeBoardLayout, type BoardLayout, type BoardLayoutOptions } from './boardLayout';
+import { clearScaleForReserved, type ReservedRect } from './boardCameraReserve';
 import { resolveVerticalArmExtent } from './boardRouting';
+import { SHORT_BOARD_EXACT_BOUNDS_MARGIN_UNITS, SHORT_BOARD_MAX_VERTICAL_ARM_TILES } from './useBoardRenderLayout';
+
+/** The product's readability floor: the smallest a tile's short edge may be on screen (decided 2026-10-26). */
+export const READABLE_FLOOR_PX = 18;
 
 /** LiveMatchScreen's `tileSize` for the live board (px per layout unit at camera scale 1). */
 export const BOARD_UNIT_PX = 84;
@@ -33,18 +38,39 @@ export interface ViewportProfile {
   containerHeight: number;
   /** Short, wide landscape viewport: tile-count routing and the lower camera floor. */
   phoneLandscape: boolean;
+  /** Overlays on the container (controls tray, corner pills), container-local px, as measured in the browser. */
+  reserved: readonly ReservedRect[];
 }
 
+const rect = (left: number, top: number, right: number, bottom: number): ReservedRect => ({ left, top, right, bottom });
+
 export const VIEWPORT_PROFILES: readonly ViewportProfile[] = [
-  { name: 'desktop-1512x982', containerWidth: 1456, containerHeight: 756, phoneLandscape: false },
-  { name: 'laptop-1280x720', containerWidth: 1224, containerHeight: 508, phoneLandscape: false },
-  { name: 'phone-932x430', containerWidth: 876, containerHeight: 244, phoneLandscape: true },
-  { name: 'phone-844x390', containerWidth: 824, containerHeight: 204, phoneLandscape: true },
+  { name: 'desktop-1512x982', containerWidth: 1456, containerHeight: 756, phoneLandscape: false, reserved: [] },
+  { name: 'laptop-1280x720', containerWidth: 1224, containerHeight: 508, phoneLandscape: false, reserved: [] },
+  {
+    name: 'phone-932x430',
+    containerWidth: 876,
+    containerHeight: 244,
+    phoneLandscape: true,
+    reserved: [rect(668, 194, 864, 232), rect(769, 66, 862, 110), rect(770, 14, 862, 58)],
+  },
+  {
+    name: 'phone-844x390',
+    containerWidth: 824,
+    containerHeight: 204,
+    phoneLandscape: true,
+    reserved: [rect(616, 154, 812, 192), rect(718, 66, 810, 110), rect(718, 14, 810, 58)],
+  },
 ];
 
 /** Mirrors useBoardRenderLayout: phones bend by tile count, everything else by measured reach. */
 export function layoutOptionsFor(profile: ViewportProfile): BoardLayoutOptions {
-  if (profile.phoneLandscape) return { maxVerticalArmTiles: 2 };
+  if (profile.phoneLandscape) {
+    return {
+      maxVerticalArmTiles: SHORT_BOARD_MAX_VERTICAL_ARM_TILES,
+      exactBoundsMarginUnits: SHORT_BOARD_EXACT_BOUNDS_MARGIN_UNITS,
+    };
+  }
   const maxVerticalArmExtent = resolveVerticalArmExtent(profile.containerHeight);
   return maxVerticalArmExtent === undefined ? {} : { maxVerticalArmExtent };
 }
@@ -59,6 +85,8 @@ export interface CameraFit {
   /** The scale the fit asked for before the camera floor was applied. */
   rawScale: number;
   overflowed: boolean;
+  /** The fit's target fill (share of the container the board should occupy). */
+  targetFill: number;
 }
 
 /** The live (non-static, default-fit-mode) camera fit for a layout in a profile's container. */
@@ -69,6 +97,7 @@ export function modelCameraFit(layout: BoardLayout, tileCount: number, profile: 
     resolvedFitMode: 'default',
     layoutSpanUnits,
     boardTileCount: tileCount,
+    tightFit: profile.phoneLandscape,
   });
   const floor = cameraFloorFor(profile);
   const common = {
@@ -78,9 +107,24 @@ export function modelCameraFit(layout: BoardLayout, tileCount: number, profile: 
     viewportHeight: profile.containerHeight,
     targetFill,
   };
-  const rawScale = calculateBoardFitScale({ ...common, minScale: 0, maxScale: maxFitScale });
-  const scale = calculateBoardFitScale({ ...common, minScale: floor, maxScale: maxFitScale });
-  return { scale, rawScale, overflowed: rawScale < floor - 1e-9 };
+  const unclamped = calculateBoardFitScale({ ...common, minScale: 0, maxScale: maxFitScale });
+  const clear = (fitScale: number, minScale: number) =>
+    profile.phoneLandscape
+      ? clearScaleForReserved({
+          layout,
+          unitPx: BOARD_UNIT_PX,
+          containerWidth: profile.containerWidth,
+          containerHeight: profile.containerHeight,
+          cameraX: 0,
+          cameraY: 0,
+          fitScale,
+          minScale,
+          reserved: profile.reserved,
+        })
+      : fitScale;
+  const rawScale = clear(unclamped, 0);
+  const scale = clear(calculateBoardFitScale({ ...common, minScale: floor, maxScale: maxFitScale }), floor);
+  return { scale, rawScale, overflowed: rawScale < floor - 1e-9, targetFill };
 }
 
 export function countBoardTiles(board: BoardState | null): number {
@@ -98,6 +142,14 @@ export interface PlacementSample {
   tileCount: number;
   scale: number;
   tileShortEdgePx: number;
+  /** Short edge the fit WANTED before the camera floor clamped it. Below the readable floor = cannot be whole and readable. */
+  rawTileEdgePx: number;
+  /**
+   * How much bigger the board is than the container would hold at the readable floor, per axis
+   * (1.0 = exactly fits at the floor; above 1 = would have to shrink below it).
+   */
+  widthNeedAtFloor: number;
+  heightNeedAtFloor: number;
   overflowed: boolean;
   /** Board extent over container extent along the worse axis, at the fitted scale (1.0 = exactly fills it). */
   fillRatio: number;
@@ -152,8 +204,11 @@ export function countReflowed(before: BoardLayout, after: BoardLayout): number {
  * Measures one hand's worth of consecutive board states. Only states where the tile
  * count grew are placements (draws and passes leave the board alone).
  */
-export function measureHand(boards: readonly BoardState[], profile: ViewportProfile): PlacementSample[] {
-  const options = layoutOptionsFor(profile);
+export function measureHand(
+  boards: readonly BoardState[],
+  profile: ViewportProfile,
+  options: BoardLayoutOptions = layoutOptionsFor(profile),
+): PlacementSample[] {
   const samples: PlacementSample[] = [];
   let prev: { layout: BoardLayout; scale: number; count: number } | null = null;
   for (const board of boards) {
@@ -178,10 +233,14 @@ export function measureHand(boards: readonly BoardState[], profile: ViewportProf
     }
     const widthPx = (layout.maxX - layout.minX) * BOARD_UNIT_PX * fit.scale;
     const heightPx = (layout.maxY - layout.minY) * BOARD_UNIT_PX * fit.scale;
+    const floorScale = READABLE_FLOOR_PX / BOARD_UNIT_PX;
     samples.push({
       tileCount: count,
       scale: fit.scale,
       tileShortEdgePx: fit.scale * BOARD_UNIT_PX,
+      rawTileEdgePx: fit.rawScale * BOARD_UNIT_PX,
+      widthNeedAtFloor: ((layout.maxX - layout.minX) * BOARD_UNIT_PX * floorScale) / (profile.containerWidth * fit.targetFill),
+      heightNeedAtFloor: ((layout.maxY - layout.minY) * BOARD_UNIT_PX * floorScale) / (profile.containerHeight * fit.targetFill),
       overflowed: fit.overflowed,
       fillRatio: Math.max(widthPx / profile.containerWidth, heightPx / profile.containerHeight),
       maxTileJumpPx,
@@ -211,6 +270,11 @@ export interface QualitySummary {
   /** Share of placements whose short edge is under each readability candidate (px). */
   underPx: Record<number, number>;
   overflowShare: number;
+  /** Share of placements where the whole board cannot be shown at >= READABLE_FLOOR_PX. */
+  unreadableShare: number;
+  /** Among those, which axis is the binding one. */
+  unreadableByHeight: number;
+  unreadableByWidth: number;
   jumpP50: number;
   jumpP95: number;
   jumpMax: number;
@@ -221,7 +285,7 @@ export interface QualitySummary {
   scaleStepMax: number;
 }
 
-export const READABILITY_CANDIDATES_PX = [12, 16, 20, 24] as const;
+export const READABILITY_CANDIDATES_PX = [12, 16, 18, 20, 24] as const;
 const BIG_JUMP_PX = 40;
 
 export function summarize(samples: readonly PlacementSample[]): QualitySummary {
@@ -239,6 +303,13 @@ export function summarize(samples: readonly PlacementSample[]): QualitySummary {
       READABILITY_CANDIDATES_PX.map((px) => [px, share(samples.filter((s) => s.tileShortEdgePx < px).length)]),
     ),
     overflowShare: share(samples.filter((s) => s.overflowed).length),
+    unreadableShare: share(samples.filter((s) => s.rawTileEdgePx < READABLE_FLOOR_PX).length),
+    unreadableByHeight: share(
+      samples.filter((s) => s.rawTileEdgePx < READABLE_FLOOR_PX && s.heightNeedAtFloor >= s.widthNeedAtFloor).length,
+    ),
+    unreadableByWidth: share(
+      samples.filter((s) => s.rawTileEdgePx < READABLE_FLOOR_PX && s.widthNeedAtFloor > s.heightNeedAtFloor).length,
+    ),
     jumpP50: percentile(jumps, 50),
     jumpP95: percentile(jumps, 95),
     jumpMax: jumps[jumps.length - 1] ?? 0,
