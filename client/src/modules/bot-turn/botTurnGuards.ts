@@ -83,6 +83,38 @@ export function resolveFritzPace(isDailyFritzMode: boolean, preference: FritzPac
   return isDailyFritzMode ? 'normal' : preference;
 }
 
+/**
+ * Fritz's draw ANIMATION at fast pace. The draw step and the flying tile are one motion (the step waits for the
+ * tile to land), so they scale together, and by less than the pauses: an animation shrunk as hard as a pause reads as
+ * a flicker, not a tile travelling. Normal pace is the original cadence, unchanged.
+ */
+export const FAST_DRAW_SCALE = 0.6;
+
+export function paceDrawMs(ms: number, pace: FritzPace = 'normal'): number {
+  return pace === 'fast' ? Math.round(ms * FAST_DRAW_SCALE) : ms;
+}
+
+/** How long Fritz waits per drawn tile (the step and the flying tile are the same length). */
+export function resolveBotDrawStepMs(pace: FritzPace = 'normal'): number {
+  return paceDrawMs(BOT_DRAW_STEP_MS, pace);
+}
+
+/**
+ * The base length of the flying tile's CSS animation (`.flying-tile-overlay` in walnut-live.css). The overlay is
+ * removed after BOT_FLY_TILE_MS (861), so at normal pace it has always been cut at ~76% of the animation; that is
+ * the look. A faster flight must keep the SAME shape, so its CSS length scales by this ratio, not by the cleanup time.
+ */
+export const FLY_TILE_CSS_BASE_MS = 1138;
+
+export function flyTileCssMs(flyMs: number): number {
+  return Math.round((flyMs * FLY_TILE_CSS_BASE_MS) / BOT_FLY_TILE_MS);
+}
+
+/** How long the flying tile for one of Fritz's draws is on screen. Matches the step so nothing is cut off. */
+export function resolveBotFlyTileMs(pace: FritzPace = 'normal'): number {
+  return paceDrawMs(BOT_FLY_TILE_MS, pace);
+}
+
 export function resolveBotOpeningDelayMs(hasLegalMove: boolean, pace: FritzPace = 'normal'): number {
   return paceMs(hasLegalMove ? BOT_OPENING_THINK_DELAY_MS : BOT_FORCED_DRAW_THINK_DELAY_MS, pace);
 }

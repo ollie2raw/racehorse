@@ -60,6 +60,8 @@ export type BotMatchViewFlyingTile = {
   toX: number;
   toY: number;
   id: number;
+  /** Set only when this flight runs off the default length (Fritz's draws at fast pace). */
+  ms?: number;
 };
 
 export type BotMatchNavigationViewModel = {

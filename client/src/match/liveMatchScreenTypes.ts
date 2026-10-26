@@ -18,7 +18,7 @@ export type HandRevealState = {
   handWinnerId?: string | null;
 };
 
-export type FlyingTile = { x: number; y: number; toX: number; toY: number; id: number };
+export type FlyingTile = { x: number; y: number; toX: number; toY: number; id: number; ms?: number };
 
 export type ScoreToastState = {
   message: string;
