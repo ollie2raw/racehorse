@@ -16,11 +16,13 @@ import {
 } from './embeddedForcedDrawPresentation.ts';
 import type { LocalRunSession } from './localRunSession.ts';
 import {
-  BOT_PLAYER_HANDOFF_DELAY_MS,
   resolveBotChainContinueDelayMs,
+  resolveBotHandoffDelayMs,
   resolveBotOpeningDelayMs,
   BOT_SCORE_HOLD_MS,
   resolveBotPostActionSettleMs,
+  resolveFritzPace,
+  type FritzPace,
   shouldContinueBotTurnAtTimer,
   shouldScheduleBotTurn,
   waitMs,
@@ -57,6 +59,8 @@ export type UseBotTurnEffectArgs = {
   runDrawSequence: RunDrawSequence;
   fritzDifficulty: BotDifficulty;
   isDailyFritzMode: boolean;
+  /** The player's game-speed preference. Daily Fritz ignores it (see resolveFritzPace). */
+  fritzPace?: FritzPace;
   dailyFritzPackage: DailyFritzStartResponse | null;
   isGuidedTranscriptMode: boolean;
   isGuidedV2Mode: boolean;
@@ -134,6 +138,8 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
 
   useEffect(() => {
     const live = () => liveRef.current;
+    // Read live, like every other input of the async tenure: the preference may change between turns.
+    const paceNow = () => resolveFritzPace(live().isDailyFritzMode, live().fritzPace ?? 'normal');
 
     botMatchDebugLog('[BOT-EFFECT] fired', {
       botScheduleKey,
@@ -186,11 +192,11 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
       try {
         // Player → Fritz handoff: settle the previous play before thinking starts.
         setPhase({ phase: 'thinking', turnScoreTotal: 0, lastScorePoints: 0, drawCount: 0 });
-        await waitMs(BOT_PLAYER_HANDOFF_DELAY_MS);
+        await waitMs(resolveBotHandoffDelayMs(paceNow()));
         if (cancelled || !isLocalRunCurrent(runToken)) return;
 
         const openingLegal = asPlayMoves(getLegalMoves(matchRef.current, 'bot')).length > 0;
-        const openingDelay = resolveBotOpeningDelayMs(openingLegal);
+        const openingDelay = resolveBotOpeningDelayMs(openingLegal, paceNow());
         setPhase({
           phase: openingLegal ? 'thinking' : 'drawing',
           turnScoreTotal: 0,
@@ -218,7 +224,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           }
 
           if (!isFirstAction) {
-            const chainDelay = resolveBotChainContinueDelayMs();
+            const chainDelay = resolveBotChainContinueDelayMs(paceNow());
             setPhase({
               phase: 'chaining',
               turnScoreTotal,
@@ -313,6 +319,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
             ghostProfile: step.ghostProfile,
             fritzDifficulty: step.fritzDifficulty,
             isDailyFritzMode: step.isDailyFritzMode,
+            pace: paceNow(),
             fritzPolicyVersion: step.dailyFritzPackage?.fritz_policy_version,
             isMuted: step.isMuted,
             moveCounter: step.moveCounterRef.current,
@@ -464,7 +471,7 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
           }
 
           const settleMs = willPlace || scoredPoints > 0
-            ? resolveBotPostActionSettleMs(scoredPoints)
+            ? resolveBotPostActionSettleMs(scoredPoints, paceNow())
             : 0;
           if (settleMs > 0) {
             await waitMs(settleMs);

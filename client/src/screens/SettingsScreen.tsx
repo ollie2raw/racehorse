@@ -4,6 +4,7 @@ import { Button } from '../components/primitives';
 import { GlobalNav } from '../components/GlobalNav';
 import { resolvePasswordChange } from '../auth/passwordChange';
 import { useMutePreference } from '../utils/useMutePreference';
+import { useGameSpeedPreference } from '../utils/useGameSpeedPreference';
 import type { UserProfile } from '../auth/useAuth';
 import type { AppMode } from '../types';
 import { LegalLink } from '../legal/LegalLinks';
@@ -311,6 +312,8 @@ function DangerZoneSection({
 function PreferencesSection() {
   const [isMuted, setIsMuted] = useMutePreference();
   const soundOn = !isMuted;
+  const [gameSpeed, setGameSpeed] = useGameSpeedPreference();
+  const fastOn = gameSpeed === 'fast';
 
   return (
     <SettingsSection eyebrow="Game" title="Preferences" accent="gold">
@@ -331,6 +334,25 @@ function PreferencesSection() {
           onClick={() => setIsMuted((prev) => !prev)}
         >
           {soundOn ? 'On' : 'Off'}
+        </Button>
+      </div>
+      <div className="rh-settings-toggle-row">
+        <span className="rh-settings-toggle-copy">
+          <span className="rh-settings-toggle-label">Fast Fritz</span>
+          <span className="rh-settings-section-note">
+            Shorter pauses while Fritz thinks, plays and draws in Play vs Fritz. Daily Fritz keeps its standard pace.
+          </span>
+        </span>
+        <Button
+          variant={fastOn ? 'tier-standard' : 'outline'}
+          size="sm"
+          role="switch"
+          aria-checked={fastOn}
+          aria-label="Fast Fritz"
+          className="rh-settings-toggle"
+          onClick={() => setGameSpeed(fastOn ? 'normal' : 'fast')}
+        >
+          {fastOn ? 'On' : 'Off'}
         </Button>
       </div>
     </SettingsSection>
@@ -434,8 +456,8 @@ export function SettingsScreen({
           </SettingsSection>
         )}
 
-        {/* Sound is stored on the device, not the account, so it is offered
-            whether or not anyone is signed in. */}
+        {/* Sound and game speed are stored on the device, not the account, so they are
+            offered whether or not anyone is signed in. */}
         {!authUser && <PreferencesSection />}
 
         <LegalSection onNavigate={onNavigate} />

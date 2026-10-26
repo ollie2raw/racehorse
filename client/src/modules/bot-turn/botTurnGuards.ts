@@ -61,18 +61,53 @@ export const BOT_LAST_PLAYED_HOLD_MS = 3400;
 export const BOT_SCORE_TOAST_HIDE_MS = 1200;
 export const BOT_SCORE_TOAST_CLEAR_MS = 1500;
 
-export function resolveBotOpeningDelayMs(hasLegalMove: boolean): number {
-  return hasLegalMove ? BOT_OPENING_THINK_DELAY_MS : BOT_FORCED_DRAW_THINK_DELAY_MS;
+/**
+ * How fast Fritz moves in Play vs Fritz. `normal` is the original cadence, unchanged. `fast` scales only
+ * Fritz's PAUSES (think, hand-off, chain continue, post-draw beat, score hold) by FAST_PACE_SCALE. It never
+ * touches an animation whose length is tied to CSS (the flying tile, the place settle), so nothing is cut
+ * off mid-motion.
+ */
+export type FritzPace = 'normal' | 'fast';
+
+export const FAST_PACE_SCALE = 0.4;
+
+export function paceMs(ms: number, pace: FritzPace = 'normal'): number {
+  return pace === 'fast' ? Math.round(ms * FAST_PACE_SCALE) : ms;
 }
 
-export function resolveBotChainContinueDelayMs(): number {
-  return BOT_CHAIN_CONTINUE_DELAY_MS;
+/**
+ * The pace a match actually runs at. Daily Fritz is a verified daily result with one standard cadence, so it
+ * ignores the preference and always runs at normal pace.
+ */
+export function resolveFritzPace(isDailyFritzMode: boolean, preference: FritzPace): FritzPace {
+  return isDailyFritzMode ? 'normal' : preference;
 }
 
-/** After apply+flash(+score), how long to hold before the next beat. */
-export function resolveBotPostActionSettleMs(scoredPoints: number): number {
+export function resolveBotOpeningDelayMs(hasLegalMove: boolean, pace: FritzPace = 'normal'): number {
+  return paceMs(hasLegalMove ? BOT_OPENING_THINK_DELAY_MS : BOT_FORCED_DRAW_THINK_DELAY_MS, pace);
+}
+
+export function resolveBotChainContinueDelayMs(pace: FritzPace = 'normal'): number {
+  return paceMs(BOT_CHAIN_CONTINUE_DELAY_MS, pace);
+}
+
+/** Settle your play before Fritz's thinking state begins. */
+export function resolveBotHandoffDelayMs(pace: FritzPace = 'normal'): number {
+  return paceMs(BOT_PLAYER_HANDOFF_DELAY_MS, pace);
+}
+
+/** Breath after draw-until-legal before Fritz plays the found tile. */
+export function resolveBotPostDrawPlayDelayMs(pace: FritzPace = 'normal'): number {
+  return paceMs(BOT_POST_DRAW_PLAY_DELAY_MS, pace);
+}
+
+/**
+ * After apply+flash(+score), how long to hold before the next beat. The place settle is tied to the place
+ * animation's CSS and never shrinks, so a scored move at fast pace holds for the settle, not below it.
+ */
+export function resolveBotPostActionSettleMs(scoredPoints: number, pace: FritzPace = 'normal'): number {
   if (scoredPoints > 0) {
-    return Math.max(BOT_PLACE_SETTLE_MS, BOT_SCORE_HOLD_MS);
+    return Math.max(BOT_PLACE_SETTLE_MS, paceMs(BOT_SCORE_HOLD_MS, pace));
   }
   return BOT_PLACE_SETTLE_MS;
 }
