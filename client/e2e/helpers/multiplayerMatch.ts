@@ -397,7 +397,7 @@ export async function waitForHostBackInMatch(page: Page) {
 
 /** After full page reload, re-enter multiplayer and wait for saved-room auto-rejoin (guest userId path). */
 export async function resumeMultiplayerAfterReload(page: Page, expectedRoomCode: string) {
-  await expect(page.getByText('RACEHORSE', { exact: false })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('RACEHORSE', { exact: false }).first()).toBeVisible({ timeout: 20_000 });
   await expect
     .poll(async () => (await readLastRoomCode(page)) === expectedRoomCode, { timeout: 10_000 })
     .toBeTruthy();

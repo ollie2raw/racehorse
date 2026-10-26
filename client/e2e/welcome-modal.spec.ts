@@ -19,7 +19,7 @@ test.describe('First-visit welcome modal', () => {
 
     if (!WELCOME_MODAL_VISIBLE) {
       // Parked: first visit must not show the modal.
-      await expect(page.getByText('RACEHORSE', { exact: false })).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText('RACEHORSE', { exact: false }).first()).toBeVisible({ timeout: 10_000 });
       await expect(dialog).toBeHidden();
       return;
     }

@@ -6,10 +6,10 @@ async function gotoStableHome(page: import('@playwright/test').Page) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
-    const homeVisible = await page.getByText('RACEHORSE', { exact: false }).isVisible().catch(() => false);
+    const homeVisible = await page.getByText('RACEHORSE', { exact: false }).first().isVisible().catch(() => false);
     if (homeVisible) return;
   }
-  await expect(page.getByText('RACEHORSE', { exact: false })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('RACEHORSE', { exact: false }).first()).toBeVisible({ timeout: 15_000 });
 }
 
 async function openMultiplayerHub(page: import('@playwright/test').Page) {
@@ -19,7 +19,7 @@ async function openMultiplayerHub(page: import('@playwright/test').Page) {
 }
 
 async function expectShellRecovered(page: import('@playwright/test').Page) {
-  await expect(page.getByText('RACEHORSE', { exact: false })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('RACEHORSE', { exact: false }).first()).toBeVisible({ timeout: 15_000 });
 }
 
 test.describe('Multiplayer production chaos', () => {
@@ -85,6 +85,6 @@ test.describe('Multiplayer production chaos', () => {
     await page.waitForTimeout(8_000);
     await context.setOffline(false);
     await expect(page.locator(HUB_LOCATOR).first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('RACEHORSE', { exact: false })).toBeVisible();
+    await expect(page.getByText('RACEHORSE', { exact: false }).first()).toBeVisible();
   });
 });
