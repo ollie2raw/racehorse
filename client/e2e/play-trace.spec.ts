@@ -11,6 +11,7 @@
  *   PLAY_TRACE=1 npx playwright test e2e/play-trace.spec.ts --project=chromium
  *   PLAY_TRACE=1 PLAY_TRACE_OUT=/tmp/trace.json ...   # also keep the raw log
  *   PLAY_TRACE_PLAYS=40 PLAY_TRACE_SECONDS=170         # tune the sample size
+ *   PLAY_TRACE_SPEED=fast                              # run with the Fast Fritz preference on (default: normal)
  *
  * Grep the output for `TRACE|`. The analysis itself lives in src/devtools/playTraceAnalysis.ts
  * (pure, unit-tested).
@@ -52,6 +53,10 @@ async function completePreGameDraw(page: Page, mark: Marker) {
 
 test('play trace', async ({ page }) => {
   test.setTimeout((SECONDS + 120) * 1000);
+
+  if (process.env.PLAY_TRACE_SPEED) {
+    await page.addInitScript((speed) => window.localStorage.setItem('racehorse_game_speed', speed), process.env.PLAY_TRACE_SPEED);
+  }
 
   // Log every change of the UI state that matters, once per animation frame, in the page itself so the
   // timestamps are not skewed by Playwright round-trips.
