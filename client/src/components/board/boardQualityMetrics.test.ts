@@ -6,8 +6,11 @@ import {
   type Policy,
 } from '../../../../packages/game-core/src/__tests__/support/engineHarness';
 import { FIXTURES } from './boardRoutingFixtures.ts';
+import { touchesReserved } from './boardCameraReserve.ts';
 import { computeBoardLayout } from './boardLayout.ts';
 import {
+  BOARD_UNIT_PX,
+  cameraFloorFor,
   READABILITY_CANDIDATES_PX,
   VIEWPORT_PROFILES,
   countBoardTiles,
@@ -27,12 +30,14 @@ const profile = (name: string): ViewportProfile => {
 
 describe('boardQualityMetrics: the model matches the browser', () => {
   // Scale the real camera produced for the `longBoth` fixture (19 tiles) in the browser
-  // geometry report (e2e/board-routing-geometry.spec.ts, BOARD_GEOMETRY_REPORT=1).
+  // geometry report (e2e/board-routing-geometry.spec.ts, BOARD_GEOMETRY_REPORT=1). Phones were
+  // 0.17 / 0.14 before Pass 1a (bend after 1 tile + exact drop-zone bounds), then 0.30 / 0.26 with the
+  // camera clear of overlays by tiles only, and 0.25 / 0.21 once drop zones are kept clear too.
   const measuredInBrowser: Array<[string, number]> = [
     ['desktop-1512x982', 0.29],
     ['laptop-1280x720', 0.28],
-    ['phone-932x430', 0.17],
-    ['phone-844x390', 0.14],
+    ['phone-932x430', 0.25],
+    ['phone-844x390', 0.21],
   ];
   for (const [name, browserScale] of measuredInBrowser) {
     it(`longBoth at ${name} fits at ~${browserScale}`, () => {
@@ -66,6 +71,9 @@ describe('boardQualityMetrics: summarize', () => {
     tileCount: 5,
     scale: 0.3,
     tileShortEdgePx: 21.6,
+    rawTileEdgePx: 21.6,
+    widthNeedAtFloor: 0.5,
+    heightNeedAtFloor: 0.5,
     overflowed: false,
     fillRatio: 0.8,
     maxTileJumpPx: 0,
@@ -111,10 +119,10 @@ const env = (globalThis as { process?: { env?: Record<string, string | undefined
 const POLICIES: Policy[] = ['random', 'scoreGreedy', 'doubles', 'branch'];
 const GAMES_PER_POLICY = Number(env.BOARD_CAMERA_GAMES ?? 8);
 
-function* hands(): Generator<BoardState[]> {
+function* hands(gamesPerPolicy = GAMES_PER_POLICY): Generator<BoardState[]> {
   for (const variant of VARIANTS.slice(0, 2)) {
     for (const policy of POLICIES) {
-      for (let g = 0; g < GAMES_PER_POLICY; g += 1) {
+      for (let g = 0; g < gamesPerPolicy; g += 1) {
         const run = playGame(`board-camera-baseline-v1:${variant.name}:${policy}:${g}`, variant, policy, { keepStates: true });
         let current: BoardState[] = [];
         let lastCount = 0;
@@ -133,6 +141,39 @@ function* hands(): Generator<BoardState[]> {
     }
   }
 }
+
+describe('overlay clearance on phones', () => {
+  it('keeps every tile and drop zone clear of the tray and pills wherever the camera is above its floor', { timeout: 60_000 }, () => {
+    // A smaller corpus than the report (3 games per policy): the CI runner is several times slower than a laptop.
+    const invariantHands = [...hands(3)];
+    let checked = 0;
+    for (const p of VIEWPORT_PROFILES.filter((x) => x.phoneLandscape)) {
+      const options = layoutOptionsFor(p);
+      for (const hand of invariantHands) {
+        for (const board of hand) {
+          const layout = computeBoardLayout(board, [], options);
+          const fit = modelCameraFit(layout, countBoardTiles(board), p);
+          const input = {
+            layout,
+            unitPx: BOARD_UNIT_PX,
+            containerWidth: p.containerWidth,
+            containerHeight: p.containerHeight,
+            cameraX: 0,
+            cameraY: 0,
+            fitScale: fit.scale,
+            minScale: cameraFloorFor(p),
+            reserved: p.reserved,
+          };
+          // At the floor the camera cannot shrink further (the board is then reported as overflowing);
+          // anywhere above it, nothing may sit under an overlay.
+          if (fit.scale > cameraFloorFor(p) + 1e-9) expect(touchesReserved(input, fit.scale)).toBe(false);
+          checked += 1;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(500);
+  });
+});
 
 const fmt = (n: number, d = 1) => n.toFixed(d);
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
@@ -153,6 +194,7 @@ describe.skipIf(!env.BOARD_CAMERA_REPORT)('board camera baseline report', () => 
           `late(>=14 tiles) p5/p50=${fmt(late.tileEdgeP5)}/${fmt(late.tileEdgeP50)}`,
           `under ${READABILITY_CANDIDATES_PX.map((px) => `${px}px:${pct(s.underPx[px])}`).join(' ')}`,
           `overflow=${pct(s.overflowShare)}`,
+          `cannotBeWholeAndReadable(<18px)=${pct(s.unreadableShare)} (byHeight=${pct(s.unreadableByHeight)} byWidth=${pct(s.unreadableByWidth)})`,
           `jumpPx p50/p95/max=${fmt(s.jumpP50)}/${fmt(s.jumpP95)}/${fmt(s.jumpMax)} bigJump(>40px)=${pct(s.bigJumpShare)}`,
           `reflow=${pct(s.reflowShare)}`,
           `scaleStep% p95/max=${fmt(s.scaleStepP95)}/${fmt(s.scaleStepMax)}`,

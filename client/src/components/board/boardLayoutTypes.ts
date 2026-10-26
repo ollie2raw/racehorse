@@ -47,6 +47,12 @@ export interface BoardLayout {
   maxY: number;
   /** Every arm corner the routing produced (empty when all arms are straight). */
   bends: BoardLayoutBend[];
+  /**
+   * Present with `exactBoundsMarginUnits`: every drop zone the board could show (all open ends, ordinary and
+   * double pending tile), whatever is selected. The camera keeps these clear of overlays (boardCameraReserve.ts)
+   * so a valid placement is never hidden under the controls tray or a corner pill.
+   */
+  dropZoneFootprints?: LayoutZone[];
 }
 
 export interface BoardLayoutOptions {
@@ -65,6 +71,12 @@ export interface BoardLayoutOptions {
    * the next ordinary tile that follows an ordinary tile.
    */
   maxVerticalArmExtent?: number;
+  /**
+   * Replace the flat 2.5-unit bounds padding with the exact envelope of every tile and every
+   * possible drop-zone footprint plus this margin (see boardBounds.ts). Used on short phone
+   * viewports, where the flat pad wastes about half the available height. Omitted = flat pad.
+   */
+  exactBoundsMarginUnits?: number;
   /** The tile being placed is a double: arm-end zones stay straight, since a double never turns the corner. */
   pendingTileIsDouble?: boolean;
 }

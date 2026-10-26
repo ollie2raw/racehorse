@@ -19,8 +19,15 @@ import { computeBoardLayout, type BoardLayout, type BoardLayoutOptions } from '.
 import { resolveVerticalArmExtent } from './boardRouting';
 import { useShortBoardViewport } from './useShortBoardViewport';
 
-/** Vertical arms bend after this many tiles on a short (phone-landscape) board. */
-const SHORT_BOARD_MAX_VERTICAL_ARM_TILES = 2;
+/**
+ * Vertical arms bend after this many tiles on a short (phone-landscape) board. One tile: the board area
+ * is only ~200-250px tall there, so every unit of height spent on a vertical arm costs the whole board
+ * its tile size (docs/board-camera-baseline.md).
+ */
+export const SHORT_BOARD_MAX_VERTICAL_ARM_TILES = 1;
+
+/** Short boards pad by the exact drop-zone envelope plus this margin instead of a flat 2.5 units. */
+export const SHORT_BOARD_EXACT_BOUNDS_MARGIN_UNITS = 0.4;
 
 export interface UseBoardRenderLayoutParams {
   board: BoardState | null;
@@ -69,7 +76,12 @@ export function useBoardRenderLayout({
   const shortViewport = useShortBoardViewport();
   const layoutOptions: BoardLayoutOptions = useMemo(() => {
     if (staticView) return {};
-    if (shortViewport) return { maxVerticalArmTiles: SHORT_BOARD_MAX_VERTICAL_ARM_TILES };
+    if (shortViewport) {
+      return {
+        maxVerticalArmTiles: SHORT_BOARD_MAX_VERTICAL_ARM_TILES,
+        exactBoundsMarginUnits: SHORT_BOARD_EXACT_BOUNDS_MARGIN_UNITS,
+      };
+    }
     const maxVerticalArmExtent = resolveVerticalArmExtent(containerHeight);
     return maxVerticalArmExtent === undefined ? {} : { maxVerticalArmExtent };
   }, [shortViewport, staticView, containerHeight]);

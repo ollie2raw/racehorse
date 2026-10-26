@@ -2,8 +2,11 @@
 //
 // The live board camera's fit targets, as a pure function. Extracted verbatim from
 // useBoardCamera.fitCameraToContainer so the same numbers can be exercised outside
-// React (boardQualityMetrics.ts replays real games through them). Behaviour is
-// unchanged: useBoardCamera calls this for the non-static path.
+// React (boardQualityMetrics.ts replays real games through them). useBoardCamera
+// calls this for the non-static path.
+
+/** Fill for large boards whose bounds are already exact. */
+export const TIGHT_FIT_FILL = 0.97;
 
 export interface BoardFitTargetsInput {
   containFullBoard: boolean;
@@ -11,6 +14,11 @@ export interface BoardFitTargetsInput {
   /** Larger of the layout's width and height, in layout units. */
   layoutSpanUnits: number;
   boardTileCount: number;
+  /**
+   * The layout's bounds are exact (tiles + drop zones + a small margin) rather than flat-padded,
+   * so the board can fill more of the container. Only raises the fill for large boards.
+   */
+  tightFit?: boolean;
 }
 
 export interface BoardFitTargets {
@@ -25,8 +33,9 @@ export function resolveBoardFitTargets({
   resolvedFitMode,
   layoutSpanUnits,
   boardTileCount,
+  tightFit = false,
 }: BoardFitTargetsInput): BoardFitTargets {
-  const targetFill = containFullBoard
+  const baseFill = containFullBoard
     ? 0.78
     : resolvedFitMode === 'guided'
       ? layoutSpanUnits <= 3
@@ -47,6 +56,8 @@ export function resolveBoardFitTargets({
             : layoutSpanUnits >= 10
               ? 0.92
               : 0.9;
+  const targetFill =
+    tightFit && !containFullBoard && resolvedFitMode === 'default' && layoutSpanUnits >= 10 ? TIGHT_FIT_FILL : baseFill;
   const maxFitScale = containFullBoard
     ? 1.8
     : resolvedFitMode === 'guided'

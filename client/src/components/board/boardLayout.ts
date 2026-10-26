@@ -13,6 +13,7 @@ import {
   type ArmOverrides,
   type RoutingContext,
 } from './boardRouting';
+import { computeBoundedLayout } from './boardBounds';
 import type { BoardLayout, BoardLayoutBend, BoardLayoutOptions, BoardLayoutTile, LayoutZone } from './boardLayoutTypes';
 
 // ─── Layout Constants ────────────────────────────────────────
@@ -46,6 +47,9 @@ export function computeBoardLayout(
   validPositions: PlacementPosition[] = [],
   options: BoardLayoutOptions = {},
 ): BoardLayout {
+  if (board && options.exactBoundsMarginUnits !== undefined) {
+    return computeBoundedLayout(board, validPositions, options, computeBoardLayout);
+  }
   const bendsArms =
     typeof options.maxVerticalArmExtent === 'number' || (options.maxVerticalArmTiles ?? 0) > 0;
   // Straight layouts (static views, unmeasured containers) skip routing entirely.
