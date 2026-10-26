@@ -100,3 +100,24 @@ That removes the cost Pass 1a introduced (phone jumps went from 4 % to 20 % over
 **Tuning notes.** `CAMERA_SMOOTH_TIME_S = 0.18`. Most of the move is done by ~0.3 s; the settle time above uses a strict 0.2 px criterion, so it overstates how long the board *looks* like it is moving. A lower value (0.14) is snappier but raises the peak per-frame move ~28 %, which would push phones' over-8-px share up.
 
 **Verified in the real browser:** a per-frame probe tracks one already-placed tile while later tiles arrive (`e2e/board-camera.spec.ts`); it must never move more than 20 px between frames. The geometry and routing specs are unchanged and still pass.
+
+## Phone headroom: what the remaining lever is worth (measured 2026-10-26, after Pass 2)
+
+After Passes 1a and 2 the board code is no longer the limit on phones: 19.7 % (844×390) and 7.6 % (932×430) of placements still cannot be both whole and 18 px, and they are the largest multi-hub boards. The remaining levers are in the match screen's chrome, not in the board. Same 454 hands, same model, varying only what sits on or around the board container:
+
+| Phone | Today (tray + pills on the board) | Tray moved off the board | No overlays | No overlays, +20 px board height | No overlays, +40 px board height |
+|---|---|---|---|---|---|
+| 844×390 median tile edge | 24.4 px | 25.4 px | 27.5 px | 30.2 px | 31.4 px |
+| 844×390 cannot be whole + 18 px | 19.7 % | 18.0 % | 14.6 % | 9.7 % | **5.4 %** |
+| 932×430 median tile edge | 27.3 px | 28.5 px | 32.9 px | 33.4 px | 34.8 px |
+| 932×430 cannot be whole + 18 px | 7.6 % | 6.9 % | 5.1 % | 3.2 % | **2.3 %** |
+
+(Today + 20 px of height alone: 16.8 % / 5.7 %, because the overlays keep eating the gain.)
+
+Reading it:
+
+- **Moving only the controls tray off the board is not worth a layout change** (19.7 → 18.0 %). The corner pills (boneyard count, open-ends sum) cost more than the tray.
+- **The overlays and the board height multiply.** Either alone helps a little; clearing the overlays *and* giving the board 40 px more height takes 844×390 from 19.7 % to 5.4 %.
+- Where the height would come from is a design decision on the phone match screen (the top HUD row is ~100 px, the rack ~85 px of the 390). It also touches the installed iOS app's landscape layouts, so it needs a design review and native QA; it is not a quiet change.
+
+Recommendation: treat it as its own design task ("phone match HUD, board-first"), judged against this table.
