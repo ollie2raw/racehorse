@@ -160,6 +160,7 @@ function BoardComponent(
     resolvedFitMode,
     boardTileCount,
     staticView,
+    tightFit: shortViewport && !staticView,
     unitToPixels,
     minCameraScale,
     staticFitMainline,

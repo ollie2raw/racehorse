@@ -225,19 +225,23 @@ test.describe('zoom, pan and home do not fight the routing', () => {
   });
 });
 
-test.describe('phone landscape keeps its tile-count routing', () => {
+test.describe('phone landscape routes by tile count (one straight tile, then the arm turns)', () => {
   test.use({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
 
-  test('arms still turn after two tiles, exactly as before', async ({ page }) => {
+  test('arms turn after one tile and the board is much larger than the old two-tile rule gave', async ({ page }) => {
     await openRoutingHarness(page, 'fixture=longBoth');
     const g = await measureBoard(page);
-    expect(routes(g)).toEqual(['arm0:V2H6:right', 'arm1:V2H6:right']);
-    expect(g.cameraScale).toBeCloseTo(0.14, 2);
+    expect(routes(g)).toEqual(['arm0:V1H7:right', 'arm1:V1H7:right']);
+    // Two-tile routing with flat-padded bounds fitted this board at 0.14 (11.8px tiles); one-tile
+    // routing with exact drop-zone bounds, kept clear of the controls tray and corner pills, fits it
+    // at 0.26 (22px). Guard the 18px readability floor.
+    expect(g.cameraScale).toBeGreaterThan(18 / 84);
+    expect(g.cameraScale).toBeCloseTo(0.26, 1);
     expect(g.intersectsExclusion).toEqual([]);
   });
 
-  test('a medium chain turns after two tiles on the phone only', async ({ page }) => {
+  test('a medium chain turns after one tile on the phone only', async ({ page }) => {
     await openRoutingHarness(page, 'fixture=mediumBoth');
-    expect(routes(await measureBoard(page))).toEqual(['arm0:V2H1:right', 'arm1:V2H1:right']);
+    expect(routes(await measureBoard(page))).toEqual(['arm0:V1H2:right', 'arm1:V1H2:right']);
   });
 });

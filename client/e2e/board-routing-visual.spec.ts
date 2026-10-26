@@ -65,7 +65,7 @@ test.describe('small laptop 1280x720 (pre-fix this overflowed into the HUD and r
   });
 });
 
-test.describe('phone landscape 844x390 (unchanged tile-count routing)', () => {
+test.describe('phone landscape 844x390 (one-tile routing, exact bounds)', () => {
   test.use({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
 
   test('long chains above and below at once', async ({ page }) => {
