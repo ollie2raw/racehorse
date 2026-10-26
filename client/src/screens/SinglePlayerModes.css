@@ -367,8 +367,42 @@
     display: none;
   }
 
+  /* Fritz and Ghost: the whole subject at its natural proportions, pinned bottom-right of the slot. The
+     old framing was `object-fit: cover` plus scale/translate nudges, which cropped the waving hand and the
+     ghost's sides in a slot narrower than the art. */
+  .home-main.sp-solo-main:not(.learn-hub-main) .daily-fritz-card-container .sp-solo-mode-card__art,
+  .home-main.sp-solo-main:not(.learn-hub-main) .daily-puzzle-card-container .sp-solo-mode-card__art {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+    object-position: right bottom;
+    transform: none;
+  }
+
+  /* Ghost's art carries its own opaque teal background, which showed as a lighter rectangle on the card
+     (and the brightness boost made it worse). Feather the image's edges into the card; a mask, not a fill. */
+  .home-main.sp-solo-main:not(.learn-hub-main) .daily-puzzle-card-container .sp-solo-mode-card__art {
+    filter: brightness(1.1) contrast(1.05) saturate(1.15);
+    -webkit-mask-image: radial-gradient(ellipse 62% 60% at 50% 50%, #000 55%, transparent 100%);
+    mask-image: radial-gradient(ellipse 62% 60% at 50% 50%, #000 55%, transparent 100%);
+  }
+
+  /* Journey's art is LANDSCAPE (900x675) on a black background, and its subject (the helmet) is ~70% as wide as the
+     image is tall. Size it by the slot's WIDTH as well as its height (container units: the slot is a size container),
+     so the whole helmet fits at any card width, then feather the edges into the card so there is no box.
+     (mix-blend-mode does not work here: the card isolates its own blending group and has no background to blend.) */
+  .home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container .sp-solo-mode-card__art-slot {
+    container-type: inline-size;
+  }
+
   .home-main.sp-solo-main:not(.learn-hub-main) .journey-card-container .sp-solo-mode-card__art {
-    transform: scale(1.15) translate(0, -6%);
+    width: auto;
+    height: min(100%, 150cqw);
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    -webkit-mask-image: radial-gradient(ellipse 46% 58% at 50% 52%, #000 58%, transparent 100%);
+    mask-image: radial-gradient(ellipse 46% 58% at 50% 52%, #000 58%, transparent 100%);
   }
 }
 

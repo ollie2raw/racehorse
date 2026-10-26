@@ -333,16 +333,24 @@
   border-color: rgba(228, 165, 59, 0.5) !important;
 }
 
+/* The class is shared with the Ghost Mode card on the Single Player hub, whose cyan is intentional. The outline
+   colour is a variable: cyan by default, and the Daily Puzzle blue (the same --tier-standard as the title and
+   the Puzzle Rush screen) on the home screen only. */
 .daily-puzzle-card-container {
+  --puzzle-card-border-rgb: 55, 199, 240;
   background-color: #111A2C;
-  border: 1px solid rgba(55, 199, 240, 0.3) !important;
+  border: 1px solid rgba(var(--puzzle-card-border-rgb), 0.3) !important;
   box-shadow: none !important;
   transition: border-color 200ms ease, filter 200ms ease;
 }
 
+.home-main:not(.sp-solo-main):not(.learn-hub-main) .daily-puzzle-card-container {
+  --puzzle-card-border-rgb: var(--tier-standard-rgb);
+}
+
 .daily-puzzle-card-container:hover {
   filter: brightness(1.05);
-  border-color: rgba(55, 199, 240, 0.5) !important;
+  border-color: rgba(var(--puzzle-card-border-rgb), 0.5) !important;
 }
 
 .daily-card--completed {
