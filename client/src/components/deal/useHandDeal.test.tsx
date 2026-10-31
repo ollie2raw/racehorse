@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { useHandDeal, type HandDealOptions } from './useHandDeal';
+import { preloadDealRuntime, resetDealRuntimeForTests, useHandDeal, type HandDealOptions } from './useHandDeal';
 
 /**
  * The deal hides the real tiles while cards fly to them, so the rule that matters most is the one in the file header:
@@ -55,7 +55,8 @@ const opts = (over: Partial<HandDealOptions> = {}): HandDealOptions => ({
 });
 
 describe('useHandDeal', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await preloadDealRuntime(); // the staging code is loaded on demand: have it ready, as it is by the end of the pick-a-tile phase
     installAnimate();
     Object.defineProperty(document, 'hidden', { value: false, configurable: true });
     window.matchMedia = ((query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })) as unknown as typeof window.matchMedia;
@@ -107,6 +108,15 @@ describe('useHandDeal', () => {
   it('does not deal a hand that was already on screen when the page loaded (a reload mid-match)', () => {
     const root = mountScreen();
     renderHook(() => useHandDeal(opts({ handNumber: 3, preGameDrawActive: false })));
+    expect(root.hasAttribute('data-hand-deal')).toBe(false);
+    expect(document.querySelectorAll('.hand-deal-card')).toHaveLength(0);
+  });
+
+  it('never hides the hand when the staging code has not loaded: the deal is skipped', () => {
+    resetDealRuntimeForTests();
+    const root = mountScreen();
+    const { rerender } = renderHook((props: HandDealOptions) => useHandDeal(props), { initialProps: opts() });
+    rerender(opts({ handNumber: 1, preGameDrawActive: false }));
     expect(root.hasAttribute('data-hand-deal')).toBe(false);
     expect(document.querySelectorAll('.hand-deal-card')).toHaveLength(0);
   });
