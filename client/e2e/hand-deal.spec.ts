@@ -42,7 +42,7 @@ async function installSampler(page: Page) {
         t: performance.now(),
         dealing: Boolean(document.querySelector('.bot-match-screen[data-hand-deal]')),
         cards: document.querySelectorAll('.hand-deal-card').length,
-        decks: document.querySelectorAll('.hand-deal-deck').length,
+        decks: document.querySelectorAll('.hand-deal-pile').length,
         handHidden: tiles.filter((el) => getComputedStyle(el).visibility === 'hidden').length,
         handShown: tiles.filter((el) => getComputedStyle(el).visibility !== 'hidden').length,
       });
@@ -73,10 +73,10 @@ test('a new hand is dealt: held, flown in, revealed, and left clean and playable
   const frames = await page.evaluate(() => (window as unknown as { __deal: Frame[] }).__deal);
   const dealing = frames.filter((f) => f.dealing);
 
-  // It happened, with a deck and a card for every tile (a hand of 7 and Fritz's 7).
+  // It happened, with a pile and a card for every tile (a hand of 7 and Fritz's 7).
   expect(dealing.length, 'the deal should have been on screen').toBeGreaterThan(8);
-  expect(Math.max(...dealing.map((f) => f.decks)), 'the cards come from a deck').toBe(1);
-  expect(Math.max(...dealing.map((f) => f.cards)), 'a card per tile, plus the deck').toBeGreaterThanOrEqual(10);
+  expect(Math.max(...dealing.map((f) => f.decks)), 'the cards come from a pile').toBe(1);
+  expect(Math.max(...dealing.map((f) => f.cards)), 'a card per tile').toBeGreaterThanOrEqual(10);
 
   // The hand is held while cards are in the air, and the real tiles come in as their cards land.
   expect(Math.max(...dealing.map((f) => f.handHidden)), 'the hand should be held hidden at first').toBeGreaterThanOrEqual(5);
@@ -94,7 +94,7 @@ test('a new hand is dealt: held, flown in, revealed, and left clean and playable
   expect(last.cards).toBe(0);
   expect(last.handHidden).toBe(0);
   expect(last.handShown).toBeGreaterThanOrEqual(5);
-  expect(await page.locator('.hand-deal-card').count()).toBe(0);
+  expect(await page.locator('.hand-deal-card, .hand-deal-pile').count()).toBe(0);
   expect(await page.locator('[data-dealt]').count()).toBe(0);
 
   // And playable the moment it is over: tap a tile and it is selected.
