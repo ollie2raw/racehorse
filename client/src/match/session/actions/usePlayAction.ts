@@ -2,6 +2,7 @@ import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction 
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, PlacementPosition, Tile } from '../../../types';
 import { playTileSound } from '../../../utils/sound';
+import { armTileImpact } from '../../../utils/tileImpact';
 import { mpPerfBeginAction, mpPerfMarkAck } from '../../../multiplayer/mpPerf';
 import { nextEndsForTile, toTileTuple } from '../../../game/moveLogger';
 import { currentRoomMatchId, emitGameAction } from '../../../multiplayer/roomTransport';
@@ -153,7 +154,7 @@ export function usePlayAction(
       pendingGameplayActionRef.current = { kind: 'play', baselineSequence };
       mpPerfBeginAction('play', baselineSequence);
       setPendingUiAction('play');
-      playTileSound('standard', isMutedRef.current);
+      armTileImpact((pan) => playTileSound('standard', isMutedRef.current, { pan })); // lands with the tile's flight
       setPendingActionRefDiag(true);
       setSelectedTile(null);
       setDrawStepMyHand(null);

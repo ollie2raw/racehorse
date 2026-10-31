@@ -12,6 +12,7 @@ import {
 import type { GhostProfileSummary, GhostResolvedMove } from '../ghost/ghostContracts.ts';
 import { resolveGhostMove } from '../ghost/ghostMoveLogic.ts';
 import { playTileSound, queueSound } from '../../utils/sound.ts';
+import { armTileImpact } from '../../utils/tileImpact.ts';
 import type { Move, Tile } from '../../types.ts';
 import { logFritzFairnessDecision } from './fritzEvaluation.ts';
 import { chooseOfficialFritzBotChoice } from '../match/runtime/gameCoreAdapter.ts';
@@ -84,7 +85,7 @@ export function executeBotPlayMove(input: {
     action: import('../review/ReviewSnapshotRecorder.ts').ReviewActorAction,
   ) => void;
 }): BotActionResult {
-  queueSound(() => playTileSound('deal', input.isMuted), 0);
+  armTileImpact((pan) => queueSound(() => playTileSound('deal', input.isMuted, { pan }), 0)); // lands with Fritz's tile
   const move = input.resolution.move;
   if (move.type === 'play' && move.tile && move.position) {
     input.recordReview?.(input.working, {

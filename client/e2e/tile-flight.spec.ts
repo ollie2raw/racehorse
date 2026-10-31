@@ -141,6 +141,51 @@ test('a tapped tile flies from the hand to its place on the board', async ({ pag
   expect(await page.locator(".board-tile-wrapper[data-flight='active']").count()).toBe(0);
 });
 
+test("a tapped tile's clack plays as it lands, not when it is tapped", async ({ page }) => {
+  test.setTimeout(180_000);
+  // Record when the tile sound fires: the decoded sample plays through a buffer source on the audio graph, and an
+  // <audio> element is only the fallback for the instant before it has decoded.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __clacks: number[] };
+    w.__clacks = [];
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function patched(...args: Parameters<typeof start>) {
+      w.__clacks.push(performance.now());
+      return start.apply(this, args);
+    };
+    HTMLMediaElement.prototype.play = function play() {
+      w.__clacks.push(performance.now());
+      return Promise.resolve();
+    };
+  });
+  await setup(page);
+  const tile = page.locator(PLAYABLE).first();
+  await expect(tile).toBeVisible({ timeout: 90_000 });
+  await waitForNoFlight(page);
+  const before = await boardTiles(page);
+
+  await installSampler(page);
+  await tile.click();
+  const zone = page.locator('.placement-zone.active').first();
+  await expect(zone).toBeVisible();
+  const clickedAt = await now(page);
+  await zone.click();
+  await expect.poll(() => boardTiles(page), { timeout: 5000 }).toBe(before + 1);
+  await page.waitForTimeout(500);
+
+  const frames = flying(await readSamples(page), clickedAt);
+  expect(frames.length, 'a copy of the tile should have flown').toBeGreaterThan(5);
+  const tookOff = frames[0].t;
+  const landed = frames[frames.length - 1].t;
+
+  const clacks = (await page.evaluate(() => (window as unknown as { __clacks: number[] }).__clacks)).filter((t) => t >= clickedAt);
+  expect(clacks.length, 'the placement should make a sound').toBeGreaterThan(0);
+  const clack = clacks[0];
+  // Not at take-off: well into the flight, and with the landing (within a frame or two of the copy being removed).
+  expect(clack - tookOff, 'the clack must not fire while the tile is still leaving the hand').toBeGreaterThan(120);
+  expect(Math.abs(clack - landed), 'the clack should arrive with the tile').toBeLessThan(70);
+});
+
 test('a dragged tile flies from where it was released', async ({ page }) => {
   test.setTimeout(180_000);
   await setup(page);

@@ -25,6 +25,7 @@ import {
   type FlightPoint,
   type FlightRect,
 } from './tileFlight';
+import { claimTileImpact, landTileImpact, panForX, setTileFlightActive } from '../../utils/tileImpact';
 
 const ARRIVING = ".board-tile-wrapper[data-placement-feedback='arrive']";
 const HAND_SELECTED_TILE = '.hand-area .domino-tile[aria-pressed="true"]';
@@ -56,7 +57,13 @@ function rotationOf(tile: HTMLElement): number {
 }
 
 export function useTileFlight(containerRef: RefObject<HTMLElement | null>, arrivingTile: string | null, enabled: boolean) {
-  const cancelRef = useRef<(() => void) | null>(null);
+  const cancelRef = useRef<((landImpact?: boolean) => void) | null>(null);
+
+  // Impact sounds wait for a flight only while flights are running.
+  useEffect(() => {
+    setTileFlightActive(enabled);
+    return () => setTileFlightActive(false);
+  }, [enabled]);
 
   // Capture where a tapped tile is, on the zone's click: before React's handler runs and the tile leaves the hand.
   useEffect(() => {
@@ -72,7 +79,9 @@ export function useTileFlight(containerRef: RefObject<HTMLElement | null>, arriv
   }, [enabled]);
 
   useLayoutEffect(() => {
-    cancelRef.current?.(); // a newer arrival lands the previous flight immediately
+    // A newer arrival lands the previous flight immediately. Its impact was already released when the new move armed its own
+    // (armTileImpact), so this cancel must not touch the impact: it would play the new move's clack before its flight starts.
+    cancelRef.current?.(false);
     if (!enabled || !arrivingTile) return;
     const container = containerRef.current;
     if (!container) return;
@@ -110,7 +119,7 @@ export function useTileFlight(containerRef: RefObject<HTMLElement | null>, arriv
 
       let raf = 0;
       let finished = false;
-      const finish = () => {
+      const finish = (landImpact = true) => {
         if (finished) return;
         finished = true;
         window.cancelAnimationFrame(raf);
@@ -123,9 +132,11 @@ export function useTileFlight(containerRef: RefObject<HTMLElement | null>, arriv
             { duration: 150, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
           );
         }
+        if (landImpact) landTileImpact(); // the clack (and any score ping behind it) plays as the tile arrives
         cancelRef.current = null;
       };
       cancelRef.current = finish;
+      claimTileImpact(plan.durationMs + 400, panForX(start.cx, window.innerWidth)); // the clack comes from where the tile lands
 
       const t0 = performance.now();
       const step = (now: number) => {

@@ -1,4 +1,6 @@
 import { logger } from '../../utils/logger';
+import { playTileSound, queueSound } from '../../utils/sound.ts';
+import { armTileImpact } from '../../utils/tileImpact.ts';
 import { useCallback, useEffect, useRef } from 'react';
 import { applyPlayMove } from '../match/runtime/botEngine.ts';
 import {
@@ -220,6 +222,9 @@ export function usePlayerPlacementHandler({
           position: move!.position,
         });
       }
+      // Your own tile gets its clack, held until the tile has flown to its place; armed BEFORE the state applies so a
+      // score ping raised by applyAndNotify queues behind it.
+      armTileImpact((pan) => queueSound(() => playTileSound('standard', isMuted, { pan }), 0));
       applyAndNotify(result);
       logger.info('guided', 'click-applied', {
         currentPlayerAfter: result.state.currentPlayer,

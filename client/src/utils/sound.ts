@@ -1,4 +1,5 @@
 import tileTapUrl from '../assets/sounds/freesound_community-thwump-85836.mp3';
+import { getAudioContext, installAudioUnlock, loadSample, outputOf, playBuffer, readySample } from '../audio/audioEngine';
 
 /**
  * sound.ts — Racehorse Dominoes audio synthesis
@@ -24,22 +25,50 @@ import tileTapUrl from '../assets/sounds/freesound_community-thwump-85836.mp3';
 
 // ─── Singleton AudioContext ────────────────────────────────────────────────
 
-let ctx: AudioContext | null = null;
 let tileTapAudio: HTMLAudioElement | null = null;
 
-function getCtx(): AudioContext | null {
-  if (!ctx) {
-    ctx = new AudioContext();
-  }
-  if (ctx.state === 'suspended') {
-    void ctx.resume().catch(() => {});
-    if (ctx.state === 'suspended') {
-      return null;
-    }
-  }
-  return ctx;
+/** Every synthesized sound plays on the shared engine and its mix bus (see audio/audioEngine.ts). */
+const getCtx = getAudioContext;
+
+// ─── Mix levels ────────────────────────────────────────────────────────────
+
+/**
+ * Per-sound level trim in dB, set from the sound bench (e2e/audio-bench.spec.ts), which renders every sound through the
+ * bus and measures it. The first bench found the score chimes ~10 dB louder than the tile clack (the game's main sound)
+ * and the draw sound ~16 dB under it. Hierarchy now: the clack leads, a score ping sits behind it, ceremonies (hand and
+ * match endings) are the loudest events, and the draw is quiet but audible.
+ */
+export const TRIM_DB = {
+  score: -10,
+  draw: 10,
+  blocked: 3,
+  yourTurn: -2.7,
+  handWin: 0,
+  handLose: 0,
+  matchWin: 0,
+  matchLose: 0,
+  matchFound: 0,
+} as const;
+
+let trim = 1;
+const fromDb = (db: number) => 10 ** (db / 20);
+
+/** Set the level for the sound about to be built. Builds are synchronous, and every public sound sets its own. */
+function setTrimDb(db: number): void {
+  trim = fromDb(db);
 }
 
+/** Where a sound's last node connects: the bus, through this sound's trim. */
+function out(ac: BaseAudioContext): AudioNode {
+  const bus = outputOf(ac);
+  if (trim === 1) return bus;
+  const gain = ac.createGain();
+  gain.gain.value = trim;
+  gain.connect(bus);
+  return gain;
+}
+
+/** The element-based sample: only a fallback for the instant before the decoded buffer is ready. */
 function getTileTapAudio(): HTMLAudioElement | null {
   if (typeof Audio === 'undefined') return null;
   if (!tileTapAudio) {
@@ -51,8 +80,16 @@ function getTileTapAudio(): HTMLAudioElement | null {
 
 // ─── Randomisation helper ──────────────────────────────────────────────────
 
+let jitterFrozen = false;
+
+/** The sound bench measures levels, so it freezes the per-hit variation to make runs comparable. */
+export function freezeJitterForBench(frozen: boolean): void {
+  jitterFrozen = frozen;
+}
+
 /** Returns a multiplier uniformly distributed in [1 - range, 1 + range]. */
 function jitter(range = 0.02): number {
+  if (jitterFrozen) return 1;
   return 1 + (Math.random() * 2 - 1) * range;
 }
 
@@ -75,7 +112,7 @@ function jitter(range = 0.02): number {
  * @param startDelay   Offset from `now` (seconds) — for layering
  */
 function buildThwack(
-  ac: AudioContext,
+  ac: BaseAudioContext,
   now: number,
   bodyFreq: number,
   oscType: OscillatorType,
@@ -101,7 +138,7 @@ function buildThwack(
   master.gain.setValueAtTime(1.0, t0);
 
   lp.connect(master);
-  master.connect(ac.destination);
+  master.connect(out(ac));
 
   // ── Oscillator body ───────────────────────────────────────────────────────
   const pitchedFreq = bodyFreq * jitter(0.02); // ±2% human variation
@@ -213,8 +250,28 @@ export type TileSoundType = 'standard' | 'slam' | 'deal';
  *   20 ms decay, minimal noise. Barely perceptible — just enough to give
  *   each staggered deal tick a tactile anchor.
  */
-export function playTileSound(type: TileSoundType, isMuted: boolean): void {
+export interface TileSoundOptions {
+  /** -1 (left) .. 1 (right): where on screen the tile lands. */
+  pan?: number;
+}
+
+/** Per-voice level and pitch of the shared tile sample. Gains include +3 dB for the equal-power panner (see playBuffer). 'deal' is Fritz's tile: a little lighter and higher. */
+const TILE_VOICE: Record<TileSoundType, { gain: number; rate: number }> = {
+  standard: { gain: 1.16, rate: 1 },
+  slam: { gain: 1.3, rate: 0.9 },
+  deal: { gain: 0.76, rate: 1.05 },
+};
+
+export function playTileSound(type: TileSoundType, isMuted: boolean, options: TileSoundOptions = {}): void {
   if (isMuted) return;
+  setTrimDb(0);
+
+  const buffer = readySample(tileTapUrl);
+  if (buffer) {
+    const voice = TILE_VOICE[type];
+    // About 1 dB of level and 4% of pitch vary per hit: the same sample never lands twice the same way.
+    if (playBuffer(buffer, { gain: voice.gain * jitter(0.12), rate: voice.rate * jitter(0.04), pan: options.pan })) return;
+  }
 
   const sample = getTileTapAudio();
   if (sample) {
@@ -228,7 +285,7 @@ export function playTileSound(type: TileSoundType, isMuted: boolean): void {
     }
   }
 
-  let ac: AudioContext;
+  let ac: BaseAudioContext;
   try {
     const activeCtx = getCtx();
     if (!activeCtx) return;
@@ -352,7 +409,8 @@ export function playTileSound(type: TileSoundType, isMuted: boolean): void {
 
 export function playScoreSound(points: number, isMuted: boolean): void {
   if (isMuted) return;
-  let ac: AudioContext;
+  setTrimDb(TRIM_DB.score);
+  let ac: BaseAudioContext;
   try {
     const activeCtx = getCtx();
     if (!activeCtx) return;
@@ -396,8 +454,8 @@ export function playScoreSound(points: number, isMuted: boolean): void {
 
     osc.connect(env);
     osc2.connect(env2);
-    env.connect(ac.destination);
-    env2.connect(ac.destination);
+    env.connect(out(ac));
+    env2.connect(out(ac));
 
     osc.start(t);
     osc.stop(t + 0.4);
@@ -408,8 +466,9 @@ export function playScoreSound(points: number, isMuted: boolean): void {
 
 export function playDrawSound(isMuted: boolean): void {
   if (isMuted) return;
+  setTrimDb(TRIM_DB.draw);
 
-  let ac: AudioContext;
+  let ac: BaseAudioContext;
   try {
     const activeCtx = getCtx();
     if (!activeCtx) return;
@@ -424,8 +483,9 @@ export function playDrawSound(isMuted: boolean): void {
 
 export function playHandWinSound(isMuted: boolean): void {
   if (isMuted) return;
+  setTrimDb(TRIM_DB.handWin);
 
-  let ac: AudioContext;
+  let ac: BaseAudioContext;
   try {
     const activeCtx = getCtx();
     if (!activeCtx) return;
@@ -441,8 +501,9 @@ export function playHandWinSound(isMuted: boolean): void {
 
 export function playHandLoseSound(isMuted: boolean): void {
   if (isMuted) return;
+  setTrimDb(TRIM_DB.handLose);
 
-  let ac: AudioContext;
+  let ac: BaseAudioContext;
   try {
     const activeCtx = getCtx();
     if (!activeCtx) return;
@@ -458,8 +519,9 @@ export function playHandLoseSound(isMuted: boolean): void {
 
 export function playMatchWinSound(isMuted: boolean): void {
   if (isMuted) return;
+  setTrimDb(TRIM_DB.matchWin);
 
-  let ac: AudioContext;
+  let ac: BaseAudioContext;
   try {
     const activeCtx = getCtx();
     if (!activeCtx) return;
@@ -476,8 +538,9 @@ export function playMatchWinSound(isMuted: boolean): void {
 
 export function playMatchLoseSound(isMuted: boolean): void {
   if (isMuted) return;
+  setTrimDb(TRIM_DB.matchLose);
 
-  let ac: AudioContext;
+  let ac: BaseAudioContext;
   try {
     const activeCtx = getCtx();
     if (!activeCtx) return;
@@ -494,8 +557,9 @@ export function playMatchLoseSound(isMuted: boolean): void {
 
 export function playBlockedSound(isMuted: boolean): void {
   if (isMuted) return;
+  setTrimDb(TRIM_DB.blocked);
 
-  let ac: AudioContext;
+  let ac: BaseAudioContext;
   try {
     const activeCtx = getCtx();
     if (!activeCtx) return;
@@ -511,6 +575,7 @@ export function playBlockedSound(isMuted: boolean): void {
 
 export function playYourTurnSound(isMuted: boolean): void {
   if (isMuted) return;
+  setTrimDb(TRIM_DB.yourTurn);
 
   try {
     const ac = getCtx();
@@ -536,7 +601,7 @@ export function playYourTurnSound(isMuted: boolean): void {
       env.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28); // gentle fade
 
       osc.connect(env);
-      env.connect(ac.destination);
+      env.connect(out(ac));
 
       osc.start(t0);
       osc.stop(t0 + 0.32);
@@ -548,6 +613,7 @@ export function playYourTurnSound(isMuted: boolean): void {
 
 export function playMatchFoundSound(isMuted: boolean): void {
   if (isMuted) return;
+  setTrimDb(TRIM_DB.matchFound);
   try {
     const ac = getCtx();
     if (!ac) return;
@@ -569,7 +635,7 @@ export function playMatchFoundSound(isMuted: boolean): void {
       env.gain.exponentialRampToValueAtTime(0.001, t0 + 0.32);
 
       osc.connect(env);
-      env.connect(ac.destination);
+      env.connect(out(ac));
 
       osc.start(t0);
       osc.stop(t0 + 0.38);
@@ -578,3 +644,8 @@ export function playMatchFoundSound(isMuted: boolean): void {
     return;
   }
 }
+
+// Decode the tile sample on the first gesture so the first clack after it has no start-up cost.
+installAudioUnlock(() => {
+  void loadSample(tileTapUrl);
+});
