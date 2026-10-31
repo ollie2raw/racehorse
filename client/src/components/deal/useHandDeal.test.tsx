@@ -75,11 +75,11 @@ describe('useHandDeal', () => {
 
     expect(animations.length).toBeGreaterThan(6); // cards flew
     expect(root.hasAttribute('data-hand-deal')).toBe(false);
-    expect(document.querySelectorAll('.hand-deal-card')).toHaveLength(0);
+    expect(document.querySelectorAll('.hand-deal-card, .hand-deal-pile')).toHaveLength(0);
     expect(root.querySelectorAll('[data-dealt]')).toHaveLength(0);
   });
 
-  it('deals a card for every tile in both hands, and a deck for them to come from', async () => {
+  it('deals a card for every tile in both hands, and a pile for them to come from', async () => {
     // Animations that never finish, so the cards are still in the air when we count them.
     (HTMLElement.prototype as unknown as { animate: unknown }).animate = () => ({ onfinish: null, oncancel: null, playbackRate: 1 });
     mountScreen(4, 4);
@@ -88,9 +88,10 @@ describe('useHandDeal', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    // 8 cards + 1 deck are on screen the instant the deal begins.
-    expect(document.querySelectorAll('.hand-deal-card')).toHaveLength(9);
-    expect(document.querySelectorAll('.hand-deal-deck')).toHaveLength(1);
+    // 8 cards and a pile of tiles are on screen the instant the deal begins.
+    expect(document.querySelectorAll('.hand-deal-card')).toHaveLength(8);
+    expect(document.querySelectorAll('.hand-deal-pile')).toHaveLength(1);
+    expect(document.querySelectorAll('.hand-deal-pile__tile').length).toBeGreaterThan(2);
   });
 
   it('deals each new hand', async () => {

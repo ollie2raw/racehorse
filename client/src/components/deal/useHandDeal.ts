@@ -40,16 +40,29 @@ function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-/** Copy the look of one of Fritz's face-down rack tiles, so a flying card is the same object that lands in his rack. */
-function cardLook(sample: Element | null): Partial<CSSStyleDeclaration> {
-  if (!sample) return { backgroundColor: '#e9e2d0', border: '1px solid rgba(0, 0, 0, 0.35)', borderRadius: '6px' };
+/**
+ * Copy the look of a real tile, so a flying card is the same object that lands: the fill, the border, the shadows
+ * and, easy to forget, the corner radius (a first version left it out and the cards flew in as sharp slabs).
+ */
+function cardLook(sample: Element | null, fallbackRadius: string): Partial<CSSStyleDeclaration> {
+  if (!sample) {
+    return { backgroundColor: 'rgb(244, 235, 218)', border: '2px solid rgba(108, 92, 68, 0.62)', borderRadius: fallbackRadius };
+  }
   const style = window.getComputedStyle(sample);
   return {
     backgroundColor: style.backgroundColor,
     backgroundImage: style.backgroundImage,
     border: style.border,
+    borderRadius: style.borderRadius,
     boxShadow: style.boxShadow,
   };
+}
+
+interface Looks {
+  /** Your tiles: the ivory body of a hand tile. */
+  you: Partial<CSSStyleDeclaration>;
+  /** Fritz's: a face-down rack tile. */
+  fritz: Partial<CSSStyleDeclaration>;
 }
 
 export function useHandDeal({ handNumber, preGameDrawActive, enabled, pace }: HandDealOptions): void {
@@ -108,7 +121,10 @@ export function useHandDeal({ handNumber, preGameDrawActive, enabled, pace }: Ha
         return (board && rectOf(board)) ?? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
       })();
       const origin = { x: boardRect.left + boardRect.width / 2, y: boardRect.top + boardRect.height / 2 };
-      const look = cardLook(rackTiles[0] ?? null);
+      const looks: Looks = {
+        you: cardLook(handTiles[0]?.querySelector('.domino-body') ?? handTiles[0] ?? null, '7px'),
+        fritz: cardLook(rackTiles[0] ?? null, '5px'),
+      };
 
       const plan = planDeal(targets, pace);
       let remaining = plan.steps.length;
@@ -117,8 +133,8 @@ export function useHandDeal({ handNumber, preGameDrawActive, enabled, pace }: Ha
         if (remaining <= 0) end();
       };
 
-      for (const step of plan.steps) launch(step, step.el, origin, look, oneLanded, cards);
-      showDeck(plan.steps, origin, look, cards);
+      for (const step of plan.steps) launch(step, step.el, origin, looks, oneLanded, cards);
+      showDeck(plan.steps, origin, looks.you, cards);
       timers.push(window.setTimeout(end, plan.totalMs + SAFETY_SLACK_MS));
     };
 
@@ -139,9 +155,8 @@ export function useHandDeal({ handNumber, preGameDrawActive, enabled, pace }: Ha
   }, [handNumber, preGameDrawActive, enabled, pace]);
 }
 
-/** A face-down domino: a soft bevel and a seam across the middle, so the flying card reads as a tile, not a blank. */
+/** A face-down domino: the real tile's body plus the seam across its middle, so the flying card reads as a tile. */
 function dressAsTileBack(card: HTMLElement, rect: DealRect): void {
-  card.style.boxShadow = 'inset 0 0 0 1.5px rgba(0, 0, 0, 0.1), inset 0 -3px 0 rgba(0, 0, 0, 0.1)';
   const seam = document.createElement('div');
   seam.className = 'hand-deal-card__seam';
   // The seam runs across the short side, as on a domino: a wide card is split left/right, a tall one top/bottom.
@@ -149,7 +164,19 @@ function dressAsTileBack(card: HTMLElement, rect: DealRect): void {
   card.appendChild(seam);
 }
 
-/** The pile the cards come from: a small stack at the middle of the board that rises, is dealt from, and fades. */
+/** How the tiles of the pile at the middle of the board are scattered: offset (px), tilt (deg), bottom to top. */
+const PILE: ReadonlyArray<{ x: number; y: number; deg: number }> = [
+  { x: -6, y: 5, deg: -13 },
+  { x: 7, y: 4, deg: 9 },
+  { x: -3, y: -3, deg: 5 },
+  { x: 5, y: -4, deg: -7 },
+  { x: 0, y: 0, deg: 2 },
+];
+
+/**
+ * The pile the cards come from: a small heap of face-down tiles at the middle of the board that rises, is dealt from,
+ * and fades. A heap of real-looking tiles, because a single blank slab read as a stray rectangle.
+ */
 function showDeck(
   steps: Array<{ rect: DealRect; owner: string; delayMs: number }>,
   origin: { x: number; y: number },
@@ -158,36 +185,40 @@ function showDeck(
 ): void {
   const sample = steps.find((step) => step.owner === 'you') ?? steps[0];
   if (!sample) return;
-  const width = sample.rect.width * 0.6;
-  const height = sample.rect.height * 0.6;
+  const width = sample.rect.width * 0.75;
+  const height = sample.rect.height * 0.75;
   const lastOut = steps.reduce((latest, step) => Math.max(latest, step.delayMs), 0);
-  const deck = document.createElement('div');
-  deck.className = 'hand-deal-card hand-deal-deck';
-  deck.setAttribute('aria-hidden', 'true');
-  Object.assign(deck.style, look);
-  // A few stacked edges under the top card. Inline, because the face copied from the rack tile sets its own shadow.
-  deck.style.boxShadow =
-    '0 2px 0 rgb(190, 181, 158), 0 4px 0 rgb(160, 151, 130), 0 6px 0 rgb(130, 122, 104)';
-  deck.style.left = `${origin.x - width / 2}px`;
-  deck.style.top = `${origin.y - height / 2}px`;
-  deck.style.width = `${width}px`;
-  deck.style.height = `${height}px`;
-  document.body.appendChild(deck);
-  cards.push(deck);
+  const pile = document.createElement('div');
+  pile.className = 'hand-deal-pile';
+  pile.setAttribute('aria-hidden', 'true');
+  pile.style.left = `${origin.x - width / 2}px`;
+  pile.style.top = `${origin.y - height / 2}px`;
+  pile.style.width = `${width}px`;
+  pile.style.height = `${height}px`;
+  for (const piece of PILE) {
+    const tile = document.createElement('div');
+    tile.className = 'hand-deal-pile__tile';
+    Object.assign(tile.style, look);
+    tile.style.transform = `translate(${piece.x}px, ${piece.y}px) rotate(${piece.deg}deg)`;
+    dressAsTileBack(tile, { left: 0, top: 0, width, height });
+    pile.appendChild(tile);
+  }
+  document.body.appendChild(pile);
+  cards.push(pile);
   const total = lastOut + 280;
   try {
-    const animation = deck.animate(
+    const animation = pile.animate(
       [
-        { opacity: 0, transform: 'scale(0.88)' },
+        { opacity: 0, transform: 'scale(0.9)' },
         { opacity: 1, transform: 'scale(1)', offset: 0.12 },
         { opacity: 1, transform: 'scale(1)', offset: 0.82 },
         { opacity: 0, transform: 'scale(0.96)' },
       ],
       { duration: total, easing: 'ease-out', fill: 'both' },
     );
-    animation.onfinish = () => deck.remove();
+    animation.onfinish = () => pile.remove();
   } catch {
-    deck.remove();
+    pile.remove();
   }
 }
 
@@ -195,7 +226,7 @@ function launch(
   step: DealStep,
   real: HTMLElement,
   origin: { x: number; y: number },
-  look: Partial<CSSStyleDeclaration>,
+  looks: Looks,
   landed: () => void,
   cards: HTMLElement[],
 ): void {
@@ -203,7 +234,7 @@ function launch(
   const card = document.createElement('div');
   card.className = 'hand-deal-card';
   card.setAttribute('aria-hidden', 'true');
-  Object.assign(card.style, look);
+  Object.assign(card.style, step.owner === 'you' ? looks.you : looks.fritz);
   dressAsTileBack(card, rect);
   card.style.left = `${rect.left}px`;
   card.style.top = `${rect.top}px`;
