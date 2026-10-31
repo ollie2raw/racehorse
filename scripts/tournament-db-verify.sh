@@ -1539,6 +1539,19 @@ grep -q '^14 cancelled slot 01|Thu 11-05 21:00 ET, reason: cadence_replaced$' "$
 pass "verify-one-result.sql (read-only): one table, no error; timezone, slot times and signatures right; all 6 expect-0 rows are 0; the planted cancelled slot is reported (12 = 1) and listed (14); the next 8 events listed"
 echo "    one-result output:"; sed -n '1,40p' "$WORK/m4_verify_one.txt" | sed 's/^/      /'
 
+# The production readiness check as ONE table (docs/ops/tournament-launch/prod-readiness-one-result.sql). The scratch db is the
+# chain + M2 + M4, and room_live_sessions is not in it: that row reads false, which is itself the proof the checks can fail.
+AT4 "$F4" -F '|' -f "$REPO_ROOT/docs/ops/tournament-launch/prod-readiness-one-result.sql" >"$WORK/m4_readiness.txt" 2>&1 || { cat "$WORK/m4_readiness.txt" >&2; fail "prod-readiness-one-result.sql"; }
+grep -qi 'error' "$WORK/m4_readiness.txt" && { cat "$WORK/m4_readiness.txt" >&2; fail "prod-readiness-one-result.sql errored"; }
+grep -q '^06 M2: _live_event_slots (expect true)|true$' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: M2 row"; }
+grep -q '^07 M4: the schedule is 18:00 / 21:00 America/New_York (expect true)|true$' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: M4 row not true after M4"; }
+grep -q '^09 tournament functions defined twice (an old overload), expect 0|0$' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: overloads"; }
+grep -q '^24 security posture hard_fail_count, expect 0|0$' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: posture"; }
+grep -q '^08 room_live_sessions, for restart restore (expect true)|false$' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: a missing object must read false"; }
+grep -q '^31 next upcoming event|' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: next event row"; }
+pass "prod-readiness-one-result.sql (read-only): one table, no error; M2 and M4 read true after M4; no old overloads; posture 0; an object that is not there (room_live_sessions) reads false"
+echo "    readiness output:"; sed -n '1,40p' "$WORK/m4_readiness.txt" | sed 's/^/      /'
+
 # The new schedule itself, across both DST changes (run twice: M4 is idempotent).
 for PASSNO in 1 2; do
   AT4 "$F4" -q >/dev/null 2>"$WORK/err" <<'SQL' || { cat "$WORK/err" >&2; fail "M4 slot generation (pass $PASSNO)"; }

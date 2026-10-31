@@ -11,7 +11,8 @@ Each step is reversible. Do them in order; stop and send me the output if anythi
 
 1. **Merge** the two PRs: the schedule change (M4, #387) and the tournament-block reactions. Render and Vercel deploy `main`.
    Check `GET /health` is 200 and `GET /api/tournaments/upcoming` still says `features: { tournaments: false }`.
-2. **Production preflight** (`prod-preflight.sql`, read-only). Expect: P1 08-31, M1, CAS, M3 and M2 rows `true`
+2. **Production readiness** (`prod-readiness-one-result.sql`, read-only, one result table; use this rather than the multi-panel
+   `prod-preflight.sql`, because the Supabase editor shows only the last result of a script). Expect: P1 08-31, M1, CAS, M3 and M2 rows `true`
    (applied 2026-10-11); the **M4 row `false`**; `room_live_sessions` `true`; P2 one row per name; P7 `0 / 0`; P8 no rows; P9 `0`.
 3. **M4, the new schedule** (`README.md` stage 1b), three pastes in the SQL editor:
    `../tournament-m4/preflight.sql`, then `supabase/migrations/2026-10-31_tournament_live_event_times_eastern.sql`,
