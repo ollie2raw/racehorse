@@ -1,7 +1,9 @@
 /**
  * Event times for players, in THEIR time zone (Phase 3C). Live Events are
- * scheduled in America/Los_Angeles on the server; that is an implementation
- * detail — the hub shows the device's local time with no zone label.
+ * scheduled in one fixed zone by the database (see supabase/migrations: currently
+ * 18:00 and 21:00 America/New_York); that is an implementation detail — the hub
+ * shows the device's local time with no zone label, so nothing here changes when
+ * the schedule does.
  * `timeZone` is injectable for tests only.
  */
 

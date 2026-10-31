@@ -6,6 +6,8 @@ set default_transaction_read_only = on;
 
 -- P1. Which launch objects already exist (before M1: the 08-31 rows decide whether
 --     tournament-v2-preflight pieces A-D go first; M1..M2 rows false; room_live_sessions true).
+--     The M4 row says which Live Event schedule is live: false = M2's 17:00 / 20:00 Pacific (or no M2 yet),
+--     true = M4's 18:00 / 21:00 Eastern. It is false until stage 1b of the runbook.
 select x.what, x.present
 from (values
   ('08-31 complete_tournament_match',                exists(select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = 'complete_tournament_match')),
@@ -15,6 +17,8 @@ from (values
   ('CAS complete_tournament_match_if_unchanged',     exists(select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = 'complete_tournament_match_if_unchanged')),
   ('M3 tournament_orchestrator_leases',              to_regclass('public.tournament_orchestrator_leases') is not null),
   ('M2 _live_event_slots',                           exists(select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = '_live_event_slots')),
+  ('M4 schedule is 18:00 / 21:00 America/New_York',  exists(select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = '_live_event_timezone' and pg_get_functiondef(p.oid) like '%America/New_York%')
+                                                      and exists(select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = '_live_event_slot_times' and pg_get_functiondef(p.oid) like '%18:00%' and pg_get_functiondef(p.oid) like '%21:00%')),
   ('room_live_sessions (restart restore; expect true)', to_regclass('public.room_live_sessions') is not null)
 ) as x(what, present);
 
@@ -29,7 +33,7 @@ group by 1 order by 1;
 
 -- P3. Which seed body is live (the 05-17 body closes at T-2; 05-14/16 at T-5).
 select case
-         when pg_get_functiondef('public.seed_future_tournaments(integer)'::regprocedure) like '%_live_event_slots%' then 'M2 body (17:00 / 20:00 PT)'
+         when pg_get_functiondef('public.seed_future_tournaments(integer)'::regprocedure) like '%_live_event_slots%' then 'M2 body (the schedule is in the helpers: see the M4 row in P1)'
          when pg_get_functiondef('public.seed_future_tournaments(integer)'::regprocedure) like '%2 minutes%' then '05-17 body (30-min cadence, close T-2)'
          when pg_get_functiondef('public.seed_future_tournaments(integer)'::regprocedure) like '%5 minutes%' then '05-14/05-16 body (30-min cadence, close T-5)'
          else 'unknown body: send the definition'

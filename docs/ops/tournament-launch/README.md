@@ -15,6 +15,7 @@ independently reversible, and no stage needs a coordinated cut-over:
 |---|---|---|
 | 0 | Read-only preflight (`prod-preflight.sql`) | nothing |
 | 1 | Database: (08-31 pieces A–D if missing) → M1 → CAS → M3 → guard → M2 | nothing (server flag off) |
+| 1b | Database: M4 — the Live Event schedule becomes 6 pm and 9 pm Eastern (replaces M2's 5 pm / 8 pm Pacific) | nothing (server flag off) |
 | 2 | Server deploy (this branch, merged to `main`), `TOURNAMENTS_ENABLED` still off | nothing |
 | 3 | Server `TOURNAMENTS_ENABLED=true` (Live only; `FRITZ_CUP_ENABLED` off) | nothing yet (client flag off) |
 | 4 | Client: Vercel `VITE_ENABLE_TOURNAMENTS=true`, redeploy | Tournament tab, Live Events |
@@ -52,8 +53,8 @@ server, and either server can run on either schema, while the flag is off.
   (≤ 120 s). Players reconnecting meanwhile re-attach, and the server rebuilds
   the room from its live session on demand (no lease needed for that); the
   turn clock then restarts from a fresh deadline.
-- Still: **do not deploy during a Live Event window** (17:00–18:00 and
-  20:00–21:00 PT); check `select count(*) from public.scheduled_tournament_matches
+- Still: **do not deploy during a Live Event window** (18:00–19:00 and
+  21:00–22:00 ET); check `select count(*) from public.scheduled_tournament_matches
   where status = 'in_progress'` is 0 first when Fritz Cups are on, or accept a
   ≈ 1 s blip for players mid-match.
 
@@ -103,6 +104,7 @@ Expected before stage 1:
 |---|---|---|
 | P1 08-31 rows | `true` | If `false` (production lacked them on 2026-10-04): apply `../tournament-v2-preflight/` A, B, C, then D (verify) **first** — CAS and the completion guard call `complete_tournament_match`, `promote_tournament_match` and the `_tournament_*` helpers |
 | P1 M1…M2 rows | `false` | Something was applied already: stop and send the output |
+| P1 M4 row | `false` | `true` means the schedule is already 6 pm / 9 pm Eastern: skip stage 1b |
 | P1 `room_live_sessions` | `true` | Restart restore needs it: stop |
 | P2 | one row per name | Two rows = old overload: stop |
 | P3 | 05-14/16 or 05-17 body | `unknown`: send the definition |
@@ -142,8 +144,42 @@ the file changed since 2026-10-11.
 7. `supabase/migrations/2026-10-10_tournament_live_event_cadence.sql` (M2)
 8. `../tournament-m2/verify.sql` — M2 body true; expect-0 rows 0; next events
    at 17:00 and 20:00 America/Los_Angeles, registration opens 12 h before and
-   closes 2 min before.
+   closes 2 min before. (This is M2's own schedule; **stage 1b replaces it**
+   before anything is switched on.)
 9. `prod-preflight.sql` again: P1 all `true`, P9 `0`.
+
+## Stage 1b — the Live Event schedule: 6 pm and 9 pm Eastern (M4, owner)
+
+Owner decision 2026-10-31: the two daily Live Events are at **18:00 and 21:00
+America/New_York** (written "6 pm / 9 pm EST"; as people say it, Eastern time
+all year, so the events stay at 6 pm and 9 pm on an Eastern clock through
+daylight saving). M2 seeded 17:00 and 20:00 Pacific, which is 8 pm and 11 pm
+Eastern. M4 redefines the two schedule helpers M2 built for exactly this and
+retires the old future inventory. Nothing in the server or the client names the
+times: the server follows the stored timestamps and every player sees the event
+in their own local time (a Pacific player sees 3 pm and 6 pm).
+
+Run **after stage 1 and before stage 3**; each file is one paste, in this order:
+
+1. `../tournament-m4/preflight.sql` — read-only. First query shows
+   `America/Los_Angeles` and the Pacific slot times (M2's schedule). Rows
+   marked "expect 0" are 0; note the "will cancel" count (the remaining future
+   5 pm / 8 pm PT rows of the seeded window: two per day) and check the last
+   query lists them as `cancel (schedule_changed)`.
+2. `supabase/migrations/2026-10-31_tournament_live_event_times_eastern.sql` (M4).
+3. `../tournament-m4/verify.sql` — read-only. Shows `America/New_York` and
+   `{18:00, 21:00}`; every "expect 0" row is 0; the next 10 events list 18:00
+   and 21:00 ET with registration opening 12 h before (06:00 / 09:00 ET) and
+   closing 2 min before.
+
+M4 is one transaction, idempotent, and never deletes. It cancels (reason
+`schedule_changed`) only future `upcoming` Live rows more than 35 minutes away,
+off the new slots, with no registration and no match row. Anything somebody has
+already entered keeps its old time. Rehearsed against a throwaway PostgreSQL 16
+by `scripts/tournament-db-verify.sh` (section 14/14), including both DST changes,
+the awkward-row matrix, idempotency and these two scripts. Rollback is forward
+only: a new migration that restores the helpers (`_live_event_timezone()`,
+`_live_event_slot_times()`) and reseeds; never delete rows.
 
 Dev rehearsal (2026-10-11): all applied cleanly with only expected notices;
 M2 cancelled 1,079 legacy rows; verify all green; posture 0.
@@ -159,7 +195,7 @@ Check: `GET /health` 200; `GET /api/tournaments/upcoming` →
 ## Stage 3 — enable Live Events on the server
 
 Set `TOURNAMENTS_ENABLED=true` (leave `FRITZ_CUP_ENABLED` unset), restart.
-Do it **at least 1 hour before** the next 17:00 or 20:00 PT event.
+Do it **at least 1 hour before** the next 18:00 or 21:00 ET event.
 
 - The first ticks drain the stale backlog: every past-due `upcoming` row is
   opened and cancelled (`not_enough_players`) about 50 per 30-second tick. On
@@ -167,7 +203,7 @@ Do it **at least 1 hour before** the next 17:00 or 20:00 PT event.
   done. Re-run P6 until `stale_backlog_rows = 0`.
 - Logs: exactly one `lease acquired` (epoch 1), renewals about every 60 s, no
   `close-and-start failed` loops.
-- `GET /api/tournaments/upcoming` lists the next events at 17:00 / 20:00 PT
+- `GET /api/tournaments/upcoming` lists the next events at 18:00 / 21:00 ET
   with `features.tournaments: true, fritzCup: false`.
 
 ## Stage 4 — client release
@@ -206,7 +242,7 @@ period beyond them:
 1. The new migrations, server and client are healthy in production.
 2. Live Events were enabled first (stage 3–4).
 3. Both daily Live Event slots have completed successfully at least once
-   under controlled observation — preferably one 17:00 PT and one 20:00 PT
+   under controlled observation — preferably one 18:00 ET and one 21:00 ET
    event. If traffic is too low for organic players, controlled accounts may
    staff them.
 4. About 24 hours of production monitoring (below) show no stuck events, no
@@ -216,7 +252,7 @@ period beyond them:
    (stage 5 checks).
 
 Also: the always-on server is in place (cups add load at any hour, not just at
-17:00 / 20:00).
+18:00 / 21:00 ET).
 
 ## Monitoring
 
