@@ -21,6 +21,7 @@ import {
   playYourTurnSound,
   queueSound,
 } from '../../../utils/sound.ts';
+import { playHaptic, scoreCue } from '../../../utils/haptics.ts';
 import {
   hasDebugLocalStorageFlag,
 } from '../runtime/botMatchDebug.ts';
@@ -228,6 +229,7 @@ export function useMatchPresentation({
       scoreCueTimerRef.current = null;
       showScoreToast(scoreEvent.player, scoreEvent.points);
       queueSound(() => playScoreSound(scoreEvent.points, isMuted), 0);
+      if (scoreEvent.player === 'you') playHaptic(scoreCue(scoreEvent.points));
     }, BOT_SCORE_CUE_DELAY_MS);
   }, [
     isDailyFritzMode,
@@ -328,9 +330,15 @@ export function useMatchPresentation({
     if (gameOverSoundKeyRef.current === key) return;
     gameOverSoundKeyRef.current = key;
     if (match.winnerId === 'you') {
-      queueSound(() => playMatchWinSound(isMuted), 320);
+      queueSound(() => {
+        playMatchWinSound(isMuted);
+        playHaptic('matchWon');
+      }, 320);
     } else {
-      queueSound(() => playMatchLoseSound(isMuted), 320);
+      queueSound(() => {
+        playMatchLoseSound(isMuted);
+        playHaptic('matchLost');
+      }, 320);
     }
   }, [match.gameOver, match.winnerId, match.handNumber, match.players.you.score, match.players.bot.score, isMuted, gameOverSoundKeyRef]);
 

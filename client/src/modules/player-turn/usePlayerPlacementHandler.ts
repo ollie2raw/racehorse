@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger';
 import { playTileSound, queueSound } from '../../utils/sound.ts';
+import { playHaptic } from '../../utils/haptics.ts';
 import { armTileImpact } from '../../utils/tileImpact.ts';
 import { useCallback, useEffect, useRef } from 'react';
 import { applyPlayMove } from '../match/runtime/botEngine.ts';
@@ -224,7 +225,10 @@ export function usePlayerPlacementHandler({
       }
       // Your own tile gets its clack, held until the tile has flown to its place; armed BEFORE the state applies so a
       // score ping raised by applyAndNotify queues behind it.
-      armTileImpact((pan) => queueSound(() => playTileSound('standard', isMuted, { pan }), 0));
+      armTileImpact((pan) => {
+        queueSound(() => playTileSound('standard', isMuted, { pan }), 0);
+        playHaptic('tilePlaced');
+      });
       applyAndNotify(result);
       logger.info('guided', 'click-applied', {
         currentPlayerAfter: result.state.currentPlayer,

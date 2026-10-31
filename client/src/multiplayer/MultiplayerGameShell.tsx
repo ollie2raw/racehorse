@@ -52,6 +52,7 @@ import {
   playMatchWinSound,
   playDrawSound,
 } from '../utils/sound';
+import { playHaptic } from '../utils/haptics';
 import {
   publishGameSnapshot,
   resetGameSnapshot,
@@ -722,8 +723,10 @@ function MultiplayerGameShellComponent({
     if (!winnerSocketId) return;
     if (winnerSocketId === you) {
       playMatchWinSound(isMutedRef.current);
+      playHaptic('matchWon');
     } else {
       playMatchLoseSound(isMutedRef.current);
+      playHaptic('matchLost');
     }
     if (winnerSocketId === you) {
       const canvas = confettiCanvasRef.current;

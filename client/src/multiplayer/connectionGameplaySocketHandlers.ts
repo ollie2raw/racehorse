@@ -1,4 +1,5 @@
 import { playBlockedSound, playHandLoseSound, playHandWinSound } from '../utils/sound';
+import { playHaptic } from '../utils/haptics';
 import type { GameRematchStatusPayload } from './legacyTournamentTypes';
 import type { MultiplayerConnectionScope } from './multiplayerConnectionScope';
 import type { ConnectionHandEndedPayload } from './gameplaySocketTypes';
@@ -15,7 +16,10 @@ export function applyHandEndedSocketEvent(
   const yourRemainingTiles = payload.yourRemainingTiles ?? myRemaining;
   const opponentRemainingTiles = payload.opponentRemainingTiles ?? [];
   const blocked = yourRemainingTiles.length > 0 && opponentRemainingTiles.length > 0;
-  if (blocked) playBlockedSound(scope.gameplay.isMutedRef.current);
+  if (blocked) {
+    playBlockedSound(scope.gameplay.isMutedRef.current);
+    playHaptic('blocked');
+  }
   const stateNow = scope.room.stateRef.current;
   const target = stateNow?.config?.winningScore ?? 60;
   const oppId = stateNow?.playerIds.find((pid) => pid !== myId) ?? null;
@@ -27,8 +31,13 @@ export function applyHandEndedSocketEvent(
   if (!matchWillBeOver) {
     const handWinnerId = payload.handWinnerId ?? payload.winnerId ?? null;
     const iWonHand = Boolean(handWinnerId && handWinnerId === myId);
-    if (iWonHand) playHandWinSound(scope.gameplay.isMutedRef.current);
-    else playHandLoseSound(scope.gameplay.isMutedRef.current);
+    if (iWonHand) {
+      playHandWinSound(scope.gameplay.isMutedRef.current);
+      playHaptic('handWon');
+    } else {
+      playHandLoseSound(scope.gameplay.isMutedRef.current);
+      playHaptic('handLost');
+    }
   }
   scope.gameplay.handRevealShownRef.current = payload.handNumber;
   scope.gameplay.handRevealTimerRef.current = window.setTimeout(() => {
