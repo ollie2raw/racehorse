@@ -1,0 +1,89 @@
+# Immersion programme: making a match feel like a premium game
+
+Follows `docs/gameplay-feel-programme-results.md` (camera, drag-to-place, tile flight, Fast Fritz). That work made the
+board **move** well. This programme is about everything else a match does to the senses: sound, impact, ceremony, touch.
+
+Method, same as before: **measure first, change second, prove it with a number or a recording.** The one constraint
+that shapes this programme: the author of the code cannot hear or feel it. So every layer gets a measurement harness
+before it gets redesigned, and every "feel" constant is a single tunable number that the owner can adjust by ear.
+
+## 1. What a match does today (audit, 2026-10-31)
+
+| Layer | State |
+|---|---|
+| Tile sound | One sample (`thwump`) for every tile, played through an `<audio>` element. No variation, no placement, started late on iOS. Your own tile in Play vs Fritz / Ghost made **no sound at all**. |
+| Other sounds | Sine-wave "arcade chimes" (score, match found, your turn) and two-note sine stingers (hand/match win/lose). The chimes read as arcade, which the identity rules out. |
+| Mix | No bus, no limiter, no shared level. Sounds connected straight to the speakers. |
+| Ambience / music | None. |
+| Haptics | None anywhere (no Capacitor haptics, no `navigator.vibrate`). |
+| Camera, flight, drag | Done (#358 to #372). |
+| Landing impact | A 150 ms scale settle on the tile, nothing else. |
+| Score ceremony | A `+N` chip and a ping; the race track moves. |
+| Hand / match endings | Overlays and two- or three-note sine stingers. |
+
+## 2. Pass A1: engine and mix (PR #377)
+
+### The finding
+
+`e2e/audio-bench.spec.ts` renders every sound offline through the real bus and measures it. The first run:
+
+| Sound | Loudness before | Note |
+|---|---|---|
+| tile clack | -21.0 dB | the game's main sound was the **quietest** thing in the mix |
+| score ping (10 pts) | -11.2 dB | **~10 dB louder than the clack**, so the ping drowned the hit |
+| draw | -37.2 dB (peak -30.4) | ~16 dB under the clack: effectively inaudible |
+| your turn / match found | -16.3 / -15.1 | louder than the clack |
+
+Also: a tile at the centre of the screen was **3 dB louder** than the same tile anywhere else (a mono source with no
+panner plays at full level in both ears).
+
+### What changed
+
+- `src/audio/audioEngine.ts`: one context and one mix bus (glue compressor, then a limiter). Nothing can clip.
+- The tile sample is decoded once (on the first gesture) and played from a buffer, with about 1 dB of level and 4% of
+  pitch variation per hit. The `<audio>` element remains only as a fallback for the instant before decoding.
+- Each clack is panned to where its tile lands on screen (equal-power, spread limited to about half the field).
+- The clack is held until the tile lands (`utils/tileImpact.ts`), and the score ping waits behind it.
+- Your own tile now has a clack.
+- Levels set from the bench (`TRIM_DB` in `utils/sound.ts`, `TILE_VOICE` for the tile).
+
+### After (loudest 100 ms, dBFS; peak in brackets)
+
+| Sound | Before | After |
+|---|---|---|
+| tile.standard | -21.0 (-4.4) | **-19.7** (-3.3) |
+| tile.deal (Fritz) | -23.2 | -21.9 |
+| tile at the far left / right | -23.8 (3 dB quieter than centre) | -20.8 (**within 1.1 dB** of centre; balance -0.76 / +0.76) |
+| score 5 / 10 / 15 pts | -13.4 / -11.2 / -11.2 | -22.6 / -19.3 / -19.2 (behind the clack; bigger score, bigger ping) |
+| draw | -37.2 (-30.4) | **-27.4** (-20.7) |
+| blocked | -22.1 | -19.1 |
+| your turn | -16.3 | -19.0 |
+| hand win / lose | -17.0 / -19.3 | -17.0 / -19.2 (unchanged) |
+| match win / lose | -13.8 / -18.5 | -13.8 / -18.3 (unchanged: still the biggest moments) |
+
+Guard rails (asserted on every CI run): nothing clips, everything is audible, no DC offset, sane lengths, the clack
+leads, pings sit behind it, endings are the biggest moments, loudness is constant across the stereo field, and the pan
+goes to the correct side.
+
+Run it yourself: `AUDIO_BENCH=1 npx playwright test e2e/audio-bench.spec.ts --project=chromium` prints the table.
+
+## 3. The plan
+
+Each pass is its own PR, measured before and after. Order is by felt impact per risk.
+
+| Pass | What | Needs from you |
+|---|---|---|
+| **A2: a premium sound palette** | Replace the sine "arcade chimes" with a warm, restrained palette (soft mallet and felt tones, no arcade arpeggios): score ping scaled by points, a distinct lead-change stinger, hand and match endings that feel earned, tile select / zone-appear ticks, an invalid-move thud. Bench measures loudness hierarchy, brightness (spectral centroid) and length for each. | A direction word or two: for example "warm wood and felt" vs "glass and brass". I will default to warm and restrained. |
+| **A3: room and bed** | A very quiet room tone under the match and a short "room" reverb on the clack so tiles sit in a space, ducking under sound effects. Settings switch. | Whether ambience is on by default (I recommend **off by default**, offered in Settings) |
+| **B: landing weight** | On landing: a contact shadow bloom under the tile, a tiny board response, the `+N` chip rising from the tile itself, and the race track's horse stepping on the same beat as the ping. Reduced-motion respected. Measured with the play-trace tool. | none |
+| **C: haptics (native app)** | A light tap on place, a firmer tap on score, a double on a blocked hand, using the Capacitor haptics plugin. This is probably the single biggest "feels like a real game" upgrade on a phone. | **Approval to add a native plugin and rebuild the iOS app**: it changes the native project, not just the web client. |
+| **D: endings** | Hand and match endings as short staged moments (the winning tile, the score count-up, the result stinger) rather than an overlay appearing. | A design review of one frame-by-frame storyboard before I build it. |
+| **E: phone board size** | The match-HUD redesign for board height on phones (still the only way to fully fix the largest boards at 844x390). | Carried over from the earlier programme: a design decision. |
+
+## 4. Rules for this programme
+
+- **Never ship a feel number without a measurement behind it.** If it cannot be measured, it must be one named constant.
+- **Never change timing and look together** in one PR; a regression has to be attributable.
+- **Reduced motion and mute are contracts.** Anything new honours both, and the mute setting silences all new sounds.
+- **Gameplay logic is untouched.** All of this is presentation.
+- The owner's ears and hands are the final judge. Every pass ends with a short "please listen / please feel" note.
