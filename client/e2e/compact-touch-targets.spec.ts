@@ -237,7 +237,6 @@ test.describe('real rack flow at 667x375: a 14-tile hand played down, then the n
       const n = await tileCount(page);
       if (n > 0 && !seen.has(n)) {
         await page.mouse.move(1, 1); await page.waitForTimeout(900); // let the draw/play animation settle
-        await expect(page.locator('.bot-match-screen[data-hand-deal]')).toHaveCount(0, { timeout: 10_000 }); // and any deal
         await assertRack(page, c, `${n}-tile hand`); seen.set(n, true); console.log(`RACK laid out ${n} tiles at ${Math.round((Date.now() - (deadline - 600_000)) / 1000)}s`);
         // the move-history scrubber: step back one move (shows the LIVE chip), check its targets, return to live
         const back = page.getByRole('button', { name: 'Previous move' });
@@ -256,7 +255,6 @@ test.describe('real rack flow at 667x375: a 14-tile hand played down, then the n
       if (n > previous + 4) {
         newHandSeen = true;
         await page.mouse.move(1, 1); await page.waitForTimeout(900);
-        await expect(page.locator('.bot-match-screen[data-hand-deal]')).toHaveCount(0, { timeout: 10_000 }); // the new hand's deal
         await assertRack(page, c, `new hand (${n} tiles)`);
       }
       previous = n;
@@ -307,8 +305,6 @@ async function openSeededMatch(page: Page, w: number, h: number, native: boolean
     if (await pickable.isVisible().catch(() => false)) await pickable.click({ timeout: 3000, force: true }).catch(() => {});
     await page.waitForTimeout(300);
   }
-  // the staged deal (cards flying to both hands) holds the real tiles hidden until each lands: measure only after it ends
-  await expect(page.locator('.bot-match-screen[data-hand-deal]')).toHaveCount(0, { timeout: 10_000 });
   // the deal is done: from here the game is deterministic, give the page its real Math.random back
   await page.evaluate(() => { Math.random = (window as unknown as { __rhRealRandom: () => number }).__rhRealRandom; });
   await page.mouse.move(1, 1);

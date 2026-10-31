@@ -89,28 +89,26 @@ no delay, no state, transients pass exactly) instead of compressors. Levels were
 
 The bench now asserts every tile sound hits within 30 ms of starting.
 
-### Pass D1: the opening deal (match cinematics, first piece)
+### Pass D1: the opening deal: built, then removed (2026-10-31)
 
-Before: after the pre-game draw, and at the start of every hand, both hands simply appeared. Now the first hand is one
-continuous piece of staging with the pick-a-tile screen (idea: the owner's):
+Tried: cards flying from a heap to both hands at the start of every hand, and for the first hand a staged opening
+(the pick-a-tile pile gathered, swirled, dealt into both hands, the rest swept into the boneyard counter). PRs #383,
+#384 and #385; all three were reverted because, in the owner's words, it "doesn't feel very strong". It was
+technically sound (presentation-only, could never hide a hand, covered by unit and real-browser tests) and it still
+did not earn its place, so it is gone rather than polished further.
 
-1. The face-down tiles you were picking from, in exactly the places they were lying (recorded by the draw board after every
-   render, `pileSnapshot.ts`, so the swap to the live screen is invisible), gather into a heap at the middle of the board.
-2. They are riffled, three quick passes left and right.
-3. 14 leave the heap one after another, alternating to your tray and Fritz's rack (yours turn face up as they land;
-   Fritz's stay face down); the rest sweep into the boneyard counter, shrinking as they go in, with a small pulse.
+Worth keeping from it:
+- **Look at motion, don't guess.** Freeze the page's animation clock (every card ran on WAAPI), step it in fixed
+  increments, screenshot each step and lay the frames out as a filmstrip. That found real problems no test would
+  (a wobble that did not read as a shuffle, straight-line "conveyor" paths) and a real bug: **Fritz played a tile
+  straight through the deal** when he started, because his thinking pause is shorter than a staged deal.
+- Copy the *real* tile's look, including its corner radius (the first cards were square slabs); a lone blank rectangle
+  as a "deck" reads as a mistake.
+- A once-per-hand presentation system belongs in its own lazily loaded chunk, not in the match screen's budget.
+- Specs that start a match must wait for any staged opening to finish before measuring the hand.
 
-About two seconds; Fast Fritz is quicker. Later hands, which have no pile on screen, deal from a small heap of tiles at
-the middle of the board (about a second). Cards are copies of the real tiles (the hand tile's ivory body and corner radius),
-because the first version used flat square slabs and a blank rectangle for the deck.
-
-Presentation only: the real tiles are held hidden by one attribute and revealed as each card lands (`components/deal/`).
-It can never lock you out of your hand: every path (finished, cut short, never possible, unmounted, code not loaded) removes
-the hide attribute and every card. **Fritz's opening move waits for the deal to land** (`utils/dealGate.ts`, a pacing wait
-with a 4 s hard cap): a frame from the first probe showed him playing a tile through the cards. The staging code is its own
-lazily loaded chunk (~7 kB), fetched when the match screen mounts, so the match screen itself grew ~2.3 kB. Skipped for
-reduced motion, a hidden tab, guided lessons, a reload mid-hand, and anywhere the Web Animations API is missing. No sound,
-on purpose.
+If staging at the start of a match is revisited, the bar is "obviously better than the instant version": judge it by
+filmstrip first, and prefer making the *existing* pick-a-tile moment stronger over adding a new sequence after it.
 
 ## 3. The plan
 
