@@ -30,3 +30,15 @@
   will-change: transform;
   filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.45));
 }
+
+/* The table's answer as a tile lands (contactRing.ts): a thin ivory ring leaves the tile's footprint and fades. */
+.tile-contact-ring {
+  position: fixed;
+  margin: 0;
+  box-sizing: border-box;
+  z-index: 2147481900;
+  pointer-events: none;
+  border: 1.5px solid rgba(244, 236, 214, 0.9);
+  border-radius: 8px;
+  opacity: 0;
+}
