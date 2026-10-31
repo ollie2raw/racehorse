@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { Fragment, useContext, useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { BrandLogo } from './BrandLogo';
 import { Button } from './primitives';
 import { APP_PRIMARY_TABS, APP_PRIMARY_TAB_COLORS } from './nav/appPrimaryTabs';
@@ -55,11 +55,17 @@ interface GlobalNavProps {
 // (`APP_PRIMARY_TABS`) so they can't disagree about which tab is active — the
 // two hand-maintained copies had drifted (audit §3 S4).
 
-/** `mode` navigates; its absence means sign out. */
-const ACCOUNT_MENU_ITEMS: { label: string; mode?: AppMode }[] = [
+/**
+ * `mode` navigates; its absence means sign out. `group` starts a new run of rows, divided from the one before it.
+ * Privacy / Terms / Support live here rather than in a page footer, so the game screens stay footer-free.
+ */
+const ACCOUNT_MENU_ITEMS: { label: string; mode?: AppMode; group?: 'legal' | 'session' }[] = [
   { label: 'Profile', mode: 'stats' },
   { label: 'Settings', mode: 'settings' },
-  { label: 'Sign out' },
+  { label: 'Privacy', mode: 'privacy', group: 'legal' },
+  { label: 'Terms', mode: 'terms', group: 'legal' },
+  { label: 'Support', mode: 'support', group: 'legal' },
+  { label: 'Sign out', group: 'session' },
 ];
 
 export function GlobalNav(props: GlobalNavProps) {
@@ -434,21 +440,27 @@ function GlobalNavChrome({
 
               {authUser && accountMenuOpen && (
                 <div className="rh-nav-account-menu" role="menu" aria-label="Account">
-                  {ACCOUNT_MENU_ITEMS.map((item) => (
-                    <Button
-                      key={item.label}
-                      variant="ghost"
-                      size="sm"
-                      role="menuitem"
-                      className="rh-nav-account-menu-item"
-                      onClick={() => {
-                        setAccountMenuOpen(false);
-                        if (item.mode) onNavigate?.(item.mode);
-                        else onSignOut?.();
-                      }}
-                    >
-                      {item.label}
-                    </Button>
+                  {ACCOUNT_MENU_ITEMS.map((item, index) => (
+                    <Fragment key={item.label}>
+                      {item.group && item.group !== ACCOUNT_MENU_ITEMS[index - 1]?.group && (
+                        <div className="rh-nav-account-menu-divider" role="separator" />
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        role="menuitem"
+                        className={['rh-nav-account-menu-item', item.group === 'legal' && 'rh-nav-account-menu-item--legal']
+                          .filter(Boolean)
+                          .join(' ')}
+                        onClick={() => {
+                          setAccountMenuOpen(false);
+                          if (item.mode) onNavigate?.(item.mode);
+                          else onSignOut?.();
+                        }}
+                      >
+                        {item.label}
+                      </Button>
+                    </Fragment>
                   ))}
                 </div>
               )}

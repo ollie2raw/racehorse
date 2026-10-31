@@ -97,6 +97,17 @@
   white-space: nowrap;
 }
 
+/* Privacy / Terms / Support sit between Settings and Sign out: quieter than the account rows, set apart by hairlines. */
+.rh-nav-account-menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-subtle);
+}
+
+.rh-nav-account-menu-item--legal.rh-btn {
+  color: var(--text-muted);
+}
+
 @media (min-width: 769px) and (min-height: 600px) {
   .rh-nav-account-name,
   .rh-nav-account-chevron {
