@@ -65,9 +65,24 @@ server, and either server can run on either schema, while the flag is off.
    orchestrator opens, closes, starts and dispatches events on a 30 s tick and
    runs every turn clock in memory; a sleeping or starved process means events
    that do not open, no-shows that are not the player's fault, and late turn
-   clocks. Restarts themselves are survivable (rehearsed, below). **Owner
-   decision:** move the web service to a paid always-on instance before
-   stage 3, or accept the risk explicitly. Nothing has been purchased.
+   clocks. Restarts themselves are survivable (rehearsed, below).
+   **DECIDED 2026-10-31 (owner): launch on Render Free; upgrade later.** The
+   risk is accepted explicitly; nothing has been purchased. What that means in
+   practice, and how it is contained:
+   - *Before stage 3:* confirm the UptimeRobot monitor on `/ping` is active at
+     its shortest interval (5 min on the free plan) and alerting you. It is the
+     only thing keeping the process awake.
+   - *Around the events:* open `/ping` yourself a few minutes before 18:00 and
+     21:00 ET until you trust the monitor; a cold start takes tens of seconds,
+     and registration closes 2 min before the start.
+   - *Never deploy during an event window* (rule above).
+   - *Check after each event* with the monitoring queries below for the first
+     week.
+   - **Upgrade trigger (any one):** an event that opened or started late, a
+     `close-and-start failed` escalation, a match stranded by a restart, or
+     regular events with 4+ live human matches (measured lag at about 4). The
+     upgrade is only the Render plan (always-on, instance count still 1); no
+     code change.
 2. **One instance.** Render instance count = 1, no autoscaling. The lease
    makes orchestration safe with two processes, but rooms live in memory on
    the process that created them and there is no sticky routing or Socket.IO
@@ -81,18 +96,31 @@ server, and either server can run on either schema, while the flag is off.
    Phase 4A report): never enable tournaments on a `main` build from before
    this branch.
 4. **`prod-preflight.sql` P6 `stale_backlog_rows`** is drained (see stage 3).
-5. **Decide how player blocks apply to tournaments, then implement and test
-   it.** Blocks (`user_blocks`, `server/src/moderation/`) are enforced for
-   friend requests, invites, Quick Match and new private-room seats, but **not**
-   for tournament bracket assignments or tournament-room reactions. Before
-   `TOURNAMENTS_ENABLED` is turned on publicly, pick one and ship it:
-   - **A.** Blocked humans are never bracket-paired (seeding/re-pairing
-     changes in the bracket engine), or
-   - **B.** Assigned opponents still play, but every social interaction
-     between the blocked pair is suppressed in tournament rooms (reactions,
-     friend/rematch prompts, profile links).
+5. **Player blocks in tournaments — DECIDED 2026-10-31 (owner delegated the
+   call): option B, implemented.** Blocks (`user_blocks`,
+   `server/src/moderation/`) are enforced for friend requests, invites, Quick
+   Match and new private-room seats. A tournament bracket assigns the opponent,
+   so the *pairing* itself does not honour a block (option A, rejected for
+   launch: it changes seeding and re-pairing in the bracket engine, a much
+   larger risk to a system that has just been hardened). Instead, **nothing
+   social passes between a blocked pair inside the match**:
+   - *Reactions (the only live channel between two players in a match):*
+     `registerRoomEmoteHandlers` relays a tournament-room reaction (either
+     tournament system) to everyone in the room **except** the sender's block
+     counterparties, in either direction. The sender is never told. If the block
+     list cannot be read, the reaction is dropped (fail closed). A block made
+     mid-match takes effect within 15 s. Guests have no account to block.
+   - *Rematch:* already refused in every tournament room
+     (`registerRematchPregameHandlers`).
+   - *Friend requests:* already block-checked server-side
+     (`social/socialFriends.ts`); the tournament screens have no friend or
+     profile prompt aimed at the opponent.
+   - Not suppressed, deliberately: the opponent's name in the bracket and on the
+     match screen, and viewing their public profile — neither reaches the other
+     person.
 
-   Do not enable tournaments with the semantics left implicit.
+   Revisit option A only if real play shows blocked players being paired often
+   enough to matter.
 
 ## Stage 0 — read-only preflight (owner)
 
