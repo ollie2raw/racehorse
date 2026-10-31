@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('Smoke — Home', () => {
   test('home screen loads with key nav elements', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('RACEHORSE', { exact: false })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('RACEHORSE', { exact: false }).first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Single Player', { exact: false })).toBeVisible();
     await expect(page.getByText('Multiplayer', { exact: false })).toBeVisible();
   });
