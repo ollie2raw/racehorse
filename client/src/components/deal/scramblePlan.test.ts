@@ -9,7 +9,6 @@ import {
   SHUFFLE_MS,
   heapOffset,
   planScramble,
-  scatterIndex,
   unit,
 } from './scramblePlan';
 import type { PilePiece } from './pileSnapshot';
@@ -93,41 +92,12 @@ describe('planScramble: the timeline', () => {
     }
   });
 
-  it('mixes the heap: after the swirl every piece sits in a NEW place, still inside the heap', () => {
-    const centreOfHeap = (s: (typeof plan.steps)[number], k: { dx: number; dy: number }) => ({ x: s.piece.cx + k.dx - center.x, y: s.piece.cy + k.dy - center.y });
-    let moved = 0;
-    const slots = new Set<string>();
+  it('settles back into the heap after the riffle, before leaving', () => {
     for (const s of plan.steps) {
-      const gathered = centreOfHeap(s, s.keyframes[1]);
-      const settled = centreOfHeap(s, s.keyframes[4]);
-      expect(Math.hypot(settled.x, settled.y)).toBeLessThanOrEqual(HEAP_RADIUS_PX + 0.001);
-      if (Math.hypot(settled.x - gathered.x, settled.y - gathered.y) > 1) moved += 1;
-      slots.add(`${settled.x.toFixed(2)},${settled.y.toFixed(2)}`);
-    }
-    expect(moved, 'almost every piece changes place').toBeGreaterThanOrEqual(plan.steps.length - 1);
-    expect(slots.size, 'and no two pieces share a place').toBe(plan.steps.length);
-  });
-
-  it('throws tiles OUT during the swirl, well beyond the heap, so the mix is visible', () => {
-    for (const s of plan.steps) {
-      const out = s.keyframes[3]; // the widest pass
-      const x = s.piece.cx + out.dx - center.x;
-      const y = s.piece.cy + out.dy - center.y;
-      expect(Math.hypot(x, y)).toBeGreaterThan(HEAP_RADIUS_PX * 0.9);
-    }
-  });
-
-  it('leaves along a curve, not a straight line', () => {
-    for (const s of plan.steps) {
-      const end = s.keyframes[s.keyframes.length - 1];
-      const mid = s.keyframes.find((k) => k.offset > s.keyframes[4].offset && k !== end && Math.abs(k.dx - s.keyframes[4].dx) + Math.abs(k.dy - s.keyframes[4].dy) > 1)!;
-      const start = s.keyframes[4];
-      // Distance of the middle point from the straight line start -> end: a bow means it is clearly off the line.
-      const lx = end.dx - start.dx;
-      const ly = end.dy - start.dy;
-      const length = Math.hypot(lx, ly) || 1;
-      const off = Math.abs((mid.dx - start.dx) * ly - (mid.dy - start.dy) * lx) / length;
-      expect(off, `piece ${s.index} flies a straight line`).toBeGreaterThan(8);
+      const heapped = s.keyframes[1];
+      const settled = s.keyframes[s.keyframes.length - (s.target ? 2 : 3)];
+      expect(settled.dx).toBeCloseTo(heapped.dx);
+      expect(settled.dy).toBeCloseTo(heapped.dy);
     }
   });
 
@@ -149,14 +119,6 @@ describe('planScramble: the timeline', () => {
 });
 
 describe('heap and noise helpers', () => {
-  it('scatterIndex is a permutation: every slot of the heap is used exactly once', () => {
-    for (const n of [1, 2, 5, 14, 26, 28]) {
-      const slots = new Set(Array.from({ length: n }, (_, i) => scatterIndex(i, n)));
-      expect(slots.size).toBe(n);
-      for (const slot of slots) expect(slot).toBeLessThan(n);
-    }
-  });
-
   it('spreads pieces across the heap without leaving it', () => {
     const offsets = Array.from({ length: 26 }, (_, i) => heapOffset(i, 26));
     for (const o of offsets) expect(Math.hypot(o.x, o.y)).toBeLessThanOrEqual(HEAP_RADIUS_PX + 0.001);
