@@ -9,6 +9,7 @@ import './RacehorseHomeArt.css';
 import { isSpectatorModeEnabled } from '../config/spectatorModeFeature.ts';
 import { isTournamentsEnabled } from '../config/tournamentsFeature.ts';
 import { hidesComingSoonSurfaces } from '../config/nativeAppSurface';
+import { Capacitor } from '@capacitor/core';
 import { LegalFooter } from '../legal/LegalFooter';
 // One AppMode, defined in ../types. A local copy here drifted the moment a
 // mode was added elsewhere — which is what `settings` did.
@@ -346,7 +347,8 @@ export default function RacehorseHomeScreen({
             </div>
           </section>
         </main>
-        <LegalFooter className="home-legal-footer" onNavigate={navigate} />
+        {/* On the web the legal links live in the account menu. The native shell keeps the footer: it owns the home-indicator inset. */}
+        {Capacitor.isNativePlatform() && <LegalFooter className="home-legal-footer" onNavigate={navigate} />}
       </div>
     </div>
   );

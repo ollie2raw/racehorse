@@ -1049,16 +1049,6 @@
   }
 }
 
-/* The compact Home is sized to the pixel (its card row cannot shrink below 157px), so a legal footer under it forces
-   .home-main to scroll and pushes the streak strip under the tab bar on a phone held sideways in a browser.
-   Privacy / Terms / Support stay one tap away in Settings > Legal and support and in the sign-in sheet, and the legal
-   pages are public URLs. The native app has its own landscape fit (native-landscape.css) and keeps the footer. */
-@media (--short-landscape) {
-  html:not(.rh-native) .today-home .home-legal-footer {
-    display: none;
-  }
-}
-
 @media (--short-landscape) and (max-height: 360px) {
   .today-home .home-main {
     gap: 4px;

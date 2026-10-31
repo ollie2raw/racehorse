@@ -38,15 +38,33 @@ describe('GlobalNav — account menu', () => {
     expect(screen.getByRole('menu')).toBeTruthy();
   });
 
-  it('offers profile, settings, and sign out', () => {
+  it('offers profile, settings, the legal pages, and sign out', () => {
     render(<GlobalNav />);
     openMenu();
 
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'Profile',
       'Settings',
+      'Privacy',
+      'Terms',
+      'Support',
       'Sign out',
     ]);
+  });
+
+  it.each([
+    ['Privacy', 'privacy'],
+    ['Terms', 'terms'],
+    ['Support', 'support'],
+  ])('opens %s in the app and closes', (label, mode) => {
+    const onNavigate = vi.fn();
+    render(<GlobalNav onNavigate={onNavigate} />);
+    openMenu();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: label }));
+
+    expect(onNavigate).toHaveBeenCalledWith(mode);
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('navigates to the profile and closes', () => {
