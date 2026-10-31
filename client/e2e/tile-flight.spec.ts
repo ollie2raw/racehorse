@@ -186,6 +186,54 @@ test("a tapped tile's clack plays as it lands, not when it is tapped", async ({ 
   expect(Math.abs(clack - landed), 'the clack should arrive with the tile').toBeLessThan(70);
 });
 
+test('a landing tile answers with a contact ring, on the beat, at its place, and cleans up', async ({ page }) => {
+  test.setTimeout(180_000);
+  await setup(page);
+  const tile = page.locator(PLAYABLE).first();
+  await expect(tile).toBeVisible({ timeout: 90_000 });
+  await waitForNoFlight(page);
+  const before = await boardTiles(page);
+
+  await installSampler(page);
+  // Log every ring the moment it is added, with where it is.
+  await page.evaluate(() => {
+    const w = window as unknown as { __rings: Array<{ t: number; cx: number; cy: number }> };
+    w.__rings = [];
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof HTMLElement && node.classList.contains('tile-contact-ring')) {
+            const r = node.getBoundingClientRect();
+            w.__rings.push({ t: performance.now(), cx: r.left + r.width / 2, cy: r.top + r.height / 2 });
+          }
+        }
+      }
+    }).observe(document.body, { childList: true });
+  });
+  await tile.click();
+  const zone = page.locator('.placement-zone.active').first();
+  await expect(zone).toBeVisible();
+  const clickedAt = await now(page);
+  await zone.click();
+  await expect.poll(() => boardTiles(page), { timeout: 5000 }).toBe(before + 1);
+  await page.waitForTimeout(700);
+
+  const frames = flying(await readSamples(page), clickedAt);
+  expect(frames.length).toBeGreaterThan(5);
+  const landed = frames[frames.length - 1];
+  const rings = (await page.evaluate(() => (window as unknown as { __rings: Array<{ t: number; cx: number; cy: number }> }).__rings)).filter(
+    (ring) => ring.t >= clickedAt,
+  );
+  expect(rings.length, 'a ring should mark the landing').toBeGreaterThan(0);
+  const ring = rings[0];
+  // On the beat: within a frame or two of the flying copy's last frame.
+  expect(Math.abs(ring.t - landed.t)).toBeLessThan(70);
+  // At the tile's place.
+  expect(Math.hypot(ring.cx - (landed.cx as number), ring.cy - (landed.cy as number))).toBeLessThan(40);
+  // Gone again, so nothing accumulates on the page.
+  expect(await page.locator('.tile-contact-ring').count()).toBe(0);
+});
+
 test('a dragged tile flies from where it was released', async ({ page }) => {
   test.setTimeout(180_000);
   await setup(page);

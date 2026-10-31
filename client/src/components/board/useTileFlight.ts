@@ -26,6 +26,7 @@ import {
   type FlightRect,
 } from './tileFlight';
 import { claimTileImpact, landTileImpact, panForX, setTileFlightActive } from '../../utils/tileImpact';
+import { spawnContactRing } from './contactRing';
 
 const ARRIVING = ".board-tile-wrapper[data-placement-feedback='arrive']";
 const HAND_SELECTED_TILE = '.hand-area .domino-tile[aria-pressed="true"]';
@@ -146,8 +147,11 @@ export function useTileFlight(containerRef: RefObject<HTMLElement | null>, arriv
         ghost.style.transform =
           `translate3d(${f.cx - naturalW / 2}px, ${f.cy - naturalH / 2}px, 0) ` +
           `rotate(${f.rotateDeg}deg) scale(${f.width / naturalW}, ${f.height / naturalH})`;
-        if (p >= 1) finish();
-        else raf = window.requestAnimationFrame(step);
+        if (p >= 1) {
+          const landed = liveTo();
+          finish();
+          spawnContactRing(landed, rotation); // contact: the table answers the landing
+        } else raf = window.requestAnimationFrame(step);
       };
       step(t0);
     } catch {
