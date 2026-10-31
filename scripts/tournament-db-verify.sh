@@ -123,7 +123,7 @@ fail() { echo "  FAIL  $1" >&2; exit 1; }
 
 # ── 3. shim + curated migration chain (greenfield apply) ────────────────────
 echo
-echo "── 1/13  greenfield apply ─────────────────────────────────────────────"
+echo "── 1/14  greenfield apply ─────────────────────────────────────────────"
 RUN -q -f "$HELPERS/shim.sql" >/dev/null
 pass "Supabase shim (auth schema, roles, auth.uid)"
 
@@ -158,7 +158,7 @@ pass "2026-08-30 lockdown self-assertion did not roll back"
 
 # ── 4. two-session FOR UPDATE serialization ─────────────────────────────────
 echo
-echo "── 2/13  FOR UPDATE serialization ─────────────────────────────────────"
+echo "── 2/14  FOR UPDATE serialization ─────────────────────────────────────"
 RUN -q -f "$HELPERS/seed.sql" >/dev/null
 QF1="$(Q "select id from public.scheduled_tournament_matches where tournament_id='11111111-1111-4111-8111-111111111111' and round=1 and match_number=1")"
 [[ -n "$QF1" ]] || fail "seed did not produce QF1"
@@ -207,7 +207,7 @@ pass "bracket consistent: one completion, one advancement, loser eliminated once
 
 # ── 5. RLS registrations lockdown diagnostics ──────────────────────────────
 echo
-echo "── 3/13  RLS registrations lockdown ──────────────────────────────────"
+echo "── 3/14  RLS registrations lockdown ──────────────────────────────────"
 [[ "$(Q "select count(*) from pg_policies where schemaname='public' and tablename='scheduled_tournament_registrations' and cmd in ('INSERT','UPDATE','DELETE','ALL') and roles && array['anon','authenticated','public']::name[]")" == "0" ]] \
   || fail "a client-writable policy survives on scheduled_tournament_registrations"
 [[ "$(Q "select count(*) from information_schema.role_table_grants where table_schema='public' and table_name='scheduled_tournament_registrations' and grantee in ('anon','authenticated','public') and privilege_type in ('INSERT','UPDATE','DELETE')")" == "0" ]] \
@@ -218,7 +218,7 @@ pass "0 client-writable policies, 0 client write grants, RLS on"
 
 # ── 6. assert_security_posture() catches a planted violation ───────────────
 echo
-echo "── 4/13  assert_security_posture() ───────────────────────────────────"
+echo "── 4/14  assert_security_posture() ───────────────────────────────────"
 [[ "$(Q "select assert_security_posture()->>'hard_fail_count'")" == "0" ]] \
   || fail "assert_security_posture() reports a hard failure on a clean schema"
 pass "clean schema -> hard_fail_count = 0"
@@ -236,7 +236,7 @@ pass "re-enable -> hard_fail_count = 0"
 
 # ── 7. registration RPCs: cap, close time, withdraw guard ──────────────────
 echo
-echo "── 5/13  registration RPCs (A2, A7) ──────────────────────────────────"
+echo "── 5/14  registration RPCs (A2, A7) ──────────────────────────────────"
 RUN -q -f "$HELPERS/phase1_seed.sql" >/dev/null
 T_OPEN='22222222-2222-4222-8222-222222222222'      # registration_open, 2 seats, closes in 10 min
 T_CLOSED='33333333-3333-4333-8333-333333333333'    # registration_open, but close time already passed
@@ -300,7 +300,7 @@ pass "withdraw after start -> withdraw_closed, registration row kept"
 
 # ── 8. bracket RPC repair ───────────────────────────────────────────────────
 echo
-echo "── 6/13  generate_tournament_bracket v2 (A1, B8) ─────────────────────"
+echo "── 6/14  generate_tournament_bracket v2 (A1, B8) ─────────────────────"
 T_PARTIAL='44444444-4444-4444-8444-444444444444'   # registration_open, 2 entrants, 4 stale QF rows
 PD='aaaaaaaa-0000-4000-8000-000000000004'           # its entrants (own users: see phase1_seed.sql)
 PE='aaaaaaaa-0000-4000-8000-000000000005'
@@ -344,7 +344,7 @@ pass "partial state containing a played match -> bracket_partial_conflict"
 
 # ── 9. cancel_reason ─────────────────────────────────────────────────────────
 echo
-echo "── 7/13  cancel_reason (Q9) ──────────────────────────────────────────"
+echo "── 7/14  cancel_reason (Q9) ──────────────────────────────────────────"
 [[ "$(Q "select count(*) from information_schema.columns where table_schema='public' and table_name='scheduled_tournaments' and column_name='cancel_reason'")" == "1" ]] \
   || fail "scheduled_tournaments.cancel_reason missing"
 pass "scheduled_tournaments.cancel_reason exists"
@@ -352,7 +352,7 @@ pass "scheduled_tournaments.cancel_reason exists"
 
 # ── 10. M1: tournament kind, Fritz Cup, per-user overlap lock ────────────────
 echo
-echo "── 8/13  M1: kind, Fritz Cup, overlap lock (Phase 2B) ─────────────────"
+echo "── 8/14  M1: kind, Fritz Cup, overlap lock (Phase 2B) ─────────────────"
 RUN -q -f "$HELPERS/m1_seed.sql" >/dev/null
 U() { printf 'cccccccc-0000-4000-8000-0000000000%02d' "$1"; }
 QE() { "$PGBIN/psql" -X -h "$SOCKDIR" -p "$PORT" -U postgres -d verify -tAqc "$1" 2>&1 || true; }
@@ -589,7 +589,7 @@ pass "generate_tournament_bracket starts a cup unchanged: in_progress, 7 rows, o
 
 # ── 11. pre-start cancellation vs start (Phase 2B.1) ────────────────────────
 echo
-echo "── 9/13  pre-start cancellation vs bracket start (Phase 2B.1) ──────────"
+echo "── 9/14  pre-start cancellation vs bracket start (Phase 2B.1) ──────────"
 # The exact statement PostgREST runs for the server's cancelTournamentBeforeStart PATCH.
 CANCEL_SQL() { echo "update public.scheduled_tournaments set status='cancelled', cancel_reason='not_enough_players' where id='$1' and status in ('upcoming','registration_open') returning id"; }
 OLD_CANCEL_SQL() { echo "update public.scheduled_tournaments set status='cancelled', cancel_reason='not_enough_players' where id='$1' returning id"; }
@@ -695,7 +695,7 @@ pass "Fritz Cups follow the same rule: started -> untouched, still registration_
 
 # ── 12. orchestrator late writes (Phase 2C) ──────────────────────────────────
 echo
-echo "── 10/13  orchestrator late writes (Phase 2C) ─────────────────────────"
+echo "── 10/14  orchestrator late writes (Phase 2C) ─────────────────────────"
 # race HOLDER_SQL STALE_SQL: HOLDER commits its write after ~3 s; STALE starts at ~1.5 s.
 # Prints "<wait seconds>|<stale output>".
 race() {
@@ -834,7 +834,7 @@ done
 
 # ── 13. M3 orchestrator lease (Phase 2C) ─────────────────────────────────────
 echo
-echo "── 11/13  M3 orchestrator lease (Phase 2C) ─────────────────────────────"
+echo "── 11/14  M3 orchestrator lease (Phase 2C) ─────────────────────────────"
 ACQ() { QE "select public.acquire_tournament_orchestrator_lease('$1', '$2', $3)"; }
 REN() { QE "select public.renew_tournament_orchestrator_lease('$1', '$2', '$3', $4)"; }
 REL() { QE "select public.release_tournament_orchestrator_lease('$1', '$2', '$3')"; }
@@ -916,7 +916,7 @@ done
 
 # ── 14. cancelled tournaments accept no new result (Phase 2C.1) ──────────────
 echo
-echo "── 12/13  completion guard: cancelled is terminal (Phase 2C.1) ─────────"
+echo "── 12/14  completion guard: cancelled is terminal (Phase 2C.1) ─────────"
 G1='dddddddd-0000-4000-8000-0000000000c1'; G2='dddddddd-0000-4000-8000-0000000000c2'
 Q "insert into auth.users (id) values ('$G1'), ('$G2') on conflict do nothing" >/dev/null
 # gx_bracket TID STATUS N: tournament with QF (in_progress, G1 v G2, a HIGH id) feeding
@@ -1064,7 +1064,7 @@ pass "contrast: the pre-2C.1 order (matches→tournament vs feeder→target) dea
 
 # ── 15. M2: Live Event cadence (Phase 2D) ───────────────────────────────────
 echo
-echo "── 13/13  M2: two Live Events a Pacific day (Phase 2D) ─────────────────"
+echo "── 13/14  M2: two Live Events a Pacific day (Phase 2D) ─────────────────"
 M2="$MIGRATIONS/2026-10-10_tournament_live_event_cadence.sql"
 [[ -f "$M2" ]] || fail "M2 migration missing"
 
@@ -1385,6 +1385,198 @@ Q "select public.register_for_tournament('dddddddd-0000-4000-8000-0000000000e2',
 Q "select public.register_for_tournament('dddddddd-0000-4000-8000-0000000000e3', '${OV}2')" >/dev/null
 QE "select public.start_fritz_cup('${OV}2')" | grep -q 'overlapping_tournament' || fail "overlap: a cup inside the event's 2-hour window was allowed"
 pass "overlap: registered 10 h ahead (12-h registration open) -> a Fritz Cup now is allowed; events 3 h apart (17:00 / 20:00) can both be entered; an event starting within 2 h still blocks a cup"
+
+# ── 16. M4: Live Events at 6 pm and 9 pm Eastern ────────────────────────────
+echo
+echo "── 14/14  M4: two Live Events an Eastern day, 6 pm and 9 pm ─────────────"
+M4="$MIGRATIONS/2026-10-31_tournament_live_event_times_eastern.sql"
+[[ -f "$M4" ]] || fail "M4 migration missing"
+
+# A scratch database in the state production is in after M2: the chain + M2, the old Pacific 17:00 / 20:00 inventory seeded,
+# and the same FAKE CLOCK as §13 (a session search_path puts harness_clock ahead of pg_catalog).
+"$PGBIN/createdb" -h "$SOCKDIR" -p "$PORT" -U postgres verify_m4
+P4=( "$PGBIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKDIR" -p "$PORT" -U postgres -d verify_m4 )
+"${P4[@]}" -q -f "$HELPERS/shim.sql" >/dev/null
+for m in "${CHAIN[@]}"; do "${P4[@]}" -q -f "$MIGRATIONS/$m" >/dev/null 2>"$WORK/err" || { cat "$WORK/err" >&2; fail "M4 scratch chain: $m"; }; done
+"${P4[@]}" -q -f "$M2" >/dev/null 2>"$WORK/err" || { cat "$WORK/err" >&2; fail "M4 scratch: M2"; }
+"${P4[@]}" -q >/dev/null <<'SQL'
+create schema harness_clock;
+create function harness_clock.now() returns timestamptz language sql stable as $$
+  select coalesce(nullif(current_setting('harness.now', true), '')::timestamptz, pg_catalog.now()) $$;
+truncate public.scheduled_tournaments cascade;
+insert into auth.users (id) values ('eeeeeeee-0000-4000-8000-00000000f401'), ('eeeeeeee-0000-4000-8000-00000000f402') on conflict do nothing;
+SQL
+AT4() { local t="$1"; shift; PGOPTIONS="-c search_path=harness_clock,pg_catalog,public -c harness.now=$t" "${P4[@]}" -tAq "$@"; }
+pt4() { echo "(timestamp '$1' at time zone 'America/Los_Angeles')"; }   # a Pacific local time as timestamptz
+et4() { echo "(timestamp '$1' at time zone 'America/New_York')"; }      # an Eastern local time as timestamptz
+F4='2026-10-30T17:00:00Z'   # 2026-10-30 13:00 EDT, two days before the 2026-11-01 fall-back
+[[ "$(AT4 "$F4" -c "select public._live_event_timezone()")" == "America/Los_Angeles" ]] || fail "M4 scratch: not in the M2 state"
+AT4 "$F4" -c "select public.seed_future_tournaments(10)" >/dev/null   # M2's inventory: Pacific 17:00 and 20:00 for 10 days
+pass "scratch db: chain + M2, fake clock 2026-10-30 13:00 ET; M2 seeded $(AT4 "$F4" -c "select count(*) from public.scheduled_tournaments") Pacific-schedule rows (17:00 / 20:00 PT)"
+
+U1='eeeeeeee-0000-4000-8000-00000000f401'; U2='eeeeeeee-0000-4000-8000-00000000f402'
+id4() { AT4 "$F4" -c "select id from public.scheduled_tournaments where scheduled_start = $1"; }
+set4() { AT4 "$F4" -c "update public.scheduled_tournaments set status='$2' ${3:-} where scheduled_start = $1" >/dev/null; }
+# The matrix, on rows of the old inventory (A: empty upcoming, to be cancelled) and our own:
+AT4 "$F4" -c "insert into public.scheduled_tournament_registrations (tournament_id, user_id, status) values ('$(id4 "$(pt4 '2026-11-03 20:00')")', '$U1', 'registered')" >/dev/null   # B: upcoming + a registration
+AT4 "$F4" -c "insert into public.scheduled_tournament_matches (tournament_id, round, match_number, room_code, status) values ('$(id4 "$(pt4 '2026-11-04 17:00')")', 1, 1, '', 'waiting')" >/dev/null   # C: upcoming + a match row
+set4 "$(pt4 '2026-11-04 20:00')" registration_open                                                                                         # D: registration_open + an entrant
+AT4 "$F4" -c "insert into public.scheduled_tournament_registrations (tournament_id, user_id, status) values ('$(id4 "$(pt4 '2026-11-04 20:00')")', '$U2', 'registered')" >/dev/null
+set4 "$(pt4 '2026-11-05 17:00')" cancelled ", cancel_reason='manual_test'"                                                               # E: already cancelled
+set4 "$(pt4 '2026-11-05 20:00')" completed                                                                                                 # F: completed
+set4 "$(pt4 '2026-11-06 17:00')" in_progress                                                                                               # G: in progress
+AT4 "$F4" -q >/dev/null <<SQL
+-- exactly now + 35 min (kept) and one minute later (cancelled); off any grid
+insert into public.scheduled_tournaments (scheduled_start, registration_open_at, registration_close_at, status)
+values (timestamptz '$F4' + interval '35 minutes', timestamptz '$F4', timestamptz '$F4' + interval '33 minutes', 'upcoming'),
+       (timestamptz '$F4' + interval '36 minutes', timestamptz '$F4', timestamptz '$F4' + interval '34 minutes', 'upcoming');
+-- a Fritz Cup in the future at an old slot time: never touched
+insert into public.scheduled_tournaments (scheduled_start, registration_open_at, registration_close_at, status, kind, owner_user_id)
+values ($(pt4 '2026-11-06 20:00') + interval '0.5 s', $(pt4 '2026-11-06 20:00'), $(pt4 '2026-11-06 20:00'), 'upcoming', 'fritz_cup', '$U1');
+-- two rows already at NEW slot times: one with a legacy 30-minute window (to be normalized), one with a match row (untouched)
+insert into public.scheduled_tournaments (scheduled_start, registration_open_at, registration_close_at, status)
+values ($(et4 '2026-11-02 18:00'), $(et4 '2026-11-02 18:00') - interval '30 minutes', $(et4 '2026-11-02 18:00') - interval '2 minutes', 'upcoming'),
+       ($(et4 '2026-11-02 21:00'), $(et4 '2026-11-02 21:00') - interval '30 minutes', $(et4 '2026-11-02 21:00') - interval '2 minutes', 'upcoming');
+SQL
+AT4 "$F4" -c "insert into public.scheduled_tournament_matches (tournament_id, round, match_number, room_code, status) values ('$(id4 "$(et4 '2026-11-02 21:00')")', 1, 1, '', 'waiting')" >/dev/null
+AT4 "$F4" -q >/dev/null <<'SQL'
+-- The state before M4, and the eligibility predicate written independently of M4's helpers.
+create table pre_t as select * from public.scheduled_tournaments;
+create table pre_r as select * from public.scheduled_tournament_registrations;
+create table pre_m as select * from public.scheduled_tournament_matches;
+create table oracle_cancel as
+  select p.id from pre_t p
+   where p.kind = 'live' and p.status = 'upcoming' and p.scheduled_start > now() + interval '35 minutes'
+     and (p.scheduled_start at time zone 'America/New_York')::time not in ('18:00', '21:00')
+     and not exists (select 1 from pre_r r where r.tournament_id = p.id)
+     and not exists (select 1 from pre_m m where m.tournament_id = p.id);
+create table oracle_normalize as
+  select p.id from pre_t p
+   where p.kind = 'live' and p.status in ('upcoming', 'registration_open') and p.scheduled_start > now()
+     and (p.scheduled_start at time zone 'America/New_York')::time in ('18:00', '21:00')
+     and not exists (select 1 from pre_m m where m.tournament_id = p.id);
+SQL
+NPRE="$(AT4 "$F4" -c "select count(*) from pre_t")"; NCAN="$(AT4 "$F4" -c "select count(*) from oracle_cancel")"; NNORM="$(AT4 "$F4" -c "select count(*) from oracle_normalize")"
+[[ "$NCAN" -gt 10 && "$NNORM" == "1" ]] || fail "M4 matrix: oracle looks wrong (cancel $NCAN, normalize $NNORM)"
+
+# The documented read-only preflight, before M4 (docs/ops/tournament-m4/preflight.sql).
+AT4 "$F4" -F '|' -f "$REPO_ROOT/docs/ops/tournament-m4/preflight.sql" >"$WORK/m4_preflight.txt" 2>&1 || { cat "$WORK/m4_preflight.txt" >&2; fail "M4 preflight.sql"; }
+pf4() { grep -F "$1" "$WORK/m4_preflight.txt" | head -1 | awk -F'|' '{print $NF}'; }
+grep -q '^America/Los_Angeles|{17:00:00,20:00:00}$' "$WORK/m4_preflight.txt" || { cat "$WORK/m4_preflight.txt" >&2; fail "M4 preflight.sql: not reporting the current Pacific schedule"; }
+[[ "$(pf4 'will cancel:')" == "$NCAN" && "$(pf4 'WITH registrations')" == "1" && "$(pf4 'WITH match rows')" == "1" && "$(pf4 'within 35 min')" == "1" && "$(pf4 'already at 18:00')" == "2" && "$(pf4 'CANCELLED rows at future')" == "0" ]] \
+  || { cat "$WORK/m4_preflight.txt" >&2; fail "M4 preflight.sql counts disagree with the oracle"; }
+AT4 "$F4" -F '|' -f "$REPO_ROOT/docs/ops/tournament-launch/prod-preflight.sql" >"$WORK/m4_prodpre_before.txt" 2>&1 || { cat "$WORK/m4_prodpre_before.txt" >&2; fail "prod-preflight.sql before M4"; }
+grep -q '^M4 schedule is 18:00 / 21:00 America/New_York|f$' "$WORK/m4_prodpre_before.txt" || { cat "$WORK/m4_prodpre_before.txt" >&2; fail "prod-preflight.sql: M4 row not false before M4"; }
+grep -qi 'error' "$WORK/m4_prodpre_before.txt" && { cat "$WORK/m4_prodpre_before.txt" >&2; fail "prod-preflight.sql errored before M4"; }
+pass "preflight.sql (read-only) before M4: reports the Pacific schedule; will cancel $NCAN (= the oracle); flags the planted anomalies (1 with a registration, 1 with a match row), 1 transition row, 2 rows already at a new slot"
+
+PGOPTIONS="-c search_path=harness_clock,pg_catalog,public -c harness.now=$F4" "${P4[@]}" -q -f "$M4" >/dev/null 2>"$WORK/err" || { cat "$WORK/err" >&2; fail "M4 did not apply"; }
+pass "M4 applied to $NPRE rows: $NCAN eligible for cancellation (the oracle), $NNORM already-at-a-new-slot row to normalize"
+
+AT4 "$F4" -q >/dev/null 2>"$WORK/err" <<'SQL' || { cat "$WORK/err" >&2; fail "M4 cleanup matrix"; }
+do $$
+declare n integer;
+begin
+  -- Exactly the eligible rows were cancelled, with schedule_changed, and nothing else was.
+  select count(*) into n from oracle_cancel o join public.scheduled_tournaments t using (id)
+   where t.status <> 'cancelled' or t.cancel_reason is distinct from 'schedule_changed';
+  assert n = 0, format('%s eligible rows not cancelled as schedule_changed', n);
+  select count(*) into n from public.scheduled_tournaments where cancel_reason = 'schedule_changed' and id not in (select id from oracle_cancel);
+  assert n = 0, format('%s ineligible rows cancelled', n);
+  -- No deletes, and every other pre-existing row is unchanged except the normalized window.
+  select count(*) into n from pre_t p where not exists (select 1 from public.scheduled_tournaments t where t.id = p.id);
+  assert n = 0, format('%s rows deleted', n);
+  select count(*) into n from pre_t p join public.scheduled_tournaments t using (id)
+   where p.id not in (select id from oracle_cancel) and p.id not in (select id from oracle_normalize)
+     and (p.status, p.kind, p.scheduled_start, p.registration_open_at, p.registration_close_at, p.cancel_reason, p.owner_user_id)
+         is distinct from (t.status, t.kind, t.scheduled_start, t.registration_open_at, t.registration_close_at, t.cancel_reason, t.owner_user_id);
+  assert n = 0, format('%s untouched-by-rule rows changed', n);
+  -- The row already at a new slot time without a match row got the standard window; same id, same start.
+  select count(*) into n from oracle_normalize o join public.scheduled_tournaments t using (id) join pre_t p using (id)
+   where t.scheduled_start = p.scheduled_start and t.scheduled_start - t.registration_open_at = interval '12 hours'
+     and t.scheduled_start - t.registration_close_at = interval '2 minutes';
+  assert n = (select count(*) from oracle_normalize), 'the normalized row did not get the 12 h / 2 min window';
+  -- The one with a match row is left exactly as it was (legacy window included).
+  select count(*) into n from pre_t p join public.scheduled_tournaments t using (id)
+   where exists (select 1 from pre_m m where m.tournament_id = p.id) and p.scheduled_start = t.scheduled_start
+     and (p.registration_open_at, p.registration_close_at) = (t.registration_open_at, t.registration_close_at)
+     and (p.scheduled_start at time zone 'America/New_York')::time = time '21:00';
+  assert n = 1, 'the new-slot row with a match row was altered';
+  -- Registrations and match rows are byte-identical.
+  assert (select count(*) from public.scheduled_tournament_registrations) = (select count(*) from pre_r), 'registration count changed';
+  assert (select count(*) from public.scheduled_tournament_matches) = (select count(*) from pre_m), 'match count changed';
+  assert not exists (select 1 from pre_r r where not exists (select 1 from public.scheduled_tournament_registrations x where x.tournament_id = r.tournament_id and x.user_id = r.user_id and x.status = r.status)), 'a registration changed';
+  -- Fritz Cups: never touched.
+  assert (select count(*) from public.scheduled_tournaments where kind = 'fritz_cup' and cancel_reason is not null) = 0, 'a Fritz Cup was cancelled';
+end $$;
+SQL
+pass "cleanup: exactly the $NCAN eligible rows cancelled (schedule_changed); registrations, match rows, cancelled / completed / in-progress rows, the 35-minute boundary row, the registration_open entrant and the Fritz Cup all untouched; the already-at-a-new-slot row got 12 h / 2 min; no deletes"
+
+AT4 "$F4" -F '|' -f "$REPO_ROOT/docs/ops/tournament-launch/prod-preflight.sql" >"$WORK/m4_prodpre_after.txt" 2>&1 || { cat "$WORK/m4_prodpre_after.txt" >&2; fail "prod-preflight.sql after M4"; }
+grep -q '^M4 schedule is 18:00 / 21:00 America/New_York|t$' "$WORK/m4_prodpre_after.txt" || { cat "$WORK/m4_prodpre_after.txt" >&2; fail "prod-preflight.sql: M4 row not true after M4"; }
+pass "prod-preflight.sql (read-only) runs clean on both sides of M4: its M4 row reads false before and true after"
+# The documented read-only verify, after M4 (docs/ops/tournament-m4/verify.sql).
+AT4 "$F4" -F '|' -f "$REPO_ROOT/docs/ops/tournament-m4/verify.sql" >"$WORK/m4_verify.txt" 2>&1 || { cat "$WORK/m4_verify.txt" >&2; fail "M4 verify.sql"; }
+grep -q '^America/New_York|{18:00:00,21:00:00}$' "$WORK/m4_verify.txt" || { cat "$WORK/m4_verify.txt" >&2; fail "M4 verify.sql: not reporting the Eastern schedule"; }
+grep -F 'expect 0' "$WORK/m4_verify.txt" | awk -F'|' '$NF != 0 {bad=1} END {exit bad}' || { cat "$WORK/m4_verify.txt" >&2; fail "M4 verify.sql: an expect-0 row is not 0"; }
+[[ "$(grep -cE '^(seed_future_tournaments\|days_ahead integer|ensure_tournament_seed_window\|)\|t$' "$WORK/m4_verify.txt")" == "2" ]] || { cat "$WORK/m4_verify.txt" >&2; fail "M4 verify.sql: function bodies"; }
+pass "verify.sql (read-only) after M4: the schedule is America/New_York 18:00 / 21:00, both seed functions keep their M2 bodies, every expect-0 row is 0"
+echo "    verify output:"; sed -n '1,40p' "$WORK/m4_verify.txt" | sed 's/^/      /'
+
+# The new schedule itself, across both DST changes (run twice: M4 is idempotent).
+for PASSNO in 1 2; do
+  AT4 "$F4" -q >/dev/null 2>"$WORK/err" <<'SQL' || { cat "$WORK/err" >&2; fail "M4 slot generation (pass $PASSNO)"; }
+do $$
+declare f timestamptz; n integer;
+begin
+  assert public._live_event_timezone() = 'America/New_York', 'timezone';
+  -- Windows across 2026-11-01 (fall back), 2027-03-14 (spring forward), 2027-11-07 (fall back).
+  foreach f in array array[timestamptz '2026-10-25 12:00 America/New_York', timestamptz '2027-03-07 12:00 America/New_York', timestamptz '2027-11-01 12:00 America/New_York'] loop
+    -- exactly two per Eastern day, at 18:00 and 21:00 local, 30 local days, no duplicates
+    select count(*) into n from (
+      select (s.scheduled_start at time zone 'America/New_York')::date d, count(*) k,
+             array_agg((s.scheduled_start at time zone 'America/New_York')::time order by s.scheduled_start) ts
+        from public._live_event_slots(f, 30) s group by 1) x
+     where k <> 2 or ts <> array[time '18:00', time '21:00'];
+    assert n = 0, format('an Eastern day without exactly 18:00 + 21:00 from %s', f);
+    assert (select count(distinct (s.scheduled_start at time zone 'America/New_York')::date) from public._live_event_slots(f, 30) s) = 30, 'not 30 local days';
+    assert (select count(*) from public._live_event_slots(f, 30)) = 60, 'not 60 slots';
+    assert (select count(*) from public._live_event_slots(f, 30) s
+             where s.scheduled_start - s.registration_open_at <> interval '12 hours'
+                or s.scheduled_start - s.registration_close_at <> interval '2 minutes') = 0, 'window not 12 h / 2 min elapsed';
+  end loop;
+  -- The UTC instant moves with DST (expected values written out, not computed).
+  assert exists (select 1 from public._live_event_slots(timestamptz '2026-10-25 12:00 America/New_York', 30) s where s.scheduled_start = timestamptz '2026-10-31 22:00:00+00'), 'Oct 31 18:00 EDT';
+  assert exists (select 1 from public._live_event_slots(timestamptz '2026-10-25 12:00 America/New_York', 30) s where s.scheduled_start = timestamptz '2026-11-01 01:00:00+00'), 'Oct 31 21:00 EDT';
+  assert exists (select 1 from public._live_event_slots(timestamptz '2026-10-25 12:00 America/New_York', 30) s where s.scheduled_start = timestamptz '2026-11-01 23:00:00+00' and s.registration_open_at = timestamptz '2026-11-01 11:00:00+00'), 'Nov 1 18:00 EST, opens 06:00 EST';
+  assert exists (select 1 from public._live_event_slots(timestamptz '2026-10-25 12:00 America/New_York', 30) s where s.scheduled_start = timestamptz '2026-11-02 02:00:00+00'), 'Nov 1 21:00 EST';
+  assert exists (select 1 from public._live_event_slots(timestamptz '2027-03-07 12:00 America/New_York', 30) s where s.scheduled_start = timestamptz '2027-03-13 23:00:00+00'), 'Mar 13 18:00 EST';
+  assert exists (select 1 from public._live_event_slots(timestamptz '2027-03-07 12:00 America/New_York', 30) s where s.scheduled_start = timestamptz '2027-03-14 22:00:00+00' and s.registration_open_at = timestamptz '2027-03-14 10:00:00+00'), 'Mar 14 18:00 EDT, opens 06:00 EDT';
+  assert exists (select 1 from public._live_event_slots(timestamptz '2027-03-07 12:00 America/New_York', 30) s where s.scheduled_start = timestamptz '2027-03-15 01:00:00+00'), 'Mar 14 21:00 EDT';
+end $$;
+SQL
+  # The seed function itself under several clocks, on an empty table: exactly the generated set, then idempotent.
+  for T in 2026-10-25T19:00:00Z 2027-03-07T20:00:00Z 2026-10-31T00:30:00Z 2026-10-31T21:59:59Z 2026-10-31T22:00:01Z; do
+    "${P4[@]}" -q -c "truncate public.scheduled_tournaments cascade" >/dev/null
+    N="$(AT4 "$T" -c "select public.ensure_tournament_seed_window()")"
+    [[ "$N" == "$(AT4 "$T" -c "select count(*) from public._live_event_slots(now(), 30)")" ]] || fail "M4 seed at $T inserted $N"
+    [[ "$(AT4 "$T" -c "select count(*) from (select scheduled_start from public.scheduled_tournaments except select scheduled_start from public._live_event_slots(now(), 30)) d")" == "0" ]] || fail "M4 seed at $T: wrong set"
+    [[ "$(AT4 "$T" -c "select public.ensure_tournament_seed_window()")|$(AT4 "$T" -c "select public.seed_future_tournaments()")" == "0|0" ]] || fail "M4 seed at $T not idempotent"
+  done
+  pass "pass $PASSNO: 30 local days x {18:00, 21:00} ET across 2026-11-01 / 2027-03-14 / 2027-11-07 (UTC 22:00Z, 01:00Z in EDT; 23:00Z, 02:00Z in EST), 12 h / 2 min elapsed; seeding = that set, then 0"
+done
+# Restore the post-M4 matrix state (the loop above truncated it) and prove applying M4 again changes nothing.
+"${P4[@]}" -q -c "truncate public.scheduled_tournaments cascade" >/dev/null
+AT4 "$F4" -c "select public.ensure_tournament_seed_window()" >/dev/null   # the full default window, under M4: the new schedule
+AT4 "$F4" -c "select t::text from public.scheduled_tournaments t order by id" >"$WORK/m4_before.txt"
+PGOPTIONS="-c search_path=harness_clock,pg_catalog,public -c harness.now=$F4" "${P4[@]}" -q -f "$M4" >/dev/null 2>"$WORK/err" || { cat "$WORK/err" >&2; fail "M4 re-apply"; }
+AT4 "$F4" -c "select t::text from public.scheduled_tournaments t order by id" >"$WORK/m4_after.txt"
+cmp -s "$WORK/m4_before.txt" "$WORK/m4_after.txt" || { diff "$WORK/m4_before.txt" "$WORK/m4_after.txt" | head -8 >&2; fail "M4 is not idempotent: re-applying changed the table"; }
+[[ "$(AT4 "$F4" -c "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and ((p.proname = 'seed_future_tournaments' and pg_get_function_identity_arguments(p.oid) = 'days_ahead integer') or (p.proname = 'ensure_tournament_seed_window' and pg_get_function_identity_arguments(p.oid) = ''))")" == "2" ]] || fail "M4 changed a public function signature"
+pass "M4 applied again: the table is byte-identical; the public seed functions keep their signatures (pg_cron and every deployed server call them unchanged)"
+REP="$(AT4 "$F4" -c "select string_agg(to_char(s.scheduled_start at time zone 'UTC', 'MM-DD HH24:MI\"Z\"') || '=' || to_char(s.scheduled_start at time zone 'America/New_York', 'MM-DD HH24:MI\"ET\"'), '  ' order by s.scheduled_start) from public._live_event_slots(timestamptz '2026-10-31 12:00 America/New_York', 3) s")"
+pass "representative (fall back): $REP"
+
 
 HARNESS_COMPLETED=1
 echo
