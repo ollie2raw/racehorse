@@ -143,10 +143,16 @@ test('a tapped tile flies from the hand to its place on the board', async ({ pag
 
 test("a tapped tile's clack plays as it lands, not when it is tapped", async ({ page }) => {
   test.setTimeout(180_000);
-  // Record when the tile sound fires (src/utils/sound.ts plays a sample through an <audio> element).
+  // Record when the tile sound fires: the decoded sample plays through a buffer source on the audio graph, and an
+  // <audio> element is only the fallback for the instant before it has decoded.
   await page.addInitScript(() => {
     const w = window as unknown as { __clacks: number[] };
     w.__clacks = [];
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function patched(...args: Parameters<typeof start>) {
+      w.__clacks.push(performance.now());
+      return start.apply(this, args);
+    };
     HTMLMediaElement.prototype.play = function play() {
       w.__clacks.push(performance.now());
       return Promise.resolve();

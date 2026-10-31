@@ -25,7 +25,7 @@ import {
   type FlightPoint,
   type FlightRect,
 } from './tileFlight';
-import { claimTileImpact, landTileImpact, setTileFlightActive } from '../../utils/tileImpact';
+import { claimTileImpact, landTileImpact, panForX, setTileFlightActive } from '../../utils/tileImpact';
 
 const ARRIVING = ".board-tile-wrapper[data-placement-feedback='arrive']";
 const HAND_SELECTED_TILE = '.hand-area .domino-tile[aria-pressed="true"]';
@@ -136,7 +136,7 @@ export function useTileFlight(containerRef: RefObject<HTMLElement | null>, arriv
         cancelRef.current = null;
       };
       cancelRef.current = finish;
-      claimTileImpact(plan.durationMs + 400);
+      claimTileImpact(plan.durationMs + 400, panForX(start.cx, window.innerWidth)); // the clack comes from where the tile lands
 
       const t0 = performance.now();
       const step = (now: number) => {

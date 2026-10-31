@@ -224,7 +224,7 @@ export function usePlayerPlacementHandler({
       }
       // Your own tile gets its clack, held until the tile has flown to its place; armed BEFORE the state applies so a
       // score ping raised by applyAndNotify queues behind it.
-      armTileImpact(() => queueSound(() => playTileSound('standard', isMuted), 0));
+      armTileImpact((pan) => queueSound(() => playTileSound('standard', isMuted, { pan }), 0));
       applyAndNotify(result);
       logger.info('guided', 'click-applied', {
         currentPlayerAfter: result.state.currentPlayer,

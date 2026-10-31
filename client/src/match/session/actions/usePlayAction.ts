@@ -154,7 +154,7 @@ export function usePlayAction(
       pendingGameplayActionRef.current = { kind: 'play', baselineSequence };
       mpPerfBeginAction('play', baselineSequence);
       setPendingUiAction('play');
-      armTileImpact(() => playTileSound('standard', isMutedRef.current)); // lands with the tile's flight
+      armTileImpact((pan) => playTileSound('standard', isMutedRef.current, { pan })); // lands with the tile's flight
       setPendingActionRefDiag(true);
       setSelectedTile(null);
       setDrawStepMyHand(null);

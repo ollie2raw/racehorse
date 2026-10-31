@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ARM_FALLBACK_MS,
+  PAN_SPREAD,
   afterTileImpact,
   armTileImpact,
   claimTileImpact,
   landTileImpact,
   resetTileImpactForTests,
+  panForX,
   setTileFlightActive,
 } from './tileImpact';
 
@@ -118,5 +120,43 @@ describe('tileImpact: the clack waits for the tile to land', () => {
     armTileImpact(clack);
     setTileFlightActive(false);
     expect(clack).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands the clack the pan of where the tile lands', () => {
+    setTileFlightActive(true);
+    const clack = vi.fn();
+    armTileImpact(clack);
+    claimTileImpact(600, -0.4);
+    landTileImpact();
+    expect(clack).toHaveBeenCalledWith(-0.4);
+  });
+
+  it('is centred when no flight says where the tile lands (fallback, no flights)', () => {
+    const noFlights = vi.fn();
+    armTileImpact(noFlights);
+    expect(noFlights).toHaveBeenCalledWith(0);
+
+    setTileFlightActive(true);
+    const unclaimed = vi.fn();
+    armTileImpact(unclaimed);
+    vi.advanceTimersByTime(ARM_FALLBACK_MS);
+    expect(unclaimed).toHaveBeenCalledWith(0);
+  });
+});
+
+describe('panForX', () => {
+  it('is centred in the middle, left on the left, right on the right', () => {
+    expect(panForX(500, 1000)).toBeCloseTo(0);
+    expect(panForX(0, 1000)).toBeCloseTo(-PAN_SPREAD);
+    expect(panForX(1000, 1000)).toBeCloseTo(PAN_SPREAD);
+  });
+
+  it('never leaves -1..1, even for a tile off screen', () => {
+    expect(panForX(-5000, 1000)).toBe(-1);
+    expect(panForX(9000, 1000)).toBe(1);
+  });
+
+  it('is centred when the viewport has no width', () => {
+    expect(panForX(100, 0)).toBe(0);
   });
 });

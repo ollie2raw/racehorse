@@ -7,8 +7,9 @@
 //
 // Protocol:
 //   armTileImpact(play)     the call site that used to play the clack. It plays now unless a flight is
-//                           about to carry this tile; then it plays on landing.
-//   claimTileImpact(maxMs)  the flight, as it starts, takes the armed impact.
+//                           about to carry this tile; then it plays on landing. `play` receives the stereo pan
+//                           (-1..1) of where the tile lands, so a tile on the left of the board is heard on the left.
+//   claimTileImpact(maxMs, pan)  the flight, as it starts, takes the armed impact and says where it will land.
 //   landTileImpact()        the flight, as it lands (or is cut short), releases it.
 //   afterTileImpact(play)   a sound that belongs AFTER the clack (the score ping) waits for it.
 //
@@ -25,7 +26,9 @@ interface Follower {
 }
 
 interface Impact {
-  play: () => void;
+  play: (pan: number) => void;
+  /** Where the tile lands, as a stereo pan; 0 until a flight claims the impact. */
+  pan: number;
   followers: Follower[];
   phase: 'armed' | 'flying';
   timer: ReturnType<typeof setTimeout> | null;
@@ -33,6 +36,15 @@ interface Impact {
 
 let current: Impact | null = null;
 let flightsActive = false;
+
+/** How far a tile at the screen's edge pans: a full-width swing is fatiguing in headphones, so keep it to about half. */
+export const PAN_SPREAD = 0.55;
+
+/** Stereo pan (-1..1) for a sound at horizontal position `cx` of a viewport `width` px wide. */
+export function panForX(cx: number, width: number): number {
+  if (!(width > 0)) return 0;
+  return Math.max(-1, Math.min(1, ((cx / width) * 2 - 1) * PAN_SPREAD));
+}
 
 /** Whether tile flights are running at all; with none, impacts play at once. */
 export function setTileFlightActive(active: boolean): void {
@@ -50,17 +62,17 @@ function release(): void {
   if (!impact) return;
   current = null;
   if (impact.timer !== null) clearTimeout(impact.timer);
-  impact.play();
+  impact.play(impact.pan);
   for (const follower of impact.followers) schedule(follower.play, follower.delayMs);
 }
 
-export function armTileImpact(play: () => void): void {
+export function armTileImpact(play: (pan: number) => void): void {
   release(); // a newer move lands the previous one's sound now
   if (!flightsActive) {
-    play();
+    play(0);
     return;
   }
-  const impact: Impact = { play, followers: [], phase: 'armed', timer: null };
+  const impact: Impact = { play, pan: 0, followers: [], phase: 'armed', timer: null };
   impact.timer = setTimeout(() => {
     if (current === impact) release();
   }, ARM_FALLBACK_MS);
@@ -68,11 +80,12 @@ export function armTileImpact(play: () => void): void {
 }
 
 /** The flight starts: it now owns the armed impact. False when nothing was armed. */
-export function claimTileImpact(maxMs: number): boolean {
+export function claimTileImpact(maxMs: number, pan = 0): boolean {
   const impact = current;
   if (!impact || impact.phase !== 'armed') return false;
   if (impact.timer !== null) clearTimeout(impact.timer);
   impact.phase = 'flying';
+  impact.pan = pan;
   impact.timer = setTimeout(() => {
     if (current === impact) release();
   }, maxMs);

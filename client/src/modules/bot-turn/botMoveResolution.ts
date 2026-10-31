@@ -85,7 +85,7 @@ export function executeBotPlayMove(input: {
     action: import('../review/ReviewSnapshotRecorder.ts').ReviewActorAction,
   ) => void;
 }): BotActionResult {
-  armTileImpact(() => queueSound(() => playTileSound('deal', input.isMuted), 0)); // lands with Fritz's tile
+  armTileImpact((pan) => queueSound(() => playTileSound('deal', input.isMuted, { pan }), 0)); // lands with Fritz's tile
   const move = input.resolution.move;
   if (move.type === 'play' && move.tile && move.position) {
     input.recordReview?.(input.working, {
