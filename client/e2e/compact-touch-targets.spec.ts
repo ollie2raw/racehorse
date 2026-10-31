@@ -305,8 +305,6 @@ async function openSeededMatch(page: Page, w: number, h: number, native: boolean
     if (await pickable.isVisible().catch(() => false)) await pickable.click({ timeout: 3000, force: true }).catch(() => {});
     await page.waitForTimeout(300);
   }
-  // the staged deal (cards flying to both hands) holds the real tiles hidden until each lands: measure only after it ends
-  await expect(page.locator('.bot-match-screen[data-hand-deal]')).toHaveCount(0, { timeout: 10_000 });
   // the deal is done: from here the game is deterministic, give the page its real Math.random back
   await page.evaluate(() => { Math.random = (window as unknown as { __rhRealRandom: () => number }).__rhRealRandom; });
   await page.mouse.move(1, 1);

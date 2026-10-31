@@ -89,17 +89,6 @@ no delay, no state, transients pass exactly) instead of compressors. Levels were
 
 The bench now asserts every tile sound hits within 30 ms of starting.
 
-### Pass D1: the deal (match cinematics, first piece)
-
-Before: after the pre-game draw, and at the start of every hand, both hands simply appeared. Now a stack rises at the
-middle of the board and cards leave it one after another, alternating to your tray and Fritz's rack (about a second
-for 7 + 7; Fast Fritz deals quicker). Yours turn face up as they land; Fritz's stay face down.
-
-Presentation only: the real tiles are held hidden by one attribute and revealed as each card lands (`components/deal/`).
-It can never lock you out of your hand: every path (finished, cut short, never possible, unmounted) removes the hide
-attribute and every card. It is skipped for reduced motion, a hidden tab, guided lessons, a reload mid-hand, and
-anywhere the Web Animations API is missing. No sound, on purpose.
-
 ## 3. The plan
 
 Each pass is its own PR, measured before and after. Order is by felt impact per risk.
