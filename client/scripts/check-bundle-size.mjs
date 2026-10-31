@@ -11,10 +11,11 @@ const LIMITS = {
   // journeyMatchOutcome / pending completions, plus the Journey HUD chip). Measured: the release branch tip was
   // 263.4 kB of 264 kB; the Journey work adds ~2.5 kB. Lesson content, the resolver and the lesson controller are NOT in
   // this chunk (journeyModuleBoundary.test.ts pins that).
-  // +6 kB (2026-10-31): the staged deal (components/deal: the choreography plan + useHandDeal, mounted in
-  // BotMatchScreenView). Measured: main's chunk is 267,288 B of 268,000 B and the deal adds 5,258 B. It is match-screen
-  // presentation (cards flying to both hands) so it belongs in this chunk; it has no other dependencies.
-  'BotMatchScreen': 274_000,
+  // +3 kB (2026-10-31): the staged deal's shell (components/deal/useHandDeal + the pick-a-tile pile recorder + the
+  // dealGate that makes Fritz wait for it). Measured: main's chunk is 267,288 B of 268,000 B and the shell adds ~2.3 kB.
+  // The staging itself (dealRuntime: choreography, scramble, cards, ~7 kB) is a SEPARATE lazily-loaded chunk, fetched
+  // when the match screen mounts, so it is not counted here and does not weigh on the match screen's first load.
+  'BotMatchScreen': 271_000,
   'index': 700_000,          // main bundle
   'lesson-v2': 1_400_000,    // huge lessonV2 chunk
 };

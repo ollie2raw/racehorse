@@ -89,16 +89,28 @@ no delay, no state, transients pass exactly) instead of compressors. Levels were
 
 The bench now asserts every tile sound hits within 30 ms of starting.
 
-### Pass D1: the deal (match cinematics, first piece)
+### Pass D1: the opening deal (match cinematics, first piece)
 
-Before: after the pre-game draw, and at the start of every hand, both hands simply appeared. Now a stack rises at the
-middle of the board and cards leave it one after another, alternating to your tray and Fritz's rack (about a second
-for 7 + 7; Fast Fritz deals quicker). Yours turn face up as they land; Fritz's stay face down.
+Before: after the pre-game draw, and at the start of every hand, both hands simply appeared. Now the first hand is one
+continuous piece of staging with the pick-a-tile screen (idea: the owner's):
+
+1. The face-down tiles you were picking from, in exactly the places they were lying (recorded by the draw board after every
+   render, `pileSnapshot.ts`, so the swap to the live screen is invisible), gather into a heap at the middle of the board.
+2. They are riffled, three quick passes left and right.
+3. 14 leave the heap one after another, alternating to your tray and Fritz's rack (yours turn face up as they land;
+   Fritz's stay face down); the rest sweep into the boneyard counter, shrinking as they go in, with a small pulse.
+
+About two seconds; Fast Fritz is quicker. Later hands, which have no pile on screen, deal from a small heap of tiles at
+the middle of the board (about a second). Cards are copies of the real tiles (the hand tile's ivory body and corner radius),
+because the first version used flat square slabs and a blank rectangle for the deck.
 
 Presentation only: the real tiles are held hidden by one attribute and revealed as each card lands (`components/deal/`).
-It can never lock you out of your hand: every path (finished, cut short, never possible, unmounted) removes the hide
-attribute and every card. It is skipped for reduced motion, a hidden tab, guided lessons, a reload mid-hand, and
-anywhere the Web Animations API is missing. No sound, on purpose.
+It can never lock you out of your hand: every path (finished, cut short, never possible, unmounted, code not loaded) removes
+the hide attribute and every card. **Fritz's opening move waits for the deal to land** (`utils/dealGate.ts`, a pacing wait
+with a 4 s hard cap): a frame from the first probe showed him playing a tile through the cards. The staging code is its own
+lazily loaded chunk (~7 kB), fetched when the match screen mounts, so the match screen itself grew ~2.3 kB. Skipped for
+reduced motion, a hidden tab, guided lessons, a reload mid-hand, and anywhere the Web Animations API is missing. No sound,
+on purpose.
 
 ## 3. The plan
 
