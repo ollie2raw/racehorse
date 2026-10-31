@@ -17,12 +17,15 @@ import { BotMatchGuidedV2BootErrorView } from './view/states/BotMatchGuidedV2Boo
 import { BotMatchMalformedStateView } from './view/states/BotMatchMalformedStateView.tsx';
 import { computeNormalHandRows } from './view/utils/botMatchHandLayout.ts';
 import { compactSingleRowLimit } from '../match/compactLandscape.ts';
+import { useHandDeal } from '../components/deal/useHandDeal.ts';
+import { useGameSpeedPreference } from '../utils/useGameSpeedPreference.ts';
 import { selectTurnLabel } from './view/utils/botMatchHudLabels.ts';
 import '../match/match-live.css';
 import './PlayVsFritz.css';
 import '../styles/shared-ui.css';
 import '../learn/learn.css';
 import '../match/preGameDraw/preGameDraw.css';
+import '../components/deal/handDeal.css';
 
 export function BotMatchScreenView({
   match,
@@ -36,6 +39,16 @@ export function BotMatchScreenView({
   overlays,
   debug,
 }: BotMatchScreenViewProps) {
+  // The deal: cards fly from the pile to both hands when a hand begins. Presentation only; guided lessons are not staged,
+  // and Daily Fritz keeps its standard pace like everything else about it.
+  const [gameSpeed] = useGameSpeedPreference();
+  useHandDeal({
+    handNumber: match?.handNumber ?? 0,
+    preGameDrawActive: hand.preGameDrawActive,
+    enabled: !hand.isGuidedMode && !layout.isGuidedV2Mode,
+    pace: gameSpeed === 'fast' && !hand.isDailyFritzMode ? 0.6 : 1,
+  });
+
   if (!match || !match.players || !match.players.you || !match.players.bot) {
     return (
       <BotMatchMalformedStateView
