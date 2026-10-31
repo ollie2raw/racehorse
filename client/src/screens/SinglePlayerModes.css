@@ -105,6 +105,13 @@
 
 /* Individual Card Chrome and Overrides */
 
+/* Fritz and Ghost reuse Home's daily-card classes, which carry a slate (#131A2B / #111A2C) fill; behind art with
+   transparent edges that fill reads as grey/navy next to Journey, which is near-black like the page. Match Journey on
+   every card. (native-landscape.css already does exactly this for the installed app.) */
+.home-main.sp-solo-main:not(.learn-hub-main) .sp-solo-mode-card {
+  background-color: #05080f;
+}
+
 /* Fritz Card */
 .daily-fritz-card-container {
   border: 1px solid rgba(228, 165, 59, 0.3);
