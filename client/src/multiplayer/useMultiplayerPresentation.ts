@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { getBoardTileCount } from '../match/boardSessionUtils';
 import { playTileSound, playScoreSound, playDrawSound, playYourTurnSound } from '../utils/sound';
+import { playHaptic, scoreCue } from '../utils/haptics';
+import { armTileImpact } from '../utils/tileImpact';
 import type { GameState, Tile } from '../types';
 import type { RoomPlayer } from './protocol';
 import type { FlyingTile } from '../match/liveMatchScreenTypes';
@@ -114,7 +116,11 @@ export function useMultiplayerPresentation({
 
     if (nextBoardCount > prevBoardCount) {
       if (actorId !== you) {
-        playTileSound('standard', isMutedRef.current);
+        // Held until the opponent's tile has flown to its place, like Fritz's.
+        armTileImpact((pan) => {
+          playTileSound('standard', isMutedRef.current, { pan });
+          playHaptic('opponentTile');
+        });
       }
     }
 
@@ -140,6 +146,7 @@ export function useMultiplayerPresentation({
         scoreToastTimerRef.current = setTimeout(() => {
           scoreToastTimerRef.current = null;
           playScoreSound(delta, isMutedRef.current);
+          if (pid === you) playHaptic(scoreCue(delta));
           showScoreToast(tone, delta, label);
         }, 80);
         break;

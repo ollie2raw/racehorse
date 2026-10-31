@@ -5,6 +5,8 @@ import { GlobalNav } from '../components/GlobalNav';
 import { resolvePasswordChange } from '../auth/passwordChange';
 import { useMutePreference } from '../utils/useMutePreference';
 import { useGameSpeedPreference } from '../utils/useGameSpeedPreference';
+import { useHapticsPreference } from '../utils/useHapticsPreference';
+import { hapticsSupported } from '../utils/haptics';
 import type { UserProfile } from '../auth/useAuth';
 import type { AppMode } from '../types';
 import { LegalLink } from '../legal/LegalLinks';
@@ -314,6 +316,7 @@ function PreferencesSection() {
   const soundOn = !isMuted;
   const [gameSpeed, setGameSpeed] = useGameSpeedPreference();
   const fastOn = gameSpeed === 'fast';
+  const [hapticsOn, setHapticsOn] = useHapticsPreference();
 
   return (
     <SettingsSection eyebrow="Game" title="Preferences" accent="gold">
@@ -355,6 +358,28 @@ function PreferencesSection() {
           {fastOn ? 'On' : 'Off'}
         </Button>
       </div>
+      {/* The app only: the web has no haptics (see utils/haptics.ts), so a switch there would do nothing. */}
+      {hapticsSupported() && (
+        <div className="rh-settings-toggle-row">
+          <span className="rh-settings-toggle-copy">
+            <span className="rh-settings-toggle-label">Haptics</span>
+            <span className="rh-settings-section-note">
+              Feel your tiles land, your scores and the end of each hand. Independent of Sound.
+            </span>
+          </span>
+          <Button
+            variant={hapticsOn ? 'tier-standard' : 'outline'}
+            size="sm"
+            role="switch"
+            aria-checked={hapticsOn}
+            aria-label="Haptics"
+            className="rh-settings-toggle"
+            onClick={() => setHapticsOn(!hapticsOn)}
+          >
+            {hapticsOn ? 'On' : 'Off'}
+          </Button>
+        </div>
+      )}
     </SettingsSection>
   );
 }
