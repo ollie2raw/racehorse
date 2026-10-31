@@ -6,6 +6,7 @@ import {
   playScoreSound,
   queueSound,
 } from '../../../utils/sound.ts';
+import { afterTileImpact } from '../../../utils/tileImpact.ts';
 
 /** Audio cues when a hand ends (blocked, win/lose). */
 export function playHandEndAudioEffects(result: BotActionResult, isMuted: boolean): void {
@@ -26,5 +27,6 @@ export function playHandEndAudioEffects(result: BotActionResult, isMuted: boolea
 /** Audio cue when points are scored mid-hand. */
 export function playScoreAudioEffect(result: BotActionResult, isMuted: boolean): void {
   if (!result.scored) return;
-  queueSound(() => playScoreSound(result.scored!.points, isMuted), 80);
+  // The ping belongs after the clack, and the clack waits for the tile to land.
+  afterTileImpact(() => queueSound(() => playScoreSound(result.scored!.points, isMuted), 80));
 }
