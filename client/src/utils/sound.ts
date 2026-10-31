@@ -1,5 +1,5 @@
 import tileTapUrl from '../assets/sounds/freesound_community-thwump-85836.mp3';
-import { getAudioContext, installAudioUnlock, loadSample, outputOf, playBuffer, readySample } from '../audio/audioEngine';
+import { attackOffsetOf, getAudioContext, installAudioUnlock, loadSample, outputOf, playBuffer, readySample } from '../audio/audioEngine';
 
 /**
  * sound.ts — Racehorse Dominoes audio synthesis
@@ -39,15 +39,15 @@ const getCtx = getAudioContext;
  * match endings) are the loudest events, and the draw is quiet but audible.
  */
 export const TRIM_DB = {
-  score: -10,
-  draw: 10,
+  score: -3.7,
+  draw: 2.5,
   blocked: 3,
-  yourTurn: -2.7,
-  handWin: 0,
-  handLose: 0,
-  matchWin: 0,
-  matchLose: 0,
-  matchFound: 0,
+  yourTurn: 3.7,
+  handWin: 6.2,
+  handLose: 5.8,
+  matchWin: 5.8,
+  matchLose: 5.1,
+  matchFound: 6.1,
 } as const;
 
 let trim = 1;
@@ -257,9 +257,9 @@ export interface TileSoundOptions {
 
 /** Per-voice level and pitch of the shared tile sample. Gains include +3 dB for the equal-power panner (see playBuffer). 'deal' is Fritz's tile: a little lighter and higher. */
 const TILE_VOICE: Record<TileSoundType, { gain: number; rate: number }> = {
-  standard: { gain: 1.16, rate: 1 },
-  slam: { gain: 1.3, rate: 0.9 },
-  deal: { gain: 0.76, rate: 1.05 },
+  standard: { gain: 1.74, rate: 1 },
+  slam: { gain: 1.95, rate: 0.9 },
+  deal: { gain: 1.14, rate: 1.05 },
 };
 
 export function playTileSound(type: TileSoundType, isMuted: boolean, options: TileSoundOptions = {}): void {
@@ -270,7 +270,19 @@ export function playTileSound(type: TileSoundType, isMuted: boolean, options: Ti
   if (buffer) {
     const voice = TILE_VOICE[type];
     // About 1 dB of level and 4% of pitch vary per hit: the same sample never lands twice the same way.
-    if (playBuffer(buffer, { gain: voice.gain * jitter(0.12), rate: voice.rate * jitter(0.04), pan: options.pan })) return;
+    // Start at the sample's real onset: its first ~100 ms is a slow swell and its loudest moment is ~120 ms in, which
+    // delayed the hit by about a tenth of a second and read as an echo leading into it. A 4 ms fade-in avoids a click.
+    if (
+      playBuffer(buffer, {
+        gain: voice.gain * jitter(0.12),
+        rate: voice.rate * jitter(0.04),
+        pan: options.pan,
+        offset: attackOffsetOf(buffer),
+        fadeInS: 0.004,
+      })
+    ) {
+      return;
+    }
   }
 
   const sample = getTileTapAudio();

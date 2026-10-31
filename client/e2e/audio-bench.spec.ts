@@ -16,6 +16,7 @@ interface Metrics {
   dc: number;
   centroidHz: number;
   balance: number;
+  hitMs: number;
 }
 
 async function bench(page: import('@playwright/test').Page): Promise<Metrics[]> {
@@ -34,7 +35,7 @@ test('every sound renders cleanly through the mix bus', async ({ page }) => {
     const rows = results.map(
       (m) =>
         `${m.name.padEnd(20)} peak ${m.peakDb.toFixed(1).padStart(6)}  loud ${m.momentaryDb.toFixed(1).padStart(6)}  ` +
-        `${m.activeMs.toFixed(0).padStart(5)} ms  dc ${m.dc.toFixed(4).padStart(7)}  ${m.centroidHz.toFixed(0).padStart(5)} Hz  bal ${m.balance.toFixed(2)}`,
+        `${m.activeMs.toFixed(0).padStart(5)} ms  dc ${m.dc.toFixed(4).padStart(7)}  ${m.centroidHz.toFixed(0).padStart(5)} Hz  bal ${m.balance.toFixed(2)}  hit ${m.hitMs.toFixed(0).padStart(4)} ms`,
     );
     console.log(`\nSOUND BENCH\n${rows.join('\n')}\n`);
   }
@@ -71,6 +72,16 @@ test('the mix has a hierarchy: the clack leads, pings sit behind it, endings are
   expect(loud('matchWin')).toBeGreaterThan(clack + 2);
   expect(loud('handWin')).toBeGreaterThan(loud('handLose'));
   expect(loud('matchWin')).toBeGreaterThan(loud('matchLose'));
+});
+
+test('a tile sound hits the moment it plays, with no swell before it', async ({ page }) => {
+  test.setTimeout(120_000);
+  const results = await bench(page);
+  // The tile sample used to carry ~100 ms of slow swell, its loudest moment ~120 ms in: the hit arrived a tenth of a
+  // second AFTER the tile touched and read as an echo leading into it. Now it starts at its real onset.
+  for (const m of results.filter((r) => r.name.startsWith('tile.'))) {
+    expect(m.hitMs, `${m.name} should hit immediately, not after a swell`).toBeLessThan(30);
+  }
 });
 
 test('a tile is as loud wherever it lands (constant-power pan)', async ({ page }) => {
