@@ -34,7 +34,6 @@ import {
   buildFritzScoreCeremonyMessage,
 } from './fritzPresentation.ts';
 import type { BotTurnPorts } from './types.ts';
-import { isDealInProgress, whenDealDone } from '../../utils/dealGate.ts';
 
 /** Turn-tenure identity only — never include hand/board/boneyard sizes (mid-turn churn). */
 export function buildBotTurnScheduleKey(input: {
@@ -211,12 +210,6 @@ export function useBotTurnEffect(args: UseBotTurnEffectArgs): void {
         });
         await waitMs(openingDelay);
         if (cancelled || !isLocalRunCurrent(runToken)) return;
-        // The opening deal may still be flying cards into the hands: Fritz plays once they have landed, not through them.
-        // Pacing only (utils/dealGate.ts), with a hard cap; no deal running means no wait at all.
-        if (isDealInProgress()) {
-          await whenDealDone();
-          if (cancelled || !isLocalRunCurrent(runToken)) return;
-        }
 
         let isFirstAction = true;
         while (!cancelled && isLocalRunCurrent(runToken)) {

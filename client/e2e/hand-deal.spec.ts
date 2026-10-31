@@ -1,14 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * The opening deal (src/components/deal/): when the pre-game draw ends, the face-down tiles you were picking from are
- * scrambled in a heap, 14 are dealt into both hands and the rest sweep into the boneyard counter. The real tiles are
- * held hidden until their card lands, and then everything is back to normal. A per-frame sampler watches a real
- * Play vs Fritz match, and these pin it:
- *   - it happens, with a card for every tile of the pile (the pile itself, not a stand-in);
+ * The deal (src/components/deal/useHandDeal.ts): when the pre-game draw ends, cards fly from a deck at the middle of the
+ * board to both hands, the real tiles are held hidden until their card lands, and then everything is back to normal.
+ * A per-frame sampler watches a real Play vs Fritz match, and these pin it:
+ *   - the deal happens, with a deck and at least a card per tile;
  *   - the hand is held hidden while cards are in the air and ALL visible afterwards;
- *   - Fritz does not play a tile through it, even when he starts;
- *   - it lasts a couple of seconds, and leaves no cards and no hide marker behind;
+ *   - it lasts about a second, and leaves no cards and no hide marker behind;
  *   - your hand is playable the moment it ends.
  */
 
@@ -19,7 +17,6 @@ interface Frame {
   decks: number;
   handHidden: number;
   handShown: number;
-  boardTiles: number;
 }
 
 async function startRookieMatch(page: Page) {
@@ -45,10 +42,9 @@ async function installSampler(page: Page) {
         t: performance.now(),
         dealing: Boolean(document.querySelector('.bot-match-screen[data-hand-deal]')),
         cards: document.querySelectorAll('.hand-deal-card').length,
-        decks: document.querySelectorAll('.hand-deal-pile').length,
+        decks: document.querySelectorAll('.hand-deal-deck').length,
         handHidden: tiles.filter((el) => getComputedStyle(el).visibility === 'hidden').length,
         handShown: tiles.filter((el) => getComputedStyle(el).visibility !== 'hidden').length,
-        boardTiles: document.querySelectorAll('.board-tile-wrapper').length,
       });
       requestAnimationFrame(tick);
     };
@@ -77,23 +73,20 @@ test('a new hand is dealt: held, flown in, revealed, and left clean and playable
   const frames = await page.evaluate(() => (window as unknown as { __deal: Frame[] }).__deal);
   const dealing = frames.filter((f) => f.dealing);
 
-  // It happened, and the cards ARE the pick-a-tile pile: a card for each of its face-down tiles, not a stand-in heap.
+  // It happened, with a deck and a card for every tile (a hand of 7 and Fritz's 7).
   expect(dealing.length, 'the deal should have been on screen').toBeGreaterThan(8);
-  expect(Math.max(...dealing.map((f) => f.cards)), 'a card for every tile of the pile').toBeGreaterThanOrEqual(20);
-  expect(Math.max(...dealing.map((f) => f.decks)), 'no stand-in heap when the real pile exists').toBe(0);
+  expect(Math.max(...dealing.map((f) => f.decks)), 'the cards come from a deck').toBe(1);
+  expect(Math.max(...dealing.map((f) => f.cards)), 'a card per tile, plus the deck').toBeGreaterThanOrEqual(10);
 
   // The hand is held while cards are in the air, and the real tiles come in as their cards land.
   expect(Math.max(...dealing.map((f) => f.handHidden)), 'the hand should be held hidden at first').toBeGreaterThanOrEqual(5);
   const first = dealing[0];
   expect(first.handShown, 'no tile may flash in before its card').toBe(0);
 
-  // Fritz waits for the cards: no tile reaches the board while the deal is running.
-  expect(Math.max(...dealing.map((f) => f.boardTiles)), 'no tile may be played through the deal').toBe(0);
-
-  // A couple of seconds: a moment to enjoy once per match, not in the way (with slack for a slow CI machine).
+  // About a second: long enough to see, short enough not to be in the way.
   const durationMs = dealing[dealing.length - 1].t - dealing[0].t;
-  expect(durationMs).toBeGreaterThan(1200);
-  expect(durationMs).toBeLessThan(5000);
+  expect(durationMs).toBeGreaterThan(500);
+  expect(durationMs).toBeLessThan(2500);
 
   // Clean afterwards: no cards, no marker, every tile visible.
   const last = frames[frames.length - 1];
@@ -101,7 +94,7 @@ test('a new hand is dealt: held, flown in, revealed, and left clean and playable
   expect(last.cards).toBe(0);
   expect(last.handHidden).toBe(0);
   expect(last.handShown).toBeGreaterThanOrEqual(5);
-  expect(await page.locator('.hand-deal-card, .hand-deal-pile').count()).toBe(0);
+  expect(await page.locator('.hand-deal-card').count()).toBe(0);
   expect(await page.locator('[data-dealt]').count()).toBe(0);
 
   // And playable the moment it is over: tap a tile and it is selected.

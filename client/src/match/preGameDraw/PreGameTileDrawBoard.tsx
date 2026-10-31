@@ -1,6 +1,5 @@
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { DominoTile } from '../../components/DominoTile.tsx';
-import { recordPileSnapshot } from '../../components/deal/pileSnapshot.ts';
 import type { PreGameDrawState } from './preGameDrawLogic.ts';
 import { computePreGameDrawScatterPositions } from './preGameDrawScatter.ts';
 import './preGameDraw.css';
@@ -38,16 +37,8 @@ export function PreGameTileDrawBoard({
 
   const hasRevealedTiles = !!drawState.currentRound?.you;
 
-  // Write down where the face-down tiles are lying, after every render, so the opening deal (components/deal) can
-  // start from them once this board has been replaced by the live match.
-  const boardRef = useRef<HTMLDivElement | null>(null);
-  useLayoutEffect(() => {
-    recordPileSnapshot(boardRef.current);
-  });
-
   return (
     <div
-      ref={boardRef}
       className={[
         'pre-game-draw-board',
         hasRevealedTiles ? 'has-revealed-tiles' : '',

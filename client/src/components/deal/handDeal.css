@@ -23,7 +23,7 @@
 /* The seam across a face-down domino. */
 .hand-deal-card__seam {
   position: absolute;
-  background: rgba(108, 92, 68, 0.5);
+  background: rgba(0, 0, 0, 0.2);
 }
 .hand-deal-card__seam--vertical {
   top: 14%;
@@ -36,19 +36,4 @@
   right: 14%;
   top: 50%;
   height: 1px;
-}
-
-/* The pile at the middle of the board: a heap of face-down tiles (built in useHandDeal.ts). */
-.hand-deal-pile {
-  position: fixed;
-  margin: 0;
-  z-index: 2147481800;
-  pointer-events: none;
-  opacity: 0;
-}
-.hand-deal-pile__tile {
-  position: absolute;
-  inset: 0;
-  box-sizing: border-box;
-  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35));
 }
