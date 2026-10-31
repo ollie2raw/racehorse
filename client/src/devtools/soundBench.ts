@@ -11,6 +11,7 @@
 //   dc          mean sample value over the audible part; should be about 0 (a DC offset thumps and wastes headroom).
 //   centroidHz  spectral centroid at the loudest moment: low is dull and woody, high is bright and sharp.
 //   balance     (right - left) / (right + left) energy, -1..1: where a panned sound sits in the stereo field.
+//   hitMs       when the loudest 5 ms lands, from the start of playback: how long the ear waits for the hit.
 import { loadSample, useAudioContextForBench } from '../audio/audioEngine';
 import tileTapUrl from '../assets/sounds/freesound_community-thwump-85836.mp3';
 import * as sound from '../utils/sound';
@@ -23,6 +24,7 @@ export interface SoundMetrics {
   dc: number;
   centroidHz: number;
   balance: number;
+  hitMs: number;
 }
 
 const SAMPLE_RATE = 44_100;
@@ -66,6 +68,22 @@ function magnitudes(input: Float32Array): Float32Array {
   return out;
 }
 
+/** Start, in ms from the beginning of playback, of the loudest 5 ms stretch (RMS across both channels). */
+function loudestWindowStartMs(left: Float32Array, right: Float32Array): number {
+  const win = Math.round(SAMPLE_RATE * 0.005);
+  let best = 0;
+  let bestAt = 0;
+  for (let start = 0; start + win <= left.length; start += Math.round(win / 5)) {
+    let acc = 0;
+    for (let i = start; i < start + win; i += 1) acc += (left[i] * left[i] + right[i] * right[i]) / 2;
+    if (acc > best) {
+      best = acc;
+      bestAt = start;
+    }
+  }
+  return (bestAt / SAMPLE_RATE) * 1000;
+}
+
 export function analyse(name: string, left: Float32Array, right: Float32Array): SoundMetrics {
   const n = left.length;
   let peak = 0;
@@ -80,7 +98,7 @@ export function analyse(name: string, left: Float32Array, right: Float32Array): 
     }
   }
   if (first < 0) {
-    return { name, peakDb: -120, momentaryDb: -120, activeMs: 0, dc: 0, centroidHz: 0, balance: 0 };
+    return { name, peakDb: -120, momentaryDb: -120, activeMs: 0, dc: 0, centroidHz: 0, balance: 0, hitMs: 0 };
   }
 
   let sum = 0;
@@ -131,6 +149,7 @@ export function analyse(name: string, left: Float32Array, right: Float32Array): 
     dc: sum / (last - first + 1),
     centroidHz: total > 0 ? weighted / total : 0,
     balance: energyL + energyR > 0 ? (energyR - energyL) / (energyR + energyL) : 0,
+    hitMs: loudestWindowStartMs(left, right),
   };
 }
 
