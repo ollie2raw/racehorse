@@ -89,6 +89,27 @@ no delay, no state, transients pass exactly) instead of compressors. Levels were
 
 The bench now asserts every tile sound hits within 30 ms of starting.
 
+### Pass D1: the opening deal: built, then removed (2026-10-31)
+
+Tried: cards flying from a heap to both hands at the start of every hand, and for the first hand a staged opening
+(the pick-a-tile pile gathered, swirled, dealt into both hands, the rest swept into the boneyard counter). PRs #383,
+#384 and #385; all three were reverted because, in the owner's words, it "doesn't feel very strong". It was
+technically sound (presentation-only, could never hide a hand, covered by unit and real-browser tests) and it still
+did not earn its place, so it is gone rather than polished further.
+
+Worth keeping from it:
+- **Look at motion, don't guess.** Freeze the page's animation clock (every card ran on WAAPI), step it in fixed
+  increments, screenshot each step and lay the frames out as a filmstrip. That found real problems no test would
+  (a wobble that did not read as a shuffle, straight-line "conveyor" paths) and a real bug: **Fritz played a tile
+  straight through the deal** when he started, because his thinking pause is shorter than a staged deal.
+- Copy the *real* tile's look, including its corner radius (the first cards were square slabs); a lone blank rectangle
+  as a "deck" reads as a mistake.
+- A once-per-hand presentation system belongs in its own lazily loaded chunk, not in the match screen's budget.
+- Specs that start a match must wait for any staged opening to finish before measuring the hand.
+
+If staging at the start of a match is revisited, the bar is "obviously better than the instant version": judge it by
+filmstrip first, and prefer making the *existing* pick-a-tile moment stronger over adding a new sequence after it.
+
 ## 3. The plan
 
 Each pass is its own PR, measured before and after. Order is by felt impact per risk.
