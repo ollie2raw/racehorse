@@ -79,10 +79,9 @@
   flex-direction: column;
   min-width: 180px;
   padding: 6px;
-  background: rgba(10, 16, 28, 0.6);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  /* Matte and opaque: it floats over the daily cards, and a translucent fill let their art show through the rows. */
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-control);
   box-shadow: 0 var(--hud-lift) 40px rgba(0, 0, 0, 0.55);
 }
