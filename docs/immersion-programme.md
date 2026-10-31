@@ -67,6 +67,28 @@ goes to the correct side.
 
 Run it yourself: `AUDIO_BENCH=1 npx playwright test e2e/audio-bench.spec.ts --project=chromium` prints the table.
 
+### A1.1: "a beat late, and like an echo" (reported after #377 shipped)
+
+The owner heard the clack as slightly delayed and echo-like. Measured in a real match, not guessed:
+
+- Tap to clack was **326 ms** (the tile's flight, by design), and then the sample itself added more: **it carries about
+  100 ms of slow swell and its real click is at 120 ms.** So the hit arrived ~120 ms after the tile touched, and the
+  swell leading into it sounded like a reversed echo.
+- The mix bus's two compressors each add ~6 ms of look-ahead delay, and **swallow a loud transient that arrives straight
+  after silence** (the bench measured a tile click losing 13 dB once the sample was trimmed to start at its click). They
+  also gave every sound an automatic make-up gain. A clack is exactly a transient after silence.
+
+Fix: the sample starts at its detected onset (4 ms fade-in), and the bus is a **static soft limiter** (a waveshaper curve:
+no delay, no state, transients pass exactly) instead of compressors. Levels were re-set to the same hierarchy as before.
+
+| | before | after |
+|---|---|---|
+| time from playback start to the hit | ~120 ms | **9 ms** |
+| bus latency | ~12 ms (two compressors) | 0 |
+| tile loudness / score ping / draw | -19.7 / -19.3 / -27.4 | -19.5 / -19.3 / -28.0 (unchanged by design) |
+
+The bench now asserts every tile sound hits within 30 ms of starting.
+
 ## 3. The plan
 
 Each pass is its own PR, measured before and after. Order is by felt impact per risk.

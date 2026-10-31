@@ -2,11 +2,11 @@
 //
 // The one audio context and mix bus every Racehorse sound goes through.
 //
-//   source -> [pan] -> [gain] -> BUS INPUT -> glue compressor -> limiter -> speakers
+//   source -> [pan] -> [gain] -> BUS INPUT -> soft limiter -> speakers
 //
 // Why a bus: sounds used to connect straight to the speakers, so a score chime stacked on a clack could
-// clip, nothing could be panned, and there was no single place to set the overall level. The glue
-// compressor gently evens out stacked sounds; the limiter is a safety net so nothing can clip.
+// clip, nothing could be panned, and there was no single place to set the overall level. The soft limiter
+// is a static safety net so nothing can clip (see BUS for why it is a curve and not a compressor).
 //
 // Why decoded buffers: the tile sample used to play through an <audio> element, which bypasses the audio
 // graph (no panning, no bus) and starts with noticeable latency, worst in the iOS WebView. A decoded
@@ -24,6 +24,42 @@ export interface Playback {
   pan?: number;
   /** Seconds from now. */
   delay?: number;
+  /** Start this far INTO the sample (seconds of the sample, not of playback): skips a silent or slowly swelling pre-roll. */
+  offset?: number;
+  /** Fade the start in over this many seconds. Needed when `offset` lands mid-sound, or the cut clicks. */
+  fadeInS?: number;
+}
+
+const onsetCache = new WeakMap<AudioBuffer, number>();
+
+/**
+ * Where a sample's real hit begins, in seconds: the first 1 ms stretch within `thresholdDb` of its loudest, minus a
+ * short lead so the attack's first few ms are kept. Some library samples carry a slow swell or silence before the
+ * impact (the tile sample's loudest moment is ~120 ms in), which both delays the sound and reads as an echo leading
+ * into it. Starting at the onset puts the transient at time zero.
+ */
+export function attackOffsetOf(buffer: AudioBuffer, thresholdDb = -14, leadS = 0.006): number {
+  const cached = onsetCache.get(buffer);
+  if (cached !== undefined) return cached;
+  const data = buffer.getChannelData(0);
+  const win = Math.max(1, Math.round(buffer.sampleRate * 0.001));
+  const rms: number[] = [];
+  let peak = 0;
+  for (let i = 0; i + win <= data.length; i += win) {
+    let acc = 0;
+    for (let j = i; j < i + win; j += 1) acc += data[j] * data[j];
+    const value = Math.sqrt(acc / win);
+    rms.push(value);
+    if (value > peak) peak = value;
+  }
+  let offset = 0;
+  if (peak > 0) {
+    const floor = peak * 10 ** (thresholdDb / 20);
+    const first = rms.findIndex((value) => value >= floor);
+    offset = first <= 0 ? 0 : Math.max(0, (first * win) / buffer.sampleRate - leadS);
+  }
+  onsetCache.set(buffer, offset);
+  return offset;
 }
 
 type Ctx = BaseAudioContext;
@@ -33,30 +69,40 @@ let busInput: GainNode | null = null;
 let realtime = true;
 const samples = new Map<string, AudioBuffer | Promise<AudioBuffer | null> | null>();
 
-/** Bus tuning. Exported so the audio bench can assert against the same numbers. */
+/**
+ * The bus's safety limiter, as a static curve. Exported so the audio bench can assert against the same numbers.
+ *
+ * Below `kneeLinear` a sample passes untouched; above it the level rolls off smoothly (tanh) toward `ceilingLinear`,
+ * which nothing can exceed. Static on purpose: Chrome's DynamicsCompressor adds ~6 ms of look-ahead delay per stage
+ * and, with no history, swallows a loud transient that arrives straight after silence (the bench measured a tile click
+ * losing 13 dB), and a clack IS a transient arriving after silence. A curve has no delay, no state and no attack to
+ * miss: transients pass exactly, and only a peak that would otherwise clip is rounded off.
+ */
 export const BUS = {
-  /** Gentle "glue": evens out sounds that land together without squashing a single hit. */
-  glue: { thresholdDb: -18, kneeDb: 10, ratio: 3, attackS: 0.004, releaseS: 0.14 },
-  /** Safety net: nothing leaves the bus above this. */
-  limiter: { thresholdDb: -2, kneeDb: 0, ratio: 20, attackS: 0.001, releaseS: 0.08 },
+  kneeLinear: 0.5, // -6 dBFS
+  ceilingLinear: 0.89, // -1 dBFS
 } as const;
+
+/** The soft-limiter transfer curve over [-1, 1], sampled for a WaveShaperNode. */
+export function softLimiterCurve(points = 8192): Float32Array<ArrayBuffer> {
+  const { kneeLinear, ceilingLinear } = BUS;
+  const headroom = ceilingLinear - kneeLinear;
+  const curve = new Float32Array(points);
+  for (let i = 0; i < points; i += 1) {
+    const x = (i / (points - 1)) * 2 - 1;
+    const magnitude = Math.abs(x);
+    const y = magnitude <= kneeLinear ? magnitude : kneeLinear + headroom * Math.tanh((magnitude - kneeLinear) / headroom);
+    curve[i] = Math.sign(x) * y;
+  }
+  return curve;
+}
 
 function buildBus(ac: Ctx): GainNode {
   const input = ac.createGain();
-  const glue = ac.createDynamicsCompressor();
-  glue.threshold.value = BUS.glue.thresholdDb;
-  glue.knee.value = BUS.glue.kneeDb;
-  glue.ratio.value = BUS.glue.ratio;
-  glue.attack.value = BUS.glue.attackS;
-  glue.release.value = BUS.glue.releaseS;
-  const limiter = ac.createDynamicsCompressor();
-  limiter.threshold.value = BUS.limiter.thresholdDb;
-  limiter.knee.value = BUS.limiter.kneeDb;
-  limiter.ratio.value = BUS.limiter.ratio;
-  limiter.attack.value = BUS.limiter.attackS;
-  limiter.release.value = BUS.limiter.releaseS;
-  input.connect(glue);
-  glue.connect(limiter);
+  const limiter = ac.createWaveShaper();
+  limiter.curve = softLimiterCurve();
+  limiter.oversample = '2x'; // the curve is non-linear: oversample so rounding a peak does not alias
+  input.connect(limiter);
   limiter.connect(ac.destination);
   return input;
 }
@@ -148,7 +194,14 @@ export function playBuffer(buffer: AudioBuffer, options: Playback = {}): boolean
     source.buffer = buffer;
     source.playbackRate.value = options.rate ?? 1;
     const gain = ac.createGain();
-    gain.gain.value = options.gain ?? 1;
+    const level = options.gain ?? 1;
+    if (options.fadeInS && options.fadeInS > 0) {
+      const t0 = ac.currentTime + (options.delay ?? 0);
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(level, t0 + options.fadeInS);
+    } else {
+      gain.gain.value = level;
+    }
     source.connect(gain);
     let tail: AudioNode = gain;
     // Always through the equal-power panner, even at 0: a mono source with no panner plays at full level in BOTH ears,
@@ -160,7 +213,7 @@ export function playBuffer(buffer: AudioBuffer, options: Playback = {}): boolean
       tail = panner;
     }
     tail.connect(outputOf(ac));
-    source.start(ac.currentTime + (options.delay ?? 0));
+    source.start(ac.currentTime + (options.delay ?? 0), Math.max(0, options.offset ?? 0));
     return true;
   } catch {
     return false;
