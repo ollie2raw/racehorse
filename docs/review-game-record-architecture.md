@@ -9,9 +9,50 @@ are **not** part of this programme and stay as they are.
 |---|---|
 | 1 Reliable saving, Analyze again, no raw errors | merged (#398) |
 | 2 Save every finished Play vs Fritz game as a server record | merged (#399); owner applies `2026-11-01_game_records.sql` |
-| 3 Read the record back and rebuild the game on the client | this PR: `GET /api/game-records/recent` and `/:sourceMatchId`, `rebuildGameFromRecord`, `savedGames` |
-| 4 Games archive + "Review this game" screen; adapters for multiplayer / Daily Fritz | next |
-| 5 Archive polish (filters, progress/notification, share link, mobile layout) | later |
+| 3 Read the record back and rebuild the game on the client | merged (#400): `GET /api/game-records/recent` and `/:sourceMatchId`, `rebuildGameFromRecord`, `savedGames` |
+| 4 Games archive + "Review this game" | merged (#402): "Your games" on Rating History, analyze any saved game on demand |
+| 5 The Games page: record at a glance, filters, accuracy and grade per game | merged (#403); server-side join of each game's saved review |
+| 6 Multiplayer (then tournaments, Daily Fritz) | designed below; **held until after the first tournament week** (see "Multiplayer: what the code shows") |
+
+## Multiplayer: what the code shows (2026-11-01)
+
+How multiplayer review works today, verified in code:
+
+- The server accepts each move and attaches the V2 review snapshot, so capture is already authoritative
+  (`MoveEntry.reviewSnapshot`, `MultiplayerGameShell.tsx`).
+- The analysis runs in a **browser worker** (`useReviewWorkerBatch`), not the durable server job Play vs Fritz uses.
+- It is saved only for the cohort (`persistMultiplayerReview`), and with no saved game record the game never appears in
+  "Your games". A multiplayer game cannot be reopened later.
+
+Why a multiplayer game cannot simply be replayed from what the server stores today: `room_match_logs.events` carries the
+actions (`tile_played` with tile and side, `tile_drawn` with the tile, `turn_passed`) but **not the dealt hands**.
+`hand_started` carries only the hand number and who is on turn (`rooms.ts`); the deal is random and is never recorded.
+Play vs Fritz is replayable because its deal comes from a seed the server issued; multiplayer has no seed.
+
+What a multiplayer record needs, and the care it takes:
+
+1. **Capture the deal at hand start** in a **server-only side structure** on the room (not in the event log: events can
+   be served to spectators and on reconnect, and a hand must never travel with them). Written at the two places hands
+   are dealt (`startGame`, next hand), including the starter per hand.
+2. **Write the record once, at terminal completion**, next to the existing `room_match_logs` archive, one row per human
+   participant (so each player's archive has the game). Idempotent per `(user, match)`; a failed write must never affect
+   the result, the rating, or a tournament.
+3. **Schema:** widen `game_records.mode` to include `'mp'` and add the opponent's display name and user id, plus explicit
+   per-hand deals (a multiplayer deal is not derivable from a seed).
+4. **Rebuild:** `rebuildGameFromRecord` takes explicit deals as well as a seed; the opponent is a human, not Fritz.
+5. **Privacy:** the opponent's dealt hands are stored in the participant's own row. They are revealed only after the game
+   is over (the record is written at completion, never mid-game), the same disclosure the post-game screen makes today.
+6. **Verification:** replaying the saved deals plus actions must reproduce the server's final state and score; a
+   mismatch is stored and flagged, as for Play vs Fritz.
+7. **Tournaments are excluded at first** (a different completion path and the highest stakes).
+
+**Why this is held:** items 1 and 2 change the multiplayer authority code (`rooms.ts`, the completion path), which also
+runs tournament matches. That code should not change in the days before the first live tournament events (Monday
+2026-11-02, 6 pm and 9 pm Eastern). The plan is to ship it after the first tournament week is observed stable, behind a
+flag, with a differential test that the replayed final state equals the server's.
+
+Accuracy over time, per-game accuracy and the Games page all work for any mode that has saved records, so multiplayer
+will appear in the same archive with no further UI work.
 
 Two assumptions in the original text below turned out wrong, and the plan changed because of them:
 
