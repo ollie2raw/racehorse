@@ -24,7 +24,17 @@
   text-align: center;
   overflow: auto;
   gap: 12px;
-  justify-content: center;
+  /* Not `justify-content: center`: with overflow, centering pushes the top (the kicker) out of reach under the nav on a
+     short landscape phone. Auto margins on the ends centre when there is room and scroll from the top when there is not. */
+  justify-content: flex-start;
+}
+
+.tr-shell > :first-child {
+  margin-top: auto;
+}
+
+.tr-shell > :last-child {
+  margin-bottom: auto;
 }
 
 .tr-card {
