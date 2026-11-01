@@ -71,14 +71,16 @@ export const VIEWPORT_PROFILES: readonly ViewportProfile[] = [
     containerWidth: 876,
     containerHeight: 290,
     phoneLandscape: true,
-    reserved: [rect(648, 244, 866, 282), rect(773, 72, 866, 116), rect(774, 10, 866, 54)],
+    // controls tray and boneyard pill; the OPEN pill is in the HUD row on the app (components/board/useHudMetaSlot.ts)
+    reserved: [rect(648, 244, 866, 282), rect(774, 10, 866, 54)],
   },
   {
     name: 'native-844x390',
     containerWidth: 824,
     containerHeight: 250,
     phoneLandscape: true,
-    reserved: [rect(596, 204, 814, 242), rect(722, 72, 814, 116), rect(722, 10, 814, 54)],
+    // controls tray and boneyard pill; the OPEN pill is in the HUD row on the app (components/board/useHudMetaSlot.ts)
+    reserved: [rect(596, 204, 814, 242), rect(722, 10, 814, 54)],
   },
 ];
 

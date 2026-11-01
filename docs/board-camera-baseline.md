@@ -157,3 +157,15 @@ The model now carries `native-844x390` and `native-932x430` beside the web profi
 Reading it: **a rail is worse than clearing the board**, because width is not free any more once the height is fixed (it spends the width it saves). The best low-cost move is to get the two pills and the tray off the board: the pills into the HUD row, which has about 125 px unused between the status chip and the YOU pill, and the tray behind one 44 px "board tools" button. Together that is the "no overlays" row: **+22 % tile size and the unreadable share halved** at 844×390. That is the next pass (it changes the match HUD on the installed app, so it needs native QA).
 
 An intermittent reading seen once while measuring (the Play vs Fritz board container at 198 px instead of 251 for one sample) did not reproduce in four further runs; it is recorded here as an open observation, not a finding.
+
+### Update: the OPEN pill is in the HUD row (#438)
+
+The first step of the table above shipped in #438: on the installed app in landscape the OPEN pill is drawn in the HUD row, off the board (`components/board/useHudMetaSlot.ts`). The boneyard pill stays on the board, because it is the draw button and needs its 44 px tap area. The native profiles now list only the tray and the boneyard pill as overlays. Re-measured on the same 454 hands, the model matched what the what-if predicted:
+
+| Viewport (iPhone app) | Before | After #438 | Real browser, `longBoth` fits at |
+|---|---|---|---|
+| 844×390, cannot be whole + 18 px | 9.1 % | **6.8 %** | 0.28 (unchanged: the tray and boneyard pill still bind that board) |
+| 844×390, median tile | 25.9 px | **29.1 px** | |
+| 932×430, cannot be whole + 18 px | 2.8 % | **2.1 %** | 0.35 (was 0.34) |
+
+What is left on the board at 844×390 is the tray and the boneyard pill. Collapsing the tray behind one button would take the model from 6.8 % to roughly 4.6 % only if the button itself also left the board, and it would put Leave, Mute, Fullscreen, Zoom and (online) the emote picker one tap further away across two near-duplicate trays and six e2e specs, so it is not worth doing without a device in hand. The phone routing already bends after one tile; what remains unreadable is the largest multi-hub boards.
