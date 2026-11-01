@@ -202,16 +202,13 @@ export default function AppRoutes(props: AppRoutesProps) {
     mode: presentationMode,
     joinedMatch: Boolean(social.joinedRoom && multiplayer.state),
     tournamentView: tournament.tournamentSubView,
-    learnLessonOpen: Boolean(learn.selectedLearnLessonId || learn.learnHowToPlayOpen),
+    learnLessonOpen: learn.learnHowToPlayOpen,
   });
   return (
     <AppPresentation
       presentation={presentation}
       mode={navigation.appMode}
       navigate={navigation.setAppMode}
-      contextualBackOverride={navigation.appMode === 'learn' && learn.selectedLearnLessonId
-        ? () => learn.setSelectedLearnLessonId(null)
-        : undefined}
       openAuth={auth.handleOpenAuthModal}
       signOut={auth.handleSignOut}
     >

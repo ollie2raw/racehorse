@@ -344,8 +344,6 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
     learn: {
       showLearnAdminView,
       canOpenHowToPlayPreview: learn.canOpenHowToPlayPreview,
-      selectedLearnLessonId: learn.selectedLearnLessonId,
-      setSelectedLearnLessonId: learn.setSelectedLearnLessonId,
       learnHowToPlayOpen: learn.learnHowToPlayOpen,
       setLearnHowToPlayOpen: learn.setLearnHowToPlayOpen,
       setIsGuidedMode: learn.setIsGuidedMode,

@@ -467,8 +467,6 @@ export default function App() {
   const {
     learnHowToPlayOpen,
     setLearnHowToPlayOpen,
-    selectedLearnLessonId,
-    setSelectedLearnLessonId,
     profileTarget,
     setProfileTarget,
     profileOriginMode,
@@ -963,8 +961,6 @@ export default function App() {
       },
       learn: {
         canOpenHowToPlayPreview,
-        selectedLearnLessonId,
-        setSelectedLearnLessonId,
         learnHowToPlayOpen,
         setLearnHowToPlayOpen,
         setIsGuidedMode,

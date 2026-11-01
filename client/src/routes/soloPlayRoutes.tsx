@@ -41,7 +41,6 @@ const GuidedMatchAnnotatorScreen = React.lazy(() =>
   import('../learn/guidedMatch/GuidedMatchAnnotatorScreen'),
 );
 const LearnHowToPlayRacehorse = React.lazy(() => import('../learn/LearnHowToPlayRacehorse'));
-const LearnPlayer = React.lazy(() => import('../learn/LearnPlayer'));
 
 export function HomeRoute({
   shell,
@@ -116,8 +115,6 @@ export function LearnRoute({
   const {
     showLearnAdminView,
     canOpenHowToPlayPreview,
-    selectedLearnLessonId,
-    setSelectedLearnLessonId,
     learnHowToPlayOpen,
     setLearnHowToPlayOpen,
     setIsGuidedMode,
@@ -127,20 +124,6 @@ export function LearnRoute({
   } = learn;
   const { setBotFritzTier, setBotDealSize } = botMatch;
 
-  if (selectedLearnLessonId) {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Lesson…" />}>
-          <LearnPlayer
-            lessonId={selectedLearnLessonId}
-            onExit={() => {
-              setSelectedLearnLessonId(null);
-            }}
-          />
-        </Suspense>
-      </div>
-    );
-  }
   if (learnHowToPlayOpen && canOpenHowToPlayPreview) {
     return withAuthModals(
       <div className={appRootClassName}>

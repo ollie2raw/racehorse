@@ -135,13 +135,6 @@ describe('useAppRouteState — initial state', () => {
     expect(setActiveTournamentId).toHaveBeenCalledWith('tour-abc');
   });
 
-  it('selectedLearnLessonId starts null', () => {
-    const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
-    });
-    expect(result.current.selectedLearnLessonId).toBeNull();
-  });
-
   it('profileOriginMode starts null', () => {
     const { result } = renderHook((p: Params) => useAppRouteState(p), {
       initialProps: defaultParams(),
@@ -314,20 +307,6 @@ describe('useAppRouteState — popstate handler', () => {
     expect(setTournamentSubView).toHaveBeenCalledWith('bracket');
   });
 
-  it('clears selectedLearnLessonId on popstate', () => {
-    const { result } = renderHook((p: Params) => useAppRouteState(p), {
-      initialProps: defaultParams(),
-    });
-
-    act(() => { result.current.setSelectedLearnLessonId('lesson-1'); });
-    expect(result.current.selectedLearnLessonId).toBe('lesson-1');
-
-    setPathname('/learn/how-to-play');
-    act(() => { firePopstate(); });
-
-    expect(result.current.selectedLearnLessonId).toBeNull();
-  });
-
   it('cleans up popstate listener on unmount', () => {
     setPathname('/');
     const setAppMode = vi.fn();
@@ -411,7 +390,6 @@ describe('useAppRouteState — setter surface', () => {
     expect(typeof result.current.setAppMode).toBe('function');
     expect(typeof result.current.setMpSubView).toBe('function');
     expect(typeof result.current.setLearnHowToPlayOpen).toBe('function');
-    expect(typeof result.current.setSelectedLearnLessonId).toBe('function');
     expect(typeof result.current.setProfileTarget).toBe('function');
     expect(typeof result.current.setProfileOriginMode).toBe('function');
     expect(typeof result.current.setRouteReady).toBe('function');
@@ -430,8 +408,5 @@ describe('useAppRouteState — setter surface', () => {
 
     act(() => { result.current.setProfileOriginMode('stats'); });
     expect(result.current.profileOriginMode).toBe('stats');
-
-    act(() => { result.current.setSelectedLearnLessonId('lesson-7'); });
-    expect(result.current.selectedLearnLessonId).toBe('lesson-7');
   });
 });

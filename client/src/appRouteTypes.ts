@@ -88,8 +88,6 @@ export type AppRoutesAuthProps = {
 export type AppRoutesLearnProps = {
   showLearnAdminView: boolean;
   canOpenHowToPlayPreview: boolean;
-  selectedLearnLessonId: string | null;
-  setSelectedLearnLessonId: Dispatch<SetStateAction<string | null>>;
   learnHowToPlayOpen: boolean;
   setLearnHowToPlayOpen: Dispatch<SetStateAction<boolean>>;
   setIsGuidedMode: Dispatch<SetStateAction<boolean>>;

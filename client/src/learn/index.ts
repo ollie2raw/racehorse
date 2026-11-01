@@ -1,6 +1,5 @@
 export { default as LearnHome } from './LearnHome';
 export { default as LearnHowToPlayRacehorse } from './LearnHowToPlayRacehorse';
-export { default as LearnPlayer } from './LearnPlayer';
 export { default as GuidedMatchRecorderScreen } from './guidedMatch/GuidedMatchRecorderScreen';
 export { default as GuidedMatchAnnotatorScreen } from './guidedMatch/GuidedMatchAnnotatorScreen';
 export * from './guidedMatch/guidedMatchCandidateTypes';
@@ -11,7 +10,4 @@ export * from './guidedMatch/guidedMatchCapture';
 export * from './guidedMatch/guidedMatchSourceStorage';
 export * from './guidedMatch/guidedMatchLessonLoader';
 export { default as LearnBoard } from './components/LearnBoard';
-export * from './data';
 export * from './engine/types';
-export * from './progress/types';
-export * from './progress/storage';
