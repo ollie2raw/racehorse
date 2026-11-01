@@ -28,11 +28,12 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 | [-] 1.6 | **Assessed, not built.** A move-parity test would be false: the two bots already differ. The server's `standard` / `elite` tiers use pick probabilities 0.82 / 0.94 (decay 0.58 / 0.50), the client's `standard` / `hard` use 0.86 / 0.97 (decay 0.55 / 0.50), the tier names do not match (`elite` has no client counterpart), the states have different shapes, both sample randomly, and the client search is wall-clock bounded. The constants are not exported, so a drift guard would mean editing both files. The fix is 4.2 (one shared engine), then a parity test is meaningful. Decide whether the tournament tiers are meant to differ before 4.2 | `server/src/bot/serverBot.ts:28-32`, `client/src/modules/fritz/botHeuristics.ts:85-90` | none |
 | [x] 1.7 | CSS ratchet: per-file `!important`, hex outside `tokens.css` and gradients may never increase; new files start at zero. Baseline today: 2,803 / 993 / 406 across 110 files. Run `node scripts/checkCssRatchet.mjs --update` in the same PR whenever a CSS count drops | `client/scripts/checkCssRatchet.mjs`, `css-ratchet-baseline.json`, CI step | #413 merged |
 | [~] 1.8 | Tests for untested logic. **Done (#414):** `coachMessaging` (1,440-case copy-rule grid, decision tables) and `learningStore`. **Still open:** `lessonV2` start/restore, then `useHandLifecycle` | `learning/coachMessaging.test.ts`, `learning/learningStore.test.ts` | #414 merged |
-| [~] 1.9 | Guest first impression. Daily Fritz: the main button reads "Sign in to play" and opens sign-in, the duplicate alert is gone, and the set tiles show today's Pacific date, "Best of 3" and the Elite tier instead of dashes. Games: an explanation and a real Sign in button. **Not done:** letting a guest actually play Daily Fritz (a product decision, since results are server-verified and ranked) | `dailyFritzHubViewModel.ts`, `DailyFritzHubView.tsx`, `GamesPage.tsx` | this PR |
+| [x] 1.9 | Guest first impression (#415 merged). Daily Fritz: the main button reads "Sign in to play" and opens sign-in, the duplicate alert is gone, and the set tiles show today's Pacific date, "Best of 3" and the Elite tier instead of dashes. Games: an explanation and a real Sign in button. **Not done:** letting a guest actually play Daily Fritz; decided on 2026-11-01 and designed in `guest-play-design.md` (items 1.14, 2.7, 3.12, 3.13) | `dailyFritzHubViewModel.ts`, `DailyFritzHubView.tsx`, `GamesPage.tsx` | this PR |
 | [ ] 1.10 | Accessibility and polish batch: `LayoutScreen` h1, per-route page titles, tap targets to 44px, raw `not_found` text, skip the authed call when signed out | launch audit P2 5-9 | |
 | [ ] 1.11 | Client dependency updates (react-router, dompurify chain, socket.io-parser) with full e2e | `npm audit --omit=dev` | |
 | [ ] 1.12 | Consolidate raw `fetch` callers onto `api/client.ts` | 15 files | |
 | [ ] 1.13 | Client half of the versioned wire protocol: event maps, ack types and `PROTOCOL_VERSION` in `match-protocol` (not yet enforced) | enforcement is 3.x | |
+| [ ] 1.14 | Guest play, phase G1: client auth groundwork behind `VITE_ENABLE_GUEST_PLAY` (off): lazy anonymous session, `isAnonymous` state, no username prompt for guests, upgrade-in-place sign-up, guest wording for sign-in and sign-out | `docs/guest-play-design.md` | |
 
 ## Phase 2: owner-side and decisions (not code)
 
@@ -42,6 +43,7 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 - [ ] 2.4 Decision: turn clock / idle-forfeit for casual and rated games
 - [ ] 2.5 Decision: node-budgeted Fritz (changes bot strength; needs calibration rerun)
 - [ ] 2.6 Play one signed-in game and run Analyze from Games; run the event-night monitor on Monday
+- [ ] 2.7 Guest play, phase G0 (owner, Supabase dashboard): enable anonymous sign-ins; pick a captcha provider (Turnstile preferred) and add its secret; review the anonymous sign-in rate limit. Decisions already made: upgraded guests may appear on the same day's leaderboard, a captcha guards guest creation, Play vs Fritz guests are recorded too
 
 ## Phase 3: after the first tournament week (server unfrozen)
 
@@ -58,6 +60,8 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 | [ ] 3.9 | Multiplayer review records (design already in `review-game-record-architecture.md`) | |
 | [ ] 3.10 | Boot-time env schema; schema baseline and migrations as single source of truth with a CI diff | |
 | [ ] 3.11 | Stamp engine/ruleset versions on saved reviews | |
+| [ ] 3.12 | Guest play, phase G2: `profiles.is_guest` (set at creation, flipped when the user becomes permanent); leaderboards and tournament registration exclude guests; inactive-guest cleanup sweep; server principal helper returning `is_anonymous`; RLS probe test. **Must deploy before the flag in 1.14 is turned on** | |
+| [ ] 3.13 | Guest play, phases G3 and G4: guest UI on Daily Fritz and Play vs Fritz ("save this game" prompt, Games page for guests, replaces the 1.9 "Sign in to play" button), captcha widget and CSP, native device test, privacy copy, flip the flag | |
 
 ## Phase 4: structural consolidation (one at a time, behind the existing tests)
 
@@ -79,6 +83,7 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 
 - 2026-11-01: roadmap created from the two audits.
 - 2026-11-01: 0.1 built and verified, PR #409 open (`[~]` = PR open, awaiting merge; `[x]` = merged).
+- 2026-11-01: #415 merged (1.9 done except guest play itself). Guest-play design written and approved in direction (anonymous Supabase sessions, upgrade in place); added as 1.14, 2.7, 3.12, 3.13.
 - 2026-11-01: #409 to #414 merged. 1.6 assessed and not built (see its row). 1.9 open.
 - 2026-11-01: #409, #410, #411, #412, #413 merged. 1.8 (coach and profile tests) open. Found while testing: `updateProfile` never fills `recurringMistakeTags` (it builds its history from lesson text, not concepts); nothing reads the field yet, recorded as an expected-fail test.
 - 2026-11-01: 1.1 (#410) and 1.3 (#411, loader and storage half) open. 1.2 (live-stylesheet selector purge) deliberately not started: it needs screenshot review per screen.
