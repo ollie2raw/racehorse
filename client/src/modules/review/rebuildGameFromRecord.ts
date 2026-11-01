@@ -41,6 +41,8 @@ export type RebuiltGame = {
   snapshots: ReviewPositionSnapshotV2[];
   /** The engine state after the last action. */
   finalState: BotMatchState;
+  /** The recorder that captured `snapshots`: hand it to the review hook exactly as the live match does. */
+  recorder: ReviewSnapshotRecorder;
 };
 
 export type RebuildFailureReason =
@@ -178,5 +180,5 @@ export function rebuildGameFromRecord(record: SavedGameRecord): RebuildResult {
       `The replay ended ${state.players.you.score}-${state.players.bot.score}, the record says ${record.result.you}-${record.result.opponent}.`,
     );
   }
-  return { ok: true, game: { moveLog, snapshots, finalState: state } };
+  return { ok: true, game: { moveLog, snapshots, finalState: state, recorder } };
 }
