@@ -13,6 +13,8 @@ import { PASSWORD_RECOVERY_PENDING_KEY, rememberPasswordResetRequest } from './r
 import { readE2eDevAuth, readMobileVisualIdentity } from './e2eDevAuth';
 import { EMAIL_CHANGE_PENDING_MESSAGE, resolveEmailChange } from './emailChange';
 import { ANONYMOUS_PLAYER_NAME } from '../identity/publicPlayerName';
+import { isGuestPlayEnabled } from '../config/guestPlayFeature';
+import { isAnonymousUser } from './guestSession';
 
 export interface UserProfile {
   id: string;
@@ -62,6 +64,17 @@ function normalizeDesiredUsername(value: string | null | undefined): string | nu
   if (normalized.length < 3) return null;
   if (!/^[a-z0-9_]+$/.test(normalized)) return null;
   return normalized;
+}
+
+/** The handle chosen at sign-up, checked against the format and the public username policy (shared by both sign-up paths). */
+function resolveSignUpUsername(username: string | undefined): { username: string } | { error: string } {
+  const normalized = normalizeDesiredUsername(username ?? null);
+  if (!normalized) {
+    return { error: 'Username must be at least 3 characters and use lowercase letters, numbers, and underscores only.' };
+  }
+  const violation = usernamePolicyViolation(normalized);
+  if (violation) return { error: usernamePolicyMessage(violation) };
+  return { username: normalized };
 }
 
 /**
@@ -568,16 +581,14 @@ function useAuthInternal() {
     };
   }, [hydrateProfile, setUser]);
 
-  const signUp = useCallback(
+  // A brand-new account. `signUp` below chooses between this and upgrading a guest in place.
+  const createAccount = useCallback(
     async (email: string, password: string, username?: string): Promise<AuthResult> => {
       if (!supabase) return { error: getSupabaseConfigError() };
       const client = supabase;
-      const normalizedUsername = normalizeDesiredUsername(username ?? null);
-      if (!normalizedUsername) {
-        return { error: 'Username must be at least 3 characters and use lowercase letters, numbers, and underscores only.' };
-      }
-      const signupViolation = usernamePolicyViolation(normalizedUsername);
-      if (signupViolation) return { error: usernamePolicyMessage(signupViolation) };
+      const resolved = resolveSignUpUsername(username);
+      if ('error' in resolved) return { error: resolved.error };
+      const normalizedUsername = resolved.username;
       const runSignUp = async () =>
         withTimeout(
           client.auth.signUp({
@@ -820,6 +831,92 @@ function useAuthInternal() {
     [user],
   );
 
+  // ── Guest play (docs/guest-play-design.md), behind VITE_ENABLE_GUEST_PLAY ───────────────────────────────────────
+
+  // Two quick taps must not create two anonymous users: callers share one in-flight request.
+  const guestSessionInFlightRef = useRef<Promise<AuthResult> | null>(null);
+
+  /**
+   * Makes sure there is a session to play on, creating an anonymous one only if there is none at all. Never replaces an
+   * existing guest or a signed-in account. The new principal reaches the app through onAuthStateChange like any other
+   * sign-in, so nothing is hydrated here.
+   */
+  const ensureGuestSession = useCallback((): Promise<AuthResult> => {
+    if (!isGuestPlayEnabled()) return Promise.resolve({ error: 'Guest play is not available yet.' });
+    if (!supabase) return Promise.resolve({ error: getSupabaseConfigError() });
+    if (principalIdRef.current) return Promise.resolve({ error: null });
+    if (guestSessionInFlightRef.current) return guestSessionInFlightRef.current;
+    const client = supabase;
+    const request = (async (): Promise<AuthResult> => {
+      try {
+        // The stored session is read before the app has finished loading it; a returning guest must get their own
+        // session back, not a second anonymous user.
+        const { data: existing } = await withTimeout(client.auth.getSession(), SESSION_BOOTSTRAP_TIMEOUT_MS);
+        if (existing.session?.user) return { error: null };
+        const { error } = await withTimeout(client.auth.signInAnonymously(), AUTH_REQUEST_TIMEOUT_MS);
+        if (error) return { error: formatAuthErrorMessage(error) };
+        return { error: null };
+      } catch (err) {
+        return { error: err instanceof Error ? formatAuthErrorMessage(err) : 'Unable to start a guest session.' };
+      } finally {
+        guestSessionInFlightRef.current = null;
+      }
+    })();
+    guestSessionInFlightRef.current = request;
+    return request;
+  }, []);
+
+  /**
+   * Turns the current guest into a permanent account IN PLACE: same user id, so the games, streak and saved reviews they
+   * already have stay theirs. The handle is saved first, so a taken name fails before any credential changes. Supabase
+   * keeps the user anonymous until the email is confirmed, so they carry on as a guest until then.
+   */
+  const upgradeGuestToAccount = useCallback(
+    async (email: string, password: string, username?: string): Promise<AuthResult> => {
+      if (!supabase) return { error: getSupabaseConfigError() };
+      const client = supabase;
+      const resolved = resolveSignUpUsername(username);
+      if ('error' in resolved) return { error: resolved.error };
+
+      const renamed = await updateUsername(resolved.username);
+      if (renamed.error) return renamed;
+
+      try {
+        const { error } = await withTimeout(
+          client.auth.updateUser(
+            {
+              email,
+              password,
+              data: { preferred_username: resolved.username, username: resolved.username },
+            },
+            { emailRedirectTo: typeof window !== 'undefined' ? getAuthEmailRedirectTo() : undefined },
+          ),
+          AUTH_REQUEST_TIMEOUT_MS,
+        );
+        if (error) return { error: formatAuthErrorMessage(error) };
+      } catch (err) {
+        return { error: err instanceof Error ? formatAuthErrorMessage(err) : 'Unable to create your account.' };
+      }
+
+      markEmailVerificationPending(email);
+      return {
+        error: null,
+        pendingVerification: true,
+        message: 'Check your email to finish creating your account. Your games are saved to it.',
+      };
+    },
+    [updateUsername],
+  );
+
+  const signUp = useCallback(
+    async (email: string, password: string, username?: string): Promise<AuthResult> => {
+      // A guest keeps their user id: a brand-new account would orphan the games they just played.
+      if (isGuestPlayEnabled() && isAnonymousUser(user)) return upgradeGuestToAccount(email, password, username);
+      return createAccount(email, password, username);
+    },
+    [user, upgradeGuestToAccount, createAccount],
+  );
+
   const resetPassword = useCallback(async (email: string): Promise<AuthResult> => {
     if (!supabase) return { error: getSupabaseConfigError() };
     const normalizedEmail = email.trim().toLowerCase();
@@ -907,6 +1004,9 @@ function useAuthInternal() {
     justVerified,
     supabaseEnabled: isSupabaseConfigured,
     supabaseConfigError: getSupabaseConfigError(),
+    /** True while the current user is a guest (an anonymous Supabase session). */
+    isAnonymous: isAnonymousUser(user),
+    ensureGuestSession,
     signUp,
     signIn,
     signOut,
