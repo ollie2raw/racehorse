@@ -5,6 +5,7 @@ import { completeGhostGame, type GhostCompletionResult, type GhostMoveLogEntry, 
 import { moveEntriesToGhostMoveLog } from './ghostMatchHelpers.ts';
 import { botMatchDebugLog } from '../match/runtime/botMatchDebug.ts';
 import { logger } from '../../utils/logger';
+import { playerFacingErrorMessage } from '../../api/playerFacingError';
 
 type UseGhostMatchCompletionArgs = {
   userId: string | null | undefined;
@@ -160,7 +161,7 @@ export function useGhostMatchCompletion({
         logger.error('useGhostMatchCompletion', err, { message: '[Fritz Rating] failed' });
         completeKeyRef.current = '';
         setGhostResultLoading(false);
-        setGhostResultError(err instanceof Error ? err.message : 'Rating update failed.');
+        setGhostResultError(playerFacingErrorMessage(err, 'Rating update failed.'));
         if (onProfileRefresh) {
           void Promise.resolve(onProfileRefresh()).catch((refreshErr) => {
             console.warn('[Fritz Rating] profile refresh after error failed:', refreshErr);

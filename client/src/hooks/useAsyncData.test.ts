@@ -59,6 +59,32 @@ describe('useAsyncData', () => {
     expect(result.current.error).toBe('Could not load the leaderboard.');
   });
 
+  it('never shows a server code or a JSON body to the person: it becomes the screen\'s own copy', async () => {
+    for (const raw of ['not_found', 'NOT_FOUND', 'rate_limited', '{"ok":false,"error":"NOT_FOUND"}', 'HTTP 500', 'Failed to fetch']) {
+      const fetcher = vi.fn().mockRejectedValue(new Error(raw));
+      const { result, unmount } = renderHook(() =>
+        useAsyncData(fetcher, [], { errorMessage: 'Could not load the activity feed.' }),
+      );
+      await waitFor(() => expect(result.current.error).not.toBeNull());
+      expect(result.current.error, raw).toBe('Could not load the activity feed.');
+      unmount();
+    }
+  });
+
+  it('uses the default sentence for a code when the screen gave no copy of its own', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error('not_found'));
+    const { result } = renderHook(() => useAsyncData(fetcher, []));
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    expect(result.current.error).toBe('Something went wrong. Please try again.');
+  });
+
+  it('keeps a message that already reads like a sentence', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error('You are not allowed to view this player.'));
+    const { result } = renderHook(() => useAsyncData(fetcher, [], { errorMessage: 'Fallback.' }));
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    expect(result.current.error).toBe('You are not allowed to view this player.');
+  });
+
   it('normalises a non-Error rejection to the fallback string', async () => {
     const fetcher = vi.fn().mockRejectedValue('a bare string');
     const { result } = renderHook(() =>
