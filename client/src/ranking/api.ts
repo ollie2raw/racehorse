@@ -1,6 +1,5 @@
 import { apiGet } from '../api/client';
 import { supabase } from '../lib/supabase';
-import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { readE2eDevAuth } from '../auth/e2eDevAuth';
 
 export type RatingHistoryGame = {
@@ -37,24 +36,22 @@ export type LeaderboardResponse = {
 export async function fetchRankingLeaderboard(
   limit = 50,
 ): Promise<{ data: LeaderboardResponse | null; error: string | null }> {
-  try {
-    const res = await fetch(
-      `${resolveGameServerUrl()}/api/ranking/leaderboard?limit=${limit}`,
-    );
-    if (!res.ok) {
-      return { data: null, error: `HTTP ${res.status}` };
-    }
-    const body = (await res.json()) as LeaderboardResponse & { ok: boolean };
-    if (body.leaderboard_load_failed) {
-      return { data: { leaderboard: [], leaderboard_load_failed: true }, error: null };
-    }
-    return {
-      data: { leaderboard: Array.isArray(body.leaderboard) ? body.leaderboard : [] },
-      error: null,
-    };
-  } catch {
+  // Public board: no sign-in needed, so no auth header. The shared client adds the timeout and the one error shape.
+  const result = await apiGet<LeaderboardResponse & { ok: boolean }>(
+    `/api/ranking/leaderboard?limit=${limit}`,
+    { auth: false },
+  );
+  const body = result.data;
+  if (result.error || !body) {
     return { data: null, error: 'Failed to load leaderboard.' };
   }
+  if (body.leaderboard_load_failed) {
+    return { data: { leaderboard: [], leaderboard_load_failed: true }, error: null };
+  }
+  return {
+    data: { leaderboard: Array.isArray(body.leaderboard) ? body.leaderboard : [] },
+    error: null,
+  };
 }
 
 export async function fetchRatingHistory(
