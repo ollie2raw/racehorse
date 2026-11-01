@@ -208,6 +208,7 @@ export function gradeRun(params: {
   const totalScore = puzzles.reduce((sum, puzzle) => sum + puzzle.awardedPoints, 0);
   const puzzlesSolved = puzzles.filter((puzzle) => puzzle.solved).length;
   const bankedBonusSeconds = puzzles.reduce((sum, puzzle) => sum + puzzle.bonusSeconds, 0);
+  const totalMovesUsed = puzzles.reduce((sum, puzzle) => sum + puzzle.movesUsed, 0);
 
   let invalidatedReason: string | null = null;
   const clientScore = Math.max(0, Math.round(params.clientReportedScore || 0));
@@ -219,6 +220,8 @@ export function gradeRun(params: {
     invalidatedReason = 'run_duration_exceeded';
   } else if (puzzles.some((puzzle) => puzzle.gradingError === 'unknown_puzzle')) {
     invalidatedReason = 'unknown_puzzle_reported';
+  } else if (params.runDurationSeconds < totalMovesUsed * config.antiCheat.minSecondsPerMove) {
+    invalidatedReason = 'run_too_fast';
   }
 
   return {

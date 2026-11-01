@@ -258,6 +258,69 @@ describe('leaderboards', () => {
     expect(path).toContain('is_official=is.true');
   });
 
+  describe('the all-time scan pages until enough different players are covered', () => {
+    // A row as supabase returns it, with just the columns the normalizer needs.
+    const row = (id: string, userId: string, score: number) => ({
+      id,
+      user_id: userId,
+      username: userId,
+      status: 'completed',
+      started_at: '2026-10-01T00:00:00.000Z',
+      ended_at: '2026-10-01T00:02:00.000Z',
+      total_score: score,
+      puzzles_solved: 5,
+      client_reported_score: score,
+      invalidated_reason: null,
+      config_version: 4,
+      run_date: '2026-10-01',
+      is_official: false,
+      assigned_puzzle_ids: [],
+      completion_claimed_at: null,
+      completion_client_score: null,
+    });
+
+    it('does not let one player with many top runs push everyone else off the board', async () => {
+      const { listCompletedRushRuns } = await import('../http/stores/puzzleRushStore');
+      // page size 3: the first page is three runs by the same player, the second page brings the others
+      mocks.supabaseFetch
+        .mockResolvedValueOnce([row('a1', 'user-a', 900), row('a2', 'user-a', 890), row('a3', 'user-a', 880)])
+        .mockResolvedValueOnce([row('b1', 'user-b', 870), row('c1', 'user-c', 860), row('a4', 'user-a', 850)]);
+      const runs = await listCompletedRushRuns(3, 3);
+      expect(mocks.supabaseFetch).toHaveBeenCalledTimes(2);
+      expect(mocks.supabaseFetch.mock.calls[0][0]).toContain('limit=3&offset=0');
+      expect(mocks.supabaseFetch.mock.calls[1][0]).toContain('limit=3&offset=3');
+      expect(buildPuzzleRushLeaderboard(runs).map((entry) => entry.userId)).toEqual(['user-a', 'user-b', 'user-c']);
+    });
+
+    it('orders by a total order (id last) so pages never overlap or skip', async () => {
+      const { listCompletedRushRuns } = await import('../http/stores/puzzleRushStore');
+      mocks.supabaseFetch.mockResolvedValueOnce([]);
+      await listCompletedRushRuns();
+      expect(mocks.supabaseFetch.mock.calls[0][0]).toContain('order=total_score.desc,puzzles_solved.desc,ended_at.asc,id.asc');
+    });
+
+    it('stops as soon as the first page already covers enough players', async () => {
+      const { listCompletedRushRuns } = await import('../http/stores/puzzleRushStore');
+      mocks.supabaseFetch.mockResolvedValueOnce([row('a1', 'user-a', 9), row('b1', 'user-b', 8), row('c1', 'user-c', 7)]);
+      await listCompletedRushRuns(2, 3);
+      expect(mocks.supabaseFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops when the table runs out, and never reads more than the page cap', async () => {
+      const { listCompletedRushRuns, RUSH_LEADERBOARD_MAX_PAGES } = await import('../http/stores/puzzleRushStore');
+      // a short page means the table is exhausted
+      mocks.supabaseFetch.mockResolvedValueOnce([row('a1', 'user-a', 9)]);
+      await listCompletedRushRuns(50, 3);
+      expect(mocks.supabaseFetch).toHaveBeenCalledTimes(1);
+
+      // a board that can never fill (one player, always full pages) still ends
+      mocks.supabaseFetch.mockClear();
+      mocks.supabaseFetch.mockResolvedValue([row('a1', 'user-a', 9), row('a2', 'user-a', 8), row('a3', 'user-a', 7)]);
+      await listCompletedRushRuns(50, 3);
+      expect(mocks.supabaseFetch).toHaveBeenCalledTimes(RUSH_LEADERBOARD_MAX_PAGES);
+    });
+  });
+
   it('the all-time store query does NOT filter on official', async () => {
     const { listCompletedRushRuns } = await import('../http/stores/puzzleRushStore');
     mocks.supabaseFetch.mockResolvedValueOnce([]);
