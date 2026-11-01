@@ -73,6 +73,17 @@ describe('NoBrainerLabScreen intro gate', () => {
     vi.clearAllMocks();
   });
 
+  it('names the page: one h1 for screen readers and a tab title', async () => {
+    const { unmount } = render(<NoBrainerLabScreen onBack={vi.fn()} />);
+    await screen.findByRole('dialog', { name: "What's a no brainer?" });
+    // The intro modal is open, which hides the page behind it from the accessibility tree; the heading is still there.
+    expect(screen.getAllByRole('heading', { level: 1, hidden: true })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, hidden: true })).toHaveTextContent('Practice');
+    expect(document.title).toBe('Practice | Racehorse Dominoes');
+    unmount();
+    expect(document.title).not.toContain('Practice');
+  });
+
   it('shows the intro modal before the training hand is available', async () => {
     render(<NoBrainerLabScreen onBack={vi.fn()} />);
 

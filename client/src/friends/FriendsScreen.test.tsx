@@ -76,6 +76,22 @@ describe('FriendsScreen — friend row interactive structure (S1)', () => {
     removeFriend.mockResolvedValue({ error: null });
   });
 
+  it('names the page: Friends is the h1 and the tab title while it is open', async () => {
+    const { unmount } = render(<FriendsScreen {...props} />);
+    await screen.findByText('@maya');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Friends');
+    expect(document.title).toBe('Friends | Racehorse Dominoes');
+    unmount();
+    expect(document.title).not.toContain('Friends');
+  });
+
+  it('does not rename the tab while the screen is closed', async () => {
+    document.title = 'Racehorse Dominoes';
+    render(<FriendsScreen {...props} open={false} />);
+    expect(document.title).toBe('Racehorse Dominoes');
+  });
+
   it('renders no <button> nested inside another <button>, and no DOM-nesting warning', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { container } = render(<FriendsScreen {...props} />);

@@ -24,6 +24,7 @@ import { getNoBrainerSolvedCount, markNoBrainerHandSolved } from './noBrainerLab
 import { NoBrainerIntroModal } from './NoBrainerIntroModal';
 import { ZoomInIcon, ZoomOutIcon } from '../components';
 import './noBrainerLab.css';
+import { usePageTitle } from '../utils/usePageTitle';
 
 interface NoBrainerLabScreenProps {
   userId?: string | null;
@@ -65,6 +66,7 @@ export default function NoBrainerLabScreen({
   userId = null,
   onBack,
 }: NoBrainerLabScreenProps) {
+  usePageTitle('Practice');
   const rootRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<BoardHandle>(null);
   const [dataset, setDataset] = useState<NoBrainerHandRecord[] | null>(null);
@@ -243,6 +245,9 @@ export default function NoBrainerLabScreen({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the effect keys on practiceState.status and record.key — the fields that gate the solve — not the whole objects
   }, [practiceState?.status, record?.key, usedHint, usedShowSolution, userId]);
 
+  // The screen is a board with no visible title; screen readers still need the page's heading, in every state.
+  const pageHeading = <h1 className="nbl-sr-title">Practice</h1>;
+
   if (!record || !practiceState) {
     let loadingLabel: string | null = null;
     if (!dataset && !error) {
@@ -255,6 +260,7 @@ export default function NoBrainerLabScreen({
 
     return (
       <>
+        {pageHeading}
         <NoBrainerIntroModal open={introOpen} onStart={dismissIntro} onDismiss={onBack} />
         {error && !record ? (
           <div className="nbl-loading-screen">
@@ -304,6 +310,8 @@ export default function NoBrainerLabScreen({
           display: practiceState.status === 'won' ? 'block' : 'none',
         }}
       />
+
+      {pageHeading}
 
       <MatchLiveLayout
         hudLeft={

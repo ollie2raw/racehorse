@@ -12,6 +12,7 @@ import { RankedPerformanceSection } from './components/RankedPerformanceSection'
 import { RivalCard } from './components/RivalCard';
 import { StatsIdentityHero } from './components/StatsIdentityHero';
 import './statsScreen.css';
+import { usePageTitle } from '../utils/usePageTitle';
 
 interface StatsScreenProps {
   open: boolean;
@@ -42,6 +43,7 @@ export default function StatsScreen({
   onOpenAuth,
   onSignOut,
 }: StatsScreenProps) {
+  usePageTitle('Stats', open);
   const isUnsupportedPublicTarget = Boolean(targetUserId && targetUserId !== user?.id);
   const identityState = usePlayerIdentityModel({
     subjectUserId: targetUserId ?? user?.id ?? null,
