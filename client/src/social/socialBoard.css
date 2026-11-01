@@ -446,6 +446,9 @@
 .rh-sb-feed-state strong { display: block; font-size: 15px; color: var(--rh-sb-ink); }
 .rh-sb-feed-state p { margin: 8px 0 0; font-size: 12.5px; color: var(--rh-sb-muted); }
 
+/* The Retry button sits in the middle of this message with nothing around it, so it gets its full 44px. */
+.rh-sb-feed-state .rh-sb-btn { height: 44px; }
+
 /* -------------------------------------------------------------- rail */
 
 .rh-sb-page .rh-sf-right-rail,

@@ -1,0 +1,61 @@
+/*
+ * Touch slop for the menu and hub controls that are compact on purpose.
+ *
+ * Apple's guidance (and WCAG 2.5.5) is a 44 x 44pt target. These controls are 28 to 40px tall in the app's compact
+ * layouts, and growing them would break the viewport-locked screens, so each gets an invisible hit area of at least
+ * 44 x 44 centred on the control. It is layout-neutral: an absolutely positioned pseudo-element takes no space, and
+ * `max(100%, 44px)` means a control already that wide (or tall) is not widened (or heightened) at all.
+ *
+ * The positioning rule is in :where() on purpose: it has no specificity, so a control that is already absolutely or
+ * sticky positioned by its own stylesheet keeps that, and only a static control becomes the slop's containing block.
+ * Only controls with no ::before of their own are listed (the how-to-play jump link, which uses both, is given real
+ * height instead). Measured, not assumed: client/e2e/touch-targets-menus.spec.ts sweeps
+ * elementFromPoint across a 44 x 44 box around each control.
+ */
+:where(
+    .mp-topbar__seg-btn,
+    .rh-settings-toggle,
+    .dfl-btn,
+    .rh-hub-filter,
+    .rh-sb-filter,
+    .rh-modal-close,
+    .rh-sb-btn,
+    .pvf-back-btn,
+    .pvf-start-btn,
+    .rh-hub-rail-link,
+    .learn-academy__path-node,
+    .mm-cta,
+    .pml-tab-seg,
+    .df-start-match-btn,
+    .df-pvf-leaderboard-link,
+    .rh-btn
+  ) {
+  position: relative;
+}
+
+:is(
+    .mp-topbar__seg-btn,
+    .rh-settings-toggle,
+    .dfl-btn,
+    .rh-hub-filter,
+    .rh-sb-filter,
+    .rh-modal-close,
+    .rh-sb-btn,
+    .pvf-back-btn,
+    .pvf-start-btn,
+    .rh-hub-rail-link,
+    .learn-academy__path-node,
+    .mm-cta,
+    .pml-tab-seg,
+    .df-start-match-btn,
+    .df-pvf-leaderboard-link,
+    .rh-btn
+  )::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
