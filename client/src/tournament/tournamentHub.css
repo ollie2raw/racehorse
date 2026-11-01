@@ -1276,8 +1276,13 @@
 
   .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) {
     flex: 1 1 auto;
-    max-height: 380px;
+    max-height: 350px;
     justify-content: space-between;
+  }
+
+  /* The same floor as the other hubs: a margin under the content, not content to the window's edge. */
+  .th-layout {
+    padding-bottom: 28px;
   }
 
   .th-soon {
