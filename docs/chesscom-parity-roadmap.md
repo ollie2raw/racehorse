@@ -14,7 +14,7 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 
 | # | Item | Evidence | PR |
 |---|---|---|---|
-| [ ] 0.1 | Tournament bracket refetches on reconnect and tab return; stale-data strip with retry when a refresh fails | `useTournament.ts:353,361`; `TournamentBracketScreen.tsx:644-646` | |
+| [~] 0.1 | Tournament bracket refetches on reconnect and tab return; stale-data strip with retry when a refresh fails. (The screen already polled every 20 s while visible; the real gap was the throttled-tab and recovery case.) | `useTournament.ts`; `TournamentBracketScreen.tsx` | #409 open |
 
 ## Phase 1: event week, client only (no server)
 
@@ -77,4 +77,5 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 
 ## Status log
 
-- 2026-11-01: roadmap created from the two audits. Nothing executed yet.
+- 2026-11-01: roadmap created from the two audits.
+- 2026-11-01: 0.1 built and verified, PR #409 open (`[~]` = PR open, awaiting merge; `[x]` = merged).
