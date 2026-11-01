@@ -277,6 +277,7 @@ import { registerBotMatchesRoutes } from './http/routes/botMatches';
 import { registerPuzzleRushRoutes } from './http/routes/puzzleRush';
 import { registerDailyFritzRoutes } from './http/routes/dailyFritz';
 import { registerGameReviewsRoute } from './http/routes/gameReviewsRoute';
+import { registerGameRecordsRoute } from './http/routes/gameRecordsRoute';
 import {
   registerReviewCompletionJobsRoute,
   scheduleReviewCompletionSweep,
@@ -583,6 +584,7 @@ registerBotMatchesRoutes(app, {
 registerPuzzleRushRoutes(app);
 registerDailyFritzRoutes(app);
 registerGameReviewsRoute(app);
+registerGameRecordsRoute(app);
 registerReviewCompletionJobsRoute(app);
 
 registerRoomEventsRoutes(app, {

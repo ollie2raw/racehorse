@@ -97,6 +97,7 @@ export function useBotMatchScreenController(props: BotMatchScreenProps): BotMatc
     bootstrap,
     guidedBoot,
     moveLog: replay.moveLog,
+    localMatchId: ghost.activeLocalMatchId,
   });
 
   const turns = useMatchTurnStack({
