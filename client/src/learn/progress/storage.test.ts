@@ -201,4 +201,12 @@ describe('progress storage', () => {
     expect(loadLearnProgress().lastLessonId).toBeNull();
     spy.mockRestore();
   });
+
+  it('21. a failed write (quota, private mode) does not throw and still returns the new record', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    expect(() => saveLearnLastPosition('lesson-b', 2)).not.toThrow();
+    expect(markLearnLessonCompleted('lesson-b').completedLessonIds).toEqual(['lesson-b']);
+  });
 });

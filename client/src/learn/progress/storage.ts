@@ -36,7 +36,13 @@ export function loadLearnProgress(): LearnProgressRecord {
 
 export function saveLearnProgress(progress: LearnProgressRecord): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(LEARN_PROGRESS_KEY, JSON.stringify(sanitizeProgress(progress)));
+  try {
+    window.localStorage.setItem(LEARN_PROGRESS_KEY, JSON.stringify(sanitizeProgress(progress)));
+  } catch {
+    // Quota exceeded, Safari private mode, or blocked storage: progress is a
+    // convenience, so a failed write must never break the lesson. The caller
+    // still gets the updated record to show for this session.
+  }
 }
 
 export function saveLearnLastPosition(lessonId: string, stepIndex: number): LearnProgressRecord {
