@@ -164,3 +164,62 @@ describe.skipIf(!allowed)('Puzzle Rush real PostgreSQL assignment and completion
     expect(count).toBe(attemptedReport.status === 'fulfilled' ? 1 : 0);
   });
 });
+
+
+/** Needs supabase/migrations/2026-11-02_rush_leaderboard_ranked_v1.sql applied to the prepared database. */
+describe.skipIf(!allowed)('Puzzle Rush ranked leaderboard function (real PostgreSQL)', () => {
+  const ids = Array.from({ length: 6 }, () => randomUUID());
+  const [alpha, bravo, charlie, delta, echo, foxtrot] = ids;
+  const insertRun = (user: string, status: string, endedAt: string | null, score: number, solved: number) =>
+    sql(`insert into public.rush_runs (user_id,username,status,ended_at,total_score,puzzles_solved) values ('${user}','${user.slice(0, 4)}','${status}',${endedAt ? `'${endedAt}'` : 'null'},${score},${solved})`);
+  // The database is shared with other tests, so only this test's own players are looked at.
+  const board = (limit = 100, offset = 0, self = 'null') => {
+    const raw = JSON.parse(sql(`select public.rush_leaderboard_ranked_v1(${limit},${offset},${self})::text`));
+    return raw as { rows: Array<{ userId: string; rank: number }>; totalPlayers: number; self: { rank: number } | null };
+  };
+  const mine = (rows: Array<{ userId: string; rank: number }>) => rows.filter((row) => ids.includes(row.userId)).map((row) => row.userId);
+
+  beforeAll(() => {
+    sql(`insert into auth.users (id) values ${ids.map((id) => `('${id}')`).join(',')}`);
+    // alpha has three completed runs: only the best may count, and it must not take extra rows
+    insertRun(alpha, 'completed', '2099-01-01 10:00', 2_000_000, 9);
+    insertRun(alpha, 'completed', '2099-01-01 11:00', 1_999_990, 9);
+    insertRun(alpha, 'completed', '2099-01-01 12:00', 1_999_980, 9);
+    insertRun(bravo, 'completed', '2099-01-01 10:00', 1_999_970, 8);
+    // charlie and delta tie on score and solved: the earlier finish ranks higher
+    insertRun(charlie, 'completed', '2099-01-01 12:00', 1_999_960, 8);
+    insertRun(delta, 'completed', '2099-01-01 09:00', 1_999_960, 8);
+    // an invalidated run with a huge score and an open run never appear
+    insertRun(echo, 'invalidated', '2099-01-01 08:00', 9_000_000, 99);
+    sql(`insert into public.rush_runs (user_id,username,status,total_score) values ('${foxtrot}','fox','in_progress',8000000)`);
+  });
+
+  it('ranks one best completed run per player in the app\'s order, leaving out invalidated and open runs', () => {
+    expect(mine(board().rows)).toEqual([alpha, bravo, delta, charlie]);
+  });
+
+  it('reports the board length and the caller\'s own rank wherever it falls', () => {
+    const full = board();
+    expect(full.totalPlayers).toBeGreaterThanOrEqual(4);
+    const deltaRank = board(1, 0, `'${delta}'`).self?.rank;
+    expect(deltaRank).toBe(board().rows.find((row) => row.userId === delta)?.rank);
+    // a player with no completed run has no rank
+    expect(board(50, 0, `'${echo}'`).self).toBeNull();
+  });
+
+  it('pages without overlap or gaps, clamps its limits, and gives an empty list past the end', () => {
+    const all = board().rows.map((row) => row.rank);
+    expect(all).toEqual([...all].sort((a, b) => a - b));
+    expect(new Set(all).size).toBe(all.length);
+    const pageTwo = board(2, 2).rows.map((row) => row.rank);
+    expect(pageTwo).toEqual(all.slice(2, 4));
+    expect(board(0, 0).rows).toHaveLength(1);
+    expect(board(2, -5).rows).toHaveLength(2);
+    expect(board(10, 1_000_000).rows).toEqual([]);
+  });
+
+  it('is executable by the service role only', () => {
+    const can = (role: string) => sql(`select has_function_privilege('${role}', 'public.rush_leaderboard_ranked_v1(integer,integer,uuid)', 'execute')`);
+    expect([can('anon'), can('authenticated'), can('service_role')]).toEqual(['f', 'f', 't']);
+  });
+});

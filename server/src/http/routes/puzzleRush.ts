@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/node';
 import type { Application } from 'express';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
 import { PUZZLE_RUSH_CONFIG, isPuzzleRushStageKey } from '../../puzzleRush/config';
+import type { PuzzleRushLeaderboardEntry } from '../../puzzleRush/types';
 import { materializeAssignedPuzzles, selectRunPuzzles, summarizeSelectionFallbacks } from '../../puzzleRush/difficulty';
 import { gradeRun, type ReportedPuzzle } from '../../puzzleRush/grading';
 import {
@@ -19,6 +20,7 @@ import {
   getRushRunById,
   invalidateUnassignedRushRun,
   incrementPuzzlePoolPlayCounts,
+  fetchRankedRushLeaderboard,
   listCompletedRushRuns,
   listCompletedRushRunsForUser,
   listOfficialRushRunsForDate,
@@ -389,12 +391,28 @@ export function registerPuzzleRushRoutes(app: Application): void {
         /* leaderboard is readable without auth */
       }
 
+      const pageSize = PUZZLE_RUSH_CONFIG.leaderboard.pageSize;
+      const limit = Math.min(100, Math.max(1, Math.floor(Number(req.query.limit)) || pageSize));
+      const offset = Math.max(0, Math.floor(Number(req.query.offset)) || 0);
+
       const runDate = getPacificDateKey();
-      const [runs, todayOfficial] = await Promise.all([
-        listCompletedRushRuns(),
+      // Ranked in the database when that function is applied (paging, the board's length, the caller's own rank); otherwise
+      // the in-memory ranking over a bounded scan, which can only show the first page and the caller's rank within it.
+      const [ranked, todayOfficial] = await Promise.all([
+        fetchRankedRushLeaderboard({ limit, offset, userId }),
         listOfficialRushRunsForDate(runDate),
       ]);
-      const leaderboard = buildPuzzleRushLeaderboard(runs);
+      let leaderboard: PuzzleRushLeaderboardEntry[];
+      let totalPlayers: number | null = null;
+      let selfRank: number | null = null;
+      if (ranked) {
+        leaderboard = ranked.rows;
+        totalPlayers = ranked.totalPlayers;
+        selfRank = ranked.self?.rank ?? null;
+      } else {
+        leaderboard = buildPuzzleRushLeaderboard(await listCompletedRushRuns());
+        if (userId) selfRank = leaderboard.find((entry) => entry.userId === userId)?.rank ?? null;
+      }
       const daily = buildDailyPuzzleRushLeaderboard(todayOfficial);
 
       let personalBest = null;
@@ -403,7 +421,7 @@ export function registerPuzzleRushRoutes(app: Application): void {
         personalBest = findPersonalBestRun(own, userId);
       }
 
-      res.json({ ok: true, runDate, leaderboard, daily, personalBest });
+      res.json({ ok: true, runDate, leaderboard, daily, personalBest, offset: ranked ? offset : 0, limit, totalPlayers, selfRank });
     } catch (error) {
       capture500(error, { route: 'puzzle-rush/leaderboard' });
       res.status(500).json({ error: prodSafeError(error, 'Failed to load Puzzle Rush leaderboard.') });
