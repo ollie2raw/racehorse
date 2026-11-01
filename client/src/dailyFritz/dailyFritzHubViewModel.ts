@@ -4,6 +4,7 @@ import {
   formatCountdownHms,
   formatDateLabel,
   formatDateShortLabel,
+  pacificDateText,
   resolveTodayNextAction,
   secondsUntilNextPacificMidnight,
   tierDisplayLabel,
@@ -129,11 +130,17 @@ export function buildDailyFritzHubViewModel(
 ): DailyFritzHubViewModel {
   void countdownTick;
 
-  const dateLabel = today ? formatDateLabel(today.run_date) : '—';
-  const dateShortLabel = today ? formatDateShortLabel(today.run_date) : '—';
-  const tierLabel = today ? tierDisplayLabel(today.fritz_tier) : '—';
-  const tierShortLabel = today ? titleCaseTier(today.fritz_tier) : '—';
-  const formatLabel = today ? 'Best of 3' : '—';
+  // A signed-out visitor has no set loaded, but most of it is knowable: the date is today's Pacific date, the format is
+  // always best of 3, and the tier uses the same "Elite" fallback the set summary below already shows. Dashes read as a
+  // broken screen, so only a signed-in player whose set has not loaded yet still sees them.
+  const guestPreview = !today && !isAuthenticated;
+  const previewDate = guestPreview ? pacificDateText(new Date()) : null;
+  const dateText = today?.run_date ?? previewDate;
+  const dateLabel = dateText ? formatDateLabel(dateText) : '—';
+  const dateShortLabel = dateText ? formatDateShortLabel(dateText) : '—';
+  const tierLabel = today ? tierDisplayLabel(today.fritz_tier) : guestPreview ? tierDisplayLabel('elite') : '—';
+  const tierShortLabel = today ? titleCaseTier(today.fritz_tier) : guestPreview ? titleCaseTier('elite') : '—';
+  const formatLabel = 'Best of 3';
   const streakLabel = today ? `${today.streak} day${today.streak === 1 ? '' : 's'}` : '0 days';
   const winTarget = today?.winning_score ?? 60;
 
@@ -141,13 +148,15 @@ export function buildDailyFritzHubViewModel(
   const isComplete = nextAction === 'view_results';
   const isStarted = today?.attempt_status === 'started';
 
-  const primaryCtaLabel = nextAction === 'view_results'
-    ? "View Today's Result"
-    : nextAction === 'locked'
-      ? 'Locked'
-      : isStarted
-        ? "Resume Today's Set"
-        : "Play Today's Set";
+  const primaryCtaLabel = !isAuthenticated
+    ? 'Sign in to play'
+    : nextAction === 'view_results'
+      ? "View Today's Result"
+      : nextAction === 'locked'
+        ? 'Locked'
+        : isStarted
+          ? "Resume Today's Set"
+          : "Play Today's Set";
 
   const games = buildDailyFritzHubGameCards(todaySetResult, {
     isComplete,

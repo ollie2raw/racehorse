@@ -401,6 +401,18 @@ export function secondsUntilNextPacificMidnight(now: Date): number {
   return Math.max(0, 86400 - elapsed);
 }
 
+/** Today's calendar date in Pacific time as YYYY-MM-DD: the day a Daily Fritz set belongs to (it resets at Pacific midnight). */
+export function pacificDateText(now: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
 export function formatCountdownHms(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);

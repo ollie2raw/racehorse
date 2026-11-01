@@ -8,6 +8,7 @@ import {
   normalizeGameNumber,
   formatMargin,
   formatCountdownHms,
+  pacificDateText,
   secondsUntilNextPacificMidnight,
   friendlyDailyFritzInitError,
   normalizeSetResult,
@@ -15,6 +16,30 @@ import {
   resolveTodayNextAction,
   resolveBetweenGamesOverlayFromStart,
 } from './dailyFritzScreenHelpers';
+
+describe('pacificDateText', () => {
+  it('is the Pacific calendar date, not the UTC one', () => {
+    // 23:30 PDT on Oct 31 is already Nov 1 in UTC.
+    expect(pacificDateText(new Date('2026-11-01T06:30:00.000Z'))).toBe('2026-10-31');
+    // 01:30 PDT, the hour before the clocks fall back.
+    expect(pacificDateText(new Date('2026-11-01T08:30:00.000Z'))).toBe('2026-11-01');
+  });
+
+  it('rolls over at Pacific midnight on both sides of the daylight-saving change', () => {
+    // PDT (UTC-7): midnight is 07:00Z.
+    expect(pacificDateText(new Date('2026-07-05T06:59:59.000Z'))).toBe('2026-07-04');
+    expect(pacificDateText(new Date('2026-07-05T07:00:00.000Z'))).toBe('2026-07-05');
+    // PST (UTC-8): midnight is 08:00Z.
+    expect(pacificDateText(new Date('2026-12-05T07:59:59.000Z'))).toBe('2026-12-04');
+    expect(pacificDateText(new Date('2026-12-05T08:00:00.000Z'))).toBe('2026-12-05');
+  });
+
+  it('agrees with the reset countdown: the date changes exactly when the countdown reaches zero', () => {
+    const justBefore = new Date('2026-12-05T07:59:59.000Z');
+    expect(secondsUntilNextPacificMidnight(justBefore)).toBe(1);
+    expect(pacificDateText(new Date(justBefore.getTime() + 1000))).not.toBe(pacificDateText(justBefore));
+  });
+});
 
 describe('formatDateLabel', () => {
   it('formats a valid date string', () => {
