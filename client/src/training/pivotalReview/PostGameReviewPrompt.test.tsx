@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer.ts';
 import type { GameAccuracyModelResult } from '@racehorse/review-engine';
@@ -232,5 +232,59 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
     expect(screen.queryByText('77.3%')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Review Game' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();
+  });
+});
+
+describe('PostGameReviewPrompt — "Analyze again" when the server gave up', () => {
+  it('offers Analyze again, and calls back when pressed', () => {
+    const onRetryReview = vi.fn();
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewUnavailable
+        onRetryReview={onRetryReview}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent("We couldn't finish analyzing this game");
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze again' }));
+    expect(onRetryReview).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Review Game' })).toBeInTheDocument();
+  });
+
+  it('disables the button and says so while restarting', () => {
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewUnavailable
+        onRetryReview={vi.fn()}
+        reviewRetryState="retrying"
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Analyze again' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Restarting the analysis');
+  });
+
+  it('explains a too-soon retry and a failed request in words', () => {
+    const { rerender } = render(
+      <PostGameReviewPrompt {...requiredProps} analysis={baseAnalysis()} accuracyModelPending reviewUnavailable onRetryReview={vi.fn()} reviewRetryState="cooldown" />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Please wait a minute');
+    rerender(
+      <PostGameReviewPrompt {...requiredProps} analysis={baseAnalysis()} accuracyModelPending reviewUnavailable onRetryReview={vi.fn()} reviewRetryState="error" />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Check your connection');
+  });
+
+  it('is not offered while the review is still analyzing or when no retry handler exists', () => {
+    const { rerender } = render(
+      <PostGameReviewPrompt {...requiredProps} analysis={baseAnalysis()} accuracyModelPending onRetryReview={vi.fn()} />,
+    );
+    expect(screen.queryByRole('button', { name: 'Analyze again' })).not.toBeInTheDocument();
+    rerender(<PostGameReviewPrompt {...requiredProps} analysis={baseAnalysis()} accuracyModelPending reviewUnavailable />);
+    expect(screen.queryByRole('button', { name: 'Analyze again' })).not.toBeInTheDocument();
   });
 });

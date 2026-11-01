@@ -9,6 +9,16 @@ import './postGameReviewPrompt.css';
 
 export type PostGameReviewAccent = 'gold' | 'blue';
 
+/** Where the "Analyze again" request stands. */
+export type ReviewRetryUiState = 'idle' | 'retrying' | 'cooldown' | 'error';
+
+const RETRY_NOTE: Record<ReviewRetryUiState, string> = {
+  idle: "We couldn't finish analyzing this game. You can run the analysis again.",
+  retrying: 'Restarting the analysis…',
+  cooldown: 'The analysis was just restarted. Please wait a minute, then try again.',
+  error: "Couldn't reach the server. Check your connection and try again.",
+};
+
 export type PostGameReviewPromptProps = {
   open: boolean;
   accent?: PostGameReviewAccent;
@@ -23,6 +33,9 @@ export type PostGameReviewPromptProps = {
   /** The server will not finish this review; show that instead of Analyzing. */
   reviewUnavailable?: boolean;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
+  /** Re-run an analysis the server gave up on. Only offered while `reviewUnavailable`. */
+  onRetryReview?: () => void;
+  reviewRetryState?: ReviewRetryUiState;
   onReviewGame: () => void;
   onSkip: () => void;
 };
@@ -93,6 +106,8 @@ export function PostGameReviewPrompt({
   accuracyModelPending,
   reviewUnavailable = false,
   decisionLedger = null,
+  onRetryReview,
+  reviewRetryState = 'idle',
   onReviewGame,
   onSkip,
 }: PostGameReviewPromptProps) {
@@ -155,9 +170,26 @@ export function PostGameReviewPrompt({
             </dl>
 
             {coverageText ? <p className="pgr-coverage-note">{coverageText}</p> : null}
+            {reviewUnavailable && onRetryReview ? (
+              <p className="pgr-coverage-note" role="status">{RETRY_NOTE[reviewRetryState]}</p>
+            ) : null}
 
             <div className="dfd__actions">
-              <button type="button" className="dfd__btn dfd__btn--primary" onClick={onReviewGame}>
+              {reviewUnavailable && onRetryReview ? (
+                <button
+                  type="button"
+                  className="dfd__btn dfd__btn--primary"
+                  onClick={onRetryReview}
+                  disabled={reviewRetryState === 'retrying'}
+                >
+                  Analyze again
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={`dfd__btn ${reviewUnavailable && onRetryReview ? 'dfd__btn--ghost' : 'dfd__btn--primary'}`}
+                onClick={onReviewGame}
+              >
                 Review Game
               </button>
               <button type="button" className="dfd__btn dfd__btn--ghost" onClick={onSkip}>

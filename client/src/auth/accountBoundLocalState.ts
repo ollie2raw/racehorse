@@ -1,6 +1,7 @@
 import { clearLastRoomCode } from '../match/recovery/matchRecovery';
 import { clearFritzSession } from '../modules/ghost/fritzSessionStorage';
 import { clearDailyFritzClientStorage } from '../dailyFritz/clientStorage';
+import { clearReviewWriteOutbox } from '../modules/review/reviewWriteOutbox';
 import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
 
 const ADMIN_KEY_STORAGE = 'racehorse:daily-fritz-admin-key';
@@ -16,6 +17,8 @@ export function clearAccountBoundLocalState(previousUserId: string, nextUserId: 
   clearLastRoomCode();
   clearFritzSession();
   clearDailyFritzClientStorage(previousUserId);
+  // A finished review waiting to be saved belongs to the account that played it.
+  clearReviewWriteOutbox(previousUserId);
   if (typeof window === 'undefined') return;
   try {
     window.sessionStorage.removeItem(ADMIN_KEY_STORAGE);
