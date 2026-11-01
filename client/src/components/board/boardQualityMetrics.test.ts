@@ -38,6 +38,9 @@ describe('boardQualityMetrics: the model matches the browser', () => {
     ['laptop-1280x720', 0.28],
     ['phone-932x430', 0.25],
     ['phone-844x390', 0.21],
+    // the installed app: same screen with `.rh-native`, whose compact HUD and hand dock give the board 46-47 px more height
+    ['native-932x430', 0.34],
+    ['native-844x390', 0.28],
   ];
   for (const [name, browserScale] of measuredInBrowser) {
     it(`longBoth at ${name} fits at ~${browserScale}`, () => {

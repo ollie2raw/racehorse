@@ -121,3 +121,39 @@ Reading it:
 - Where the height would come from is a design decision on the phone match screen (the top HUD row is ~100 px, the rack ~85 px of the 390). It also touches the installed iOS app's landscape layouts, so it needs a design review and native QA; it is not a quiet change.
 
 Recommendation: treat it as its own design task ("phone match HUD, board-first"), judged against this table.
+
+## Two phone layouts: phone web vs the installed app (measured 2026-11-02)
+
+Everything above, including "Phone headroom", modelled the **phone web** layout. The installed iPhone app sets `.rh-native` on `<html>`, and `styles/native-landscape.css` compacts the match screens for it (HUD bar 48 px with 36 px pills, a small tile rack, hand tiles 74×38). The geometry harness (`e2e/board-routing-geometry.spec.ts`) does not set that class, so it measured the web layout. Measured now, on the real `LiveMatchScreen` with `rh-native` set before load (and cross-checked on the real Play vs Fritz screen, which gives the same 251 / 277 px):
+
+| Viewport | Layout | Board container | `longBoth` (19 tiles) fits at | Median tile edge | Cannot be whole + 18 px |
+|---|---|---|---|---|---|
+| 844×390 | phone web | 824 × 204 | 0.21 | 24.4 px | 19.7 % |
+| 844×390 | **iPhone app** | 824 × 250 | 0.28 | 25.9 px | **9.1 %** |
+| 932×430 | phone web | 876 × 244 | 0.25 | 27.3 px | 7.6 % |
+| 932×430 | **iPhone app** | 876 × 290 | 0.34 | 31.9 px | **2.8 %** |
+
+So the app already has most of the "+40 px of board height" the earlier table priced, and the open problem there is smaller than the programme assumed. Phone **web** in landscape still gets the bulky HUD (58 px pills, a 60 px hand); extending the compact rules to it would take its 19.7 % toward the app's figure, but it is the less important surface for a launch that is an App Store app.
+
+The model now carries `native-844x390` and `native-932x430` beside the web profiles, and `boardQualityMetrics.test.ts` pins each to the browser-measured scale (0.28 / 0.34, within 0.02) the way the others are pinned.
+
+### What would still help on the iPhone app (model what-if, same 454 hands)
+
+| 844×390 | Median tile | Cannot be whole + 18 px |
+|---|---|---|
+| Today (tray + two pills on the board) | 25.9 px | 9.1 % |
+| Pills moved into the HUD row, tray stays | 29.8 px | 6.7 % |
+| **No overlays on the board** | **31.5 px** | **4.5 %** |
+| A 96 px right-hand rail for pills + tray, no overlays | 28.9 px | 5.7 % |
+| +24 px of height (shorter hand dock), overlays stay | 29.0 px | 7.3 % |
+| No overlays and +24 px | 32.7 px | 3.4 % |
+
+| 932×430 | Median tile | Cannot be whole + 18 px |
+|---|---|---|
+| Today | 31.9 px | 2.8 % |
+| No overlays | 34.8 px | 1.9 % |
+| No overlays and +24 px | 34.8 px | 0.9 % |
+
+Reading it: **a rail is worse than clearing the board**, because width is not free any more once the height is fixed (it spends the width it saves). The best low-cost move is to get the two pills and the tray off the board: the pills into the HUD row, which has about 125 px unused between the status chip and the YOU pill, and the tray behind one 44 px "board tools" button. Together that is the "no overlays" row: **+22 % tile size and the unreadable share halved** at 844×390. That is the next pass (it changes the match HUD on the installed app, so it needs native QA).
+
+An intermittent reading seen once while measuring (the Play vs Fritz board container at 198 px instead of 251 for one sample) did not reproduce in four further runs; it is recorded here as an open observation, not a finding.

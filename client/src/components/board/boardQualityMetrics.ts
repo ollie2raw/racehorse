@@ -63,6 +63,23 @@ export const VIEWPORT_PROFILES: readonly ViewportProfile[] = [
     phoneLandscape: true,
     reserved: [rect(616, 154, 812, 192), rect(718, 66, 810, 110), rect(718, 14, 810, 58)],
   },
+  // The installed iPhone app. `.rh-native` (styles/native-landscape.css) compacts the HUD and the hand dock, so the same
+  // screen gets a board 46-47 px taller than the phone-web profiles above. Measured in the browser with the class set, on
+  // the real LiveMatchScreen (e2e/board-routing-geometry.spec.ts opens it; set `rh-native` on <html> before load).
+  {
+    name: 'native-932x430',
+    containerWidth: 876,
+    containerHeight: 290,
+    phoneLandscape: true,
+    reserved: [rect(648, 244, 866, 282), rect(773, 72, 866, 116), rect(774, 10, 866, 54)],
+  },
+  {
+    name: 'native-844x390',
+    containerWidth: 824,
+    containerHeight: 250,
+    phoneLandscape: true,
+    reserved: [rect(596, 204, 814, 242), rect(722, 72, 814, 116), rect(722, 10, 814, 54)],
+  },
 ];
 
 /** Mirrors useBoardRenderLayout: phones bend by tile count, everything else by measured reach. */
