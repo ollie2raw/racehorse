@@ -1,0 +1,552 @@
+{
+  "src/App.css": {
+    "important": 0,
+    "hex": 0,
+    "gradient": 1
+  },
+  "src/analyzer/GameReviewer.css": {
+    "important": 0,
+    "hex": 6,
+    "gradient": 0
+  },
+  "src/auth/authModal.css": {
+    "important": 0,
+    "hex": 9,
+    "gradient": 0
+  },
+  "src/bot/botMatch.css": {
+    "important": 63,
+    "hex": 32,
+    "gradient": 7
+  },
+  "src/components/GameOverModal.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 0
+  },
+  "src/components/handOver/handOverModal.css": {
+    "important": 11,
+    "hex": 11,
+    "gradient": 10
+  },
+  "src/components/hub/hubDesignTokens.css": {
+    "important": 0,
+    "hex": 6,
+    "gradient": 0
+  },
+  "src/components/hub/hubPageHero.css": {
+    "important": 0,
+    "hex": 2,
+    "gradient": 0
+  },
+  "src/components/hub/hubViewportPage.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 0
+  },
+  "src/components/hub/playerInitialsAvatar.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 3
+  },
+  "src/components/hub/sideRailCard.css": {
+    "important": 0,
+    "hex": 2,
+    "gradient": 0
+  },
+  "src/components/leaveGameModal.css": {
+    "important": 16,
+    "hex": 4,
+    "gradient": 0
+  },
+  "src/components/match-score-header.css": {
+    "important": 0,
+    "hex": 4,
+    "gradient": 0
+  },
+  "src/components/primitives/Button.css": {
+    "important": 0,
+    "hex": 7,
+    "gradient": 4
+  },
+  "src/components/primitives/GlassCard.css": {
+    "important": 0,
+    "hex": 0,
+    "gradient": 1
+  },
+  "src/components/primitives/Modal.css": {
+    "important": 0,
+    "hex": 2,
+    "gradient": 0
+  },
+  "src/components/primitives/StatValue.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 0
+  },
+  "src/dailyFritz/dailyFritz.css": {
+    "important": 14,
+    "hex": 44,
+    "gradient": 28
+  },
+  "src/dailyFritz/dailyFritzLeaderboardBoard.css": {
+    "important": 0,
+    "hex": 0,
+    "gradient": 2
+  },
+  "src/dailyFritz/dailyFritzLeaderboardScreen.css": {
+    "important": 0,
+    "hex": 19,
+    "gradient": 0
+  },
+  "src/dailyFritz/dailyFritzMatchBoard.css": {
+    "important": 15,
+    "hex": 4,
+    "gradient": 0
+  },
+  "src/friends/friendsScreen.css": {
+    "important": 8,
+    "hex": 16,
+    "gradient": 3
+  },
+  "src/ghost/ghostMode.css": {
+    "important": 15,
+    "hex": 10,
+    "gradient": 7
+  },
+  "src/home/components/HomeNextMoveBar.css": {
+    "important": 0,
+    "hex": 14,
+    "gradient": 0
+  },
+  "src/home/components/HomeStreakStrip.css": {
+    "important": 0,
+    "hex": 15,
+    "gradient": 0
+  },
+  "src/index.css": {
+    "important": 2,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/journey/PuzzleSprintModal.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 0
+  },
+  "src/journey/lessonHost/JourneyLessonHost.css": {
+    "important": 3,
+    "hex": 22,
+    "gradient": 0
+  },
+  "src/journey/racehorseJourney.css": {
+    "important": 1,
+    "hex": 14,
+    "gradient": 6
+  },
+  "src/journey/racehorseJourneyTrail.css": {
+    "important": 0,
+    "hex": 18,
+    "gradient": 6
+  },
+  "src/learn/academy/learnAcademy.css": {
+    "important": 31,
+    "hex": 34,
+    "gradient": 2
+  },
+  "src/learn/guidedMatch/guidedMatchFinalDebrief.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 0
+  },
+  "src/learn/guidedMatch/guidedMatchRecorder.css": {
+    "important": 0,
+    "hex": 7,
+    "gradient": 0
+  },
+  "src/learn/howToPlay/howToPlayArticle.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 0
+  },
+  "src/learn/learn-pvf-theme.css": {
+    "important": 10,
+    "hex": 5,
+    "gradient": 2
+  },
+  "src/learn/learn.css": {
+    "important": 13,
+    "hex": 10,
+    "gradient": 17
+  },
+  "src/learn/learnGuidedMatch.css": {
+    "important": 91,
+    "hex": 4,
+    "gradient": 5
+  },
+  "src/learn/learnHowToPlayDiagrams.css": {
+    "important": 0,
+    "hex": 3,
+    "gradient": 0
+  },
+  "src/learn/learnHowToPlayImmersive.css": {
+    "important": 1,
+    "hex": 6,
+    "gradient": 0
+  },
+  "src/learn/learnHowToPlayRacehorse.css": {
+    "important": 0,
+    "hex": 0,
+    "gradient": 1
+  },
+  "src/learn/learnPlayer.css": {
+    "important": 13,
+    "hex": 17,
+    "gradient": 13
+  },
+  "src/learning/coach.css": {
+    "important": 0,
+    "hex": 19,
+    "gradient": 2
+  },
+  "src/live/liveNow.css": {
+    "important": 2,
+    "hex": 16,
+    "gradient": 0
+  },
+  "src/match/gameLayoutLayers.css": {
+    "important": 1,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/match/match-live-solo.css": {
+    "important": 42,
+    "hex": 3,
+    "gradient": 0
+  },
+  "src/match/match-live-surface.css": {
+    "important": 50,
+    "hex": 8,
+    "gradient": 7
+  },
+  "src/match/match-live-theme.css": {
+    "important": 234,
+    "hex": 28,
+    "gradient": 15
+  },
+  "src/match/preGameDraw/preGameDraw.css": {
+    "important": 8,
+    "hex": 8,
+    "gradient": 5
+  },
+  "src/matchmaking/matchFoundOverlay.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 10
+  },
+  "src/matchmaking/matchmakingScreen.css": {
+    "important": 11,
+    "hex": 1,
+    "gradient": 2
+  },
+  "src/matchmaking/multiplayerTopBar.css": {
+    "important": 1,
+    "hex": 1,
+    "gradient": 0
+  },
+  "src/modules/replay/MatchHistoryScrubber.css": {
+    "important": 0,
+    "hex": 5,
+    "gradient": 0
+  },
+  "src/multiplayer/friendChallenge.css": {
+    "important": 0,
+    "hex": 3,
+    "gradient": 1
+  },
+  "src/multiplayer/multiplayerHubShell.css": {
+    "important": 2,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/multiplayer/privateMatchLobby.css": {
+    "important": 35,
+    "hex": 17,
+    "gradient": 8
+  },
+  "src/practice/noBrainerLab.css": {
+    "important": 64,
+    "hex": 37,
+    "gradient": 21
+  },
+  "src/premium-theme.css": {
+    "important": 74,
+    "hex": 5,
+    "gradient": 1
+  },
+  "src/puzzleRush/puzzleRush.css": {
+    "important": 0,
+    "hex": 2,
+    "gradient": 0
+  },
+  "src/screens/RacehorseHomeArt.css": {
+    "important": 19,
+    "hex": 40,
+    "gradient": 28
+  },
+  "src/screens/SinglePlayerModes.css": {
+    "important": 0,
+    "hex": 4,
+    "gradient": 2
+  },
+  "src/screens/settingsScreen.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 0
+  },
+  "src/social/activityFeed.css": {
+    "important": 0,
+    "hex": 22,
+    "gradient": 0
+  },
+  "src/social/activityFeedScreen.css": {
+    "important": 1,
+    "hex": 14,
+    "gradient": 0
+  },
+  "src/social/hub/socialHubTokens.css": {
+    "important": 0,
+    "hex": 4,
+    "gradient": 0
+  },
+  "src/social/leaderboard.css": {
+    "important": 1,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/social/publicProfile.css": {
+    "important": 3,
+    "hex": 2,
+    "gradient": 0
+  },
+  "src/social/socialBoard.css": {
+    "important": 0,
+    "hex": 5,
+    "gradient": 2
+  },
+  "src/social/socialPageHero.css": {
+    "important": 0,
+    "hex": 3,
+    "gradient": 0
+  },
+  "src/styles/_fritz-screen-shell.css": {
+    "important": 0,
+    "hex": 2,
+    "gradient": 2
+  },
+  "src/styles/_pvf-layout.css": {
+    "important": 63,
+    "hex": 17,
+    "gradient": 7
+  },
+  "src/styles/board/board-hand-dock.css": {
+    "important": 3,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/styles/board/board-hud.css": {
+    "important": 25,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/styles/board/board-meta.css": {
+    "important": 4,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/styles/board/board-shell.css": {
+    "important": 6,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/styles/board/skins/racehorse-matte.css": {
+    "important": 83,
+    "hex": 18,
+    "gradient": 14
+  },
+  "src/styles/buttons.css": {
+    "important": 0,
+    "hex": 2,
+    "gradient": 0
+  },
+  "src/styles/dossierRecord.css": {
+    "important": 0,
+    "hex": 0,
+    "gradient": 2
+  },
+  "src/styles/game-interactions.css": {
+    "important": 5,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/styles/home-hub.css": {
+    "important": 51,
+    "hex": 84,
+    "gradient": 9
+  },
+  "src/styles/large-mode.css": {
+    "important": 42,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/styles/lobby.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 3
+  },
+  "src/styles/match-board-architecture.css": {
+    "important": 14,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/styles/match-gameplay.css": {
+    "important": 11,
+    "hex": 3,
+    "gradient": 3
+  },
+  "src/styles/match-hud-corner-pills.css": {
+    "important": 8,
+    "hex": 0,
+    "gradient": 0
+  },
+  "src/styles/match-hud-polish.css": {
+    "important": 6,
+    "hex": 12,
+    "gradient": 0
+  },
+  "src/styles/match-in-game.css": {
+    "important": 2,
+    "hex": 3,
+    "gradient": 7
+  },
+  "src/styles/match-live-hud.css": {
+    "important": 93,
+    "hex": 5,
+    "gradient": 1
+  },
+  "src/styles/match-standard-live-board.css": {
+    "important": 17,
+    "hex": 3,
+    "gradient": 2
+  },
+  "src/styles/native-landscape.css": {
+    "important": 1083,
+    "hex": 27,
+    "gradient": 6
+  },
+  "src/styles/racehorse-background.css": {
+    "important": 2,
+    "hex": 3,
+    "gradient": 16
+  },
+  "src/styles/responsive.css": {
+    "important": 35,
+    "hex": 0,
+    "gradient": 1
+  },
+  "src/styles/rh-glow-underline.css": {
+    "important": 0,
+    "hex": 5,
+    "gradient": 0
+  },
+  "src/styles/rh-soon-pill.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 0
+  },
+  "src/styles/rotate-overlay.css": {
+    "important": 1,
+    "hex": 3,
+    "gradient": 0
+  },
+  "src/styles/screen-loader.css": {
+    "important": 18,
+    "hex": 0,
+    "gradient": 3
+  },
+  "src/styles/shared-ui.css": {
+    "important": 35,
+    "hex": 12,
+    "gradient": 18
+  },
+  "src/styles/table-theme-toggle.css": {
+    "important": 0,
+    "hex": 4,
+    "gradient": 1
+  },
+  "src/styles/toast.css": {
+    "important": 0,
+    "hex": 0,
+    "gradient": 2
+  },
+  "src/styles/tokens.css": {
+    "important": 0,
+    "hex": 0,
+    "gradient": 7
+  },
+  "src/styles/walnut-live.css": {
+    "important": 273,
+    "hex": 98,
+    "gradient": 57
+  },
+  "src/styles/weekly-awards.css": {
+    "important": 0,
+    "hex": 7,
+    "gradient": 2
+  },
+  "src/tournament/tournamentBracket.css": {
+    "important": 0,
+    "hex": 4,
+    "gradient": 0
+  },
+  "src/tournament/tournamentHub.css": {
+    "important": 0,
+    "hex": 4,
+    "gradient": 0
+  },
+  "src/tournament/tournamentMatchHud.css": {
+    "important": 26,
+    "hex": 5,
+    "gradient": 0
+  },
+  "src/tournament/tournamentReadyBanner.css": {
+    "important": 0,
+    "hex": 5,
+    "gradient": 0
+  },
+  "src/tournament/tournamentResult.css": {
+    "important": 0,
+    "hex": 5,
+    "gradient": 2
+  },
+  "src/training/pivotalReview/pivotalReviewSummary.css": {
+    "important": 0,
+    "hex": 1,
+    "gradient": 0
+  },
+  "src/training/pivotalReview/pivotalTurnReviewCard.css": {
+    "important": 0,
+    "hex": 7,
+    "gradient": 0
+  },
+  "src/ui/claudeMode.css": {
+    "important": 42,
+    "hex": 26,
+    "gradient": 9
+  },
+  "src/ui/leaderboardPage.css": {
+    "important": 0,
+    "hex": 23,
+    "gradient": 10
+  }
+}

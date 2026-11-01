@@ -26,7 +26,7 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 | [~] 1.4 | Client geometry copy replaced by game-core's open-ends functions. The scoring code was byte-identical, so no behaviour change; the client file now re-exports core and keeps only its dev diagnostics. A test pins every shared export to the core function | `client/src/game/openEndsGeometry.ts`, `openEndsSingleSource.test.ts` | this PR |
 | [ ] 1.5 | Remove `Math.random` defaults from game-core (rng/deck required); callers inject | `engine.ts:38`, `pregameDraw.ts:17`; server call sites change in 3.x | |
 | [ ] 1.6 | Server-bot parity test over a fixed position corpus (test only) | guards the later shared-engine extraction | |
-| [ ] 1.7 | CSS ratchets in stylelint: `!important` budget, hex ban outside `tokens.css`, no new gradients | baselines from current counts so nothing regresses | |
+| [~] 1.7 | CSS ratchet: per-file `!important`, hex outside `tokens.css` and gradients may never increase; new files start at zero. Baseline today: 2,803 / 993 / 406 across 110 files. Run `node scripts/checkCssRatchet.mjs --update` in the same PR whenever a CSS count drops | `client/scripts/checkCssRatchet.mjs`, `css-ratchet-baseline.json`, CI step | this PR |
 | [ ] 1.8 | Tests for untested logic: `coachMessaging`, `learningStore`, `lessonV2` start/restore, then `useHandLifecycle` | highest-risk first | |
 | [ ] 1.9 | Guest first impression: playable path or real sign-in button on Daily Fritz and `/games`; skeletons instead of placeholder dashes | from launch audit P1-3 | |
 | [ ] 1.10 | Accessibility and polish batch: `LayoutScreen` h1, per-route page titles, tap targets to 44px, raw `not_found` text, skip the authed call when signed out | launch audit P2 5-9 | |

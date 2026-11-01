@@ -87,6 +87,9 @@ jobs:
       - name: Lint CSS
         run: npm run lint:css --prefix client
 
+      - name: CSS ratchet (!important, hex outside tokens, gradients may not increase)
+        run: npm run check:css-ratchet --prefix client
+
       - name: Dependency boundaries
         run: npm run check:deps --prefix client
 
