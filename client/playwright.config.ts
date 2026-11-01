@@ -281,6 +281,9 @@ export default defineConfig({
           env: {
             ...process.env,
             VITE_SERVER_URL: 'http://localhost:3001',
+            // Guest play is off in every shipped build. It only ever changes how an ANONYMOUS user is treated, and no
+            // other spec seeds one, so turning it on for the e2e dev server lets guest-play.spec.ts exercise the guest UI.
+            VITE_ENABLE_GUEST_PLAY: 'true',
             // journey-premium-*.spec.ts run anonymously and need to reach
             // Journey content, which is otherwise gated to the admin
             // account (see isAdminUser.ts) — never set outside this

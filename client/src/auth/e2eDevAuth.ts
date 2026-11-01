@@ -4,6 +4,8 @@ export const E2E_DEV_USER_ID_KEY = 'racehorse_e2e_user_id';
 export const E2E_DEV_BEARER_KEY = 'racehorse_e2e_bearer';
 export const E2E_DEV_BEARER_TOKEN = 'e2e-daily-fritz';
 export const MOBILE_VISUAL_IDENTITY_KEY = 'racehorse_mobile_visual_identity_v1';
+/** When "1", the dev E2E principal is a guest: Supabase's anonymous user (`is_anonymous`, no email). Dev only, like the rest. */
+export const E2E_DEV_GUEST_KEY = 'racehorse_e2e_guest';
 
 export type MobileVisualIdentity = {
   userId: string;
@@ -42,13 +44,16 @@ export function readE2eDevAuth(): { user: User; token: string } | null {
     const userId = window.localStorage.getItem(E2E_DEV_USER_ID_KEY)?.trim();
     const token = window.localStorage.getItem(E2E_DEV_BEARER_KEY)?.trim();
     if (!userId || token !== E2E_DEV_BEARER_TOKEN) return null;
+    const guest = window.localStorage.getItem(E2E_DEV_GUEST_KEY)?.trim() === '1';
     return {
       token,
       user: {
         id: userId,
         aud: 'authenticated',
         role: 'authenticated',
-        email: 'e2e-daily-fritz@racehorse.test',
+        // An anonymous Supabase user has no email.
+        email: guest ? '' : 'e2e-daily-fritz@racehorse.test',
+        ...(guest ? { is_anonymous: true } : {}),
         app_metadata: {},
         user_metadata: {},
         created_at: '2026-01-01T00:00:00.000Z',
