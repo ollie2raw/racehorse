@@ -1,7 +1,32 @@
 # Post-game review: a saved game record, then analysis (chess.com model)
 
-Status: **proposal, awaiting approval** (2026-10-31). No code changed. The analysis engine, accuracy model and
-coaching prose are **not** part of this proposal and stay as they are.
+Status: **approved by the owner and in progress** (2026-11-01). The analysis engine, accuracy model and coaching prose
+are **not** part of this programme and stay as they are.
+
+## Progress and revisions (read this first)
+
+| Phase | State |
+|---|---|
+| 1 Reliable saving, Analyze again, no raw errors | merged (#398) |
+| 2 Save every finished Play vs Fritz game as a server record | merged (#399); owner applies `2026-11-01_game_records.sql` |
+| 3 Read the record back and rebuild the game on the client | this PR: `GET /api/game-records/recent` and `/:sourceMatchId`, `rebuildGameFromRecord`, `savedGames` |
+| 4 Games archive + "Review this game" screen; adapters for multiplayer / Daily Fritz | next |
+| 5 Archive polish (filters, progress/notification, share link, mobile layout) | later |
+
+Two assumptions in the original text below turned out wrong, and the plan changed because of them:
+
+1. **"Server writes the review row itself" (old Phase 2) cannot stand alone.** The replay artifact (frozen
+   explanations) is built from the browser's move-log analysis, and the review insert is `ignore-duplicates`, so a bare
+   server-written row would shadow the artifact. The saved game has to come first; review is derived from it.
+2. **"Unranked Play vs Fritz needs a server-issued seed" (old decision 2) is moot.** Every signed-in standalone Play vs
+   Fritz game already starts a verified match with a server-issued deal (`/api/bot-matches/local/start`), so nearly
+   every saved record is `replay_verified`. Only guests are unsaved.
+
+Phase 3 also settled *where* a saved game is rebuilt. A server-side derivation would need the capture logic, which
+lives in the client and cannot be imported by the server build. Rebuilding on the client with the real engine and the
+real `ReviewSnapshotRecorder` gives identical snapshots by construction, feeds the existing, proven review pipeline
+unchanged, and has no second implementation to drift. A server derivation can still be added later (for background
+auto-analysis) behind its own flag if the free instance can afford it.
 
 ## The idea in one paragraph
 

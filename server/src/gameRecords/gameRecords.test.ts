@@ -6,6 +6,7 @@ import { playHonestGhostShapedGame } from '../testing/rankedDealSelfPlay';
 import { buildGameRecordInsertPayload, parseGameRecordRequestBody } from './gameRecordPayload';
 import { verifyGameRecord } from './verifyGameRecord';
 import { registerGameRecordsRoute } from '../http/routes/gameRecordsRoute';
+import { GAME_RECORD_LIST_DEFAULT_LIMIT, GAME_RECORD_LIST_MAX_LIMIT, clampGameRecordListLimit } from './queryGameRecords';
 
 const USER = 'record-user-1';
 let requestUser: string | null = USER;
@@ -230,3 +231,119 @@ describe('POST /api/game-records', () => {
     expect((await post(body())).status).toBe(500);
   });
 });
+
+const STORED_ROW = {
+  source_match_id: 'match-9',
+  local_match_id: 'local-9',
+  mode: 'pvf',
+  fritz_tier: 'elite',
+  deal_size: 7,
+  winning_score: 60,
+  match_starter: 'you',
+  deal_seed: 'seed-9',
+  result: { you: 61, opponent: 40, winner: 'you' },
+  moves: [{ turn: 1, actor: 'you', tile_played: '6|6', branch: 'left' }],
+  move_count: 1,
+  record_version: 1,
+  verification: 'replay_verified',
+  played_at: '2026-11-01T01:00:00.000Z',
+  created_at: '2026-11-01T01:00:05.000Z',
+};
+
+describe('clampGameRecordListLimit', () => {
+  it('defaults, floors and caps the page size', () => {
+    expect(clampGameRecordListLimit(undefined)).toBe(GAME_RECORD_LIST_DEFAULT_LIMIT);
+    expect(clampGameRecordListLimit('abc')).toBe(GAME_RECORD_LIST_DEFAULT_LIMIT);
+    expect(clampGameRecordListLimit('0')).toBe(GAME_RECORD_LIST_DEFAULT_LIMIT);
+    expect(clampGameRecordListLimit('-5')).toBe(GAME_RECORD_LIST_DEFAULT_LIMIT);
+    expect(clampGameRecordListLimit('7')).toBe(7);
+    expect(clampGameRecordListLimit('100000')).toBe(GAME_RECORD_LIST_MAX_LIMIT);
+  });
+});
+
+describe('GET /api/game-records', () => {
+  let server: Server;
+  let apiBase: string;
+
+  beforeAll(async () => {
+    const app = express();
+    app.use(express.json({ limit: '2mb' }));
+    registerGameRecordsRoute(app);
+    server = createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Test HTTP server did not bind');
+    apiBase = `http://127.0.0.1:${address.port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  });
+
+  beforeEach(() => {
+    requestUser = USER;
+    supabaseFetch.mockReset();
+  });
+
+  it('requires a signed-in user for both reads', async () => {
+    requestUser = null;
+    expect((await fetch(`${apiBase}/api/game-records/recent`)).status).toBe(401);
+    expect((await fetch(`${apiBase}/api/game-records/match-9`)).status).toBe(401);
+    expect(supabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it('lists the caller\'s games newest first, without the actions or the deal seed', async () => {
+    supabaseFetch.mockResolvedValue([STORED_ROW]);
+    const response = await fetch(`${apiBase}/api/game-records/recent?limit=5`);
+    expect(response.status).toBe(200);
+    const { games } = await response.json() as { games: Array<Record<string, unknown>> };
+    expect(games).toHaveLength(1);
+    expect(games[0]).toMatchObject({ sourceMatchId: 'match-9', verification: 'replay_verified', moveCount: 1, savedAt: '2026-11-01T01:00:05.000Z' });
+    expect(games[0]).not.toHaveProperty('moves');
+    expect(games[0]).not.toHaveProperty('dealSeed');
+    const path = (supabaseFetch.mock.calls[0] as [string])[0];
+    expect(path).toContain(`user_id=eq.${USER}`);
+    expect(path).toContain('order=created_at.desc');
+    expect(path).toContain('limit=5');
+  });
+
+  it('caps an oversized page', async () => {
+    supabaseFetch.mockResolvedValue([]);
+    await fetch(`${apiBase}/api/game-records/recent?limit=99999`);
+    expect((supabaseFetch.mock.calls[0] as [string])[0]).toContain(`limit=${GAME_RECORD_LIST_MAX_LIMIT}`);
+  });
+
+  it('returns one saved game in full, scoped to its owner inside the query', async () => {
+    supabaseFetch.mockResolvedValue([STORED_ROW]);
+    const response = await fetch(`${apiBase}/api/game-records/match-9`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      sourceMatchId: 'match-9', dealSeed: 'seed-9', matchStarter: 'you', localMatchId: 'local-9', recordVersion: 1,
+      moves: [{ turn: 1, actor: 'you', tile_played: '6|6', branch: 'left' }],
+    });
+    const path = (supabaseFetch.mock.calls[0] as [string])[0];
+    expect(path).toContain(`user_id=eq.${USER}`);
+    expect(path).toContain('source_match_id=eq.match-9');
+  });
+
+  it("answers 404 for a game that is not the caller's (or not saved)", async () => {
+    supabaseFetch.mockResolvedValue([]);
+    expect((await fetch(`${apiBase}/api/game-records/someone-elses`)).status).toBe(404);
+  });
+
+  it('encodes the id it queries with, so it cannot inject filters', async () => {
+    supabaseFetch.mockResolvedValue([]);
+    await fetch(`${apiBase}/api/game-records/${encodeURIComponent('a&user_id=eq.other')}`);
+    const path = (supabaseFetch.mock.calls[0] as [string])[0];
+    expect(path).not.toContain('&user_id=eq.other');
+    expect(path).toContain(encodeURIComponent('a&user_id=eq.other'));
+  });
+
+  it('rejects an over-long id and answers 500 on a database failure', async () => {
+    expect((await fetch(`${apiBase}/api/game-records/${'x'.repeat(200)}`)).status).toBe(400);
+    supabaseFetch.mockRejectedValue(new Error('db down'));
+    expect((await fetch(`${apiBase}/api/game-records/match-9`)).status).toBe(500);
+    expect((await fetch(`${apiBase}/api/game-records/recent`)).status).toBe(500);
+  });
+});
+
