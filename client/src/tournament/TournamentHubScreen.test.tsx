@@ -335,3 +335,44 @@ describe('Tournament Hub: countdown boundaries', () => {
     expect(screen.getByRole('button', { name: 'Register' })).toBeTruthy();
   });
 });
+
+describe('Tournament Hub v2: how it works and the schedule', () => {
+  it('shows how an event works (the side copy and the narrow-screen copy, one visible at a time by CSS)', () => {
+    renderHub();
+    expect(document.querySelectorAll('.th-how')).toHaveLength(2);
+    expect(document.querySelector('.th-how--side')).not.toBeNull();
+    expect(document.querySelector('.th-how--below')).not.toBeNull();
+    expect(screen.getAllByText('The bracket')).toHaveLength(2);
+  });
+
+  it('shows neither when tournaments are unavailable', () => {
+    renderHub({ features: { tournaments: false, fritzCup: false } });
+    expect(document.querySelector('.th-how')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Coming up' })).toBeNull();
+  });
+
+  it('lists the Live Events after the two cards under "Coming up", not the ones already shown', () => {
+    renderHub({
+      upcoming: [
+        event('card-1', 'registration_open', 8 * HOUR),
+        event('card-2', 'upcoming', 11 * HOUR),
+        event('later-1', 'upcoming', 32 * HOUR),
+        event('later-2', 'upcoming', 35 * HOUR),
+      ],
+    });
+    const soon = screen.getByRole('region', { name: 'Coming up' });
+    expect(soon.textContent).toMatch(/Tomorrow/);
+    expect(soon.querySelectorAll('li')).toHaveLength(1);
+    expect(soon.querySelector('.th-soon__times')?.textContent).toMatch(/^\d{1,2}:\d{2} [AP]M · \d{1,2}:\d{2} [AP]M$/);
+  });
+
+  it('has no "Coming up" when the two cards are all there is', () => {
+    renderHub({ upcoming: [event('card-1', 'registration_open', 8 * HOUR), event('card-2', 'upcoming', 11 * HOUR)] });
+    expect(screen.queryByRole('region', { name: 'Coming up' })).toBeNull();
+  });
+
+  it('has no "Coming up" while the events could not be loaded', () => {
+    renderHub({ upcoming: [], upcomingError: 'Failed' });
+    expect(screen.queryByRole('region', { name: 'Coming up' })).toBeNull();
+  });
+});

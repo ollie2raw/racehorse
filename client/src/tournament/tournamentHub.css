@@ -1227,3 +1227,321 @@
   min-height: 44px;
   padding: 0 4px;
 }
+
+
+/* ═══ Hub v2 ═══════════════════════════════════════════════════════════════
+   The page used to be two thin cards inside one huge empty rounded box, with an empty left column. Now: the next event is a
+   HERO card (big day and time, a big status line and button), there is no box around the cards (no box-in-a-box), and the
+   empty space holds real content: how an event works (left on a wide screen, under the events on a narrow one) and a
+   "coming up" schedule. Matte, no gradients, amber accent. Compact landscape (844x390) keeps its tuned fit and shows none of
+   the extras. Appended last on purpose so it wins over the older rules above without !important. */
+
+/* The unboxed panel: wide screens, and portrait. (Short landscape keeps its boxed, fitted panel.) */
+@media (min-width: 1101px) and (min-height: 431px), (orientation: portrait) {
+  .th-panel {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+}
+
+@media (min-width: 1101px) and (min-height: 431px) {
+  .th-layout {
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .th-layout::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  /* Size to the cards, not to the window: a tall empty rectangle is what looked unfinished. */
+  .th-panel {
+    height: auto;
+    max-height: none;
+    flex: 1 1 auto;
+    align-self: flex-start;
+  }
+
+  .th-panel-body {
+    overflow: visible;
+    gap: 14px;
+    padding-bottom: 0;
+  }
+}
+
+/* The hero: the next Live Event. (Not the Fritz Cup card, not the smaller second event.) */
+.th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) {
+  gap: 16px;
+  padding: 26px 30px 24px;
+  border-left-width: 4px;
+  border-radius: 14px;
+}
+
+.th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-event__head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-event__when {
+  font-size: clamp(34px, 3.6vw, 50px);
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-event__meta {
+  font-size: 14px;
+}
+
+.th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-event__status {
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+}
+
+.th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-cta {
+  min-height: 52px;
+  padding: 12px 34px;
+  font-size: 16px;
+}
+
+/* The second event: same family, quieter. */
+.th-event--compact {
+  padding: 16px 22px;
+}
+
+.th-event--compact .th-event__when {
+  font-size: 20px;
+}
+
+.th-event--compact .th-event__status {
+  font-size: 15px;
+}
+
+@media (--phone) {
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) {
+    padding: 20px 18px 18px;
+    gap: 12px;
+  }
+
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-event__when {
+    font-size: 26px;
+  }
+
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-event__status {
+    font-size: 18px;
+  }
+
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-cta {
+    min-height: 48px;
+  }
+}
+
+/* How it works */
+.th-how {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.th-how--below {
+  display: none;
+}
+
+.th-how__title,
+.th-soon__title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.th-how__steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.th-how__step {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.th-how__step:first-child {
+  border-top: 0;
+}
+
+.th-how__num {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--th-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.th-how__step-title {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.th-how__step-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* Coming up */
+.th-soon {
+  margin-top: 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.th-soon__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.th-soon__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.th-soon__row:first-child {
+  border-top: 0;
+}
+
+.th-soon__day {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.th-soon__times {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Narrow screens: the rules move under the events, and the page scrolls (portrait already scrolls the shell). */
+@media (max-width: 1100px) {
+  .th-how--side {
+    display: none;
+  }
+
+  .th-how--below {
+    display: flex;
+    margin-top: 22px;
+  }
+}
+
+/* Compact landscape is tuned to fit one screen with no scroll: none of the extras belong there. */
+@media (--short-landscape) {
+  .th-how,
+  .th-soon {
+    display: none;
+  }
+}
+
+/* Compact landscape keeps its pre-v2 card sizes: the hero treatment above is for screens with room for it. The values are the
+   ones the cards had before Hub v2, so the 844x390 fit is exactly what it was. */
+@media (--short-landscape) {
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) {
+    gap: 8px;
+    padding: 16px 18px;
+    border-left-width: 3px;
+    border-radius: 12px;
+  }
+
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-event__head {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 4px 12px;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-event__when {
+    font-size: 20px;
+    line-height: normal;
+    letter-spacing: normal;
+  }
+
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-event__meta {
+    font-size: 13px;
+  }
+
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-event__status {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: normal;
+    letter-spacing: normal;
+  }
+
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) .th-cta {
+    min-height: 44px;
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+
+  .th-event--compact {
+    padding: 12px 16px;
+  }
+
+  .th-event--compact .th-event__when {
+    font-size: 16px;
+  }
+
+  .th-event--compact .th-event__status {
+    font-size: 14px;
+  }
+}
+
+/* Shorter wide screens (a 720p laptop): a little tighter, so all four steps fit without scrolling. */
+@media (min-width: 1101px) and (min-height: 431px) and (max-height: 800px) {
+  .th-how {
+    margin-top: 6px;
+  }
+
+  .th-how__step {
+    padding: 9px 0;
+  }
+
+  .th-how__num {
+    font-size: 24px;
+  }
+
+  .th-how__step-body {
+    line-height: 1.4;
+  }
+}
