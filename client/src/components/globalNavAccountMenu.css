@@ -113,6 +113,14 @@
     display: block;
   }
 
+  /* A long username must not push the rating/friends cluster into the centered tabs. */
+  .rh-nav-account-name {
+    max-width: 8ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
 
   .rh-nav-account-label {
   display: flex;
