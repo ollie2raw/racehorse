@@ -40,8 +40,11 @@ Eastern, so the 6 pm event is the first one.
 10. **Run one staffed event:** register two real accounts. At close the bracket is generated, empty seats are filled with Fritz
     (so one human alone still gets a bracket), both players get `match_ready`, join by tap, play to a result, the next round
     dispatches, and a result page and a `/history` row exist.
-11. After each event, for the first week, run the three read-only monitoring queries in `README.md` ("Monitoring"): nothing
-    stuck, nothing late, one lease renewed in the last 2 minutes.
+11. Before, during (every 10 to 15 minutes) and after each event, for the first week, paste `monitor-one-result.sql` into the
+    SQL editor: ONE read-only table, six rows. The `verdict` column should read OK or INFO on every row. `MISSING` / `STALE`
+    on the lease means the scheduler is not running (check Render and `/ping`); `LOOK` on overdue or stuck names what to
+    open in the logs (`README.md`, "Monitoring"). It is the three queries in the README combined, because the editor shows
+    only the last result of a script.
 
 ## D. When to upgrade the server (the only part that costs money)
 

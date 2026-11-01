@@ -1552,6 +1552,58 @@ grep -q '^31 next upcoming event|' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_r
 pass "prod-readiness-one-result.sql (read-only): one table, no error; M2 and M4 read true after M4; no old overloads; posture 0; an object that is not there (room_live_sessions) reads false"
 echo "    readiness output:"; sed -n '1,40p' "$WORK/m4_readiness.txt" | sed 's/^/      /'
 
+# The event-night monitor as ONE read-only table (docs/ops/tournament-launch/monitor-one-result.sql). A monitor that cannot say
+# "wrong" is worthless, so every verdict is driven to its bad value here as well as its good one (fake clock F4, as above).
+MON="$REPO_ROOT/docs/ops/tournament-launch/monitor-one-result.sql"
+monitor() { AT4 "$F4" -F '|' -f "$MON" 2>&1; }
+mon_row() { monitor | grep -E "^$1\|" || true; }
+OUT="$(monitor)"
+grep -qi 'error' <<<"$OUT" && { echo "$OUT" >&2; fail "monitor-one-result.sql errored"; }
+[[ "$(wc -l <<<"$OUT" | tr -d ' ')" == "6" ]] || { echo "$OUT" >&2; fail "monitor: expected exactly 6 rows"; }
+# Nothing running yet: no lease row reads MISSING; nothing overdue or stuck; the next event is listed in Eastern time.
+[[ "$(mon_row 1)" == "1|orchestrator lease|no lease row|MISSING" ]] || { echo "$OUT" >&2; fail "monitor: a missing lease must read MISSING"; }
+[[ "$(mon_row 2)" == "2|overdue events|0 event(s) past their start without starting|OK" ]] || { echo "$OUT" >&2; fail "monitor: overdue events should be 0 / OK"; }
+[[ "$(mon_row 3)" == "3|stuck matches|0 match(es) ready past the deadline or in progress too long|OK" ]] || { echo "$OUT" >&2; fail "monitor: stuck matches should be 0 / OK"; }
+grep -qE '^4\|next event\|[A-Z][a-z]{2} [A-Z][a-z]{2} [0-9]{2} [0-9]{2}:[0-9]{2} (AM|PM) ET, (upcoming|registration_open), [0-9]+ registered\|INFO$' <<<"$OUT" || { echo "$OUT" >&2; fail "monitor: the next event row"; }
+# Rows 5 and 6 are context, and the scratch db already holds a live event and a completed one from the sections above, so their
+# expectations come from separate queries on the same data rather than from hard-coded numbers.
+oracle_live() { AT4 "$F4" -c "select (select count(*) from public.scheduled_tournaments where status = 'in_progress') || ' event(s) in progress; matches: ' || count(*) filter (where m.status = 'in_progress') || ' playing, ' || count(*) filter (where m.status = 'ready') || ' ready, ' || count(*) filter (where m.status = 'waiting') || ' waiting' from public.scheduled_tournament_matches m join public.scheduled_tournaments t on t.id = m.tournament_id and t.status = 'in_progress'"; }
+oracle_done() { AT4 "$F4" -c "select coalesce((select to_char(scheduled_start at time zone 'America/New_York', 'Dy Mon DD HH12:MI AM') || ' ET' from public.scheduled_tournaments where status = 'completed' and scheduled_start <= now() order by scheduled_start desc limit 1), 'none yet')"; }
+[[ "$(mon_row 5)" == "5|live now|$(oracle_live)|INFO" ]] || { echo "$OUT" >&2; fail "monitor: live now (baseline)"; }
+[[ "$(mon_row 6)" == "6|last completed event|$(oracle_done)|INFO" ]] || { echo "$OUT" >&2; fail "monitor: last completed event (baseline)"; }
+# A cancelled event in the FUTURE (the leftover cadence slots in production) must never be reported as the last completed one.
+"${P4[@]}" -q -c "insert into public.scheduled_tournaments (scheduled_start, registration_open_at, registration_close_at, status) values (timestamptz '$F4' + interval '400 days', timestamptz '$F4' + interval '399 days', timestamptz '$F4' + interval '400 days' - interval '2 minutes', 'cancelled')" >/dev/null 2>"$WORK/err" || { cat "$WORK/err" >&2; fail "monitor: could not plant a future cancelled event"; }
+[[ "$(mon_row 6)" == "6|last completed event|$(oracle_done)|INFO" ]] || { monitor >&2; fail "monitor: a future cancelled event must not be the last completed one"; }
+"${P4[@]}" -q -c "delete from public.scheduled_tournaments where scheduled_start = timestamptz '$F4' + interval '400 days'" >/dev/null
+# A lease renewed 30 s ago is OK; one renewed 10 minutes ago is STALE.
+"${P4[@]}" -q -c "insert into public.tournament_orchestrator_leases (lease_key, owner_id, lease_token, leased_until, acquired_at, renewed_at) values ('harness-monitor', 'harness', gen_random_uuid(), timestamptz '$F4' + interval '90 seconds', timestamptz '$F4' - interval '5 minutes', timestamptz '$F4' - interval '30 seconds')" >/dev/null
+[[ "$(mon_row 1)" == "1|orchestrator lease|30 s since it last renewed|OK" ]] || { monitor >&2; fail "monitor: a fresh lease must read OK"; }
+"${P4[@]}" -q -c "update public.tournament_orchestrator_leases set renewed_at = timestamptz '$F4' - interval '10 minutes' where lease_key = 'harness-monitor'" >/dev/null
+[[ "$(mon_row 1)" == "1|orchestrator lease|600 s since it last renewed|STALE" ]] || { monitor >&2; fail "monitor: an old lease must read STALE"; }
+# An event 10 minutes past its start that never started, and two stuck matches (ready past its deadline; in progress 30 min).
+OVERDUE_ID="$(AT4 "$F4" -c "select id from public.scheduled_tournaments where status = 'upcoming' order by scheduled_start limit 1")"
+OVERDUE_START="$(AT4 "$F4" -c "select scheduled_start from public.scheduled_tournaments where id = '$OVERDUE_ID'")"
+"${P4[@]}" -q -c "update public.scheduled_tournaments set scheduled_start = timestamptz '$F4' - interval '10 minutes' where id = '$OVERDUE_ID'" >/dev/null 2>"$WORK/err" || { cat "$WORK/err" >&2; fail "monitor: could not plant an overdue event"; }
+[[ "$(mon_row 2)" == "2|overdue events|1 event(s) past their start without starting|LOOK" ]] || { monitor >&2; fail "monitor: an overdue event must read LOOK"; }
+"${P4[@]}" -q -c "insert into public.scheduled_tournament_matches (tournament_id, round, match_number, status, started_at) values ('$OVERDUE_ID', 1, 1, 'in_progress', timestamptz '$F4' - interval '30 minutes')" >/dev/null 2>"$WORK/err" || { cat "$WORK/err" >&2; fail "monitor: could not plant a stuck in-progress match"; }
+"${P4[@]}" -q -c "insert into public.scheduled_tournament_matches (tournament_id, round, match_number, status, ready_deadline_at) values ('$OVERDUE_ID', 1, 2, 'ready', timestamptz '$F4' - interval '5 minutes')" >/dev/null 2>"$WORK/err" || { cat "$WORK/err" >&2; fail "monitor: could not plant a stuck ready match"; }
+[[ "$(mon_row 3)" == "3|stuck matches|2 match(es) ready past the deadline or in progress too long|LOOK" ]] || { monitor >&2; fail "monitor: two stuck matches must read LOOK with 2"; }
+# A match that is merely recent is not stuck: 5 minutes in progress and a deadline 1 minute ago are both inside the limits.
+"${P4[@]}" -q -c "update public.scheduled_tournament_matches set started_at = timestamptz '$F4' - interval '5 minutes' where tournament_id = '$OVERDUE_ID' and match_number = 1; update public.scheduled_tournament_matches set ready_deadline_at = timestamptz '$F4' - interval '1 minute' where tournament_id = '$OVERDUE_ID' and match_number = 2" >/dev/null
+[[ "$(mon_row 3)" == "3|stuck matches|0 match(es) ready past the deadline or in progress too long|OK" ]] || { monitor >&2; fail "monitor: a recent match must not read as stuck"; }
+# A live event: the counts by match status.
+"${P4[@]}" -q -c "update public.scheduled_tournaments set status = 'in_progress' where id = '$OVERDUE_ID'" >/dev/null 2>"$WORK/err" || { cat "$WORK/err" >&2; fail "monitor: could not make the event live"; }
+[[ "$(mon_row 5)" == "5|live now|$(oracle_live)|INFO" ]] || { monitor >&2; fail "monitor: the live counts"; }
+grep -qE '^5\|live now\|[0-9]+ event\(s\) in progress; matches: 1 playing, 1 ready, 0 waiting\|INFO$' <<<"$(monitor)" || { monitor >&2; fail "monitor: the planted matches are not counted as 1 playing, 1 ready"; }
+"${P4[@]}" -q -c "update public.scheduled_tournaments set status = 'completed' where id = '$OVERDUE_ID'" >/dev/null 2>"$WORK/err" || { cat "$WORK/err" >&2; fail "monitor: could not complete the event"; }
+[[ "$(mon_row 6)" == "6|last completed event|$(oracle_done)|INFO" ]] || { monitor >&2; fail "monitor: the completed event is not reported"; }
+grep -qE '^6\|last completed event\|[A-Z][a-z]{2} [A-Z][a-z]{2} [0-9]{2} [0-9]{2}:[0-9]{2} (AM|PM) ET\|INFO$' <<<"$(monitor)" || { monitor >&2; fail "monitor: the last completed event row shape"; }
+# Restore the scratch state exactly as it was.
+"${P4[@]}" -q -c "delete from public.scheduled_tournament_matches where tournament_id = '$OVERDUE_ID'; update public.scheduled_tournaments set status = 'upcoming', scheduled_start = '$OVERDUE_START' where id = '$OVERDUE_ID'; delete from public.tournament_orchestrator_leases where lease_key = 'harness-monitor'" >/dev/null
+[[ "$(mon_row 1)" == "1|orchestrator lease|no lease row|MISSING" && "$(mon_row 2)" == "2|overdue events|0 event(s) past their start without starting|OK" ]] || { monitor >&2; fail "monitor: the scratch state was not restored"; }
+pass "monitor-one-result.sql (read-only): one table of 6 rows, no error; MISSING / OK / STALE lease; an overdue event and two stuck matches read LOOK with the right counts; recent matches are not stuck; live counts and the last completed event are right (a future cancelled slot is never reported as completed); every planted row removed"
+echo "    monitor output:"; monitor | sed 's/^/      /'
+
 # The new schedule itself, across both DST changes (run twice: M4 is idempotent).
 for PASSNO in 1 2; do
   AT4 "$F4" -q >/dev/null 2>"$WORK/err" <<'SQL' || { cat "$WORK/err" >&2; fail "M4 slot generation (pass $PASSNO)"; }

@@ -288,7 +288,10 @@ Render logs (contexts): `tournament:scheduler` (`lease acquired`/`lost`,
 `close-and-start failed`, escalation cancel), `tournament:dispatch`
 (`match ready`), `tournament:turn-clock` (timeouts, forfeits),
 `room-forfeit`, `tournament:routes` (`tournament request failed` → also in
-Sentry). Read-only SQL, every few hours on event days:
+Sentry). **Fastest: paste `monitor-one-result.sql` (this folder) into the SQL editor: one read-only table, six rows, a
+`verdict` column that should read OK or INFO.** It is the three queries below combined (the editor shows only the last
+result of a script), plus the next event with its registered count and what is live. Read-only SQL, every few hours on
+event days:
 
 ```sql
 -- Stuck: ready past its deadline, or in progress past the 20-minute cap.
