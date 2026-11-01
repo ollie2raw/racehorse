@@ -49,14 +49,19 @@
   box-sizing: border-box !important;
 }
 
-.pml-root .mp-hub-pvf-layout.pvf-layout > .pvf-left-col.pml-left--stack {
-  flex: 0 1 40% !important;
-  width: auto;
-  max-width: 40%;
-  min-width: 0 !important;
-  /* Vertical clip at 100% zoom: keep horizontal containment only */
-  overflow-x: hidden;
-  overflow-y: visible;
+/* Two-column layout only. Below 1025px the hub stacks (column), and a 40% basis there made the left column a ~210px
+   scroll box that clipped the 287px duel stage (the lobby card then sat on top of it on a phone). The stacked rule at
+   max-width 1024px (`flex: 0 0 auto`) could not win against the old `!important`, so the rule is scoped instead. */
+@media (min-width: 1025px) {
+  .pml-root .mp-hub-pvf-layout.pvf-layout > .pvf-left-col.pml-left--stack {
+    flex: 0 1 40% !important;
+    width: auto;
+    max-width: 40%;
+    min-width: 0 !important;
+    /* Vertical clip at 100% zoom: keep horizontal containment only */
+    overflow-x: hidden;
+    overflow-y: visible;
+  }
 }
 
 .pml-root .home-bg {
@@ -2715,6 +2720,31 @@
   .pml-matchup {
     min-height: 0;
     gap: 10px;
+  }
+
+  /* The duel row is ~290px wide on a phone. A fixed 84px VS column, 48px VS and 21px names left each card ~70px, so
+     "Find Opponent" was cut off and a long username ran under the VS. Give the cards the room: a slim VS column,
+     smaller VS and names, tighter card padding. */
+  .pml-room-stage .pml-matchup {
+    gap: 4px;
+  }
+
+  .pml-room-stage .pml-vs-column {
+    width: 44px;
+  }
+
+  .pml-room-stage .pml-vs-text {
+    font-size: 26px;
+  }
+
+  .pml-room-stage .pml-duel-card {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .pml-room-stage .pml-duel-name-text {
+    font-size: 15px;
+    overflow-wrap: anywhere;
   }
 
   .pml-duel-name {
