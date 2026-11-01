@@ -28,8 +28,6 @@ export type UseAppRouteStateResult = {
   mpSubViewRef: MutableRefObject<'quick' | 'private'>;
   learnHowToPlayOpen: boolean;
   setLearnHowToPlayOpen: Dispatch<SetStateAction<boolean>>;
-  selectedLearnLessonId: string | null;
-  setSelectedLearnLessonId: Dispatch<SetStateAction<string | null>>;
   profileTarget: string | null;
   setProfileTarget: Dispatch<SetStateAction<string | null>>;
   profileOriginMode: AppMode | null;
@@ -52,7 +50,6 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
 
   // eslint-disable-next-line react-hooks/refs -- useState initializer reading the route parsed once on mount — runs once, value is stable
   const [routeReady, setRouteReady] = useState(!initialRouteRef.current.tournamentId);
-  const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
   const [learnHowToPlayOpen, setLearnHowToPlayOpen] = useState(
     // eslint-disable-next-line react-hooks/refs -- useState initializer reading the route parsed once on mount — runs once, value is stable
     Boolean(initialRouteRef.current.learnHowToPlay),
@@ -88,7 +85,6 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
   useEffect(() => {
     if (!LEARN_MODE_VISIBLE && appMode === 'learn') {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- mode guard — redirects out of a feature-flagged-off route and clears its state
-      setSelectedLearnLessonId(null);
       setLearnHowToPlayOpen(false);
       setAppMode('singlePlayerHub');
     }
@@ -134,7 +130,6 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
       const route = resolveAppRoute(window.location.pathname);
       setAppMode(route.mode);
       setLearnHowToPlayOpen(Boolean(route.learnHowToPlay));
-      setSelectedLearnLessonId(null);
 
       if (route.multiplayerView) setMpSubView(route.multiplayerView);
       if (route.profileUsername) {
@@ -198,8 +193,6 @@ export function useAppRouteState(params: UseAppRouteStateParams): UseAppRouteSta
     mpSubViewRef,
     learnHowToPlayOpen,
     setLearnHowToPlayOpen,
-    selectedLearnLessonId,
-    setSelectedLearnLessonId,
     profileTarget,
     setProfileTarget,
     profileOriginMode,

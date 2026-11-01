@@ -199,11 +199,6 @@
     "hex": 0,
     "gradient": 1
   },
-  "src/learn/learnPlayer.css": {
-    "important": 13,
-    "hex": 10,
-    "gradient": 13
-  },
   "src/learning/coach.css": {
     "important": 0,
     "hex": 19,
