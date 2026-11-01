@@ -12,9 +12,23 @@ import type {
 // inlining 1.2 MB of JSON into the JS bundle. The fetch happens once at module
 // init (this file is always dynamically imported via lessonV2 → LearnHome lazy).
 import canonicalLessonUrl from './lessons/FINAL-guided-match-standard-v1-canonical-75-48.json?url';
-const bundledCanonicalLesson: GuidedMatchLesson = await fetch(canonicalLessonUrl).then(
-  (r) => r.json() as Promise<GuidedMatchLesson>,
-);
+
+/**
+ * A failed fetch (offline, a flaky network, a stale deploy) must not reject this
+ * module: that would take down lessonV2 and the Learn hub's guided path with it.
+ * It resolves to null instead and the getters below report "unavailable", which
+ * resolveGuidedMatchStart already turns into a player-facing message.
+ */
+async function loadBundledCanonicalLesson(): Promise<GuidedMatchLesson | null> {
+  try {
+    const response = await fetch(canonicalLessonUrl);
+    if (!response.ok) return null;
+    return (await response.json()) as GuidedMatchLesson;
+  } catch {
+    return null;
+  }
+}
+const bundledCanonicalLesson = await loadBundledCanonicalLesson();
 import {
   getGuidedMatchFinalDebrief,
   STANDARD_GUIDED_MATCH_FINAL_DEBRIEF,
@@ -168,11 +182,15 @@ function buildPublicPlaybackLesson(lesson: GuidedMatchLesson): LessonV2 {
   };
 }
 
-const publicGuidedMatchLesson = bundledCanonicalLesson as GuidedMatchLesson;
-const publicGuidedMatchLessonSanityIssues = validatePublicLessonSanity(publicGuidedMatchLesson);
-const publicGuidedMatchPlaybackLesson = buildPublicPlaybackLesson(publicGuidedMatchLesson);
+const publicGuidedMatchLesson: GuidedMatchLesson | null = bundledCanonicalLesson;
+const publicGuidedMatchLessonSanityIssues = publicGuidedMatchLesson
+  ? validatePublicLessonSanity(publicGuidedMatchLesson)
+  : ['the bundled lesson could not be loaded'];
+const publicGuidedMatchPlaybackLesson = publicGuidedMatchLesson
+  ? buildPublicPlaybackLesson(publicGuidedMatchLesson)
+  : null;
 
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV && publicGuidedMatchLesson) {
   if (publicGuidedMatchLessonSanityIssues.length > 0) {
     console.warn('[guided-match-public-lesson] sanity issues', publicGuidedMatchLessonSanityIssues);
   } else {
@@ -185,11 +203,15 @@ if (import.meta.env.DEV) {
   }
 }
 
+/** Throws when the bundled lesson could not be fetched; callers already treat a throw as "unavailable". */
 export function getPublicGuidedMatchLesson(): GuidedMatchLesson {
+  if (!publicGuidedMatchLesson) throw new Error('The bundled guided match lesson is unavailable.');
   return publicGuidedMatchLesson;
 }
 
+/** Throws when the bundled lesson could not be fetched; callers already treat a throw as "unavailable". */
 export function getPublicGuidedMatchPlaybackLesson(): LessonV2 {
+  if (!publicGuidedMatchPlaybackLesson) throw new Error('The bundled guided match lesson is unavailable.');
   return publicGuidedMatchPlaybackLesson;
 }
 
@@ -198,7 +220,7 @@ export function getPublicGuidedMatchLessonSanityIssues(): string[] {
 }
 
 export function getPublicGuidedMatchFinalDebrief(): GuidedMatchFinalDebrief | null {
-  return getGuidedMatchFinalDebrief(publicGuidedMatchLesson.lessonId);
+  return publicGuidedMatchLesson ? getGuidedMatchFinalDebrief(publicGuidedMatchLesson.lessonId) : null;
 }
 
 export { STANDARD_GUIDED_MATCH_FINAL_DEBRIEF };
