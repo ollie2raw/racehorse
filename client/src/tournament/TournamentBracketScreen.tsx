@@ -646,6 +646,10 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
       ? props.bracketError.code
       : null;
 
+  // A refresh failed while an older bracket is still on screen: keep showing it,
+  // but say it may be out of date instead of failing silently.
+  const staleRefreshFailed = Boolean(bracket) && props.bracketError?.tournamentId === props.tournamentId;
+
   const bracketDisplay = useMemo<BracketDisplayContext>(
     () => ({
       isBracketLobby,
@@ -786,6 +790,14 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
         compactChrome={isWaitingRoom}
       />
       <div className={`tb-shell${isWaitingRoom ? ' tb-shell--waiting' : ''}`}>
+        {staleRefreshFailed ? (
+          <div className="tb-stale" role="status">
+            <span>Reconnecting. This bracket may be out of date.</span>
+            <button className="tb-stale__retry" type="button" onClick={() => onLoadBracket(props.tournamentId)}>
+              Retry
+            </button>
+          </div>
+        ) : null}
         <div className={`tb-toolbar${isWaitingRoom ? ' tb-toolbar--waiting' : ''}`}>
           <button
             className="tb-back"
