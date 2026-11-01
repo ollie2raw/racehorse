@@ -47,6 +47,30 @@ function placementBranchForEntry(entry: MoveEntry): string | null {
   );
 }
 
+/**
+ * The compact form of one action in a saved game record: just what a replay needs (who, which hand, which tile, which
+ * side), none of the derived board/hand snapshots. Same shape the server's ranked replayer already accepts.
+ */
+export type RecordMoveEntry = {
+  turn: number;
+  hand_number: number | null;
+  actor: 'you' | 'fritz';
+  tile_played: string | null;
+  branch: string | null;
+  score_delta: number;
+};
+
+export function moveEntriesToRecordMoves(entries: readonly MoveEntry[]): RecordMoveEntry[] {
+  return entries.map((entry) => ({
+    turn: entry.moveNumber,
+    hand_number: entry.handNumber ?? null,
+    actor: entry.player === 'you' ? 'you' : 'fritz',
+    tile_played: entry.action === 'place' && entry.tile ? `${entry.tile[0]}|${entry.tile[1]}` : null,
+    branch: placementBranchForEntry(entry),
+    score_delta: entry.pointsScored,
+  }));
+}
+
 export function moveEntriesToGhostMoveLog(entries: MoveEntry[]): GhostMoveLogEntry[] {
   return entries.map((entry) => ({
     turn: entry.moveNumber,

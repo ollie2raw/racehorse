@@ -9,6 +9,7 @@ import {
 import { PIVOTAL_REVIEW_WIZARD_ENABLED } from '../match/types.ts';
 import { usePostGamePivotalReview } from './usePostGamePivotalReview.ts';
 import { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
+import { useGameRecordSave } from './useGameRecordSave.ts';
 import { useAuth } from '../../auth/useAuth.ts';
 import { createLocalMatchId } from '../match/hooks/useBotMatchBootstrap.ts';
 import type { BotMatchScreenProps } from '../match/types.ts';
@@ -21,6 +22,8 @@ export type UseReviewRuntimeArgs = {
   bootstrap: UseBotMatchBootstrapResult;
   guidedBoot: UseGuidedLessonBootResult;
   moveLog: readonly MoveEntry[];
+  /** The bot match's local id: how the server finds the deal it issued for this game (ranked only). */
+  localMatchId?: string | null;
 };
 
 export function useReviewRuntime({
@@ -28,6 +31,7 @@ export function useReviewRuntime({
   bootstrap,
   guidedBoot,
   moveLog,
+  localMatchId = null,
 }: UseReviewRuntimeArgs) {
   const { fritzTier = 'elite', winningScore = 60 } = props;
   const { match, showPostGameOverlays, isPlayVsFritzGameOver } = bootstrap;
@@ -86,6 +90,18 @@ export function useReviewRuntime({
   // review-capture session itself (decisionId construction), this
   // identifies the real match a persisted game_reviews row belongs to.
   const [sourceMatchId] = useState(() => createLocalMatchId());
+
+  // Every finished standard Play vs Fritz game is saved to the server (the review is derived from it later), whether or
+  // not the review UI is shown to this player.
+  useGameRecordSave({
+    enabled: reviewCaptureEnabled && Boolean(authUser?.id),
+    match,
+    moveLog,
+    sourceMatchId,
+    localMatchId,
+    fritzTier,
+    winningScore,
+  });
 
   const review = usePostGamePivotalReview({
     match,

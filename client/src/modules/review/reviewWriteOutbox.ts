@@ -1,3 +1,10 @@
+import {
+  createDurableOutbox,
+  type OutboxEntry,
+  type OutboxFlushResult,
+  type OutboxSendResult,
+} from './durableOutbox.ts';
+
 /**
  * Durable outbox for the finished-review save (`POST /api/game-reviews`).
  *
@@ -23,136 +30,44 @@ export const REVIEW_WRITE_RETRY_DELAYS_MS = [2_000, 5_000, 15_000, 45_000, 120_0
  */
 export type ReviewWriteBodyBase = { readonly gameDigest: string };
 
-export type ReviewWriteOutboxEntry = {
-  /** Game digest: one entry per game, so re-queueing replaces. */
-  readonly key: string;
-  readonly userId: string;
-  readonly queuedAt: number;
-  readonly body: ReviewWriteBodyBase;
-};
-
-export type ReviewWriteSendResult = { readonly ok: true } | { readonly ok: false; readonly status?: number };
+export type ReviewWriteOutboxEntry = OutboxEntry<ReviewWriteBodyBase>;
+export type ReviewWriteSendResult = OutboxSendResult;
 export type ReviewWriteSender<T extends ReviewWriteBodyBase = ReviewWriteBodyBase> = (body: T) => Promise<ReviewWriteSendResult>;
+export type ReviewWriteFlushResult = OutboxFlushResult;
 
-/** In-memory mirror so a full or blocked localStorage still lets this session retry. */
-const memory = new Map<string, ReviewWriteOutboxEntry>();
-
-function readStored(): ReviewWriteOutboxEntry[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(REVIEW_WRITE_OUTBOX_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry): entry is ReviewWriteOutboxEntry => (
-      Boolean(entry)
-      && typeof (entry as ReviewWriteOutboxEntry).key === 'string'
-      && typeof (entry as ReviewWriteOutboxEntry).userId === 'string'
-      && typeof (entry as ReviewWriteOutboxEntry).queuedAt === 'number'
-      && typeof (entry as ReviewWriteOutboxEntry).body === 'object'
-    ));
-  } catch {
-    return [];
-  }
-}
-
-function writeStored(entries: readonly ReviewWriteOutboxEntry[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    if (entries.length === 0) window.localStorage.removeItem(REVIEW_WRITE_OUTBOX_KEY);
-    else window.localStorage.setItem(REVIEW_WRITE_OUTBOX_KEY, JSON.stringify(entries));
-  } catch {
-    // Quota or blocked storage: the in-memory copy still drives retries for this session.
-  }
-}
-
-function allEntries(now: number): ReviewWriteOutboxEntry[] {
-  const merged = new Map<string, ReviewWriteOutboxEntry>();
-  for (const entry of readStored()) merged.set(entry.key, entry);
-  for (const entry of memory.values()) merged.set(entry.key, entry);
-  return [...merged.values()]
-    .filter((entry) => now - entry.queuedAt <= REVIEW_WRITE_OUTBOX_MAX_AGE_MS)
-    .sort((a, b) => b.queuedAt - a.queuedAt)
-    .slice(0, REVIEW_WRITE_OUTBOX_MAX_ENTRIES);
-}
-
-function persist(entries: readonly ReviewWriteOutboxEntry[]): void {
-  memory.clear();
-  for (const entry of entries) memory.set(entry.key, entry);
-  writeStored(entries);
-}
+const outbox = createDurableOutbox<ReviewWriteBodyBase>({
+  storageKey: REVIEW_WRITE_OUTBOX_KEY,
+  maxEntries: REVIEW_WRITE_OUTBOX_MAX_ENTRIES,
+  maxAgeMs: REVIEW_WRITE_OUTBOX_MAX_AGE_MS,
+  keyOf: (body) => body.gameDigest,
+});
 
 export function listReviewWriteOutbox(now = Date.now()): ReviewWriteOutboxEntry[] {
-  return allEntries(now);
+  return outbox.list(now);
 }
 
 export function enqueueReviewWrite(userId: string, body: ReviewWriteBodyBase, now = Date.now()): ReviewWriteOutboxEntry {
-  const entry: ReviewWriteOutboxEntry = { key: body.gameDigest, userId, queuedAt: now, body };
-  persist([entry, ...allEntries(now).filter((existing) => existing.key !== entry.key)].slice(0, REVIEW_WRITE_OUTBOX_MAX_ENTRIES));
-  return entry;
+  return outbox.enqueue(userId, body, now);
 }
 
 export function removeReviewWrite(key: string, now = Date.now()): void {
-  persist(allEntries(now).filter((entry) => entry.key !== key));
+  outbox.remove(key, now);
 }
 
 /** Account switch / sign-out: drop what belongs to the previous account. */
 export function clearReviewWriteOutbox(userId?: string): void {
-  if (userId === undefined) {
-    persist([]);
-    return;
-  }
-  persist(allEntries(Date.now()).filter((entry) => entry.userId !== userId));
+  outbox.clear(userId);
 }
 
-/** Not worth retrying: the server understood the request and refused it. */
-function isPermanentRefusal(status: number | undefined): boolean {
-  return status !== undefined && status >= 400 && status < 500 && status !== 401 && status !== 408 && status !== 429;
-}
-
-export type ReviewWriteFlushResult = {
-  readonly sent: number;
-  readonly remaining: number;
-  /** Keys the server refused for good (not retried, removed from the queue). */
-  readonly refused: readonly string[];
-};
-
-let flushing: Promise<ReviewWriteFlushResult> | null = null;
-
-/**
- * Send everything queued for `userId`, oldest-failed-first is irrelevant: each entry is independent and idempotent.
- * One flush at a time; a second caller shares the first's result.
- */
-export function flushReviewWriteOutbox<T extends ReviewWriteBodyBase = ReviewWriteBodyBase>(userId: string, send: ReviewWriteSender<T>): Promise<ReviewWriteFlushResult> {
-  if (flushing) return flushing;
-  flushing = (async () => {
-    let sent = 0;
-    const refused: string[] = [];
-    for (const entry of allEntries(Date.now()).filter((candidate) => candidate.userId === userId)) {
-      let result: ReviewWriteSendResult;
-      try {
-        result = await send(entry.body as T);
-      } catch {
-        result = { ok: false };
-      }
-      if (result.ok) {
-        removeReviewWrite(entry.key);
-        sent += 1;
-      } else if (isPermanentRefusal(result.status)) {
-        removeReviewWrite(entry.key);
-        refused.push(entry.key);
-      }
-    }
-    return { sent, refused, remaining: allEntries(Date.now()).filter((candidate) => candidate.userId === userId).length };
-  })().finally(() => { flushing = null; });
-  return flushing;
+/** Send everything queued for `userId`. One flush at a time; a second caller shares the first's result. */
+export function flushReviewWriteOutbox<T extends ReviewWriteBodyBase = ReviewWriteBodyBase>(
+  userId: string,
+  send: ReviewWriteSender<T>,
+): Promise<ReviewWriteFlushResult> {
+  return outbox.flush(userId, send as ReviewWriteSender);
 }
 
 /** Test seam. */
 export function resetReviewWriteOutboxForTests(): void {
-  memory.clear();
-  flushing = null;
-  if (typeof window !== 'undefined') {
-    try { window.localStorage.removeItem(REVIEW_WRITE_OUTBOX_KEY); } catch { /* noop */ }
-  }
+  outbox.resetForTests();
 }
