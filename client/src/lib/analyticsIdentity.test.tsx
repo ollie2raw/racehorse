@@ -79,3 +79,54 @@ describe('identify effect', () => {
     expect(reset).not.toHaveBeenCalled();
   });
 });
+
+describe('identify effect for a guest (docs/guest-play-design.md)', () => {
+  let identify: ReturnType<typeof vi.fn>;
+  let reset: ReturnType<typeof vi.fn>;
+
+  function GuestHarness({ id, guest }: { id: string | null; guest: boolean }) {
+    useAnalyticsIdentity(id, guest);
+    return null;
+  }
+
+  beforeEach(() => {
+    identify = vi.fn();
+    reset = vi.fn();
+    __setAnalyticsTransport({ capture: vi.fn(), identify, reset } as AnalyticsTransport);
+  });
+
+  it('marks a guest, once', async () => {
+    const { rerender } = render(<GuestHarness id="g-1" guest />);
+    rerender(<GuestHarness id="g-1" guest />);
+    await settle();
+    expect(identify).toHaveBeenCalledTimes(1);
+    expect(identify).toHaveBeenCalledWith('g-1', { guest: true });
+  });
+
+  it('says the same person is no longer a guest when they upgrade, without a second person', async () => {
+    const { rerender } = render(<GuestHarness id="g-1" guest />);
+    await settle();
+    rerender(<GuestHarness id="g-1" guest={false} />);
+    await settle();
+    expect(identify).toHaveBeenCalledTimes(2);
+    expect(identify).toHaveBeenLastCalledWith('g-1', { guest: false });
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing extra for an ordinary account, exactly as before', async () => {
+    render(<GuestHarness id="user-1" guest={false} />);
+    await settle();
+    expect(identify).toHaveBeenCalledWith('user-1', undefined);
+  });
+
+  it('unlinks when a guest leaves, and a new guest is a new person', async () => {
+    const { rerender } = render(<GuestHarness id="g-1" guest />);
+    await settle();
+    rerender(<GuestHarness id={null} guest={false} />);
+    await settle();
+    expect(reset).toHaveBeenCalledTimes(1);
+    rerender(<GuestHarness id="g-2" guest />);
+    await settle();
+    expect(identify).toHaveBeenLastCalledWith('g-2', { guest: true });
+  });
+});
