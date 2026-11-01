@@ -157,6 +157,64 @@ export async function enqueueReviewCompletionJob(input: {
   return confirmed;
 }
 
+/** A failed job may be re-run at most this often, so a poison job cannot be hammered from the retry button. */
+export const REVIEW_RETRY_COOLDOWN_MS = 60_000;
+
+export type RetryReviewCompletionResult =
+  | { readonly kind: 'not_found' }
+  /** Pending, running or complete: there is nothing to re-run. */
+  | { readonly kind: 'not_failed'; readonly job: ReviewCompletionJobRecord }
+  | { readonly kind: 'cooldown'; readonly retryAfterMs: number; readonly job: ReviewCompletionJobRecord }
+  | { readonly kind: 'restarted'; readonly job: ReviewCompletionJobRecord };
+
+/**
+ * Re-run a job that was given up on (`failed_fatal`), the way "Analyze again" works on chess.com: same game, same
+ * saved positions, decisions that already finished are kept and only the unfinished ones are re-evaluated. The positions
+ * come from the stored job, never from the caller, so a retry cannot change what is analyzed. Owner only.
+ */
+export async function retryReviewCompletionJob(input: {
+  readonly userId: string;
+  readonly jobId: string;
+  readonly now?: number;
+}): Promise<RetryReviewCompletionResult> {
+  const now = input.now ?? Date.now();
+  const job = await store.get(input.jobId);
+  if (!job || job.userId !== input.userId) return { kind: 'not_found' };
+  if (job.status !== 'failed_fatal') return { kind: 'not_failed', job };
+  const sinceFailure = now - job.updatedAt;
+  if (sinceFailure < REVIEW_RETRY_COOLDOWN_MS) {
+    return { kind: 'cooldown', retryAfterMs: REVIEW_RETRY_COOLDOWN_MS - sinceFailure, job };
+  }
+  const fresh = createReviewCompletionJob({
+    gameDigest: job.gameDigest,
+    sourceMatchId: job.sourceMatchId,
+    userId: job.userId,
+    snapshots: job.snapshots,
+    expectedDecisionIds: job.expectedDecisionIds,
+    captureFailures: job.captureFailures,
+    now,
+  });
+  const finished = new Map(
+    job.decisions
+      .filter((decision) => decision.lifecycle === 'SCORED' || decision.lifecycle === 'FORCED')
+      .map((decision) => [decision.decisionId, decision] as const),
+  );
+  const restarted: ReviewCompletionJobRecord = {
+    ...fresh,
+    createdAt: job.createdAt,
+    claimGeneration: job.claimGeneration,
+    decisions: fresh.decisions.map((decision) => finished.get(decision.decisionId) ?? decision),
+  };
+  await store.put(restarted);
+  log.info({ jobId: job.jobId, kept: finished.size, total: job.expectedDecisionIds.length }, 'failed review job re-run requested');
+  if (isReviewSweepEnabled() && !isProcessClosing()) {
+    void trackProcessWork('review-kick', () => sweepReviewCompletionJobs()).catch((error) => {
+      log.warn({ err: error, jobId: job.jobId }, 'kick failed');
+    });
+  }
+  return { kind: 'restarted', job: restarted };
+}
+
 type SweepResult = { ran: number; completed: number; recovered: number };
 type EvaluatePosition = NonNullable<RunCompletionPassOptions['evaluatePosition']>;
 
@@ -463,6 +521,34 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       })),
       evaluations: job.decisions.flatMap((d) => d.evaluation ? [d.evaluation] : []),
     });
+  });
+
+  app.post('/api/review-completion-jobs/:jobId/retry', async (req: Request, res: Response) => {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    try {
+      const result = await retryReviewCompletionJob({ userId: authenticatedUserId, jobId: String(req.params.jobId) });
+      if (result.kind === 'not_found') {
+        res.status(404).json({ error: 'Job not found.' });
+        return;
+      }
+      if (result.kind === 'cooldown') {
+        res.setHeader('Retry-After', String(Math.ceil(result.retryAfterMs / 1000)));
+        res.status(429).json({ error: 'Please wait a moment before trying again.', retryAfterMs: result.retryAfterMs });
+        return;
+      }
+      res.status(result.kind === 'restarted' ? 202 : 200).json({
+        jobId: result.job.jobId,
+        status: result.job.status,
+        restarted: result.kind === 'restarted',
+      });
+    } catch (error) {
+      log.error({ err: error }, 'review retry failed');
+      res.status(500).json({ error: 'Failed to restart the review.' });
+    }
   });
 
   app.get('/api/review-completion-jobs', async (req: Request, res: Response) => {
