@@ -338,6 +338,9 @@ jobs:
       - name: Bundle size check
         run: npm run size-check --prefix client
 
+      - name: Bundle ratchet
+        run: npm run check:bundle-ratchet --prefix client
+
       - name: Upload source maps to Sentry
         if: github.ref == 'refs/heads/main' && env.SENTRY_AUTH_TOKEN != ''
         env:

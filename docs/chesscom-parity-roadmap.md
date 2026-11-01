@@ -76,7 +76,7 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 | [ ] 4.7 | One "which analysis stack owns what" doc and a differential test between the learning coach and review-engine thresholds |
 | [ ] 4.8 | Unify Learn / Journey / learning progress into a versioned, optionally synced store |
 | [ ] 4.9 | Retire `walnut-live.css` and `premium-theme.css` screen by screen; split `dailyFritz.css` and `native-landscape.css` by surface; shared solo-leaderboard component |
-| [ ] 4.10 | Bundle budgets ratchet from a committed baseline |
+| [x] 4.10 | Bundle ratchet (this PR): `client/scripts/checkBundleRatchet.mjs` + committed `bundle-ratchet-baseline.json` (total JS and every chunk of 10 kB or more, by name without hash; 1 kB tolerance; a new large chunk fails until `--update`). CI step after the size check; the hand-set ceilings in `check-bundle-size.mjs` stay as a second fence. Verified against a build with CI's env vars (0.4 kB apart) | `scripts/checkBundleRatchet.mjs` | this PR |
 | [ ] 4.11 | Marketing assets: per-page OG images, 180px apple-touch-icon |
 
 ## Status log
