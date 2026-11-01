@@ -1,6 +1,7 @@
 import { Button } from '../components/primitives';
 import { HistoricalGameReviewPortal } from '../modules/review/HistoricalGameReviewPortal';
 import LayoutScreen from '../ui/LayoutScreen';
+import { usePageTitle } from '../utils/usePageTitle';
 
 interface GamesPageProps {
   signedIn: boolean;
@@ -14,8 +15,10 @@ interface GamesPageProps {
  * each one (instant when it has been analyzed, analyzed on demand from the saved record when it has not).
  */
 export default function GamesPage({ signedIn, onOpenAuth, onBack }: GamesPageProps) {
+  usePageTitle('Games');
   return (
     <LayoutScreen
+      headingLevel={1}
       // Deliberately not `mode-home-screen`: premium-theme.css sizes that class's header and content to min(1000px, 94vw)
       // !important, which ignores the shell's own padding and pushes the column past the right edge of a phone.
       className="screen lobby-screen mode-subpage-screen rating-history-screen games-screen"

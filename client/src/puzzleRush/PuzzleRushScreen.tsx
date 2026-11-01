@@ -19,6 +19,7 @@ import type {
 } from './types';
 import './puzzleRush.css';
 import { useGameplayPresentation } from '../presentation/gameplayPresentation';
+import { usePageTitle } from '../utils/usePageTitle';
 
 type Phase = 'intro' | 'starting' | 'running' | 'error' | 'leaderboard';
 
@@ -38,6 +39,7 @@ const FALLBACK_STAGES: PuzzleRushStage[] = [
 ];
 
 export function PuzzleRushScreen({ onBack, onNavigate }: PuzzleRushScreenProps) {
+  usePageTitle('Puzzle Rush');
   const { profile } = useAuth();
   const [phase, setPhase] = useState<Phase>('intro');
   const [startResponse, setStartResponse] = useState<PuzzleRushStartResponse | null>(null);

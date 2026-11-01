@@ -1,5 +1,18 @@
 /* No Brainer Lab — training surface (scoped; does not affect live match board) */
 
+/* The page heading for screen readers; the board screen has no visible title. Absolute, so it takes no layout space. */
+.nbl-sr-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .practice-lab {
   --nbl-accent: var(--tier-master, #a855f7);
   --nbl-accent-soft: rgba(168, 85, 247, 0.42);

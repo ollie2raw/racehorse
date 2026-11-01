@@ -22,6 +22,7 @@ import {
 import { friendsSocketScopeRef } from './friendsSocketScope';
 import './friendsScreen.css';
 import { publicPlayerName } from '../identity/publicPlayerName';
+import { usePageTitle } from '../utils/usePageTitle';
 
 interface FriendsScreenProps {
   open: boolean;
@@ -189,6 +190,7 @@ export default function FriendsScreen({
   onViewProfile,
   onSpectate,
 }: FriendsScreenProps) {
+  usePageTitle('Friends', open);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendRecord[]>([]);
@@ -377,7 +379,7 @@ export default function FriendsScreen({
         {/* ── Left: friend list ── */}
         <div className="friends-page-list-pane">
           <div className="friends-page-list-header">
-            <span className="friends-page-list-title">Friends</span>
+            <h1 className="friends-page-list-title">Friends</h1>
             <span className="friends-page-online-count">
               <span className="friends-page-online-dot" />
               {onlineCount} online

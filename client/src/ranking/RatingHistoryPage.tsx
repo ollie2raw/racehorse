@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import LayoutScreen from '../ui/LayoutScreen';
 import { useAsyncData } from '../hooks/useAsyncData';
+import { usePageTitle } from '../utils/usePageTitle';
 import { fetchRatingHistory, fetchRankingLeaderboard, type LeaderboardEntry, type RatingHistoryResponse } from './api';
 
 interface RatingHistoryPageProps {
@@ -89,6 +90,7 @@ export default function RatingHistoryPage({
   onBack,
   onOpenGames,
 }: RatingHistoryPageProps) {
+  usePageTitle('Rating History');
   const { data: history, loading, error } = useAsyncData<RatingHistoryResponse | null>(
     async () => {
       if (!userId) return null;
@@ -148,6 +150,7 @@ export default function RatingHistoryPage({
       // Not `mode-home-screen`: premium-theme.css sizes that class's header and content to min(1000px, 94vw) !important,
       // which ignores the shell's own padding and pushed this page's column 17px past the right edge of a 390px phone.
       className="screen lobby-screen mode-subpage-screen rating-history-screen"
+      headingLevel={1}
       title="Rating History"
       subtitle={`Glicko-2 progression for ${heading}`}
       contentClassName="screen-shell rating-history-content"
