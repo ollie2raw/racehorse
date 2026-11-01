@@ -23,11 +23,11 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 | [x] 1.1 | Delete dead Learn v1 code, dead CSS files, deprecated shims | 9 files, about 2,770 lines; `tsc -b` is the proof | #410 merged |
 | [ ] 1.2 | Purge unreferenced selectors from the four big Learn/Journey stylesheets | review the diff by screenshot; dynamic class names are the risk | |
 | [~] 1.3 | Loader and storage half merged (#411). Guided-match loader no longer rejects the module on a failed fetch; `saveLearnProgress` write guarded. **Still open: gate the recorder/annotator tools out of the production bundle** (separate PR, needs its own size check) | `guidedMatchLessonLoader.ts`, `learn/progress/storage.ts` | #411 merged; recorder gating still open |
-| [~] 1.4 | Client geometry copy replaced by game-core's open-ends functions. The scoring code was byte-identical, so no behaviour change; the client file now re-exports core and keeps only its dev diagnostics. A test pins every shared export to the core function | `client/src/game/openEndsGeometry.ts`, `openEndsSingleSource.test.ts` | this PR |
+| [~] 1.4 | Client geometry copy replaced by game-core's open-ends functions. The scoring code was byte-identical, so no behaviour change; the client file now re-exports core and keeps only its dev diagnostics. A test pins every shared export to the core function | `client/src/game/openEndsGeometry.ts`, `openEndsSingleSource.test.ts` | #412 merged |
 | [ ] 1.5 | Remove `Math.random` defaults from game-core (rng/deck required); callers inject | `engine.ts:38`, `pregameDraw.ts:17`; server call sites change in 3.x | |
 | [ ] 1.6 | Server-bot parity test over a fixed position corpus (test only) | guards the later shared-engine extraction | |
-| [~] 1.7 | CSS ratchet: per-file `!important`, hex outside `tokens.css` and gradients may never increase; new files start at zero. Baseline today: 2,803 / 993 / 406 across 110 files. Run `node scripts/checkCssRatchet.mjs --update` in the same PR whenever a CSS count drops | `client/scripts/checkCssRatchet.mjs`, `css-ratchet-baseline.json`, CI step | this PR |
-| [ ] 1.8 | Tests for untested logic: `coachMessaging`, `learningStore`, `lessonV2` start/restore, then `useHandLifecycle` | highest-risk first | |
+| [x] 1.7 | CSS ratchet: per-file `!important`, hex outside `tokens.css` and gradients may never increase; new files start at zero. Baseline today: 2,803 / 993 / 406 across 110 files. Run `node scripts/checkCssRatchet.mjs --update` in the same PR whenever a CSS count drops | `client/scripts/checkCssRatchet.mjs`, `css-ratchet-baseline.json`, CI step | #413 merged |
+| [~] 1.8 | Tests for untested logic. **Done in this PR:** `coachMessaging` (1,440-case copy-rule grid, decision tables) and `learningStore`. **Still open:** `lessonV2` start/restore, then `useHandLifecycle` | `learning/coachMessaging.test.ts`, `learning/learningStore.test.ts` | this PR |
 | [ ] 1.9 | Guest first impression: playable path or real sign-in button on Daily Fritz and `/games`; skeletons instead of placeholder dashes | from launch audit P1-3 | |
 | [ ] 1.10 | Accessibility and polish batch: `LayoutScreen` h1, per-route page titles, tap targets to 44px, raw `not_found` text, skip the authed call when signed out | launch audit P2 5-9 | |
 | [ ] 1.11 | Client dependency updates (react-router, dompurify chain, socket.io-parser) with full e2e | `npm audit --omit=dev` | |
@@ -79,4 +79,5 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 
 - 2026-11-01: roadmap created from the two audits.
 - 2026-11-01: 0.1 built and verified, PR #409 open (`[~]` = PR open, awaiting merge; `[x]` = merged).
+- 2026-11-01: #409, #410, #411, #412, #413 merged. 1.8 (coach and profile tests) open. Found while testing: `updateProfile` never fills `recurringMistakeTags` (it builds its history from lesson text, not concepts); nothing reads the field yet, recorded as an expected-fail test.
 - 2026-11-01: 1.1 (#410) and 1.3 (#411, loader and storage half) open. 1.2 (live-stylesheet selector purge) deliberately not started: it needs screenshot review per screen.
