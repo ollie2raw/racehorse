@@ -210,7 +210,7 @@ export default function App() {
     setSigningOut,
     welcomeOpen,
     setWelcomeOpen,
-  } = useAppSessionUi({ authUser: authUser ? { id: authUser.id, email: authUser.email ?? '' } : null, authProfile, authLoading, justVerified, showToast });
+  } = useAppSessionUi({ authUser: authUser ? { id: authUser.id, email: authUser.email ?? '', is_anonymous: authUser.is_anonymous } : null, authProfile, authLoading, justVerified, showToast });
 
   // Single tournament hook instance, shared by Hub/Bracket/Result screens.
   // Hoisted from the screens so that registration changes / bracket updates /
