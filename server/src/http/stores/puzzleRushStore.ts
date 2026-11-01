@@ -342,12 +342,35 @@ export async function incrementPuzzlePoolPlayCounts(puzzleIds: string[]): Promis
   );
 }
 
-/** Bounded scan of completed runs for the all-time board. */
-export async function listCompletedRushRuns(limit = RUSH_LEADERBOARD_RUN_LIMIT): Promise<PuzzleRushRun[]> {
-  const rows = await supabaseFetch<RushRunRow[]>(
-    `/rest/v1/rush_runs?select=${RUN_SELECT}&status=eq.completed&order=total_score.desc,puzzles_solved.desc,ended_at.asc&limit=${Math.max(1, Math.round(limit))}`,
-  );
-  return (rows ?? []).map(normalizeRushRun);
+/** Most pages the all-time scan will read, so a board that cannot fill still ends. */
+export const RUSH_LEADERBOARD_MAX_PAGES = 10;
+
+/**
+ * Completed runs for the all-time board, best first, read page by page until `distinctUsers` different players are covered.
+ *
+ * One page is not enough: a player with many top runs would fill it alone and push everyone else off the board. The runs come back
+ * in rank order, so a player's best run is their first one in the stream, and the first N distinct players in the stream are exactly
+ * the top N. The order carries `id` last so it is a total order and pages never overlap or skip.
+ */
+export async function listCompletedRushRuns(
+  distinctUsers = PUZZLE_RUSH_CONFIG.leaderboard.pageSize,
+  pageSize = RUSH_LEADERBOARD_RUN_LIMIT,
+): Promise<PuzzleRushRun[]> {
+  const size = Math.max(1, Math.round(pageSize));
+  const runs: PuzzleRushRun[] = [];
+  const users = new Set<string>();
+  for (let page = 0; page < RUSH_LEADERBOARD_MAX_PAGES; page += 1) {
+    const rows = await supabaseFetch<RushRunRow[]>(
+      `/rest/v1/rush_runs?select=${RUN_SELECT}&status=eq.completed&order=total_score.desc,puzzles_solved.desc,ended_at.asc,id.asc&limit=${size}&offset=${page * size}`,
+    );
+    const batch = (rows ?? []).map(normalizeRushRun);
+    for (const run of batch) {
+      runs.push(run);
+      users.add(run.userId);
+    }
+    if (batch.length < size || users.size >= distinctUsers) break;
+  }
+  return runs;
 }
 
 /**

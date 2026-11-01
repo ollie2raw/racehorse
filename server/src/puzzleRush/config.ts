@@ -109,6 +109,12 @@ export type PuzzleRushConfig = {
     durationGraceSeconds: number;
     /** A run open longer than this is abandoned rather than gradeable. */
     maxRunWallClockSeconds: number;
+    /**
+     * The fastest a run can plausibly average per move, over the whole run. The run's duration is server-stamped (start to the
+     * completion claim), so a bot that posts solved lines the instant it is served finishes in a fraction of this. Deliberately far
+     * below what a fast human averages, so it only ever catches the impossible.
+     */
+    minSecondsPerMove: number;
   };
 
   leaderboard: {
@@ -191,6 +197,7 @@ export const PUZZLE_RUSH_CONFIG: PuzzleRushConfig = {
     scoreTolerancePoints: 0,
     durationGraceSeconds: 10,
     maxRunWallClockSeconds: 1800,
+    minSecondsPerMove: 0.15,
   },
 
   leaderboard: {

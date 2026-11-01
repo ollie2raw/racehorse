@@ -55,7 +55,7 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 | [ ] 3.4 | Protocol version enforced in the handshake with explicit `upgrade_required` | |
 | [ ] 3.5 | Turn clock for casual and rated games (per 2.4) | |
 | [ ] 3.6 | Crash-restart test: kill mid-hand, assert timers, receipts, turn state recover | |
-| [ ] 3.7 | Rush leaderboard: best-run-per-user in SQL, pagination, own rank; per-puzzle solve-time plausibility | |
+| [~] 3.7 | Rush leaderboard integrity. **Done (this PR; the owner lifted the tournament-week freeze for server work):** (1) the all-time board no longer lets a player with many top runs push everyone else off it: the store reads in rank order, page by page (total order with `id` last, at most 10 pages), until 50 different players are covered, which is provably the true top 50 because a player's best run is their first in the stream. (2) New plausibility rule `run_too_fast`: a run whose server-stamped duration is under (moves used x 0.15 s) is invalidated, which catches a bot that posts solved lines the instant they are served; exactly at the floor is allowed. **Still open:** pagination beyond the first 50 and the caller's own rank when outside it (needs a SQL function or a window query, so a migration the owner applies), and true per-puzzle solve times (the client does not report them) | `puzzleRushStore.ts`, `grading.ts` | this PR |
 | [ ] 3.8 | Tournament hygiene: public bracket DTO, paginate `/history`, explicit bot-result winner source | |
 | [ ] 3.9 | Multiplayer review records (design already in `review-game-record-architecture.md`) | |
 | [ ] 3.10 | Boot-time env schema; schema baseline and migrations as single source of truth with a CI diff | |

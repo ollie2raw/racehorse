@@ -800,6 +800,25 @@ describe('end-of-run grading', () => {
     expect(stretched.invalidatedReason).toBe('run_duration_exceeded');
   });
 
+  it('invalidates a run that finished faster than any player could make its moves', () => {
+    const { poolById, reported } = buildHonestRun(3);
+    const truth = gradeRun({ reported, poolById, clientReportedScore: 0, runDurationSeconds: 60 });
+    const moves = truth.puzzles.reduce((sum, puzzle) => sum + puzzle.movesUsed, 0);
+    expect(moves).toBeGreaterThan(0);
+    const floor = moves * PUZZLE_RUSH_CONFIG.antiCheat.minSecondsPerMove;
+
+    // a bot posting solved lines the instant they are served: score matches, only the clock gives it away
+    const instant = gradeRun({ reported, poolById, clientReportedScore: truth.totalScore, runDurationSeconds: 0.05 });
+    expect(instant.valid).toBe(false);
+    expect(instant.invalidatedReason).toBe('run_too_fast');
+
+    // exactly at the floor is allowed: the rule only catches what is impossible
+    const atFloor = gradeRun({ reported, poolById, clientReportedScore: truth.totalScore, runDurationSeconds: floor });
+    expect(atFloor.valid).toBe(true);
+    const justUnder = gradeRun({ reported, poolById, clientReportedScore: truth.totalScore, runDurationSeconds: floor - 0.01 });
+    expect(justUnder.invalidatedReason).toBe('run_too_fast');
+  });
+
   it('does not punish a client that under-reports its score', () => {
     const { poolById, reported } = buildHonestRun(2);
     const truth = gradeRun({ reported, poolById, clientReportedScore: 0, runDurationSeconds: 60 });
