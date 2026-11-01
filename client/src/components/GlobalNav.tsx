@@ -61,6 +61,7 @@ interface GlobalNavProps {
  */
 const ACCOUNT_MENU_ITEMS: { label: string; mode?: AppMode; group?: 'legal' | 'session' }[] = [
   { label: 'Profile', mode: 'stats' },
+  { label: 'My games', mode: 'games' },
   { label: 'Settings', mode: 'settings' },
   { label: 'Privacy', mode: 'privacy', group: 'legal' },
   { label: 'Terms', mode: 'terms', group: 'legal' },

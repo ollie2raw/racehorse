@@ -45,6 +45,7 @@ export const SURFACE_BY_MODE: Record<AppMode, SurfacePresentation> = {
   friends: focused('social', 'feed'),
   stats: focused('social', 'feed'),
   ratingHistory: focused('social', 'stats'),
+  games: focused('social', 'stats'),
   leaderboard: focused('social', 'feed'),
   profile: focused('social', 'feed'),
   live: focused('social', 'feed'),

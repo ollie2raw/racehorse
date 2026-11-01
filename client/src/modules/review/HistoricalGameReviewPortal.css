@@ -91,3 +91,159 @@
   min-height: 44px;
   min-width: 88px;
 }
+
+/* Header row: title on the left, "All games" on the right (strip only). */
+.rh-saved-games__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rh-saved-games__head .rh-recent-reviews__eyebrow {
+  margin: 0;
+}
+
+.rh-saved-games__all {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tier-standard);
+  cursor: pointer;
+}
+
+.rh-saved-games__all:hover {
+  text-decoration: underline;
+}
+
+/* The Games page: the page scrolls, the list is not boxed in a small scroller. */
+.rh-saved-games--page {
+  max-height: none;
+  overflow: visible;
+  margin-top: 0;
+  padding: 16px;
+}
+
+.rh-saved-games--page .rh-recent-reviews__row {
+  min-height: 56px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.rh-saved-games--page .rh-recent-reviews__meta {
+  font-size: 14px;
+}
+
+.rh-saved-games__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 12px;
+}
+
+.rh-saved-games__stats > div {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-control);
+}
+
+.rh-saved-games__stats dt {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.rh-saved-games__stats dd {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.rh-saved-games__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-bottom: 8px;
+}
+
+.rh-saved-games__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rh-saved-games__chip {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-control);
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+}
+
+.rh-saved-games__chip[aria-pressed='true'] {
+  border-color: var(--tier-standard);
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(59, 130, 246, 0.14);
+}
+
+@media (--phone) {
+  .rh-saved-games__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rh-saved-games--page {
+    padding: 12px;
+  }
+}
+
+/* A result line and, under it, where the review stands. */
+.rh-saved-games .rh-recent-reviews__meta {
+  display: block;
+}
+
+.rh-saved-games__line {
+  display: block;
+}
+
+.rh-saved-games__state {
+  display: block;
+  margin-top: 2px;
+}
+
+/* The row action is a real button: a quiet one to start an analysis, an accented one to open a ready review. */
+.rh-saved-games__btn {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-control);
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+
+.rh-saved-games__btn--ready {
+  border-color: var(--tier-standard);
+  background: rgba(59, 130, 246, 0.14);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.rh-saved-games__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -18,6 +18,8 @@ export type SavedGameSummary = {
   verification: 'replay_verified' | 'replay_mismatch' | 'unverified';
   playedAt: string | null;
   savedAt: string;
+  /** This game's saved review, when it has one that reopens instantly (joined on the server). */
+  review: { id: string; accuracy: number | null; grade: string | null } | null;
 };
 
 export type RecentGamesResult =

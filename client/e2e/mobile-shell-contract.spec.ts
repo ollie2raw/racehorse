@@ -48,6 +48,7 @@ for (const [route, fixture] of [
   ['/friends', 'solo/populated'],
   ['/stats', 'solo/populated'],
   ['/rating-history', 'solo/populated'],
+  ['/games', 'solo/populated'],
   ['/players/route-smoke', 'solo/populated'],
   ['/tournament/route-smoke', 'home/not-played'],
   ['/tournament/route-smoke/result', 'home/not-played'],

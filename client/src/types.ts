@@ -101,6 +101,7 @@ export type AppMode =
   | 'friends'
   | 'stats'
   | 'ratingHistory'
+  | 'games'
   | 'singlePlayerHub'
   | 'journey'
   | 'tournament'
