@@ -292,8 +292,14 @@ describe('GET /api/game-records', () => {
     expect(supabaseFetch).not.toHaveBeenCalled();
   });
 
+  /** Answers the records query and the reviews query separately, by which table the path asks for. */
+  const answer = (rows: { records?: unknown[]; reviews?: unknown[] }) => {
+    supabaseFetch.mockImplementation(async (path: string) => (path.includes('/game_reviews?') ? (rows.reviews ?? []) : (rows.records ?? [])));
+  };
+  const reviewCalls = () => supabaseFetch.mock.calls.map((call) => (call as [string])[0]).filter((path) => path.includes('/game_reviews?'));
+
   it('lists the caller\'s games newest first, without the actions or the deal seed', async () => {
-    supabaseFetch.mockResolvedValue([STORED_ROW]);
+    answer({ records: [STORED_ROW] });
     const response = await fetch(`${apiBase}/api/game-records/recent?limit=5`);
     expect(response.status).toBe(200);
     const { games } = await response.json() as { games: Array<Record<string, unknown>> };
@@ -301,10 +307,69 @@ describe('GET /api/game-records', () => {
     expect(games[0]).toMatchObject({ sourceMatchId: 'match-9', verification: 'replay_verified', moveCount: 1, savedAt: '2026-11-01T01:00:05.000Z' });
     expect(games[0]).not.toHaveProperty('moves');
     expect(games[0]).not.toHaveProperty('dealSeed');
+    expect(games[0]).toMatchObject({ review: null });
     const path = (supabaseFetch.mock.calls[0] as [string])[0];
     expect(path).toContain(`user_id=eq.${USER}`);
     expect(path).toContain('order=created_at.desc');
     expect(path).toContain('limit=5');
+  });
+
+  it('attaches each game\'s saved review (id, accuracy, grade), joined on the server', async () => {
+    answer({
+      records: [STORED_ROW, { ...STORED_ROW, source_match_id: 'match-8' }],
+      reviews: [{ id: 'review-9', source_match_id: 'match-9', accuracy: 91.2, grade: 'A' }],
+    });
+    const { games } = await (await fetch(`${apiBase}/api/game-records/recent`)).json() as { games: Array<{ sourceMatchId: string; review: unknown }> };
+    expect(games.find((g) => g.sourceMatchId === 'match-9')?.review).toEqual({ id: 'review-9', accuracy: 91.2, grade: 'A' });
+    expect(games.find((g) => g.sourceMatchId === 'match-8')?.review).toBeNull();
+  });
+
+  it('looks reviews up scoped to the caller, only reopenable ones, in one query for the whole page', async () => {
+    answer({ records: [STORED_ROW, { ...STORED_ROW, source_match_id: 'match-8' }] });
+    await fetch(`${apiBase}/api/game-records/recent`);
+    expect(reviewCalls()).toHaveLength(1);
+    const path = reviewCalls()[0]!;
+    expect(path).toContain(`user_id=eq.${USER}`);
+    expect(path).toContain('replay_artifact=not.is.null');
+    expect(path).toContain('order=created_at.desc');
+    expect(path).toContain(`source_match_id=in.(${encodeURIComponent('"match-9"')},${encodeURIComponent('"match-8"')})`);
+  });
+
+  it('keeps the newest review when a game has more than one', async () => {
+    answer({
+      records: [STORED_ROW],
+      reviews: [
+        { id: 'newer', source_match_id: 'match-9', accuracy: 70, grade: 'C' },
+        { id: 'older', source_match_id: 'match-9', accuracy: 50, grade: 'D' },
+      ],
+    });
+    const { games } = await (await fetch(`${apiBase}/api/game-records/recent`)).json() as { games: Array<{ review: { id: string } }> };
+    expect(games[0]?.review.id).toBe('newer');
+  });
+
+  it('reports a review with no numeric accuracy honestly instead of inventing one', async () => {
+    answer({ records: [STORED_ROW], reviews: [{ id: 'r', source_match_id: 'match-9', accuracy: null, grade: null }] });
+    const { games } = await (await fetch(`${apiBase}/api/game-records/recent`)).json() as { games: Array<{ review: unknown }> };
+    expect(games[0]?.review).toEqual({ id: 'r', accuracy: null, grade: null });
+  });
+
+  it('never puts an odd id into a filter, and skips the review query when there are no games', async () => {
+    answer({ records: [{ ...STORED_ROW, source_match_id: 'bad"),user_id=eq.other' }] });
+    const { games } = await (await fetch(`${apiBase}/api/game-records/recent`)).json() as { games: Array<{ review: unknown }> };
+    expect(reviewCalls()).toHaveLength(0);
+    expect(games[0]?.review).toBeNull();
+    supabaseFetch.mockReset();
+    answer({ records: [] });
+    await fetch(`${apiBase}/api/game-records/recent`);
+    expect(reviewCalls()).toHaveLength(0);
+  });
+
+  it('answers 500 rather than a list that wrongly says nothing was analyzed, when the reviews lookup fails', async () => {
+    supabaseFetch.mockImplementation(async (path: string) => {
+      if (path.includes('/game_reviews?')) throw new Error('reviews down');
+      return [STORED_ROW];
+    });
+    expect((await fetch(`${apiBase}/api/game-records/recent`)).status).toBe(500);
   });
 
   it('caps an oversized page', async () => {
@@ -314,12 +379,13 @@ describe('GET /api/game-records', () => {
   });
 
   it('returns one saved game in full, scoped to its owner inside the query', async () => {
-    supabaseFetch.mockResolvedValue([STORED_ROW]);
+    answer({ records: [STORED_ROW], reviews: [{ id: 'review-9', source_match_id: 'match-9', accuracy: 88, grade: 'B' }] });
     const response = await fetch(`${apiBase}/api/game-records/match-9`);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       sourceMatchId: 'match-9', dealSeed: 'seed-9', matchStarter: 'you', localMatchId: 'local-9', recordVersion: 1,
       moves: [{ turn: 1, actor: 'you', tile_played: '6|6', branch: 'left' }],
+      review: { id: 'review-9', accuracy: 88, grade: 'B' },
     });
     const path = (supabaseFetch.mock.calls[0] as [string])[0];
     expect(path).toContain(`user_id=eq.${USER}`);

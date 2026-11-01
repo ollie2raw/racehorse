@@ -10,6 +10,7 @@ import type {
 import { isSpectatorModeEnabled } from '../config/spectatorModeFeature';
 
 const RatingHistoryPage = React.lazy(() => import('../ranking/RatingHistoryPage'));
+const GamesPage = React.lazy(() => import('../games/GamesPage'));
 const StatsScreen = React.lazy(() => import('../stats/StatsScreen'));
 const SettingsScreen = React.lazy(() => import('../screens/SettingsScreen'));
 const FriendsScreenLobbyBridge = React.lazy(() => import('../multiplayer/FriendsScreenLobbyBridge'));
@@ -68,8 +69,33 @@ export function RatingHistoryRoute({
           userId={authUser?.id ?? null}
           username={authProfile?.username ?? null}
           onBack={() => setAppMode('home')}
+          onOpenGames={() => setAppMode('games')}
         />
       </Suspense>
+      </ErrorBoundary>
+    </div>
+  );
+}
+
+/** The player's saved games: archive, stats, filters, and review (Phase 5 of the post-game review programme). */
+export function GamesRoute({
+  shell,
+  navigation,
+  auth,
+}: {
+  shell: AppRoutesShellProps;
+  navigation: AppRoutesNavigationProps;
+  auth: AppRoutesAuthProps;
+}) {
+  const { withAuthModals, appRootClassName } = shell;
+  const { setAppMode } = navigation;
+  const { authUser } = auth;
+  return withAuthModals(
+    <div className={appRootClassName}>
+      <ErrorBoundary context="games">
+        <Suspense fallback={<ScreenLoader label="Loading your games…" />}>
+          <GamesPage signedIn={Boolean(authUser?.id)} onBack={() => setAppMode('home')} />
+        </Suspense>
       </ErrorBoundary>
     </div>
   );

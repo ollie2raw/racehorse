@@ -25,6 +25,7 @@ import {
   LiveNowScreen,
   LiveNowRoute,
   RatingHistoryRoute,
+  GamesRoute,
   FriendsRoute,
   StatsRoute,
   SettingsRoute,
@@ -136,6 +137,10 @@ function AppRoutesContent({
 
   if (appMode === 'ratingHistory') {
     return <RatingHistoryRoute shell={shell} navigation={navigation} auth={auth} />;
+  }
+
+  if (appMode === 'games') {
+    return <GamesRoute shell={shell} navigation={navigation} auth={auth} />;
   }
 
   if (appMode === 'friends') {

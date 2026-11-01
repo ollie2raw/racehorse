@@ -47,7 +47,7 @@ const ALL_PRIMARY_TABS: AppPrimaryTab[] = [
     area: 'social',
     shortLabel: 'Social',
     mode: 'feed',
-    activeModes: ['feed', 'friends', 'leaderboard', 'profile', 'stats', 'ratingHistory'],
+    activeModes: ['feed', 'friends', 'leaderboard', 'profile', 'stats', 'ratingHistory', 'games'],
   },
   {
     label: 'Learn',

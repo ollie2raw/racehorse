@@ -20,6 +20,8 @@ interface RatingHistoryPageProps {
   userId: string | null;
   username: string | null;
   onBack: () => void;
+  /** Opens the dedicated Games page (the full archive). */
+  onOpenGames?: () => void;
 }
 
 type HistoryPoint = {
@@ -85,6 +87,7 @@ export default function RatingHistoryPage({
   userId,
   username,
   onBack,
+  onOpenGames,
 }: RatingHistoryPageProps) {
   const { data: history, loading, error } = useAsyncData<RatingHistoryResponse | null>(
     async () => {
@@ -382,7 +385,7 @@ export default function RatingHistoryPage({
           )}
         </div>
 
-        {userId ? <HistoricalGameReviewPortal enabled /> : null}
+        {userId ? <HistoricalGameReviewPortal enabled onOpenGamesPage={onOpenGames} /> : null}
 
         <div className="rating-history-back" style={{ display: 'flex', justifyContent: 'flex-start' }}>
           <button className="mode-inline-btn rh-back-button" data-rh-parent-back onClick={onBack}>

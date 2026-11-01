@@ -85,6 +85,7 @@ const ROUTES: string[] = [
   '/daily-fritz',
   '/daily-fritz/leaderboard',
   '/rating-history',
+  '/games',
   '/solo',
   '/solo/fritz',
   '/solo/ghost',

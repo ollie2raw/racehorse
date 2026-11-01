@@ -38,12 +38,13 @@ describe('GlobalNav — account menu', () => {
     expect(screen.getByRole('menu')).toBeTruthy();
   });
 
-  it('offers profile, settings, the legal pages, and sign out', () => {
+  it('offers profile, my games, settings, the legal pages, and sign out', () => {
     render(<GlobalNav />);
     openMenu();
 
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'Profile',
+      'My games',
       'Settings',
       'Privacy',
       'Terms',
@@ -75,6 +76,17 @@ describe('GlobalNav — account menu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Profile' }));
 
     expect(onNavigate).toHaveBeenCalledWith('stats');
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('opens the games archive from the account menu and closes', () => {
+    const onNavigate = vi.fn();
+    render(<GlobalNav onNavigate={onNavigate} />);
+    openMenu();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'My games' }));
+
+    expect(onNavigate).toHaveBeenCalledWith('games');
     expect(screen.queryByRole('menu')).toBeNull();
   });
 

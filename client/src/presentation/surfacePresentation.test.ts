@@ -6,7 +6,7 @@ const modes: AppMode[] = [
   'home', 'multiplayer', 'singlePlayerHub', 'tournament', 'feed', 'learn',
   'botSetup', 'ghostSetup', 'dailyFritz', 'dailyFritzLeaderboard', 'journey',
   'puzzleRush', 'noBrainer', 'guidedMatchRecorder', 'guidedMatchAnnotator',
-  'friends', 'stats', 'ratingHistory', 'leaderboard', 'profile', 'live',
+  'friends', 'stats', 'ratingHistory', 'games', 'leaderboard', 'profile', 'live',
   'bot', 'ghost', 'settings', 'dailyFritzHealthAdmin',
   'privacy', 'terms', 'support',
 ];

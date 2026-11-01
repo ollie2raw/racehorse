@@ -12,6 +12,9 @@ describe('app route paths', () => {
     ['/daily-fritz/leaderboard', { mode: 'dailyFritzLeaderboard' }],
     ['/learn/how-to-play', { mode: 'learn', learnHowToPlay: true }],
     ['/settings', { mode: 'settings' }],
+    ['/games', { mode: 'games' }],
+    ['/games/', { mode: 'games' }],
+    ['/rating-history', { mode: 'ratingHistory' }],
     ['/privacy', { mode: 'privacy' }],
     ['/terms', { mode: 'terms' }],
     ['/support', { mode: 'support' }],
@@ -50,6 +53,7 @@ describe('app route paths', () => {
     expect(buildAppPath({ ...base, mode: 'profile', profileUsername: '@Maya' })).toBe('/players/Maya');
     expect(buildAppPath({ ...base, mode: 'tournament', tournamentView: 'history' })).toBe('/tournament/history');
     expect(buildAppPath({ ...base, mode: 'multiplayer', multiplayerView: 'private' })).toBe('/multiplayer/private');
+    expect(buildAppPath({ ...base, mode: 'games' })).toBe('/games');
     expect(buildAppPath({ ...base, mode: 'learn', learnHowToPlay: true })).toBe('/learn/how-to-play');
     expect(buildAppPath({
       ...base,
