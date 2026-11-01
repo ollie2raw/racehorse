@@ -786,7 +786,7 @@
   }
 
   .rh-native .dfl-page .rh-hub-filter {
-    min-height: 30px;
+    min-height: 44px;
     height: 100%;
     padding: 0 10px;
   }
@@ -3246,7 +3246,7 @@
   }
 
   .rh-native .rh-htp-page__jump {
-    height: 30px !important;
+    height: 44px !important;
     min-height: 0 !important;
     padding-block: 0 !important;
     font-size: 10px !important;

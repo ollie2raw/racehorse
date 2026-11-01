@@ -187,6 +187,11 @@
 }
 
 .rh-legal-section a {
+  /* A 20px line of text is a poor tap target (the support address): pad it to 44px and pull the margin back, so the lines
+     around it do not move. */
+  display: inline-block;
+  padding-block: 12px;
+  margin-block: -12px;
   color: var(--text-primary);
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--rh-legal-accent) 60%, transparent);

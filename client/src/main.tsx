@@ -61,6 +61,7 @@ import './styles/racehorse-background.css';
 import './styles/rh-image-surface.css';
 import './styles/board/index.css';
 import './styles/native-landscape.css';
+import './styles/touch-slop.css';
 
 // Native-shell-only layout rules key off this class, so the web build
 // (including phones in landscape on playracehorse.com) is untouched.
