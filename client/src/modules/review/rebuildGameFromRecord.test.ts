@@ -50,6 +50,9 @@ describe('rebuildGameFromRecord: a saved game rebuilds exactly', () => {
     expect(game.snapshots).toHaveLength(record.moves.length);
     expect(game.snapshots.map((s) => s.identifiers.actionNumber)).toEqual(record.moves.map((_, i) => i + 1));
     expect(game.snapshots.every((s) => s.identifiers.decisionId.startsWith(`${record.sourceMatchId}:`))).toBe(true);
+    // The recorder is the one that captured them, ready for the review hook.
+    expect(game.recorder.getSnapshots()).toEqual(game.snapshots);
+    expect(game.recorder.getCaptureFailures()).toHaveLength(0);
   });
 
   it('feeds the existing analyzer: every human decision is one analyzed row, in order', () => {

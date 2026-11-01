@@ -4,6 +4,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { HistoricalGameReviewPortal } from './HistoricalGameReviewPortal';
 const { fetchRecent, load } = vi.hoisted(() => ({ fetchRecent: vi.fn(), load: vi.fn() }));
 vi.mock('./historicalGameReviewApi', () => ({ fetchRecentGameReviews: fetchRecent, loadHistoricalGameReview: load }));
+// The games archive has its own tests; here it is empty so these tests only exercise the review strip.
+vi.mock('./savedGames', () => ({ fetchRecentGames: vi.fn(async () => ({ ok: true, games: [] })) }));
 vi.mock('../../analyzer/GameReviewer', () => ({ default: ({ open, analysis, onClose }: { open: boolean; analysis: { analyzedAt: number }; onClose: () => void }) => open ? <div role="dialog">Review {analysis.analyzedAt}<button onClick={onClose}>Close review</button></div> : null }));
 afterEach(() => { window.history.replaceState(null, '', '/'); vi.clearAllMocks(); });
 const hydration = { analysis: { analyzedAt: 42 }, reviewWorkerBatch: {}, decisionIdByMoveNumber: new Map(), hasReplayArtifact: true, historicalCoachingByDecisionId: new Map() };
