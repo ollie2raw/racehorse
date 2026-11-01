@@ -234,5 +234,27 @@ describe('the Games page', () => {
     fireEvent.click(within(rows[2]!).getByRole('button', { name: 'Analyze' }));
     expect(await screen.findByLabelText('analyzing')).toHaveTextContent('Analyzing c');
   });
+
+  it('charts your accuracy over time on the page, and keeps it when the list is filtered down to nothing', async () => {
+    fetchGames.mockResolvedValue({ ok: true, games: pageGames() });
+    render(<HistoricalGameReviewPortal enabled layout="page" />);
+    await within(archive()).findAllByRole('listitem');
+    expect(screen.getByRole('img', { name: /Accuracy across your last 2 reviewed games/ })).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Filter by result' })).getByRole('button', { name: 'Wins' }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Filter by Fritz tier' })).getByRole('button', { name: 'Master' }));
+    expect(screen.getByRole('img', { name: /Accuracy across your last 2 reviewed games/ })).toBeTruthy();
+  });
+
+  it('keeps the chart off the Rating History strip, and off a page with fewer than two reviewed games', async () => {
+    fetchGames.mockResolvedValue({ ok: true, games: pageGames() });
+    const { unmount } = render(<HistoricalGameReviewPortal enabled />);
+    await within(archive()).findAllByRole('listitem');
+    expect(screen.queryByRole('img', { name: /Accuracy across/ })).toBeNull();
+    unmount();
+    fetchGames.mockResolvedValue({ ok: true, games: [game({ review: { id: 'only', accuracy: 88, grade: 'B' } }), game({ sourceMatchId: 'x' })] });
+    render(<HistoricalGameReviewPortal enabled layout="page" />);
+    await within(archive()).findAllByRole('listitem');
+    expect(screen.queryByRole('img', { name: /Accuracy across/ })).toBeNull();
+  });
 });
 

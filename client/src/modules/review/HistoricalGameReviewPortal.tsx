@@ -14,6 +14,7 @@ import {
   titleCase,
   type ArchiveFilters,
 } from './gamesArchiveModel';
+import { AccuracyTrend } from './AccuracyTrend';
 import { fetchRecentGames, type SavedGameSummary } from './savedGames';
 import './HistoricalGameReviewPortal.css';
 
@@ -197,6 +198,7 @@ export function HistoricalGameReviewPortal({ enabled, layout = 'strip', onOpenGa
             <div><dt>Avg accuracy</dt><dd>{formatAccuracy(stats.averageAccuracy) ?? '—'}</dd></div>
           </dl>
         ) : null}
+        {isPage && !loadingGames && allGames.length > 0 ? <AccuracyTrend games={allGames} /> : null}
         {isPage && !loadingGames && allGames.length > 0 ? (
           <div className="rh-saved-games__filters">
             <div role="group" aria-label="Filter by result" className="rh-saved-games__chips">
