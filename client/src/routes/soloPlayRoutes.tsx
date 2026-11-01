@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react';
 import { ScreenLoader } from '../ui/ScreenLoader';
+import AuthoringToolLockedScreen from '../screens/AuthoringToolLockedScreen';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import type {
   AppRoutesShellProps,
@@ -228,15 +229,47 @@ export function LearnRoute({
   );
 }
 
+/**
+ * The Guided Match recorder and annotator are authoring tools: the buttons that open them only render in the admin view,
+ * and the same must hold for their URLs. A visitor (or a signed-in player who is not the admin) gets a "not available"
+ * page; while auth is still loading nobody is judged yet, so an admin does not see the locked page flash.
+ */
+function authoringToolGate(
+  shell: AppRoutesShellProps,
+  navigation: AppRoutesNavigationProps,
+  auth: Pick<AppRoutesAuthProps, 'isAdmin' | 'authLoading'>,
+): React.ReactNode | null {
+  const { withAuthModals, appRootClassName } = shell;
+  if (auth.authLoading) {
+    return withAuthModals(
+      <div className={appRootClassName}>
+        <ScreenLoader label="Loading…" />
+      </div>,
+    );
+  }
+  if (!auth.isAdmin) {
+    return withAuthModals(
+      <div className={appRootClassName}>
+        <AuthoringToolLockedScreen onBack={() => navigation.setAppMode('learn')} />
+      </div>,
+    );
+  }
+  return null;
+}
+
 export function GuidedMatchAnnotatorRoute({
   shell,
   navigation,
+  auth,
 }: {
   shell: AppRoutesShellProps;
   navigation: AppRoutesNavigationProps;
+  auth: AppRoutesAuthProps;
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
+  const gate = authoringToolGate(shell, navigation, auth);
+  if (gate) return gate;
   return withAuthModals(
     <div className={appRootClassName}>
       <ErrorBoundary context="guided-match-annotator">
@@ -253,12 +286,16 @@ export function GuidedMatchAnnotatorRoute({
 export function GuidedMatchRecorderRoute({
   shell,
   navigation,
+  auth,
 }: {
   shell: AppRoutesShellProps;
   navigation: AppRoutesNavigationProps;
+  auth: AppRoutesAuthProps;
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
+  const gate = authoringToolGate(shell, navigation, auth);
+  if (gate) return gate;
   return withAuthModals(
     <div className={appRootClassName}>
       <ErrorBoundary context="guided-match-recorder">

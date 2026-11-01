@@ -82,11 +82,11 @@ function AppRoutesContent({
   }
 
   if (appMode === 'guidedMatchAnnotator') {
-    return <GuidedMatchAnnotatorRoute shell={shell} navigation={navigation} />;
+    return <GuidedMatchAnnotatorRoute shell={shell} navigation={navigation} auth={auth} />;
   }
 
   if (appMode === 'guidedMatchRecorder') {
-    return <GuidedMatchRecorderRoute shell={shell} navigation={navigation} />;
+    return <GuidedMatchRecorderRoute shell={shell} navigation={navigation} auth={auth} />;
   }
 
   if (appMode === 'botSetup') {
