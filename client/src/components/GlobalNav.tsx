@@ -3,6 +3,7 @@ import { BrandLogo } from './BrandLogo';
 import { Button } from './primitives';
 import { APP_PRIMARY_TABS, APP_PRIMARY_TAB_COLORS } from './nav/appPrimaryTabs';
 import { useAuth } from '../auth/useAuth';
+import { isGuestUser } from '../auth/guestSession';
 import { fetchFriends } from '../friends/friendsApi';
 import type { AppMode } from '../types';
 import type { PrimaryArea } from '../presentation/surfacePresentation';
@@ -59,7 +60,15 @@ interface GlobalNavProps {
  * `mode` navigates; its absence means sign out. `group` starts a new run of rows, divided from the one before it.
  * Privacy / Terms / Support live here rather than in a page footer, so the game screens stay footer-free.
  */
-const ACCOUNT_MENU_ITEMS: { label: string; mode?: AppMode; group?: 'legal' | 'session' }[] = [
+type AccountMenuItem = {
+  label: string;
+  mode?: AppMode;
+  group?: 'legal' | 'session';
+  /** What a click does when it is not a plain navigation (without `mode` or `action` it signs out). */
+  action?: 'create-account' | 'leave-guest';
+};
+
+const ACCOUNT_MENU_ITEMS: AccountMenuItem[] = [
   { label: 'Profile', mode: 'stats' },
   { label: 'My games', mode: 'games' },
   { label: 'Settings', mode: 'settings' },
@@ -68,6 +77,22 @@ const ACCOUNT_MENU_ITEMS: { label: string; mode?: AppMode; group?: 'legal' | 'se
   { label: 'Support', mode: 'support', group: 'legal' },
   { label: 'Sign out', group: 'session' },
 ];
+
+/**
+ * A guest has no profile or account to sign out of: the way forward is creating one, and leaving throws the games away,
+ * so it asks twice (docs/guest-play-design.md).
+ */
+const GUEST_ACCOUNT_MENU_ITEMS: AccountMenuItem[] = [
+  { label: 'Create account', action: 'create-account' },
+  { label: 'My games', mode: 'games' },
+  { label: 'Settings', mode: 'settings' },
+  { label: 'Privacy', mode: 'privacy', group: 'legal' },
+  { label: 'Terms', mode: 'terms', group: 'legal' },
+  { label: 'Support', mode: 'support', group: 'legal' },
+  { label: 'Leave guest session', group: 'session', action: 'leave-guest' },
+];
+
+const LEAVE_GUEST_CONFIRM_LABEL = 'Leave and lose these games?';
 
 export function GlobalNav(props: GlobalNavProps) {
   const chromeOwned = useContext(RouteChromeOwnedContext);
@@ -185,7 +210,11 @@ function GlobalNavChrome({
         : null;
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  // Leaving a guest session is a second tap; opening the menu again starts over.
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const isGuest = isGuestUser(authUser);
+  const menuItems = isGuest ? GUEST_ACCOUNT_MENU_ITEMS : ACCOUNT_MENU_ITEMS;
 
   // Signing out mid-menu leaves the popup anchored to a "Sign In" trigger.
   useEffect(() => {
@@ -210,14 +239,16 @@ function GlobalNavChrome({
   }, [accountMenuOpen]);
 
   const initials = useMemo(() => {
+    if (isGuest) return 'G';
     const username = authProfile?.username;
     if (!username) return authUser || !authSettled ? '?' : '→';
     const parts = username.replace(/[^a-zA-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
     const init = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
     return init || username.slice(0, 2).toUpperCase();
-  }, [authProfile?.username, authUser, authSettled]);
+  }, [authProfile?.username, authUser, authSettled, isGuest]);
 
-  const displayName = authProfile?.username ?? (authUser || !authSettled ? 'Loading…' : 'Sign In');
+  // A guest's handle is a placeholder ("user_ab12cd34"); the nav calls them what they are.
+  const displayName = isGuest ? 'Guest' : (authProfile?.username ?? (authUser || !authSettled ? 'Loading…' : 'Sign In'));
 
   const todayLabel = new Date().toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -408,7 +439,14 @@ function GlobalNavChrome({
                   part of it that renders, so it has to be the trigger too. */}
               <button
                 type="button"
-                onClick={() => (authUser ? setAccountMenuOpen((open) => !open) : onOpenAuth?.())}
+                onClick={() => {
+                  if (!authUser) {
+                    onOpenAuth?.();
+                    return;
+                  }
+                  setConfirmingLeave(false);
+                  setAccountMenuOpen((open) => !open);
+                }}
                 className="rh-nav-account-trigger"
                 aria-label={authUser ? 'Account menu' : 'Sign in'}
                 aria-haspopup={authUser ? 'menu' : undefined}
@@ -441,9 +479,9 @@ function GlobalNavChrome({
 
               {authUser && accountMenuOpen && (
                 <div className="rh-nav-account-menu" role="menu" aria-label="Account">
-                  {ACCOUNT_MENU_ITEMS.map((item, index) => (
+                  {menuItems.map((item, index) => (
                     <Fragment key={item.label}>
-                      {item.group && item.group !== ACCOUNT_MENU_ITEMS[index - 1]?.group && (
+                      {item.group && item.group !== menuItems[index - 1]?.group && (
                         <div className="rh-nav-account-menu-divider" role="separator" />
                       )}
                       <Button
@@ -454,12 +492,17 @@ function GlobalNavChrome({
                           .filter(Boolean)
                           .join(' ')}
                         onClick={() => {
+                          if (item.action === 'leave-guest' && !confirmingLeave) {
+                            setConfirmingLeave(true);
+                            return;
+                          }
                           setAccountMenuOpen(false);
-                          if (item.mode) onNavigate?.(item.mode);
+                          if (item.action === 'create-account') onOpenAuth?.();
+                          else if (item.mode) onNavigate?.(item.mode);
                           else onSignOut?.();
                         }}
                       >
-                        {item.label}
+                        {item.action === 'leave-guest' && confirmingLeave ? LEAVE_GUEST_CONFIRM_LABEL : item.label}
                       </Button>
                     </Fragment>
                   ))}

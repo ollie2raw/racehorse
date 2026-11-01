@@ -28,6 +28,11 @@ interface AuthModalProps {
   onResetPassword: (email: string) => Promise<{ error: string | null; message?: string | null }>;
   /** Opens a legal page in-app (the modal closes first). Without it the links navigate normally. */
   onOpenLegal?: (mode: LegalMode) => void;
+  /**
+   * The visitor is playing as a guest (docs/guest-play-design.md). The dialog then opens on "Create account", which keeps
+   * the games they have played, and says plainly that signing in to an existing account replaces the guest session.
+   */
+  isGuest?: boolean;
 }
 
 export default function AuthModal({
@@ -39,6 +44,7 @@ export default function AuthModal({
   onSignUp,
   onResetPassword,
   onOpenLegal,
+  isGuest = false,
 }: AuthModalProps) {
   const [mode, setMode] = useState<'signin' | 'signup' | 'verify'>('signin');
   const [username, setUsername] = useState('');
@@ -61,6 +67,11 @@ export default function AuthModal({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the form when the modal opens or switches mode (a key-remount refactor is the cleaner fix — see plan doc)
     resetFormState();
   }, [open, mode]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a guest opens on "Create account" (it keeps their games); the modal stays mounted between opens, so this has to follow `open`
+    if (open && isGuest) setMode('signup');
+  }, [open, isGuest]);
 
   useEffect(() => {
     if (!open || !submitting) return;
@@ -177,8 +188,12 @@ export default function AuthModal({
           {mode === 'verify'
             ? 'Finish account setup from your inbox.'
             : mode === 'signin'
-              ? 'Track your rating, friends, streaks, and leaderboard results.'
-              : 'Create a free account to track your stats and compete on the leaderboard.'}
+              ? isGuest
+                ? 'Signing in replaces your guest session. Games you played as a guest stay with it.'
+                : 'Track your rating, friends, streaks, and leaderboard results.'
+              : isGuest
+                ? 'Create a free account and keep the games you have played.'
+                : 'Create a free account to track your stats and compete on the leaderboard.'}
         </p>
 
         {!supabaseEnabled && (

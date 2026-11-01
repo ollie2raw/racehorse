@@ -25,6 +25,8 @@ export type AuthModalsLayerProps = {
   ) => Promise<{ error: string | null; message?: string | null; pendingVerification?: boolean }>;
   onResetPassword: (email: string) => Promise<{ error: string | null; message?: string | null }>;
   onOpenLegal?: (mode: LegalMode) => void;
+  /** The visitor is playing as a guest, so the sign-in dialog opens on "Create account". */
+  isGuest?: boolean;
   passwordRecoveryPending: boolean;
   onUpdatePassword: (password: string) => Promise<{ error: string | null; message?: string | null }>;
   onPasswordRecoveryClose: () => void;
@@ -45,6 +47,7 @@ export function AuthModalsLayer({
   onSignUp,
   onResetPassword,
   onOpenLegal,
+  isGuest,
   passwordRecoveryPending,
   onUpdatePassword,
   onPasswordRecoveryClose,
@@ -71,6 +74,7 @@ export function AuthModalsLayer({
         onSignUp={onSignUp}
         onResetPassword={onResetPassword}
         onOpenLegal={onOpenLegal}
+        isGuest={isGuest}
       />
       <ChangePasswordModal
         open={passwordRecoveryPending}

@@ -13,6 +13,7 @@ import { useReviewWriteOutboxFlush } from './modules/review/useReviewWriteOutbox
 import { useJourneyStorageScope } from './journey/useJourneyStorageScope';
 import { useClearJourneyChallengeOutsideMatch } from './journey/useJourneyChallengeLifecycle';
 import { useAppSessionUi } from './auth/useAppSessionUi';
+import { isGuestUser } from './auth/guestSession';
 import type { GameState } from './types';
 import { useBotGamePreferences } from './bot/useBotGamePreferences';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -840,6 +841,7 @@ export default function App() {
       onSignUp={signUp}
       onResetPassword={resetPassword}
       onOpenLegal={setAppMode}
+      isGuest={isGuestUser(authUser)}
       passwordRecoveryPending={passwordRecoveryPending}
       onUpdatePassword={updatePassword}
       onPasswordRecoveryClose={clearPasswordRecoveryPending}

@@ -14,7 +14,7 @@ import { readE2eDevAuth, readMobileVisualIdentity } from './e2eDevAuth';
 import { EMAIL_CHANGE_PENDING_MESSAGE, resolveEmailChange } from './emailChange';
 import { ANONYMOUS_PLAYER_NAME } from '../identity/publicPlayerName';
 import { isGuestPlayEnabled } from '../config/guestPlayFeature';
-import { isAnonymousUser } from './guestSession';
+import { isAnonymousUser, isGuestUser } from './guestSession';
 
 export interface UserProfile {
   id: string;
@@ -1027,7 +1027,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useAuthInternal();
-  useAnalyticsIdentity(value.user?.id ?? null);
+  useAnalyticsIdentity(value.user?.id ?? null, isGuestUser(value.user));
   return React.createElement(AuthContext.Provider, { value }, children);
 }
 
@@ -1039,20 +1039,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
  * lastIdentified ref makes a repeated run a no-op even if the effect fires
  * again, which StrictMode guarantees it will in development.
  */
-export function useAnalyticsIdentity(userId: string | null): void {
+export function useAnalyticsIdentity(userId: string | null, isGuest = false): void {
   const lastIdentified = React.useRef<string | null>(null);
+  const lastWasGuest = React.useRef(false);
 
   React.useEffect(() => {
-    if (userId === lastIdentified.current) return;
+    if (userId === lastIdentified.current && isGuest === lastWasGuest.current) return;
     if (userId) {
-      identifyUser(userId);
+      // A guest is marked so the funnel (guest started, finished, upgraded) can be measured, and the same person is marked
+      // not-a-guest when they upgrade (same id, so it is one person throughout). An ordinary account sends no extra
+      // property, exactly as before.
+      const justUpgraded = userId === lastIdentified.current && lastWasGuest.current && !isGuest;
+      identifyUser(userId, isGuest ? { guest: true } : justUpgraded ? { guest: false } : undefined);
     } else if (lastIdentified.current !== null) {
       // Signed out, rather than never signed in: unlink so a shared device
       // does not fold two people into one person.
       resetAnalytics();
     }
     lastIdentified.current = userId;
-  }, [userId]);
+    lastWasGuest.current = isGuest;
+  }, [userId, isGuest]);
 }
 
 export function useAuth(): AuthContextType {
