@@ -9,11 +9,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MatchLifecycleController } from '../controllers/MatchLifecycleController.ts';
-import { createBotMatch, type BotMatchState } from '../runtime/botEngine.ts';
+import { createBotMatch, type BotActionResult, type BotMatchState } from '../runtime/botEngine.ts';
 import type { UseHandLifecycleArgs } from '../hand-lifecycle/types.ts';
 
 const service = vi.hoisted(() => ({
   request: vi.fn(),
+  telemetry: vi.fn(),
+  /** What the (mocked) step that applies the server's next hand to the local match returns. */
+  apply: { result: null as unknown, calls: [] as unknown[][] },
   pkg: {
     attempt_id: 'attempt-1',
     run_date: '2026-11-01',
@@ -21,13 +24,17 @@ const service = vi.hoisted(() => ({
     winning_score: 60,
     challenge_id: null,
     set_result: null,
-  },
+  } as Record<string, unknown>,
 }));
 
 // The watchdog hook runs its own intervals; every test calls advanceHand itself.
 vi.mock('../hand-lifecycle/useHandLifecycleWatchdogs.ts', () => ({ useHandLifecycleWatchdogs: () => undefined }));
 vi.mock('../hand-lifecycle/dailyFritzHandService.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../hand-lifecycle/dailyFritzHandService.ts')>()),
+  tryApplyDailyFritzNextHand: (...args: unknown[]) => {
+    service.apply.calls.push(args);
+    return service.apply.result;
+  },
   buildDailyFritzPrefetchParams: () => ({
     dailyFritzPackage: service.pkg,
     dailyFritzHandIndex: 0,
@@ -40,7 +47,7 @@ vi.mock('../hand-lifecycle/dailyFritzHandService.ts', async (importOriginal) => 
 vi.mock('../../../dailyFritz/api.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../dailyFritz/api.ts')>()),
   nextDailyFritzHand: (...args: unknown[]) => service.request(...args),
-  recordDailyFritzTelemetry: vi.fn().mockResolvedValue(undefined),
+  recordDailyFritzTelemetry: (...args: unknown[]) => service.telemetry(...args),
 }));
 
 const { useHandLifecycle } = await import('./useHandLifecycle.ts');
@@ -106,14 +113,23 @@ const dailyArgs = (): Partial<UseHandLifecycleArgs> => ({
 /** Lets the rejected/resolved request promise chain run to its handler without moving the clock. */
 const flush = async () => {
   await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 12; i += 1) await Promise.resolve();
   });
 };
 
 beforeEach(() => {
   service.request.mockReset();
+  service.telemetry.mockReset().mockResolvedValue(undefined);
+  service.apply.result = null;
+  service.apply.calls = [];
+  service.pkg = {
+    attempt_id: 'attempt-1',
+    run_date: '2026-11-01',
+    current_game_number: 1,
+    winning_score: 60,
+    challenge_id: null,
+    set_result: null,
+  };
   vi.useFakeTimers();
 });
 afterEach(() => vi.useRealTimers());
@@ -320,5 +336,198 @@ describe('advanceHand: Daily Fritz, fetching the next hand', () => {
     act(() => result.current.retryHandAdvance());
     expect(result.current.handAdvanceError).toBeNull();
     expect(service.request.mock.calls.length).toBe(before + 1);
+  });
+});
+
+// ── applying what the server sent, challenge sets, the stale-cursor bail, and the hand-end notification ─────────────────
+
+const errorsIn = (phases: () => string[]) => phases().filter((phase) => phase === 'error').length;
+const advancesIn = (phases: () => string[]) => phases().filter((phase) => phase === 'advancing-hand').length;
+const response = (over: Record<string, unknown> = {}) => ({
+  current_hand_index: 1,
+  authority_revision: 7,
+  current_game_number: 1,
+  hand: {},
+  current_game_scores: { you: 10, fritz: 5 },
+  ...over,
+});
+const nextHandState = () => ({ ...createBotMatch(60, 7), handNumber: 2 });
+
+describe('advanceHand: applying the next hand the server sent', () => {
+  it('deals it, moves the cursor to the server\'s hand and revision, and clears every error and flag', async () => {
+    service.request.mockResolvedValue(response());
+    service.apply.result = { applied: true, nextState: nextHandState() };
+    const { result, args, phases } = setup(dailyArgs());
+
+    act(() => result.current.advanceHand());
+    await flush();
+
+    expect(args.applyDailyFritzNextHand).toHaveBeenCalledTimes(1);
+    expect(args.applyDailyFritzNextHand).toHaveBeenCalledWith({
+      cursor: { gameNumber: 1, handIndex: 1, revision: 7 },
+      match: expect.objectContaining({ handNumber: 2 }),
+    });
+    expect(args.setDailyFritzHandResult).toHaveBeenCalledWith(null);
+    expect(result.current.handAdvanceError).toBeNull();
+    expect(result.current.showManualHandAdvance).toBe(false);
+    expect(result.current.getDebugSnapshot()).toMatchObject({ transitionInFlight: false, nextHandPrefetched: false, nextHandInFlight: false });
+    expect(phases().at(-1)).toBe('playing');
+  });
+
+  it('takes the authority revision from the response, then the package, then 0', async () => {
+    service.apply.result = { applied: true, nextState: nextHandState() };
+
+    service.request.mockResolvedValue(response({ authority_revision: undefined }));
+    service.pkg.authority_revision = 3;
+    const fromPackage = setup(dailyArgs());
+    act(() => fromPackage.result.current.advanceHand());
+    await flush();
+    expect((fromPackage.args.applyDailyFritzNextHand as ReturnType<typeof vi.fn>).mock.calls[0][0].cursor.revision).toBe(3);
+
+    delete service.pkg.authority_revision;
+    const fromNothing = setup(dailyArgs());
+    act(() => fromNothing.result.current.advanceHand());
+    await flush();
+    expect((fromNothing.args.applyDailyFritzNextHand as ReturnType<typeof vi.fn>).mock.calls[0][0].cursor.revision).toBe(0);
+  });
+
+  it('when the local match cannot take the hand, shows a retry prompt and records why, instead of leaving the board stuck', async () => {
+    service.request.mockResolvedValue(response());
+    service.apply.result = { applied: false };
+    const { result, args, phases } = setup(dailyArgs());
+
+    act(() => result.current.advanceHand());
+    await flush();
+
+    expect(args.applyDailyFritzNextHand).not.toHaveBeenCalled();
+    expect(result.current.handAdvanceError).toBe('Could not start the next hand. Tap Continue to retry.');
+    expect(result.current.showManualHandAdvance).toBe(true);
+    expect(result.current.getDebugSnapshot().transitionInFlight).toBe(false);
+    expect(errorsIn(phases)).toBe(1);
+    expect(service.telemetry).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'recovery_started', failureCode: 'next_hand_apply_rejected', attemptId: 'attempt-1' }),
+    );
+  });
+});
+
+describe('advanceHand: a challenge set ends on a hand, not on a score', () => {
+  it('keeps advancing after the engine says "game over" while neither side has reached the winning score', async () => {
+    service.pkg.challenge_code = 'weekly-1';
+    service.request.mockResolvedValue(response());
+    service.apply.result = { applied: true, nextState: nextHandState() };
+    const { result, args } = setup(dailyArgs(), { ...completedHand(), gameOver: true, winnerId: 'you' });
+
+    act(() => result.current.advanceHand());
+    await flush();
+
+    expect(service.request).toHaveBeenCalled();
+    // the engine's premature game over is lifted for the hand advance, so the next deal is accepted
+    const handedToApply = service.apply.calls[0][0] as { gameOver: boolean; winnerId: string | null };
+    expect(handedToApply.gameOver).toBe(false);
+    expect(handedToApply.winnerId).toBeNull();
+    expect(args.applyDailyFritzNextHand).toHaveBeenCalledTimes(1);
+  });
+
+  it('but an ordinary Daily Fritz game that is over stays over', () => {
+    const { result, phases } = setup(dailyArgs(), { ...completedHand(), gameOver: true });
+    act(() => result.current.advanceHand());
+    expect(service.request).not.toHaveBeenCalled();
+    expect(phases()).toEqual(['match-complete']);
+  });
+});
+
+describe('advanceHand: a hand the server has moved past by more than one', () => {
+  it('uses the unverified fallback after two failures, then stops, tells the player to reload, and says why to telemetry', async () => {
+    service.request.mockRejectedValue(new DailyFritzNextHandHttpError('This hand is no longer current.', 409, null, null, null, 5));
+    const { result, phases } = setup({ ...dailyArgs(), dailyFritzHandIndex: 0 });
+
+    act(() => result.current.advanceHand());
+    await flush();
+    // attempt 1 retries quietly (300 ms), attempts 2 to 4 fall back to an unverified advance (300 ms each), attempt 5 gives up
+    expect(result.current.showManualHandAdvance).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    await flush();
+
+    expect(advancesIn(phases)).toBe(5);
+    expect(errorsIn(phases)).toBe(1); // only the give-up is reported as an error; the quiet retries are not
+    expect(result.current.handAdvanceError).toMatch(/fell out of sync/i);
+    expect(result.current.showManualHandAdvance).toBe(true);
+    expect(
+      service.request.mock.calls.some(([params]) => ((params as { unverifiedFallback?: { attempts: number } }).unverifiedFallback?.attempts ?? 0) >= 2),
+    ).toBe(true);
+    const codes = service.telemetry.mock.calls.map(([event]) => (event as { failureCode: string }).failureCode);
+    expect(codes).toContain('stale_cursor_detected');
+
+    // and nothing keeps resubmitting the same doomed hand behind the dialog
+    const callsAtBail = service.request.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    await flush();
+    expect(service.request.mock.calls.length).toBe(callsAtBail);
+  });
+
+  it('a hand only one behind is not treated as stale: it keeps retrying quietly, with no dialog', async () => {
+    // one behind is the server's own replay window and resolves on a normal retry, so there is no bail
+    service.request.mockRejectedValue(new DailyFritzNextHandHttpError('This hand is no longer current.', 409, null, null, null, 1));
+    const { result, phases } = setup({ ...dailyArgs(), dailyFritzHandIndex: 0 });
+
+    act(() => result.current.advanceHand());
+    await flush();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    await flush();
+
+    expect(advancesIn(phases)).toBeGreaterThanOrEqual(8);
+    expect(errorsIn(phases)).toBe(0);
+    expect(result.current.handAdvanceError).toBeNull();
+    expect(result.current.showManualHandAdvance).toBe(false);
+  });
+});
+
+describe('notifyBotActionResult', () => {
+  const handEnded = (over: Record<string, unknown> = {}) => ({
+    state: { ...createBotMatch(60, 7), handNumber: 1, handOver: true },
+    handEnded: { winner: 'you', reason: 'domino', pointsAwarded: 15, loserPips: 12, calcText: 'You went out' },
+    ...over,
+  }) as unknown as BotActionResult;
+
+  it('tells the lifecycle which hand ended and who won, and clears the last-played highlight', () => {
+    const { result, lifecycle, ports } = setup();
+    act(() => result.current.notifyBotActionResult(handEnded()));
+    expect(lifecycle.onHandEndedFromBotAction).toHaveBeenCalledTimes(1);
+    expect(lifecycle.onHandEndedFromBotAction.mock.calls[0][1]).toEqual({ winner: 'you', reason: 'domino', gameOver: false, handNumber: 1 });
+    expect(ports.flashLastPlayed).toHaveBeenCalledWith(null);
+  });
+
+  it('shows the hand-end reveal for the hand that ended', async () => {
+    const { result } = setup();
+    expect(result.current.handReveal).toBeNull();
+    act(() => result.current.notifyBotActionResult(handEnded()));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(result.current.handReveal).not.toBeNull();
+    expect(result.current.handReveal).toMatchObject({ winner: 'you' });
+  });
+
+  it('does nothing about hands when the action did not end one', () => {
+    const { result, lifecycle } = setup();
+    act(() => result.current.notifyBotActionResult({ state: createBotMatch(60, 7), scored: { player: 'you', points: 10 } } as unknown as BotActionResult));
+    expect(lifecycle.onHandEndedFromBotAction).not.toHaveBeenCalled();
+    expect(result.current.handReveal).toBeNull();
+  });
+
+  it('in Daily Fritz it also records the hand result, labels the flow, and holds the next hand request until the reveal has had its time', async () => {
+    service.request.mockReturnValue(new Promise(() => undefined));
+    const { result, args } = setup(dailyArgs());
+    act(() => result.current.notifyBotActionResult(handEnded()));
+
+    expect(args.setDailyFritzHandResult).toHaveBeenCalledWith(expect.objectContaining({ winner: 'you' }));
+    expect(args.lastDailyFlowLabelRef.current).toBe('hand-complete');
+
+    // advancing straight away is refused for the reveal window: no request yet
+    act(() => result.current.advanceHand());
+    expect(service.request).not.toHaveBeenCalled();
+    expect(result.current.getDebugSnapshot().transitionInFlight).toBe(false);
+
+    // once the window has passed the hand is requested, without anyone pressing anything
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+    expect(service.request).toHaveBeenCalled();
   });
 });
