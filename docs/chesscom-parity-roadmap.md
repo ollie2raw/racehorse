@@ -20,9 +20,9 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 
 | # | Item | Notes | PR |
 |---|---|---|---|
-| [ ] 1.1 | Delete dead Learn v1 code, dead CSS files, deprecated shims | list in code-health audit "Delete list"; verify with `tsc -b` | |
+| [~] 1.1 | Delete dead Learn v1 code, dead CSS files, deprecated shims | 9 files, about 2,770 lines; `tsc -b` is the proof | #410 open |
 | [ ] 1.2 | Purge unreferenced selectors from the four big Learn/Journey stylesheets | review the diff by screenshot; dynamic class names are the risk | |
-| [ ] 1.3 | Guided-match loader: no top-level `await fetch`; error state. Guard `saveLearnProgress` writes. Gate recorder/annotator tools out of production | `guidedMatchLessonLoader.ts:11-14`, `learn/progress/storage.ts:36` | |
+| [~] 1.3 | Guided-match loader no longer rejects the module on a failed fetch; `saveLearnProgress` write guarded. **Still open: gate the recorder/annotator tools out of the production bundle** (separate PR, needs its own size check) | `guidedMatchLessonLoader.ts`, `learn/progress/storage.ts` | #411 open |
 | [ ] 1.4 | Client geometry copy replaced by game-core's open-ends functions | `client/src/game/openEndsGeometry.ts`; keep oracle parity test | |
 | [ ] 1.5 | Remove `Math.random` defaults from game-core (rng/deck required); callers inject | `engine.ts:38`, `pregameDraw.ts:17`; server call sites change in 3.x | |
 | [ ] 1.6 | Server-bot parity test over a fixed position corpus (test only) | guards the later shared-engine extraction | |
@@ -79,3 +79,4 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 
 - 2026-11-01: roadmap created from the two audits.
 - 2026-11-01: 0.1 built and verified, PR #409 open (`[~]` = PR open, awaiting merge; `[x]` = merged).
+- 2026-11-01: 1.1 (#410) and 1.3 (#411, loader and storage half) open. 1.2 (live-stylesheet selector purge) deliberately not started: it needs screenshot review per screen.
