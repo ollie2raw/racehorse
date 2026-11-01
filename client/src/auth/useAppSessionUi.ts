@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import type { UserProfile } from './useAuth';
 import { isTemporaryUsername } from './useAuth';
+import { shouldPromptForUsername } from './guestSession';
 import { fetchGhostProfileSummary, type GhostProfileSummary } from '../ghost/api';
 import { WELCOME_MODAL_VISIBLE } from '../components/welcomeModalPolicy.ts';
 
 export type UseAppSessionUiParams = {
-  authUser: { id: string; email: string } | null;
+  authUser: { id: string; email: string; is_anonymous?: boolean } | null;
   authProfile: UserProfile | null;
   authLoading: boolean;
   justVerified: boolean;
@@ -106,8 +107,11 @@ export function useAppSessionUi(params: UseAppSessionUiParams): UseAppSessionUiR
     }
   }, [justVerified, showToast]);
 
+  // Not for a guest: their handle is a placeholder until they make an account, and the prompt belongs to that step.
   const needsUsernameOnboarding = Boolean(
-    authUser && !authLoading && authProfile !== null && isTemporaryUsername(authProfile.username),
+    !authLoading &&
+      authProfile !== null &&
+      shouldPromptForUsername(authUser, isTemporaryUsername(authProfile.username)),
   );
 
   return {

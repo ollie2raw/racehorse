@@ -236,6 +236,36 @@ describe('useAppSessionUi — needsUsernameOnboarding', () => {
     expect(result.current.needsUsernameOnboarding).toBe(true);
   });
 
+  it('is false for a guest (anonymous session), even though their handle is a placeholder', () => {
+    const { result } = renderHook((p: Params) => useAppSessionUi(p), {
+      initialProps: defaultParams({
+        authUser: { ...makeUser(), is_anonymous: true },
+        authProfile: makeProfile('user_abc12345'),
+        authLoading: false,
+      }),
+    });
+    expect(result.current.needsUsernameOnboarding).toBe(false);
+  });
+
+  it('turns on once the guest becomes a permanent account that still has the placeholder handle', () => {
+    const { result, rerender } = renderHook((p: Params) => useAppSessionUi(p), {
+      initialProps: defaultParams({
+        authUser: { ...makeUser(), is_anonymous: true },
+        authProfile: makeProfile('user_abc12345'),
+        authLoading: false,
+      }),
+    });
+    expect(result.current.needsUsernameOnboarding).toBe(false);
+    rerender(
+      defaultParams({
+        authUser: { ...makeUser(), is_anonymous: false },
+        authProfile: makeProfile('user_abc12345'),
+        authLoading: false,
+      }),
+    );
+    expect(result.current.needsUsernameOnboarding).toBe(true);
+  });
+
   it('is false when user has set a real username', () => {
     const { result } = renderHook((p: Params) => useAppSessionUi(p), {
       initialProps: defaultParams({
