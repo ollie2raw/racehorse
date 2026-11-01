@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildDailyFritzHubGameCards, buildDailyFritzHubViewModel } from './dailyFritzHubViewModel';
+import { formatDateLabel, formatDateShortLabel } from './dailyFritzScreenHelpers';
 import type { DailyFritzSetResult, DailyFritzTodayResponse } from './api';
 
 function makeToday(
@@ -104,5 +105,42 @@ describe('buildDailyFritzHubViewModel', () => {
     const vm = buildDailyFritzHubViewModel(makeToday('abandoned', 'locked'), emptySetResult, 0, false, true);
     expect(vm.primaryCtaLabel).toBe('Locked');
     expect(vm.setStatusLabel).toBe('Locked');
+  });
+});
+
+describe('buildDailyFritzHubViewModel for a signed-out visitor', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('offers sign-in as the call to action, whatever the (absent) set says', () => {
+    const vm = buildDailyFritzHubViewModel(null, null, 0, false, false);
+    expect(vm.primaryCtaLabel).toBe('Sign in to play');
+    expect(vm.isAuthenticated).toBe(false);
+  });
+
+  it('previews the set with real values instead of dashes: today in Pacific time, best of 3, the Elite tier', () => {
+    vi.useFakeTimers();
+    // 01:30 PDT on 2026-11-01, the hour before clocks fall back; Pacific is still on the 1st.
+    vi.setSystemTime(new Date('2026-11-01T08:30:00.000Z'));
+    const vm = buildDailyFritzHubViewModel(null, null, 0, false, false);
+    expect(vm.dateLabel).toBe(formatDateLabel('2026-11-01'));
+    expect(vm.dateShortLabel).toBe(formatDateShortLabel('2026-11-01'));
+    expect(vm.formatLabel).toBe('Best of 3');
+    expect(vm.tierLabel).toBe('Elite · Competitive');
+    expect(vm.tierShortLabel).toBe('Elite');
+    expect([vm.dateLabel, vm.tierLabel, vm.formatLabel]).not.toContain('—');
+  });
+
+  it('keeps the dashes for a signed-in player whose set has not loaded yet, but never for the fixed format', () => {
+    const vm = buildDailyFritzHubViewModel(null, null, 0, false, true);
+    expect(vm.dateLabel).toBe('—');
+    expect(vm.tierLabel).toBe('—');
+    expect(vm.formatLabel).toBe('Best of 3');
+    expect(vm.primaryCtaLabel).toBe("Play Today's Set");
+  });
+
+  it('uses the loaded set for a signed-in player, as before', () => {
+    const vm = buildDailyFritzHubViewModel(makeToday('none'), null, 0, false, true);
+    expect(vm.dateLabel).toBe(formatDateLabel('2026-07-05'));
+    expect(vm.tierLabel).toBe('Elite · Competitive');
   });
 });

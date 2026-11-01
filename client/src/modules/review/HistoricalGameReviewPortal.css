@@ -30,6 +30,14 @@
   margin-top: 8px;
 }
 
+/* Signed-out state of the Games page: say what is here, then offer the one next step. */
+.rh-recent-reviews__guest {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  max-width: 460px;
+}
+
 .rh-recent-reviews__list {
   list-style: none;
   margin: 0;

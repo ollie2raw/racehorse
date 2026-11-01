@@ -89,12 +89,12 @@ export function GamesRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser } = auth;
+  const { authUser, handleOpenAuthModal } = auth;
   return withAuthModals(
     <div className={appRootClassName}>
       <ErrorBoundary context="games">
         <Suspense fallback={<ScreenLoader label="Loading your games…" />}>
-          <GamesPage signedIn={Boolean(authUser?.id)} onBack={() => setAppMode('home')} />
+          <GamesPage signedIn={Boolean(authUser?.id)} onOpenAuth={handleOpenAuthModal} onBack={() => setAppMode('home')} />
         </Suspense>
       </ErrorBoundary>
     </div>

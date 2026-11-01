@@ -288,7 +288,8 @@ export function DailyFritzHubView({
             </div>
 
             <div className="df-pvf-actions">
-              {hubError ? (
+              {/* A signed-out visitor's only message is the button below; an alert saying the same thing is noise. */}
+              {hubError && isAuthenticated ? (
                 <p className="df-hub-error" role="alert">
                   {hubError}
                 </p>
@@ -304,11 +305,11 @@ export function DailyFritzHubView({
                 ]
                   .filter(Boolean)
                   .join(' ')}
-                onClick={() => void onSetAction()}
+                onClick={() => (isAuthenticated ? void onSetAction() : onOpenAuth())}
                 disabled={startActionPending}
               >
                 {primaryCtaLabel}
-                {!isComplete ? <span className="df-start-match-chevron" aria-hidden> ›</span> : null}
+                {!isComplete || !isAuthenticated ? <span className="df-start-match-chevron" aria-hidden> ›</span> : null}
               </Button>
               <div className="df-pvf-footer">
                 <Button type="button" variant="ghost" className="df-pvf-leaderboard-link" onClick={() => void onOpenLeaderboard()}>
