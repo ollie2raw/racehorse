@@ -11,6 +11,7 @@ import {
   type LiveEventCardState,
 } from './hubCardState';
 import { fritzCupErrorCopy, registrationErrorCopy } from './tournamentErrorCopy';
+import { ComingUp, HowItWorks, comingUpDays } from './TournamentHubInfo';
 import { formatCountdown, formatEventWhen } from './tournamentTime';
 import { useTournamentNow } from './useTournamentNow';
 import type { FritzLaunchState } from './useTournament';
@@ -389,6 +390,12 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
     [props.features, signedIn, props.myTournaments, props.activeAssignedMatch, props.fritzLaunch],
   );
 
+  // The Live Events after the (at most two) cards: a quiet schedule so the page is never a few cards in an empty room.
+  const comingUp = useMemo(
+    () => comingUpDays({ upcoming: props.upcoming, shownIds: new Set(liveCards.map((card) => card.event.id)), nowMs, timeZone: props.timeZone }),
+    [props.upcoming, liveCards, nowMs, props.timeZone],
+  );
+
   const boundaries = useMemo(
     () => liveCards.flatMap(({ event, state }) => {
       const at = boundaryOf(state);
@@ -458,6 +465,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
               <li>3 rounds</li>
               <li>First to 30</li>
             </ul>
+            {!disabled ? <HowItWorks variant="side" /> : null}
           </div>
 
           <div className="th-panel">
@@ -517,6 +525,8 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                     </div>
                   ) : null}
 
+                  {!props.upcomingError ? <ComingUp days={comingUp} /> : null}
+
                   {signedIn && props.myError ? (
                     <p className="th-event__error" role="alert">
                       Your entries couldn&apos;t be loaded.{' '}
@@ -527,6 +537,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
               )}
             </div>
           </div>
+          {!disabled ? <HowItWorks variant="below" /> : null}
         </div>
       </div>
     </div>
