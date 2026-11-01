@@ -11,7 +11,12 @@ const LIMITS = {
   // journeyMatchOutcome / pending completions, plus the Journey HUD chip). Measured: the release branch tip was
   // 263.4 kB of 264 kB; the Journey work adds ~2.5 kB. Lesson content, the resolver and the lesson controller are NOT in
   // this chunk (journeyModuleBoundary.test.ts pins that).
-  'BotMatchScreen': 268_000,
+  // +4 kB (2026-11-01): the review overhaul puts the finished-game path on the match screen: the Analyze-again retry and
+  // durable review save in usePostGamePivotalReview (now 11.2 kB of the chunk) and useGameRecordSave (0.8 kB). Measured:
+  // the chunk is 268.8 kB against the previous 268.0 kB limit; the only review code left in it is the hooks, because the
+  // outboxes, the record builder and the API calls live in the main bundle (App flushes them on load). The games
+  // archive and the review-from-record screen are separate lazy routes and must NOT be imported by the match path.
+  'BotMatchScreen': 272_000,
   'index': 700_000,          // main bundle
   'lesson-v2': 1_400_000,    // huge lessonV2 chunk
 };
