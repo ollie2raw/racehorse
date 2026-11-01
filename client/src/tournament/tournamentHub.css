@@ -1259,18 +1259,37 @@
     height: 0;
   }
 
-  /* Size to the cards, not to the window: a tall empty rectangle is what looked unfinished. */
+  /* Fill the page like the other hubs: the panel runs to the bottom, the hero takes the spare height, and the
+     schedule sits at the foot. (A tall empty rectangle is what looked unfinished; so was a short column.) */
   .th-panel {
     height: auto;
     max-height: none;
     flex: 1 1 auto;
-    align-self: flex-start;
+    align-self: stretch;
   }
 
   .th-panel-body {
     overflow: visible;
     gap: 14px;
     padding-bottom: 0;
+  }
+
+  .th-event:not(.th-event--compact):not(.th-event--fritz):not(.th-event--skeleton) {
+    flex: 1 1 auto;
+    max-height: 380px;
+    justify-content: space-between;
+  }
+
+  .th-soon {
+    margin-top: auto;
+  }
+
+  .th-left {
+    justify-content: flex-start;
+  }
+
+  .th-left .th-how {
+    margin-top: auto;
   }
 }
 
