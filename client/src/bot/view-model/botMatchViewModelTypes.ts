@@ -279,6 +279,8 @@ export type ModalOverlayViewModel = {
   postGameAnalysisPending: boolean;
   accuracyModelPending: boolean;
   reviewUnavailable: boolean;
+  retryReview: () => Promise<void>;
+  reviewRetryState: 'idle' | 'retrying' | 'cooldown' | 'error';
   decisionLedger: PlayerDecisionLedgerSummary | null;
   isPlayVsFritzGameOver: boolean;
   isGuidedMatchVictoryResult: boolean;

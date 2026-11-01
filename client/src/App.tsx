@@ -9,6 +9,7 @@ import './styles/table-theme-toggle.css';
 import './styles/weekly-awards.css';
 import './styles/responsive.css';
 import { useAuthSession } from './auth/useAuthSession';
+import { useReviewWriteOutboxFlush } from './modules/review/useReviewWriteOutboxFlush';
 import { useJourneyStorageScope } from './journey/useJourneyStorageScope';
 import { useClearJourneyChallengeOutsideMatch } from './journey/useJourneyChallengeLifecycle';
 import { useAppSessionUi } from './auth/useAppSessionUi';
@@ -136,6 +137,8 @@ export default function App() {
   useJourneyStorageScope(authUser?.id ?? null, authLoading);
   // A Journey challenge is only valid while a match is being played; drop it however the player left.
   useClearJourneyChallengeOutsideMatch(appMode);
+  // A finished post-game review that could not be saved yet is delivered on the next load / reconnect / return to the tab.
+  useReviewWriteOutboxFlush(authUser?.id ?? null, multiplayerAuthToken);
 
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
   const [roomCode, setRoomCode] = useState('');

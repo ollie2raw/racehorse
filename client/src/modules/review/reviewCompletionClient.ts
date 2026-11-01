@@ -62,6 +62,41 @@ export async function enqueueServerReviewCompletion(input: {
   }
 }
 
+export type RetryServerReviewResult =
+  /** The server accepted the re-run: poll again. */
+  | { readonly kind: 'restarted' }
+  /** Nothing to re-run (already running or finished): poll again anyway. */
+  | { readonly kind: 'not_failed' }
+  /** Re-run too soon after the last failure. */
+  | { readonly kind: 'cooldown'; readonly retryAfterMs: number }
+  | { readonly kind: 'error' };
+
+/**
+ * Ask the server to re-run a review it gave up on (the "Analyze again" button). The server re-runs from the positions it
+ * already stored, so nothing about the game is re-sent.
+ */
+export async function retryServerReviewCompletion(input: {
+  readonly apiBase: string;
+  readonly authHeader: string | null;
+  readonly jobId: string;
+}): Promise<RetryServerReviewResult> {
+  try {
+    const res = await fetch(`${input.apiBase}/api/review-completion-jobs/${encodeURIComponent(input.jobId)}/retry`, {
+      method: 'POST',
+      headers: { ...(input.authHeader ? { Authorization: input.authHeader } : {}) },
+    });
+    if (res.status === 429) {
+      const body = (await res.json().catch(() => ({}))) as { retryAfterMs?: unknown };
+      return { kind: 'cooldown', retryAfterMs: typeof body.retryAfterMs === 'number' ? body.retryAfterMs : 60_000 };
+    }
+    if (!res.ok) return { kind: 'error' };
+    const body = (await res.json().catch(() => ({}))) as { restarted?: unknown };
+    return body.restarted === true ? { kind: 'restarted' } : { kind: 'not_failed' };
+  } catch {
+    return { kind: 'error' };
+  }
+}
+
 /**
  * Review-job poll cadence. Each poll makes the server read the job row from
  * Supabase (~13-40 KB gzip with the move snapshots), so the old 1 s cadence

@@ -1,6 +1,6 @@
 import React from 'react';
 import { PivotalReviewSummary } from '../training/pivotalReview/PivotalReviewSummary';
-import { PostGameReviewPrompt } from '../training/pivotalReview/PostGameReviewPrompt';
+import { PostGameReviewPrompt, type ReviewRetryUiState } from '../training/pivotalReview/PostGameReviewPrompt';
 
 import type { PivotalReviewSession } from '../training/pivotalReview/pivotalReviewStorage';
 import type { PivotalTurnSelection } from '../training/pivotalReview/pivotalTurnSelector';
@@ -15,6 +15,8 @@ export interface BotReviewSummaryPortalProps {
   accuracyModelPending: boolean;
   reviewUnavailable?: boolean;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
+  onRetryReview?: () => void;
+  reviewRetryState?: ReviewRetryUiState;
   opponentLabel: string;
   showPostGameReviewPrompt: boolean;
   winnerId: 'you' | 'bot' | null;
@@ -35,6 +37,8 @@ export const BotReviewSummaryPortal: React.FC<BotReviewSummaryPortalProps> = ({
   accuracyModelPending,
   reviewUnavailable = false,
   decisionLedger = null,
+  onRetryReview,
+  reviewRetryState = 'idle',
   opponentLabel,
   showPostGameReviewPrompt,
   winnerId,
@@ -74,6 +78,8 @@ export const BotReviewSummaryPortal: React.FC<BotReviewSummaryPortalProps> = ({
           accuracyModelPending={accuracyModelPending}
           reviewUnavailable={reviewUnavailable}
           decisionLedger={decisionLedger}
+          onRetryReview={onRetryReview}
+          reviewRetryState={reviewRetryState}
           onReviewGame={onOpenReviewGameFromPrompt}
           onSkip={onSkipPostGameReview}
         />

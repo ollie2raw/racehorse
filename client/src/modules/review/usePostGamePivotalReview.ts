@@ -55,10 +55,14 @@ import {
   nextReviewPollDelayMs,
   pollServerReviewCompletion,
   REVIEW_POLL_INITIAL_MS,
+  retryServerReviewCompletion,
 } from './reviewCompletionClient.ts';
 import { REVIEW_START_DELAY_MS, useReviewStartTrigger } from './useReviewStartTrigger.ts';
 import { sendReviewFunnelEvent, type ReviewFunnelEvent } from './reviewFunnelClient.ts';
 import { resolveGameServerUrl } from '../../lib/gameServerUrl.ts';
+
+/** State of the "Analyze again" button: nothing asked, asking, asked too soon, or the request failed. */
+export type ReviewRetryState = 'idle' | 'retrying' | 'cooldown' | 'error';
 
 export type UsePostGamePivotalReviewParams = {
   match: BotMatchState;
@@ -139,6 +143,9 @@ export function usePostGamePivotalReview({
   const [serverJobId, setServerJobId] = useState<string | null>(null);
   const [serverCompletion, setServerCompletion] = useState<Awaited<ReturnType<typeof pollServerReviewCompletion>>>(null);
   const [enqueueRetry, setEnqueueRetry] = useState(0);
+  // "Analyze again": bumping the nonce restarts the poll loop after the server re-runs a failed job.
+  const [pollNonce, setPollNonce] = useState(0);
+  const [reviewRetryState, setReviewRetryState] = useState<ReviewRetryState>('idle');
   const enqueueKeyRef = useRef<string | null>(null);
   const loggedCaptureFailureIdsRef = useRef(new Set<string>());
   const { started: reviewStartRequested, requestStart: requestReviewStart } = useReviewStartTrigger({
@@ -165,6 +172,7 @@ export function usePostGamePivotalReview({
       setReviewWorkerSnapshots([]);
       setServerJobId(null);
       setServerCompletion(null);
+      setReviewRetryState('idle');
       setEnqueueRetry(0);
       enqueueKeyRef.current = null;
       return;
@@ -327,7 +335,7 @@ export function usePostGamePivotalReview({
     };
     void poll();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [serverJobId, accessToken, reviewPersistenceEnabled]);
+  }, [serverJobId, accessToken, reviewPersistenceEnabled, pollNonce]);
 
   // The local batch supports immediate/dev-only review. Cohort-enabled
   // production Game Review receives its authoritative results from polling.
@@ -440,6 +448,22 @@ export function usePostGamePivotalReview({
   const reviewUnavailable = reviewPersistenceEnabled
     && serverCompletion?.unavailable === true
     && serverCompletion.complete !== true;
+  const retryReview = useCallback(async () => {
+    if (!serverJobId || !accessToken || reviewRetryState === 'retrying') return;
+    setReviewRetryState('retrying');
+    const result = await retryServerReviewCompletion({
+      apiBase: resolveGameServerUrl(),
+      authHeader: `Bearer ${accessToken}`,
+      jobId: serverJobId,
+    });
+    if (result.kind === 'restarted' || result.kind === 'not_failed') {
+      setServerCompletion(null);
+      setReviewRetryState('idle');
+      setPollNonce((nonce) => nonce + 1);
+    } else {
+      setReviewRetryState(result.kind === 'cooldown' ? 'cooldown' : 'error');
+    }
+  }, [serverJobId, accessToken, reviewRetryState]);
   const [accuracyModel, setAccuracyModel] = useState<GameAccuracyModelResult | undefined>(undefined);
   // Derived alongside accuracyModel, from the same resolved data, so
   // GameReviewer's evidence banner stops being permanently pinned to
@@ -626,6 +650,9 @@ export function usePostGamePivotalReview({
               replayArtifact,
             }, (message) => {
               setCalibratedHandsAnalysis((current) => current ? { ...current, reviewPersistenceError: message } : current);
+            }, () => {
+              // The save landed (possibly after retries): the "could not save yet" notice no longer applies.
+              setCalibratedHandsAnalysis((current) => (current?.reviewPersistenceError ? { ...current, reviewPersistenceError: undefined } : current));
             });
           })
           .catch((error) => {
@@ -803,6 +830,8 @@ export function usePostGamePivotalReview({
     postGameAnalysisPending,
     accuracyModelPending,
     reviewUnavailable,
+    retryReview,
+    reviewRetryState,
     decisionLedger,
     reviewWorkerBatch: exposedReviewWorkerBatch,
     decisionIdByMoveNumber,

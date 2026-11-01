@@ -5,6 +5,7 @@ import { createFixedBotMatchWithStarter } from '../runtime/botEngine.ts';
 import { abandonLocalBotMatch, startLocalBotMatch } from '../api/botMatchApi.ts';
 import { resolveGameServerUrl } from '../../../lib/gameServerUrl';
 import { supabase } from '../../../lib/supabase';
+import { playerFacingErrorMessage } from '../../../api/playerFacingError';
 
 type UseStandaloneFritzRatingSessionArgs = {
   enabled: boolean;
@@ -135,11 +136,11 @@ export function useStandaloneFritzRatingSession({
         console.warn('[Fritz Pending] start failed', err);
         const live = matchRef.current;
         if (live.handNumber === 0) {
-          setMatch({ ...live, initializationError: err instanceof Error ? err.message : 'Could not start your rated match. Please try again.' });
+          setMatch({ ...live, initializationError: playerFacingErrorMessage(err, 'Could not start your rated match. Please try again.') });
         }
         if (matchRef.current.gameOver) {
           setResultLoading(false);
-          setResultError(err instanceof Error ? err.message : 'Rating session failed to start.');
+          setResultError(playerFacingErrorMessage(err, 'Rating session failed to start.'));
         }
       }
     })();
