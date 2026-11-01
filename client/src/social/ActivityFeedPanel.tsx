@@ -189,6 +189,7 @@ export default function ActivityFeedPanel({
       return result.feed;
     },
     [],
+    { errorMessage: 'The activity feed could not be loaded.' },
   );
   const isFriendsFilter = filter === 'friends' && Boolean(user);
   const { data: friendsData, loading: friendsLoading, error: friendsError, refetch: refetchFriends } = useAsyncData<FeedItem[]>(
@@ -198,7 +199,7 @@ export default function ActivityFeedPanel({
       return result.feed;
     },
     [user?.id],
-    { enabled: isFriendsFilter },
+    { enabled: isFriendsFilter, errorMessage: 'Your friends\' activity could not be loaded.' },
   );
   // Players the viewer has blocked are left out of the feed. The global feed is
   // a shared public cache, so this is applied here rather than on the server.

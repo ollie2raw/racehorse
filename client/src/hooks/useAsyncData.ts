@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type DependencyList } from 'react';
+import { playerFacingErrorMessage } from '../api/playerFacingError';
 
 /**
  * Shared replacement for the hand-rolled `[data] / [loading] / [error]` +
@@ -104,11 +105,10 @@ export function useAsyncData<T>(
       }
     } catch (err) {
       if (runId !== runIdRef.current || controller.signal.aborted) return;
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : errorMessageRef.current ?? DEFAULT_ERROR_MESSAGE;
-      setError(message);
+      // A server code or a bare JSON body ("not_found", {"ok":false,...}) is for logs, not for the person looking at the
+      // screen: it becomes the caller's own copy. A message that already reads like a sentence is kept.
+      const fallback = errorMessageRef.current ?? DEFAULT_ERROR_MESSAGE;
+      setError(err instanceof Error ? playerFacingErrorMessage(err, fallback) : fallback);
       setFetching(false);
     }
   }, []);
