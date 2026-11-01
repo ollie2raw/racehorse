@@ -229,13 +229,25 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
   }, [setActiveBracket]);
 
   const bracketTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleBracketRefresh = useCallback((tournamentId: string) => {
+  const scheduleBracketRefresh = useCallback((tournamentId: string, delayMs: number = TOURNAMENT_REFRESH_COALESCE_MS) => {
     if (bracketTimerRef.current) return;
     bracketTimerRef.current = setTimeout(() => {
       bracketTimerRef.current = null;
       void fetchAndApplyBracket(tournamentId);
-    }, TOURNAMENT_REFRESH_COALESCE_MS);
+    }, delayMs);
   }, [fetchAndApplyBracket]);
+
+  // The bracket on screen, read by the recovery path (reconnect, tab return),
+  // which a phone that slept through a round advance relies on: its interval
+  // poll is throttled while hidden, so without this the bracket stays stale
+  // until the next push.
+  const openBracketIdRef = useRef<string | null>(null);
+  useEffect(() => { openBracketIdRef.current = activeBracket?.tournament.id ?? null; }, [activeBracket]);
+  const recover = useCallback(() => {
+    scheduleRefresh(0);
+    const openId = openBracketIdRef.current;
+    if (openId) scheduleBracketRefresh(openId, 0);
+  }, [scheduleRefresh, scheduleBracketRefresh]);
 
   // ── legacy (/me-shaped) view, for consumers not yet on /my ────────────────
 
@@ -350,7 +362,7 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
         if (fritzLaunchRef.current.tournamentId === payload.tournamentId) setLaunch(IDLE_LAUNCH);
         touch(payload);
       },
-      onRecover: () => scheduleRefresh(0),
+      onRecover: recover,
     };
   });
 
@@ -358,9 +370,9 @@ export function useTournament({ userId, enabled = isTournamentsEnabled() }: Args
     if (typeof document === 'undefined') return;
     return bindTournamentRecoverySignals({
       documentLike: document,
-      onRecover: () => scheduleRefresh(0),
+      onRecover: recover,
     });
-  }, [scheduleRefresh]);
+  }, [recover]);
 
   // ── registration ──────────────────────────────────────────────────────────
 
