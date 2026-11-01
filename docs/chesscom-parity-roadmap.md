@@ -14,16 +14,16 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 
 | # | Item | Evidence | PR |
 |---|---|---|---|
-| [~] 0.1 | Tournament bracket refetches on reconnect and tab return; stale-data strip with retry when a refresh fails. (The screen already polled every 20 s while visible; the real gap was the throttled-tab and recovery case.) | `useTournament.ts`; `TournamentBracketScreen.tsx` | #409 open |
+| [x] 0.1 | Tournament bracket refetches on reconnect and tab return; stale-data strip with retry when a refresh fails. (The screen already polled every 20 s while visible; the real gap was the throttled-tab and recovery case.) | `useTournament.ts`; `TournamentBracketScreen.tsx` | #409 merged |
 
 ## Phase 1: event week, client only (no server)
 
 | # | Item | Notes | PR |
 |---|---|---|---|
-| [~] 1.1 | Delete dead Learn v1 code, dead CSS files, deprecated shims | 9 files, about 2,770 lines; `tsc -b` is the proof | #410 open |
+| [x] 1.1 | Delete dead Learn v1 code, dead CSS files, deprecated shims | 9 files, about 2,770 lines; `tsc -b` is the proof | #410 merged |
 | [ ] 1.2 | Purge unreferenced selectors from the four big Learn/Journey stylesheets | review the diff by screenshot; dynamic class names are the risk | |
-| [~] 1.3 | Guided-match loader no longer rejects the module on a failed fetch; `saveLearnProgress` write guarded. **Still open: gate the recorder/annotator tools out of the production bundle** (separate PR, needs its own size check) | `guidedMatchLessonLoader.ts`, `learn/progress/storage.ts` | #411 open |
-| [ ] 1.4 | Client geometry copy replaced by game-core's open-ends functions | `client/src/game/openEndsGeometry.ts`; keep oracle parity test | |
+| [~] 1.3 | Loader and storage half merged (#411). Guided-match loader no longer rejects the module on a failed fetch; `saveLearnProgress` write guarded. **Still open: gate the recorder/annotator tools out of the production bundle** (separate PR, needs its own size check) | `guidedMatchLessonLoader.ts`, `learn/progress/storage.ts` | #411 merged; recorder gating still open |
+| [~] 1.4 | Client geometry copy replaced by game-core's open-ends functions. The scoring code was byte-identical, so no behaviour change; the client file now re-exports core and keeps only its dev diagnostics. A test pins every shared export to the core function | `client/src/game/openEndsGeometry.ts`, `openEndsSingleSource.test.ts` | this PR |
 | [ ] 1.5 | Remove `Math.random` defaults from game-core (rng/deck required); callers inject | `engine.ts:38`, `pregameDraw.ts:17`; server call sites change in 3.x | |
 | [ ] 1.6 | Server-bot parity test over a fixed position corpus (test only) | guards the later shared-engine extraction | |
 | [ ] 1.7 | CSS ratchets in stylelint: `!important` budget, hex ban outside `tokens.css`, no new gradients | baselines from current counts so nothing regresses | |
