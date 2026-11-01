@@ -184,37 +184,6 @@
   color: rgba(245, 253, 250, 0.98);
 }
 
-.wl-tiles-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border-radius: 999px;
-  padding: 3px 10px 3px 8px;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(236, 246, 241, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: rgba(10, 16, 22, 0.72);
-}
-
-.wl-tiles-count {
-  font-size: 1.02rem;
-  line-height: 1;
-  font-weight: 800;
-  color: #ffffff;
-}
-
-.wl-tiles-text {
-  font-size: 0.64rem;
-  letter-spacing: 0.09em;
-  color: rgba(227, 238, 233, 0.82);
-}
-
-.wl-tiles-chip.is-pulsing {
-  animation: wl-chip-pulse 260ms ease-out;
-}
-
 .wl-center-status {
   display: grid;
   justify-items: center;
@@ -333,26 +302,6 @@
   opacity: 0.65;
 }
 
-.wl-board-watermark {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 3;
-  width: min(165px, 31.5%);
-  height: min(165px, 31.5%);
-  transform: translate(-50%, -50%);
-  color: #58a6ff;
-  opacity: 0.022;
-  pointer-events: none;
-}
-
-.wl-board-watermark img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
 .walnut-match-layout .wl-stage-shell {
   border-top: none;
 }
@@ -392,51 +341,6 @@
 
 /* Match No Brainer Lab board surface exactly (see noBrainerLab.css .nbl-board-frame).
    Include .board-area.wl-board-area so we beat App.css unset/flatten at equal (0,2,0) specificity. */
-.walnut-live .board-area.wl-board-area,
-.board-area.wl-board-area,
-.wl-board-area {
-  position: relative;
-  width: 100% !important;
-  height: auto !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  flex: 1 1 auto !important;
-  margin: 0 !important;
-  border-radius: 0 0 16px 16px;
-  border: 1px solid rgba(110, 132, 170, 0.18);
-  border-top: 1px solid rgba(110, 132, 170, 0.1);
-  background-color: var(--match-board-surface-mid, #121e32) !important;
-  background:
-    linear-gradient(rgba(148, 170, 204, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 170, 204, 0.045) 1px, transparent 1px),
-    var(--match-board-surface-mid, #121e32) !important;
-  background-size: 26px 26px, 26px 26px, 100% 100% !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    inset 0 0 0 1px rgba(22, 34, 54, 0.85),
-    inset 0 10px 24px rgba(0, 0, 0, 0.12),
-    0 14px 32px rgba(0, 0, 0, 0.26) !important;
-  overflow: hidden;
-}
-
-.wl-board-area::before {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  border-radius: 10px;
-  border: 1px solid rgba(168, 190, 220, 0.2);
-  background: rgba(24, 38, 58, 0.28);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 0 0 1px rgba(16, 26, 42, 0.45);
-  pointer-events: none;
-  z-index: 2;
-}
-
-.walnut-live .wl-board-area .board-container {
-  position: relative;
-  z-index: 4;
-}
 
 .wl-hand-area {
   position: relative !important;
@@ -477,10 +381,6 @@
   color: rgba(225, 238, 232, 0.7);
 }
 
-.wl-selection-info {
-  color: var(--wl-mint);
-}
-
 .wl-hand-area .btn.text {
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -495,36 +395,6 @@
   background: rgba(255, 255, 255, 0.15);
 }
 
-.wl-hand-area .tray-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  justify-self: end;
-  gap: 6px;
-  padding-right: 2px;
-}
-
-.wl-hand-area .tray-controls {
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 16px;
-  border: 1px solid rgba(110, 132, 170, 0.16);
-  background: rgba(11, 18, 31, 0.94);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 8px 20px rgba(0, 0, 0, 0.22);
-}
-
-.wl-hand-area .tray-icon-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .wl-hand-area .btn.text.compact {
   width: 92px;
   min-width: 92px;
@@ -535,62 +405,6 @@
   text-align: center;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.06);
-}
-
-.wl-hand-area .optional-draw-btn.compact {
-  width: 92px;
-  min-width: 92px;
-  min-height: 30px;
-  padding: 5px 10px;
-  font-size: 0.58rem;
-  letter-spacing: 0.11em;
-}
-
-.wl-hand-area .tray-controls .fullscreen-btn {
-  width: 34px;
-  min-width: 34px;
-  height: 34px;
-  min-height: 34px;
-  border-radius: 50%;
-  padding: 0;
-}
-
-.wl-hand-area .tray-controls .fullscreen-btn span {
-  font-size: 0.9rem;
-}
-
-.wl-hand-area .tray-controls .volume-btn {
-  width: 34px;
-  min-width: 34px;
-  height: 34px;
-  min-height: 34px;
-  border-radius: 50%;
-  padding: 0;
-}
-
-.wl-hand-area .tray-controls .volume-btn span {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.icon-btn .icon-svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: rgba(229, 238, 245, 0.9);
-  stroke-width: 1.9;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.icon-btn .icon-svg.volume-svg {
-  stroke-width: 1.8;
-}
-
-.icon-btn .icon-svg .icon-slash {
-  stroke: #e55656;
-  stroke-width: 2.2;
 }
 
 .walnut-live .domino-body {
@@ -1110,47 +924,6 @@
   100% { transform: scale(1.1); filter: brightness(1); }
 }
 
-
-.walnut-live.theme-brown {
-  background:
-    radial-gradient(circle at 50% 22%, rgba(234, 195, 141, 0.12), transparent 42%),
-    radial-gradient(circle at 20% 84%, rgba(181, 126, 83, 0.12), transparent 40%),
-    linear-gradient(162deg, #1f140e 0%, #2a1b12 52%, #130d09 100%);
-}
-
-.walnut-live.theme-brown .wl-stage-shell {
-  background: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
-  overflow: hidden;
-  border-radius: 0;
-}
-
-.walnut-live.theme-brown .board-area.wl-board-area,
-.walnut-live.theme-brown .wl-board-area {
-  border-color: rgba(231, 255, 244, 0.14);
-  background:
-    linear-gradient(rgba(88, 120, 200, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(88, 120, 200, 0.04) 1px, transparent 1px),
-    radial-gradient(ellipse 85% 65% at 50% 42%, rgba(59, 130, 246, 0.08), transparent 68%),
-    linear-gradient(180deg, #0c1424 0%, #070d18 52%, #050910 100%) !important;
-  background-size: 28px 28px, 28px 28px, 100% 100%, 100% 100% !important;
-}
-
-.walnut-live.theme-brown .wl-turn-label {
-  border-color: rgba(224, 175, 123, 0.4);
-  background: rgba(34, 22, 15, 0.66);
-}
-
-.walnut-live.theme-brown .domino-body {
-  border-color: #7f5f45 !important;
-}
-
-.walnut-live.theme-brown .pip {
-  border: 1px solid rgba(0, 0, 0, 0.12) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
-
 @keyframes wl-turn-pulse {
   0%,
   100% {
@@ -1175,18 +948,6 @@
   }
   45% {
     transform: scale(1.04);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes wl-chip-pulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.08);
   }
   100% {
     transform: scale(1);
@@ -1276,37 +1037,6 @@
 }
 
 /* ─── Match board navy surface (max specificity — beats theme-brown + App.css) ─── */
-.screen.game-screen.walnut-live .walnut-match-layout .wl-stage-shell .board-area.wl-board-area,
-.screen.game-screen.walnut-live.theme-brown .walnut-match-layout .wl-stage-shell .board-area.wl-board-area,
-.screen.game-screen.walnut-live.bot-match-screen:not(.rh-match-live) .walnut-match-layout .wl-stage-shell .board-area.wl-board-area,
-.screen.game-screen.walnut-live.theme-brown.bot-match-screen:not(.rh-match-live) .walnut-match-layout .wl-stage-shell .board-area.wl-board-area {
-  background-color: var(--match-board-surface-mid, #121e32) !important;
-  background-image:
-    linear-gradient(rgba(148, 170, 204, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 170, 204, 0.045) 1px, transparent 1px),
-    linear-gradient(
-      180deg,
-      var(--match-board-surface-top, #152238) 0%,
-      var(--match-board-surface-mid, #121e32) 52%,
-      var(--match-board-surface-deep, #0f192b) 100%
-    ) !important;
-  background-size: 26px 26px, 26px 26px, 100% 100% !important;
-  background-repeat: repeat, repeat, no-repeat !important;
-  background-position: 0 0, 0 0, center !important;
-}
-
-.screen.game-screen.walnut-live .walnut-match-layout .wl-stage-shell .board-area.wl-board-area .board-container,
-.screen.game-screen.walnut-live .walnut-match-layout .wl-stage-shell .board-area.wl-board-area .board-canvas,
-.screen.game-screen.walnut-live .walnut-match-layout .wl-stage-shell .board-area.wl-board-area .game-board,
-.screen.game-screen.walnut-live .walnut-match-layout .wl-stage-shell .board-area.wl-board-area .wl-stage,
-.screen.game-screen.walnut-live.theme-brown .walnut-match-layout .wl-stage-shell .board-area.wl-board-area .board-container,
-.screen.game-screen.walnut-live.theme-brown .walnut-match-layout .wl-stage-shell .board-area.wl-board-area .board-canvas,
-.screen.game-screen.walnut-live.theme-brown .walnut-match-layout .wl-stage-shell .board-area.wl-board-area .game-board,
-.screen.game-screen.walnut-live.theme-brown .walnut-match-layout .wl-stage-shell .board-area.wl-board-area .wl-stage {
-  background: transparent !important;
-  background-color: transparent !important;
-  background-image: none !important;
-}
 
 /* ─── Match HUD: navy shell aligned with NBL board ─── */
 .screen.game-screen.walnut-live,
@@ -1390,17 +1120,6 @@
   color: rgba(220, 230, 244, 0.96);
 }
 
-.screen.game-screen.walnut-live.theme-brown .wl-turn-label.your-turn {
-  border-color: rgba(231, 182, 74, 0.55);
-  background: rgba(28, 22, 10, 0.88) !important;
-  color: rgba(255, 241, 210, 1);
-}
-
-.screen.game-screen.walnut-live.theme-brown .wl-turn-label.opp-turn {
-  border-color: rgba(148, 170, 204, 0.28);
-  color: rgba(220, 230, 244, 0.96);
-}
-
 .screen.game-screen.walnut-live .board-corner-pill,
 .screen.game-screen.walnut-live .boneyard-pill,
 .screen.game-screen.walnut-live .board-zoom-tray,
@@ -1444,24 +1163,6 @@
   line-height: 0.95 !important;
   font-weight: 800 !important;
   text-shadow: none !important;
-}
-
-.app.large-mode .screen.game-screen.walnut-live .wl-tiles-chip {
-  min-height: 26px !important;
-  padding: 4px 10px 4px 8px !important;
-  border-width: 1px !important;
-  font-size: 0.66rem !important;
-  background: rgba(10, 16, 22, 0.72) !important;
-}
-
-.app.large-mode .screen.game-screen.walnut-live .wl-tiles-count {
-  font-size: 1.02rem !important;
-  font-weight: 800 !important;
-}
-
-.app.large-mode .screen.game-screen.walnut-live .wl-tiles-text {
-  font-size: 0.64rem !important;
-  font-weight: 700 !important;
 }
 
 .app.large-mode .screen.game-screen.walnut-live .wl-turn-label {
@@ -2547,20 +2248,6 @@
 @media (max-height: 760px) {
   .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) {
     --tray-height: 112px;
-  }
-}
-
-@keyframes wl-last-played {
-  0% {
-    box-shadow:
-      0 0 0 2px rgba(231, 182, 74, 0.72),
-      0 0 0 6px rgba(231, 182, 74, 0.18),
-      0 10px 20px rgba(0, 0, 0, 0.22);
-  }
-  100% {
-    box-shadow:
-      0 0 0 2px rgba(231, 182, 74, 0.52),
-      0 8px 18px rgba(0, 0, 0, 0.2);
   }
 }
 
