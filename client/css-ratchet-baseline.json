@@ -140,9 +140,9 @@
     "gradient": 0
   },
   "src/journey/racehorseJourney.css": {
-    "important": 1,
-    "hex": 14,
-    "gradient": 6
+    "important": 0,
+    "hex": 13,
+    "gradient": 0
   },
   "src/journey/racehorseJourneyTrail.css": {
     "important": 0,
@@ -201,7 +201,7 @@
   },
   "src/learn/learnPlayer.css": {
     "important": 13,
-    "hex": 17,
+    "hex": 10,
     "gradient": 13
   },
   "src/learning/coach.css": {
