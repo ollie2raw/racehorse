@@ -1,4 +1,5 @@
 import { supabaseFetch } from '../../supabaseUtils';
+import { childLogger } from '../../logger';
 import {
   PUZZLE_RUSH_CONFIG,
   type PuzzleRushStageKey,
@@ -10,12 +11,15 @@ import {
   normalizeRushRunPuzzle,
   type PuzzlePoolEntry,
   type PuzzlePoolRow,
+  type PuzzleRushLeaderboardEntry,
   type PuzzleRushRun,
   type PuzzleRushRunPuzzle,
   type RushRunPuzzleRow,
   type RushRunRow,
 } from '../../puzzleRush/types';
 import type { GradedPuzzle } from '../../puzzleRush/grading';
+
+const log = childLogger('puzzle-rush');
 
 const POOL_SELECT =
   'id,source,source_puzzle_id,starting_board,starting_hand,max_moves,puzzle_type,tier,deal_size,target_score,best_possible_score,difficulty_score,play_count,enabled';
@@ -340,6 +344,67 @@ export async function incrementPuzzlePoolPlayCounts(puzzleIds: string[]): Promis
       }).catch(() => undefined),
     ),
   );
+}
+
+export type RankedRushLeaderboard = {
+  rows: PuzzleRushLeaderboardEntry[];
+  /** Players with at least one completed run, i.e. the length of the whole board. */
+  totalPlayers: number;
+  /** The caller's own best run and rank, wherever it falls on the board; null when they have no completed run. */
+  self: PuzzleRushLeaderboardEntry | null;
+};
+
+/** After the ranking function fails (not applied yet, or the database is unwell), go straight to the fallback for this long. */
+export const RUSH_RANKED_RPC_COOLDOWN_MS = 60_000;
+let rankedRpcUnavailableUntil = 0;
+
+/** Test hook: forget a previous failure. */
+export function resetRankedRushLeaderboardCooldown(): void {
+  rankedRpcUnavailableUntil = 0;
+}
+
+function normalizeRankedEntry(raw: unknown): PuzzleRushLeaderboardEntry | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  if (typeof row.rank !== 'number' || typeof row.userId !== 'string' || typeof row.runId !== 'string') return null;
+  return {
+    rank: row.rank,
+    userId: row.userId,
+    username: typeof row.username === 'string' && row.username.trim() ? row.username.trim() : 'Player',
+    totalScore: Number(row.totalScore) || 0,
+    puzzlesSolved: Number(row.puzzlesSolved) || 0,
+    runId: row.runId,
+    achievedAt: typeof row.achievedAt === 'string' ? row.achievedAt : null,
+  };
+}
+
+/**
+ * One page of the all-time board, ranked in the database (supabase/migrations/2026-11-02_rush_leaderboard_ranked_v1.sql), plus
+ * the caller's own rank wherever it falls. Returns null when the function is not available, so the caller falls back to the
+ * in-memory ranking above: applying the migration is not a deploy dependency in either order.
+ */
+export async function fetchRankedRushLeaderboard(input: {
+  limit: number;
+  offset: number;
+  userId: string | null;
+}): Promise<RankedRushLeaderboard | null> {
+  if (Date.now() < rankedRpcUnavailableUntil) return null;
+  try {
+    const raw = await supabaseFetch<{ rows?: unknown; totalPlayers?: unknown; self?: unknown } | undefined>(
+      '/rest/v1/rpc/rush_leaderboard_ranked_v1',
+      {
+        method: 'POST',
+        body: JSON.stringify({ p_limit: input.limit, p_offset: input.offset, p_user_id: input.userId }),
+      },
+    );
+    if (!raw || !Array.isArray(raw.rows)) throw new Error('rush_leaderboard_ranked_v1 returned an unexpected shape');
+    const rows = raw.rows.map(normalizeRankedEntry).filter((row): row is PuzzleRushLeaderboardEntry => row !== null);
+    return { rows, totalPlayers: Number(raw.totalPlayers) || 0, self: normalizeRankedEntry(raw.self) };
+  } catch (error) {
+    rankedRpcUnavailableUntil = Date.now() + RUSH_RANKED_RPC_COOLDOWN_MS;
+    log.warn({ err: error instanceof Error ? error.message : String(error) }, 'ranked leaderboard function unavailable, using the in-memory ranking');
+    return null;
+  }
 }
 
 /** Most pages the all-time scan will read, so a board that cannot fill still ends. */

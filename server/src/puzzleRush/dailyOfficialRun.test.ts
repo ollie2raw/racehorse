@@ -321,6 +321,73 @@ describe('leaderboards', () => {
     });
   });
 
+  describe('the ranked leaderboard function', () => {
+    const entry = (rank: number, userId: string, score: number) => ({
+      rank,
+      userId,
+      username: userId,
+      totalScore: score,
+      puzzlesSolved: 7,
+      runId: `run-${userId}`,
+      achievedAt: '2026-11-01T10:00:00.000Z',
+    });
+
+    beforeEach(async () => {
+      const { resetRankedRushLeaderboardCooldown } = await import('../http/stores/puzzleRushStore');
+      resetRankedRushLeaderboardCooldown();
+    });
+
+    it('asks the database for one page and the caller\'s own row, and maps what comes back', async () => {
+      const { fetchRankedRushLeaderboard } = await import('../http/stores/puzzleRushStore');
+      mocks.supabaseFetch.mockResolvedValueOnce({
+        rows: [entry(1, 'a', 900), { ...entry(2, 'b', 800), username: '  ' }],
+        totalPlayers: 120,
+        self: entry(87, 'me', 300),
+      });
+      const result = await fetchRankedRushLeaderboard({ limit: 2, offset: 0, userId: 'me' });
+      const [path, init] = mocks.supabaseFetch.mock.calls[0] as [string, { method: string; body: string }];
+      expect(path).toBe('/rest/v1/rpc/rush_leaderboard_ranked_v1');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toEqual({ p_limit: 2, p_offset: 0, p_user_id: 'me' });
+      expect(result?.totalPlayers).toBe(120);
+      expect(result?.rows.map((row) => row.rank)).toEqual([1, 2]);
+      // a blank name never reaches the board as an empty string
+      expect(result?.rows[1].username).toBe('Player');
+      // the caller's own rank is reported even though it is far off this page
+      expect(result?.self?.rank).toBe(87);
+    });
+
+    it('reports no own row when the caller has no completed run', async () => {
+      const { fetchRankedRushLeaderboard } = await import('../http/stores/puzzleRushStore');
+      mocks.supabaseFetch.mockResolvedValueOnce({ rows: [entry(1, 'a', 900)], totalPlayers: 1, self: null });
+      const result = await fetchRankedRushLeaderboard({ limit: 50, offset: 0, userId: 'nobody' });
+      expect(result?.self).toBeNull();
+    });
+
+    it('returns null when the function is missing, and does not ask again until the cooldown has passed', async () => {
+      const { fetchRankedRushLeaderboard, resetRankedRushLeaderboardCooldown } = await import('../http/stores/puzzleRushStore');
+      mocks.supabaseFetch.mockRejectedValueOnce(new Error('Supabase request failed: 404 {"code":"PGRST202"}'));
+      expect(await fetchRankedRushLeaderboard({ limit: 50, offset: 0, userId: null })).toBeNull();
+      expect(mocks.supabaseFetch).toHaveBeenCalledTimes(1);
+
+      // inside the cooldown the database is not asked at all
+      expect(await fetchRankedRushLeaderboard({ limit: 50, offset: 0, userId: null })).toBeNull();
+      expect(mocks.supabaseFetch).toHaveBeenCalledTimes(1);
+
+      // and once it has passed, the next request tries again and can succeed
+      resetRankedRushLeaderboardCooldown();
+      mocks.supabaseFetch.mockResolvedValueOnce({ rows: [], totalPlayers: 0, self: null });
+      expect(await fetchRankedRushLeaderboard({ limit: 50, offset: 0, userId: null })).toEqual({ rows: [], totalPlayers: 0, self: null });
+      expect(mocks.supabaseFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('treats a malformed response as unavailable rather than showing a broken board', async () => {
+      const { fetchRankedRushLeaderboard } = await import('../http/stores/puzzleRushStore');
+      mocks.supabaseFetch.mockResolvedValueOnce({ totalPlayers: 3 });
+      expect(await fetchRankedRushLeaderboard({ limit: 50, offset: 0, userId: null })).toBeNull();
+    });
+  });
+
   it('the all-time store query does NOT filter on official', async () => {
     const { listCompletedRushRuns } = await import('../http/stores/puzzleRushStore');
     mocks.supabaseFetch.mockResolvedValueOnce([]);
