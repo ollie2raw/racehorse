@@ -44,3 +44,17 @@
 .screen.game-screen.walnut-live .nbl-board-toolbar > * {
   pointer-events: auto;
 }
+
+/* Touch devices (mobile web): the zoom, chat, mute, fullscreen and leave buttons are 28px glyphs. Give each an invisible
+   44px-tall hit area (the native app already does this in native-landscape.css) without changing how it looks. */
+@media (pointer: coarse) {
+  .screen.game-screen.walnut-live .rh-board-control-btn {
+    position: relative;
+  }
+
+  .screen.game-screen.walnut-live .rh-board-control-btn::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+}
