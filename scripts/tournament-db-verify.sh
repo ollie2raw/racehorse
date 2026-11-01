@@ -1439,6 +1439,8 @@ values ($(et4 '2026-11-02 18:00'), $(et4 '2026-11-02 18:00') - interval '30 minu
        ($(et4 '2026-11-02 21:00'), $(et4 '2026-11-02 21:00') - interval '30 minutes', $(et4 '2026-11-02 21:00') - interval '2 minutes', 'upcoming');
 SQL
 AT4 "$F4" -c "insert into public.scheduled_tournament_matches (tournament_id, round, match_number, room_code, status) values ('$(id4 "$(et4 '2026-11-02 21:00')")', 1, 1, '', 'waiting')" >/dev/null
+# a cancelled row ALREADY at a new slot time, like the legacy 30-minute rows M2 cancelled: that slot is never revived
+AT4 "$F4" -c "insert into public.scheduled_tournaments (scheduled_start, registration_open_at, registration_close_at, status, cancel_reason) values ($(et4 '2026-11-05 21:00'), $(et4 '2026-11-05 21:00') - interval '12 hours', $(et4 '2026-11-05 21:00') - interval '2 minutes', 'cancelled', 'cadence_replaced')" >/dev/null
 AT4 "$F4" -q >/dev/null <<'SQL'
 -- The state before M4, and the eligibility predicate written independently of M4's helpers.
 create table pre_t as select * from public.scheduled_tournaments;
@@ -1463,7 +1465,7 @@ NPRE="$(AT4 "$F4" -c "select count(*) from pre_t")"; NCAN="$(AT4 "$F4" -c "selec
 AT4 "$F4" -F '|' -f "$REPO_ROOT/docs/ops/tournament-m4/preflight.sql" >"$WORK/m4_preflight.txt" 2>&1 || { cat "$WORK/m4_preflight.txt" >&2; fail "M4 preflight.sql"; }
 pf4() { grep -F "$1" "$WORK/m4_preflight.txt" | head -1 | awk -F'|' '{print $NF}'; }
 grep -q '^America/Los_Angeles|{17:00:00,20:00:00}$' "$WORK/m4_preflight.txt" || { cat "$WORK/m4_preflight.txt" >&2; fail "M4 preflight.sql: not reporting the current Pacific schedule"; }
-[[ "$(pf4 'will cancel:')" == "$NCAN" && "$(pf4 'WITH registrations')" == "1" && "$(pf4 'WITH match rows')" == "1" && "$(pf4 'within 35 min')" == "1" && "$(pf4 'already at 18:00')" == "2" && "$(pf4 'CANCELLED rows at future')" == "0" ]] \
+[[ "$(pf4 'will cancel:')" == "$NCAN" && "$(pf4 'WITH registrations')" == "1" && "$(pf4 'WITH match rows')" == "1" && "$(pf4 'within 35 min')" == "1" && "$(pf4 'already at 18:00')" == "2" && "$(pf4 'CANCELLED rows at future')" == "1" ]] \
   || { cat "$WORK/m4_preflight.txt" >&2; fail "M4 preflight.sql counts disagree with the oracle"; }
 AT4 "$F4" -F '|' -f "$REPO_ROOT/docs/ops/tournament-launch/prod-preflight.sql" >"$WORK/m4_prodpre_before.txt" 2>&1 || { cat "$WORK/m4_prodpre_before.txt" >&2; fail "prod-preflight.sql before M4"; }
 grep -q '^M4 schedule is 18:00 / 21:00 America/New_York|f$' "$WORK/m4_prodpre_before.txt" || { cat "$WORK/m4_prodpre_before.txt" >&2; fail "prod-preflight.sql: M4 row not false before M4"; }
@@ -1522,6 +1524,33 @@ grep -F 'expect 0' "$WORK/m4_verify.txt" | awk -F'|' '$NF != 0 {bad=1} END {exit
 [[ "$(grep -cE '^(seed_future_tournaments\|days_ahead integer|ensure_tournament_seed_window\|)\|t$' "$WORK/m4_verify.txt")" == "2" ]] || { cat "$WORK/m4_verify.txt" >&2; fail "M4 verify.sql: function bodies"; }
 pass "verify.sql (read-only) after M4: the schedule is America/New_York 18:00 / 21:00, both seed functions keep their M2 bodies, every expect-0 row is 0"
 echo "    verify output:"; sed -n '1,40p' "$WORK/m4_verify.txt" | sed 's/^/      /'
+
+# The same checks as ONE result table (the Supabase editor only shows the last result of a script).
+AT4 "$F4" -F '|' -f "$REPO_ROOT/docs/ops/tournament-m4/verify-one-result.sql" >"$WORK/m4_verify_one.txt" 2>&1 || { cat "$WORK/m4_verify_one.txt" >&2; fail "M4 verify-one-result.sql"; }
+grep -qi 'error' "$WORK/m4_verify_one.txt" && { cat "$WORK/m4_verify_one.txt" >&2; fail "verify-one-result.sql errored"; }
+grep -q '^01 timezone (expect America/New_York)|America/New_York$' "$WORK/m4_verify_one.txt" || { cat "$WORK/m4_verify_one.txt" >&2; fail "verify-one-result: timezone"; }
+grep -q '^02 slot times (expect 18:00:00, 21:00:00)|18:00:00, 21:00:00$' "$WORK/m4_verify_one.txt" || { cat "$WORK/m4_verify_one.txt" >&2; fail "verify-one-result: slot times"; }
+grep -q '^03 seed functions keep their signatures (expect 2)|2$' "$WORK/m4_verify_one.txt" || { cat "$WORK/m4_verify_one.txt" >&2; fail "verify-one-result: signatures"; }
+[[ "$(grep -c 'expect 0' "$WORK/m4_verify_one.txt")" == "6" ]] || { cat "$WORK/m4_verify_one.txt" >&2; fail "verify-one-result: expected 6 expect-0 rows"; }
+grep -F 'expect 0' "$WORK/m4_verify_one.txt" | awk -F'|' '$NF != 0 {bad=1} END {exit bad}' || { cat "$WORK/m4_verify_one.txt" >&2; fail "verify-one-result: an expect-0 row is not 0"; }
+grep -q '^12 desired slots held by a CANCELLED row (informational: those slots stay empty)|1$' "$WORK/m4_verify_one.txt" || { cat "$WORK/m4_verify_one.txt" >&2; fail "verify-one-result: the cancelled-slot row"; }
+grep -q '^14 cancelled slot 01|Thu 11-05 21:00 ET, reason: cadence_replaced$' "$WORK/m4_verify_one.txt" || { cat "$WORK/m4_verify_one.txt" >&2; fail "verify-one-result: the cancelled slot is not listed"; }
+[[ "$(grep -c '^20 next event' "$WORK/m4_verify_one.txt")" == "8" ]] || { cat "$WORK/m4_verify_one.txt" >&2; fail "verify-one-result: next events"; }
+pass "verify-one-result.sql (read-only): one table, no error; timezone, slot times and signatures right; all 6 expect-0 rows are 0; the planted cancelled slot is reported (12 = 1) and listed (14); the next 8 events listed"
+echo "    one-result output:"; sed -n '1,40p' "$WORK/m4_verify_one.txt" | sed 's/^/      /'
+
+# The production readiness check as ONE table (docs/ops/tournament-launch/prod-readiness-one-result.sql). The scratch db is the
+# chain + M2 + M4, and room_live_sessions is not in it: that row reads false, which is itself the proof the checks can fail.
+AT4 "$F4" -F '|' -f "$REPO_ROOT/docs/ops/tournament-launch/prod-readiness-one-result.sql" >"$WORK/m4_readiness.txt" 2>&1 || { cat "$WORK/m4_readiness.txt" >&2; fail "prod-readiness-one-result.sql"; }
+grep -qi 'error' "$WORK/m4_readiness.txt" && { cat "$WORK/m4_readiness.txt" >&2; fail "prod-readiness-one-result.sql errored"; }
+grep -q '^06 M2: _live_event_slots (expect true)|true$' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: M2 row"; }
+grep -q '^07 M4: the schedule is 18:00 / 21:00 America/New_York (expect true)|true$' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: M4 row not true after M4"; }
+grep -q '^09 tournament functions defined twice (an old overload), expect 0|0$' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: overloads"; }
+grep -q '^24 security posture hard_fail_count, expect 0|0$' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: posture"; }
+grep -q '^08 room_live_sessions, for restart restore (expect true)|false$' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: a missing object must read false"; }
+grep -q '^31 next upcoming event|' "$WORK/m4_readiness.txt" || { cat "$WORK/m4_readiness.txt" >&2; fail "readiness: next event row"; }
+pass "prod-readiness-one-result.sql (read-only): one table, no error; M2 and M4 read true after M4; no old overloads; posture 0; an object that is not there (room_live_sessions) reads false"
+echo "    readiness output:"; sed -n '1,40p' "$WORK/m4_readiness.txt" | sed 's/^/      /'
 
 # The new schedule itself, across both DST changes (run twice: M4 is idempotent).
 for PASSNO in 1 2; do
