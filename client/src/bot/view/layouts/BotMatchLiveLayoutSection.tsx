@@ -29,6 +29,7 @@ export function BotMatchLiveLayoutSection({
       hudLeft={hudLeft}
       hudCenter={hudCenter}
       hudRight={hudRight}
+      metaSlotSide="left"
     />
   );
 }

@@ -25,6 +25,33 @@
   left: 12px;
 }
 
+/* The HUD's own home for a corner pill, used on the installed phone app in landscape (useHudMetaSlot). Empty elsewhere, so it takes no
+   space; a pill in it sits in the row instead of floating over the board. */
+.rh-hud-meta-slot:empty {
+  display: none;
+}
+
+.rh-hud-meta-slot {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  /* On the board the label is sized by rules scoped to .rh-board-meta-bar, which a pill in the HUD is not inside, so it would take the
+     0.76rem default of the walnut rule (about 8px here). The app's floor for visible text is 10px; that rule reads this property. */
+  --match-counter-label-size: 10px;
+}
+
+.rh-hud-meta-slot--right {
+  margin-right: 8px;
+}
+
+.rh-hud-meta-slot--left {
+  margin-left: 8px;
+}
+
+.rh-hud-meta-slot .board-corner-pill {
+  position: static;
+}
+
 .board-corner-pill--tr {
   right: 12px;
 }
