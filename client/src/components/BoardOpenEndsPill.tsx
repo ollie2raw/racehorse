@@ -1,4 +1,6 @@
+import { createPortal } from 'react-dom';
 import { FeedbackNumber } from './FeedbackNumber';
+import { useHudMetaSlot } from './board/useHudMetaSlot';
 /** Open-end sum pill — always shows canonical geometry sum from board tiles. */
 
 import {
@@ -19,6 +21,7 @@ export interface BoardOpenEndsPillProps {
 }
 
 export function BoardOpenEndsPill({ board, openEndsSum, visible = true }: BoardOpenEndsPillProps) {
+  const hudSlot = useHudMetaSlot();
   if (!visible) return null;
 
   // Fresh hands start with board === null; still show "0" until the first tile is played.
@@ -28,10 +31,12 @@ export function BoardOpenEndsPill({ board, openEndsSum, visible = true }: BoardO
     assertDisplayedOpenCountMatchesCanonical(scoringBoard, openEndsSum, 'BoardOpenEndsPill');
   }
 
-  return (
+  const pill = (
     <div className="open-ends-pill board-corner-pill board-corner-pill--tl" aria-label={`${canonical} open ends`}>
       <span className="open-ends-pill__label">Open</span>
       <FeedbackNumber value={canonical} className="open-ends-count" />
     </div>
   );
+  // On the installed phone app in landscape it is drawn in the HUD row, off the board (see useHudMetaSlot).
+  return hudSlot ? createPortal(pill, hudSlot) : pill;
 }

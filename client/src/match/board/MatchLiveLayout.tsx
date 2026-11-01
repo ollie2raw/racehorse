@@ -7,6 +7,8 @@ export interface MatchLiveLayoutProps {
   hudLeft: ReactNode;
   hudCenter?: ReactNode;
   hudRight: ReactNode;
+  /** See InGameBoardHud: the side whose room the OPEN pill is drawn into on the installed phone app in landscape. */
+  metaSlotSide?: 'left' | 'right';
   boardInner: ReactNode;
   boardToolbar?: ReactNode;
   handDock: ReactNode;
@@ -26,6 +28,7 @@ export function MatchLiveLayout({
   hudLeft,
   hudCenter,
   hudRight,
+  metaSlotSide,
   boardInner,
   boardToolbar,
   handDock,
@@ -43,6 +46,7 @@ export function MatchLiveLayout({
         leftSlot={hudLeft}
         centerSlot={hudCenter}
         rightSlot={hudRight}
+        metaSlotSide={metaSlotSide}
       />
       <InGameBoardFrame
         boardInner={boardInner}
