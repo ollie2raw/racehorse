@@ -145,7 +145,9 @@ export default function RatingHistoryPage({
 
   return (
     <LayoutScreen
-      className="screen lobby-screen mode-home-screen mode-subpage-screen rating-history-screen"
+      // Not `mode-home-screen`: premium-theme.css sizes that class's header and content to min(1000px, 94vw) !important,
+      // which ignores the shell's own padding and pushed this page's column 17px past the right edge of a 390px phone.
+      className="screen lobby-screen mode-subpage-screen rating-history-screen"
       title="Rating History"
       subtitle={`Glicko-2 progression for ${heading}`}
       contentClassName="screen-shell rating-history-content"
