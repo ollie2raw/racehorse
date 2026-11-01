@@ -10,6 +10,10 @@
  * Usage:
  *   import { apiGet, apiPost, apiDelete } from '../api/client';
  *   const { data, error } = await apiGet<MyType>('/api/something');
+ *
+ * A raw fetch() skips all of the above. The few files that have a reason to make one (static assets, debug ingest,
+ * unload-time keepalive, explicit-token flows) are listed with that reason in scripts/rawFetchGuard.test.ts, which fails
+ * for any new one.
  */
 
 import { supabase } from '../lib/supabase';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAsyncData } from '../hooks/useAsyncData';
-import { resolveGameServerUrl } from '../lib/gameServerUrl';
+import { apiGet } from '../api/client';
 
 const ADMIN_KEY_STORAGE = 'racehorse:daily-fritz-admin-key';
 
@@ -88,16 +88,14 @@ function resolveInitialAdminKey(): string {
   return legacy || readStoredAdminKey();
 }
 
-async function fetchDailyFritzHealth(key: string): Promise<HealthResponse> {
-  const url = new URL(`${resolveGameServerUrl()}/api/daily-fritz/health`);
-  const response = await fetch(url.toString(), {
+/** Admin access here is the shared secret in a header, not a Supabase session, so no auth header is added. */
+export async function fetchDailyFritzHealth(key: string): Promise<HealthResponse> {
+  const result = await apiGet<HealthResponse>('/api/daily-fritz/health', {
+    auth: false,
     headers: { 'x-admin-secret': key },
   });
-  const body = await response.json() as HealthResponse;
-  if (!response.ok) {
-    throw new Error(body.error ?? `HTTP ${response.status}`);
-  }
-  return body;
+  if (result.error || !result.data) throw new Error(result.error ?? 'Health check failed.');
+  return result.data;
 }
 
 export default function DailyFritzHealthAdminScreen() {
