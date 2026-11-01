@@ -247,3 +247,69 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* Accuracy over time: a line across your reviewed games, oldest to newest. */
+.rh-accuracy-trend {
+  margin: 0 0 12px;
+  padding: 10px 12px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-control);
+}
+
+.rh-accuracy-trend__eyebrow {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* The plot area: inset so the first and last dots are not clipped at the card edge. */
+.rh-accuracy-trend__plot {
+  position: relative;
+  height: clamp(84px, 14vw, 132px);
+  margin: 10px 8px 6px;
+}
+
+.rh-accuracy-trend__chart {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.rh-accuracy-trend__line {
+  stroke: var(--tier-standard);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.rh-accuracy-trend__dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: var(--radius-pill);
+  background: var(--tier-standard);
+}
+
+.rh-accuracy-trend__dot--latest {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid var(--tier-standard);
+  box-sizing: border-box;
+}
+
+.rh-accuracy-trend__summary {
+  margin: 8px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.7);
+}

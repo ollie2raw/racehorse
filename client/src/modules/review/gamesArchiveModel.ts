@@ -78,3 +78,47 @@ export const titleCase = (value: string | null): string => (value ? value.charAt
 export function formatAccuracy(accuracy: number | null): string | null {
   return accuracy === null || !Number.isFinite(accuracy) ? null : `${Math.round(accuracy * 10) / 10}%`;
 }
+
+export const TREND_MAX_POINTS = 20;
+/** A trend needs a before and an after: this many reviewed games compared against the same number just before them. */
+export const TREND_WINDOW = 5;
+
+export type AccuracyPoint = { id: string; accuracy: number; when: string };
+
+/** An unparseable date sorts as the oldest instead of poisoning the comparison with NaN. */
+const timeOf = (when: string): number => {
+  const time = Date.parse(when);
+  return Number.isNaN(time) ? 0 : time;
+};
+
+export type AccuracyTrend = {
+  /** Oldest first, newest last: the order a chart reads. At most TREND_MAX_POINTS. */
+  points: AccuracyPoint[];
+  /** Mean accuracy of the most recent TREND_WINDOW games, or null when there are not enough games to compare. */
+  recentAverage: number | null;
+  /** How much that mean moved against the TREND_WINDOW games before it (percentage points), or null. */
+  change: number | null;
+};
+
+/**
+ * Accuracy over your reviewed games. Only games with a numeric accuracy count; unreviewed games are simply absent (never
+ * plotted as zero). `change` needs two full windows, so a short history shows the chart without claiming a trend.
+ */
+export function computeAccuracyTrend(games: readonly SavedGameSummary[]): AccuracyTrend {
+  const reviewed = games
+    .flatMap((game) => (game.review && game.review.accuracy !== null && Number.isFinite(game.review.accuracy)
+      ? [{ id: game.sourceMatchId, accuracy: game.review.accuracy, when: game.playedAt ?? game.savedAt }]
+      : []))
+    .sort((a, b) => timeOf(a.when) - timeOf(b.when))
+    .slice(-TREND_MAX_POINTS);
+  const mean = (rows: readonly AccuracyPoint[]) => rows.reduce((sum, row) => sum + row.accuracy, 0) / rows.length;
+  const round1 = (value: number) => Math.round(value * 10) / 10;
+  const recent = reviewed.slice(-TREND_WINDOW);
+  const before = reviewed.slice(-TREND_WINDOW * 2, -TREND_WINDOW);
+  const enough = recent.length === TREND_WINDOW && before.length === TREND_WINDOW;
+  return {
+    points: reviewed,
+    recentAverage: recent.length === TREND_WINDOW ? round1(mean(recent)) : null,
+    change: enough ? round1(mean(recent) - mean(before)) : null,
+  };
+}

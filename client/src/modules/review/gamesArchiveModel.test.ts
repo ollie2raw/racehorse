@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   NO_FILTERS,
+  TREND_MAX_POINTS,
+  computeAccuracyTrend,
   computeArchiveStats,
   filterGames,
   formatAccuracy,
@@ -104,3 +106,56 @@ describe('formatting', () => {
     expect(titleCase(null)).toBe('Fritz');
   });
 });
+
+describe('computeAccuracyTrend', () => {
+  /** A reviewed game on day `n` of November with this accuracy. */
+  const on = (n: number, accuracy: number | null, overrides: Partial<SavedGameSummary> = {}) => game({
+    playedAt: `2026-11-${String(n).padStart(2, '0')}T12:00:00.000Z`,
+    review: accuracy === null ? null : { id: `r${n}`, accuracy, grade: null },
+    ...overrides,
+  });
+
+  it('plots reviewed games oldest to newest, whatever order they arrive in', () => {
+    const { points } = computeAccuracyTrend([on(3, 70), on(1, 50), on(2, 60)]);
+    expect(points.map((p) => p.accuracy)).toEqual([50, 60, 70]);
+  });
+
+  it('leaves unreviewed games and non-numeric accuracies out instead of plotting zero', () => {
+    const { points } = computeAccuracyTrend([on(1, 80), on(2, null), on(3, Number.NaN), on(4, 90)]);
+    expect(points.map((p) => p.accuracy)).toEqual([80, 90]);
+  });
+
+  it('falls back to the saved time when a game has no played time, and survives an unparseable date', () => {
+    const { points } = computeAccuracyTrend([
+      on(2, 60),
+      on(1, 50, { playedAt: null, savedAt: '2026-11-01T00:00:00.000Z' }),
+      on(3, 70, { playedAt: 'not a date' }),
+    ]);
+    expect(points.map((p) => p.accuracy)).toEqual([70, 50, 60]);
+  });
+
+  it('keeps the most recent games when there are more than the chart can show', () => {
+    const many = Array.from({ length: TREND_MAX_POINTS + 7 }, (_, i) => on((i % 28) + 1, i, { sourceMatchId: `m${i}`, playedAt: new Date(Date.UTC(2026, 0, 1 + i)).toISOString() }));
+    const { points } = computeAccuracyTrend(many);
+    expect(points).toHaveLength(TREND_MAX_POINTS);
+    expect(points[points.length - 1]!.accuracy).toBe(TREND_MAX_POINTS + 6);
+  });
+
+  it('claims no average with fewer than five games, no change with fewer than ten', () => {
+    expect(computeAccuracyTrend([on(1, 80), on(2, 90)])).toMatchObject({ recentAverage: null, change: null });
+    const five = [1, 2, 3, 4, 5].map((n) => on(n, 80));
+    expect(computeAccuracyTrend(five)).toMatchObject({ recentAverage: 80, change: null });
+    const nine = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => on(n, 80));
+    expect(computeAccuracyTrend(nine).change).toBeNull();
+  });
+
+  it('measures the last five reviewed games against the five before them', () => {
+    const accuracies = [70, 72, 74, 76, 78, 80, 82, 84, 86, 88];
+    const { recentAverage, change } = computeAccuracyTrend(accuracies.map((a, i) => on(i + 1, a)));
+    expect(recentAverage).toBe(84);
+    expect(change).toBe(10);
+    const worse = computeAccuracyTrend([90, 90, 90, 90, 90, 80, 80, 80, 80, 80].map((a, i) => on(i + 1, a)));
+    expect(worse.change).toBe(-10);
+  });
+});
+
