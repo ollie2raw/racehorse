@@ -1,6 +1,6 @@
 import type { GhostMoveLogEntry } from '../ghost/service';
 import type { RoomMatchEvent } from '../roomEvents';
-import { generateFullSet } from '../game/engine';
+import { GAME_RULES_VERSION, generateFullSet } from '../game/engine';
 import type { Config } from '../game/types';
 
 /**
@@ -42,6 +42,11 @@ export type MultiplayerRecordDraft = {
   players: string[];
   /** The rules the game was played under, needed to replay it. */
   config: Config;
+  /**
+   * Which version of the game's rules produced this record (`GAME_RULES_VERSION`). A replay under different rules would land on different scores, so a record
+   * from an older rules version is refused with its own reason rather than flagged as a mismatch. Records saved before this field existed have none, and mean 1.
+   */
+  rulesVersion?: number;
   hands: RecordedHand[];
   finalScores: Record<string, number>;
   winnerId: string | null;
@@ -146,5 +151,5 @@ export function deriveMultiplayerRecord(input: DeriveInput): DeriveResult {
     }
   }
 
-  return { ok: true, record: { players: [...players], config: input.config, hands, finalScores, winnerId } };
+  return { ok: true, record: { players: [...players], config: input.config, rulesVersion: GAME_RULES_VERSION, hands, finalScores, winnerId } };
 }

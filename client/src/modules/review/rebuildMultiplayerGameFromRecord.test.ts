@@ -40,6 +40,21 @@ describe('rebuildMultiplayerGameFromRecord', () => {
     expect(ids()).toEqual(ids());
   });
 
+  it('treats a record with no rules version (saved before the field existed) as version 1, and accepts an explicit 1', () => {
+    const none = good();
+    expect(none.record.rulesVersion).toBeUndefined();
+    expect(rebuildMultiplayerGameFromRecord(none)).toMatchObject({ ok: true });
+    const one = good();
+    one.record = { ...one.record, rulesVersion: 1 };
+    expect(rebuildMultiplayerGameFromRecord(one)).toMatchObject({ ok: true });
+  });
+
+  it('refuses a game saved under a different version of the rules, and says so', () => {
+    const saved = good();
+    saved.record = { ...saved.record, rulesVersion: 2 };
+    expect(rebuildMultiplayerGameFromRecord(saved)).toMatchObject({ ok: false, reason: 'not_replayable', detail: expect.stringMatching(/version 2 of the rules/) });
+  });
+
   it('refuses a record with no hands', () => {
     const saved = good();
     saved.record = { ...saved.record, hands: [] };

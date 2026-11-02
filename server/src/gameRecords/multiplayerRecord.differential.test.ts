@@ -184,6 +184,19 @@ describe('the pure replay does not trust a record that does not add up', () => {
     expect(reasonOf(replayMultiplayerRecord(rec))).not.toBe('ok');
   });
 
+  it('a record made under a different version of the rules is refused with its own reason, not reported as a score mismatch', async () => {
+    const newer = await goodRecord();
+    newer.rulesVersion = 2;
+    expect(reasonOf(replayMultiplayerRecord(newer))).toBe('unsupported_rules_version:2');
+  });
+
+  it('a record with no rules version (saved before the field existed) means version 1', async () => {
+    const rec = await goodRecord();
+    expect(rec.rulesVersion).toBe(1); // new records are stamped
+    delete rec.rulesVersion;
+    expect(reasonOf(replayMultiplayerRecord(rec))).toBe('ok');
+  });
+
   it('never throws on garbage', () => {
     expect(replayMultiplayerRecord({ players: ['a', 'b'], config: CFG, hands: [{ handNumber: 1, starterId: 'a', deals: {}, actions: [], drawn: [], endScores: null }], finalScores: {}, winnerId: null }).ok).toBe(false);
     expect(replayMultiplayerRecord({ players: ['a', 'b'], config: CFG, hands: [], finalScores: {}, winnerId: null }).ok).toBe(false);

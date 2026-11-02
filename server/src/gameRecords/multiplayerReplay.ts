@@ -1,4 +1,5 @@
 import {
+  GAME_RULES_VERSION,
   applyMove,
   canDraw,
   createInitialState,
@@ -63,6 +64,9 @@ const scoresOf = (state: GameState): Record<string, number> => Object.fromEntrie
 const sameScores = (a: Record<string, number>, b: Record<string, number>) => a && b && Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((k) => a[k] === b[k]);
 
 export function replayMultiplayerRecord(record: MultiplayerRecordDraft): ReplayResult {
+  // A record from a different rules version cannot be replayed faithfully; say so instead of reporting a score mismatch. No field means version 1.
+  const rulesVersion = record.rulesVersion ?? 1;
+  if (rulesVersion !== GAME_RULES_VERSION) return { ok: false, reason: `unsupported_rules_version:${rulesVersion}` };
   try {
     const full = generateFullSet(record.config.maxPips);
     let state = createInitialState(record.players, record.config);
