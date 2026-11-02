@@ -8,7 +8,6 @@
  */
 
 const homeImage = '/homeOG.png';
-const defaultImage = '/dailypuzzleHOMEBG.png';
 export const PRERENDER_ROUTES = [
   {
     path: '/',
@@ -32,7 +31,7 @@ export const PRERENDER_ROUTES = [
     description: 'Practice Racehorse Dominoes against Fritz, sharpen your decisions, and build your game.',
     heading: 'Single Player',
     body: 'Choose a solo mode and sharpen your Racehorse Dominoes strategy.',
-    image: '/dailyfritznew.png',
+    image: '/og-play-vs-fritz.png',
   },
   {
     path: '/journey',
@@ -40,7 +39,7 @@ export const PRERENDER_ROUTES = [
     description: 'Progress through structured Racehorse Dominoes challenges designed to build stronger strategic play.',
     heading: 'Racehorse Journey',
     body: 'Progress through focused challenges and build a stronger game.',
-    image: defaultImage,
+    image: '/og-journey.png',
   },
   {
     path: '/learn',
@@ -48,7 +47,7 @@ export const PRERENDER_ROUTES = [
     description: 'Learn Racehorse Dominoes through guided play, practical lessons, and focused position drills.',
     heading: 'Learn Racehorse Dominoes',
     body: 'Build your game with guided lessons, match coaching, and position drills.',
-    image: defaultImage,
+    image: '/og-learn.png',
   },
   {
     path: '/tournament',
@@ -56,7 +55,7 @@ export const PRERENDER_ROUTES = [
     description: 'Create or join a Racehorse Dominoes tournament and compete through a full round-robin table.',
     heading: 'Racehorse Tournaments',
     body: 'Create or join a tournament and compete through the full table.',
-    image: defaultImage,
+    image: '/og-tournament.png',
   },
   {
     path: '/multiplayer',
@@ -64,7 +63,7 @@ export const PRERENDER_ROUTES = [
     description: 'Play competitive Racehorse Dominoes online against other players.',
     heading: 'Racehorse Multiplayer',
     body: 'Find an opponent and play competitive Racehorse Dominoes online.',
-    image: homeImage,
+    image: '/og-multiplayer.png',
   },
   {
     path: '/multiplayer/private',
@@ -73,7 +72,7 @@ export const PRERENDER_ROUTES = [
     description: 'Create or join a private Racehorse Dominoes room and play with friends.',
     heading: 'Private Racehorse Match',
     body: 'Create a private room or join a friend with a room code.',
-    image: homeImage,
+    image: '/og-multiplayer.png',
   },
   {
     path: '/solo/fritz',
@@ -82,7 +81,7 @@ export const PRERENDER_ROUTES = [
     description: 'Choose a Fritz difficulty and play a strategic solo Racehorse Dominoes match.',
     heading: 'Play vs Fritz',
     body: 'Choose your Fritz difficulty and deal size, then start a solo match.',
-    image: '/dailyfritznew.png',
+    image: '/og-play-vs-fritz.png',
   },
   {
     path: '/solo/ghost',
@@ -91,7 +90,7 @@ export const PRERENDER_ROUTES = [
     description: 'Challenge a Racehorse Dominoes ghost modeled on another player’s decisions.',
     heading: 'Ghost Mode',
     body: 'Choose a player ghost and test your strategy against their style.',
-    image: homeImage,
+    image: '/og-ghost-mode.png',
   },
   {
     path: '/social',
@@ -126,7 +125,7 @@ export const PRERENDER_ROUTES = [
     description: 'Learn the rules, scoring, and core strategy of Racehorse Dominoes.',
     heading: 'How to Play Racehorse Dominoes',
     body: 'Learn Racehorse scoring, turns, draws, and the decisions that shape each hand.',
-    image: homeImage,
+    image: '/og-learn.png',
   },
   {
     path: '/tournament/detail',
@@ -135,7 +134,7 @@ export const PRERENDER_ROUTES = [
     description: 'View a Racehorse Dominoes tournament table, players, and match schedule.',
     heading: 'Racehorse Tournament',
     body: 'View the tournament table, players, and match schedule.',
-    image: homeImage,
+    image: '/og-tournament.png',
   },
   {
     path: '/tournament/result',
@@ -144,7 +143,7 @@ export const PRERENDER_ROUTES = [
     description: 'View the result of a Racehorse Dominoes tournament match.',
     heading: 'Tournament Match Result',
     body: 'Review the completed tournament match result.',
-    image: homeImage,
+    image: '/og-tournament.png',
   },
   {
     path: '/settings',

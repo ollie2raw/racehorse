@@ -73,9 +73,10 @@ Then:
    <link rel="icon" href="/favicon.ico" sizes="48x48" />
    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
-   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
    ```
-   (today it uses `icon-192.png` for both icon and apple-touch-icon).
+   (The apple-touch-icon link is already in `index.html` as of 2026-11-02, pointing at an interim 180px file made from the current `icon-512.png`; running the
+   generator overwrites that same path with the final artwork, so only the favicon lines remain to be switched.)
 3. `npm run build:ios`, open Xcode, check the asset catalog shows no warnings,
    run on a device: launch screen is navy with the mark, no white flash.
 4. Commit the generated files together with the `index.html` change.
