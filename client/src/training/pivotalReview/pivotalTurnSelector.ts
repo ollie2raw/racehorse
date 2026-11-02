@@ -3,7 +3,7 @@ import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import type { AnalyzedMove, GameAnalysis } from '../../analyzer/moveAnalyzer';
 import type { ConsequenceChain } from '../../analyzer/analysisTypes';
 import type { MoveEntry } from '../../game/moveLogger';
-import { lossBandLabelForEvaluation, type LossBandLabel } from '../../analyzer/gameAccuracyModel';
+import { presentedLabelForEvaluation, type PresentedLabel } from '../../analyzer/gameAccuracyModel';
 
 export type PivotalTurnPhase = 'opening' | 'midgame' | 'endgame';
 
@@ -13,7 +13,7 @@ export type PivotalTurnCandidate = {
   moveNumber: number;
   playerMoveIndex: number;
   evaluation: ReviewEvaluationV1;
-  rating: LossBandLabel | null;
+  rating: PresentedLabel | null;
   scoreYou: number;
   scoreOpp: number;
   phase: PivotalTurnPhase;
@@ -75,7 +75,7 @@ export function selectPivotalTurns(
     const score = buildScoreStateAtMove(moveLog, move.moveNumber);
     eligible.push({
       moveNumber: move.moveNumber, playerMoveIndex, evaluation, move,
-      rating: lossBandLabelForEvaluation(evaluation),
+      rating: presentedLabelForEvaluation(evaluation),
       scoreYou: score.you, scoreOpp: score.opp,
       phase: resolvePhase(playerMoveIndex, playerMoves.length, Math.max(score.you, score.opp), options.winningScore ?? 60),
       consequence: analysis.consequenceByMoveNumber[move.moveNumber],

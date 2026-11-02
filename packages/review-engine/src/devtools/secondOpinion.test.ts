@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { replayRecordedSelfPlay } from './replayRecordedSelfPlay';
 import { rolloutGain, sampleAllocations } from '../rolloutValue';
+import { adaptiveEvaluateReviewPosition } from '../adaptiveEvaluateReviewPosition';
 import { computeSecondOpinion, SECOND_OPINION_BEST_MARGIN, SECOND_OPINION_TIER } from '../secondOpinion';
 
 const CORPUS = resolve(dirname(fileURLToPath(import.meta.url)), '../../fixtures/recorded-self-play');
@@ -62,5 +63,27 @@ describe('computeSecondOpinion', () => {
   it('declines when too few consistent hands exist', () => {
     const { snapshot, evaluation } = errors[0]!;
     expect(computeSecondOpinion(snapshot, evaluation, { samples: 3 })).toBeNull();
+  });
+});
+
+describe('second opinion in the production escalation', () => {
+  const sample = searchable.slice(0, 5);
+
+  it('is attached by the completion pass to a scored search decision, and agrees with computeSecondOpinion', () => {
+    let attached = 0;
+    for (const { snapshot } of sample) {
+      const result = adaptiveEvaluateReviewPosition(snapshot, { phase: 'completion', startTier: 2, maxTier: 2 });
+      if (result.lifecycle !== 'SCORED' || result.evaluation.evidence.source !== 'search') continue;
+      expect(result.evaluation.secondOpinion).toEqual(computeSecondOpinion(snapshot, result.evaluation));
+      if (result.evaluation.secondOpinion) attached += 1;
+    }
+    expect(attached).toBeGreaterThan(0);
+  });
+
+  it('is left off the live pass', () => {
+    for (const { snapshot } of sample) {
+      const result = adaptiveEvaluateReviewPosition(snapshot, { phase: 'live', startTier: 1, maxTier: 1 });
+      expect(result.evaluation.secondOpinion).toBeUndefined();
+    }
   });
 });

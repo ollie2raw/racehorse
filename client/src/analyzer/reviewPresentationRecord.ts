@@ -3,7 +3,7 @@ import {
   classifyHeuristicResult,
   type HeuristicClassification,
 } from './classifyHeuristicResult';
-import { lossBandLabelForEvaluation } from './gameAccuracyModel';
+import { lossBandLabelForEvaluation, presentedLabelForEvaluation } from './gameAccuracyModel';
 import type { ReviewCoachingFacts } from './reviewCoachingFacts';
 
 /**
@@ -19,6 +19,8 @@ export type ReviewPresentationRecord = {
   readonly evidenceSource: ReviewEvaluationV1['evidence']['source'] | null;
   readonly contested: boolean;
   readonly playedMatchesPrimary: boolean;
+  /** The whole-hand second opinion did not confirm the verdict, so `classification` is one grade softer than the loss band. */
+  readonly softenedBySecondOpinion?: boolean;
 };
 
 function actionsEqual(a: ReviewAction, b: ReviewAction): boolean {
@@ -67,7 +69,7 @@ export function buildReviewPresentationRecord(
     // contradictions and false "Good" when fixtures set best === played.
     classification = classifyHeuristicResult(evaluation);
   } else {
-    const label = lossBandLabelForEvaluation(evaluation);
+    const label = presentedLabelForEvaluation(evaluation);
     classification = label ? { kind: 'calibrated', label } : { kind: 'forced' };
   }
 
@@ -89,6 +91,10 @@ export function buildReviewPresentationRecord(
     evidenceSource,
     contested,
     playedMatchesPrimary,
+    ...(evidenceSource !== 'heuristic' && evaluation.secondOpinion?.verdict === 'unconfirmed' && classification?.kind === 'calibrated'
+      && classification.label !== lossBandLabelForEvaluation(evaluation)
+      ? { softenedBySecondOpinion: true }
+      : {}),
   };
 }
 
@@ -102,7 +108,9 @@ export function assertPresentationConsistency(
   const headline = coachingHeadline ?? '';
 
   if (record.playedMatchesPrimary) {
-    if (label === 'Mistake' || label === 'Blunder' || label === 'Inaccuracy' || label === 'Good') {
+    // A "Best" the second opinion did not confirm is shown as Good on purpose; that is the only way a matching move is not Best.
+    const softenedBest = record.softenedBySecondOpinion === true && label === 'Good';
+    if (!softenedBest && (label === 'Mistake' || label === 'Blunder' || label === 'Inaccuracy' || label === 'Good')) {
       violations.push('played matches primary reference but classification is a severity label');
     }
     if (/\b(weakest|significant miss|meaningful miss|costliest|noticeably weaker|major miss)\b/i.test(headline)) {

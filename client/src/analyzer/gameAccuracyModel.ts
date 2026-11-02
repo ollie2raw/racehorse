@@ -31,6 +31,38 @@ export function lossBandLabel(
   return 'Blunder';
 }
 
+/** A loss-band label as PRESENTED: the four bands plus the milder `Good` a verdict softens to when the second opinion does not confirm it. */
+export type PresentedLabel = LossBandLabel | 'Good';
+
+/**
+ * One grade softer, the way chess.com gives the milder grade when its engine is unsure instead of an accusation (or a "Best") it cannot
+ * back. Inaccuracy -> Good, Mistake and Blunder -> Inaccuracy, Best -> Good.
+ */
+const SOFTER_LABEL: Readonly<Record<LossBandLabel, PresentedLabel>> = {
+  Best: 'Good',
+  Inaccuracy: 'Good',
+  Mistake: 'Inaccuracy',
+  Blunder: 'Inaccuracy',
+};
+
+/**
+ * The label to SHOW. Equal to the loss-band label unless the whole-hand second opinion (docs/review-quality-baseline-2026-11-02.md
+ * section 7) did not confirm the verdict, in which case it is one grade softer. The loss, the bands and the accuracy number are
+ * unchanged: this only moves what the player is told. A verdict of a different kind than the label (an error opinion on a move whose
+ * loss is within the Best tolerance) is not softened.
+ */
+export function presentedLabelForEvaluation(
+  evaluation: ReviewEvaluationV1,
+  boundaries: CalibratedLossBandBoundaries = LOSS_BAND_BOUNDARIES,
+): PresentedLabel | null {
+  const label = lossBandLabelForEvaluation(evaluation, boundaries);
+  if (!label) return null;
+  const opinion = evaluation.secondOpinion;
+  if (!opinion || opinion.verdict !== 'unconfirmed') return label;
+  const applies = opinion.kind === 'best' ? label === 'Best' : label !== 'Best';
+  return applies ? SOFTER_LABEL[label] : label;
+}
+
 /**
  * Spec section 4a: labels only apply to scorable decisions -- a forced
  * (action-level) or heuristic-only decision gets no loss-band label.

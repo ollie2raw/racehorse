@@ -186,6 +186,11 @@ export type ReviewCoachingFacts = {
    * value as `best` in the oracle-referenced cases, so nothing new to add).
    */
   readonly oracleMove?: { readonly action: ReviewAction; readonly immediatePoints: number };
+  /**
+   * Set when the whole-hand second opinion did not confirm this decision's verdict (`evaluation.secondOpinion`). Prose then must not
+   * state the severity, or "Best move", as settled; the label is shown one grade softer (see `presentedLabelForEvaluation`).
+   */
+  readonly secondOpinionUnconfirmed?: 'error' | 'best';
   /** Ranked (largest |delta| first) positional-feature deltas, played vs. `best`. Present only when a snapshot was supplied. */
   readonly featureDeltas?: readonly ReviewFeatureDelta[];
   readonly prose?: ReviewCoachingProse;
@@ -330,6 +335,19 @@ export function buildReviewCoachingFacts(
   evaluation: ReviewEvaluationV1,
   snapshot?: ReviewPositionSnapshotV2,
   enablePositionalExplanations: boolean = false,
+): ReviewCoachingFacts {
+  const facts = buildBaseReviewCoachingFacts(evaluation, snapshot, enablePositionalExplanations);
+  // Added on both paths (positional explanations on or off); absent unless the second opinion did not confirm the verdict, so the
+  // default facts shape is unchanged for every decision without one.
+  return evaluation.secondOpinion?.verdict === 'unconfirmed'
+    ? { ...facts, secondOpinionUnconfirmed: evaluation.secondOpinion.kind }
+    : facts;
+}
+
+function buildBaseReviewCoachingFacts(
+  evaluation: ReviewEvaluationV1,
+  snapshot: ReviewPositionSnapshotV2 | undefined,
+  enablePositionalExplanations: boolean,
 ): ReviewCoachingFacts {
   const { played, best: oracleBest, evidence, candidates, loss } = evaluation;
   if (candidates.length === 0) {
