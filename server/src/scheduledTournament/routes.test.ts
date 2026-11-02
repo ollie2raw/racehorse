@@ -35,6 +35,7 @@ vi.mock('../platform/auth/supabaseAuth', () => ({
     const result = (await mocks.supabaseFetch()) as { id?: string } | null;
     return result && typeof result.id === 'string' ? result.id : null;
   },
+  isGuestBearerToken: async () => false,
 }));
 
 vi.mock('./persistence', async () => {

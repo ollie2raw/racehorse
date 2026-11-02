@@ -39,7 +39,7 @@ vi.mock('../supabaseUtils', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../supabaseUtils')>()),
   supabaseFetch: vi.fn(async () => []),
 }));
-vi.mock('../platform/auth/supabaseAuth', () => ({ verifyBearerToken: async () => {
+vi.mock('../platform/auth/supabaseAuth', () => ({ isGuestBearerToken: async () => false, verifyBearerToken: async () => {
   if (mocks.authThrows) throw new Error(DB_TEXT_HOISTED);
   return mocks.authUser;
 } }));

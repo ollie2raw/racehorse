@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('../platform/auth/supabaseAuth', () => ({
   verifyBearerToken: async (token: string | null | undefined) => (/^[0-9a-f-]{36}$/i.test(token ?? '') ? token! : null),
+  isGuestBearerToken: async () => false,
 }));
 vi.mock('../supabaseUtils', () => ({
   isSupabaseTimeoutError: () => false,
