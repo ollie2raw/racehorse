@@ -233,12 +233,25 @@ test.describe('phone landscape routes by tile count (one straight tile, then the
     const g = await measureBoard(page);
     expect(routes(g)).toEqual(['arm0:V1H7:right', 'arm1:V1H7:right']);
     // Two-tile routing with flat-padded bounds fitted this board at 0.14 (11.8px tiles). One-tile routing with
-    // exact drop-zone bounds, kept clear of the controls tray and corner pills (tiles AND drop zones: a valid
-    // placement must stay tappable), fits it at 0.21 (17.6px): this fixture is a worst case, so it sits a hair
-    // under the 18px floor; the corpus median is well above it (docs/board-camera-baseline.md).
-    expect(g.cameraScale).toBeGreaterThan(0.19);
-    expect(g.cameraScale).toBeCloseTo(0.21, 1);
+    // exact drop-zone bounds, kept clear of the controls tray and the boneyard pill (tiles AND drop zones: a valid
+    // placement must stay tappable), fits it at 0.28 (23.5px) on a phone's browser, the same as the installed app: the
+    // browser gets the app's compact in-game layout (utils/webPhoneClass.ts), a 250px board where the roomy layout had 204px
+    // (docs/board-camera-baseline.md).
+    expect(g.cameraScale).toBeGreaterThan(0.26);
+    expect(g.cameraScale).toBeCloseTo(0.28, 1);
     expect(g.intersectsExclusion).toEqual([]);
+  });
+
+  test('a desktop browser in a short window keeps the roomy layout and the old fit', async ({ browser }) => {
+    // A mouse has hover and a fine pointer, so it is not a phone: nothing about its layout changes.
+    const context = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: false, hasTouch: false });
+    const page = await context.newPage();
+    await openRoutingHarness(page, 'fixture=longBoth');
+    const g = await measureBoard(page);
+    expect(await page.evaluate(() => document.documentElement.classList.contains('rh-web-phone'))).toBe(false);
+    expect(g.cameraScale).toBeCloseTo(0.21, 1);
+    expect(g.container.height).toBeLessThan(215);
+    await context.close();
   });
 
   test('a medium chain turns after one tile on the phone only', async ({ page }) => {

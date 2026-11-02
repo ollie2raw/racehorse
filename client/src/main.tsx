@@ -34,6 +34,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { consumeSupabaseRecoveryHash } from './auth/recoveryHash';
 import { AuthProvider } from './auth/useAuth';
 import { installGlobalErrorHandlers } from "./debug/globalErrors";
+import { installWebPhoneClass } from './utils/webPhoneClass';
 import { markAppLoadSuccessful } from './debug/moduleImportRecovery';
 import { reportWebVitals } from './debug/reportWebVitals';
 import { migrateLegacyHashRoute } from './routing/legacyHashRoute';
@@ -63,9 +64,10 @@ import './styles/board/index.css';
 import './styles/native-landscape.css';
 import './styles/touch-slop.css';
 
-// Native-shell-only layout rules key off this class, so the web build
-// (including phones in landscape on playracehorse.com) is untouched.
+// Native-shell-only layout rules key off this class. A phone's browser gets the compact in-game layout through its own class
+// (utils/webPhoneClass.ts), set only on a touch-only device in short landscape; desktop browsers are untouched.
 if (Capacitor.isNativePlatform()) document.documentElement.classList.add('rh-native');
+installWebPhoneClass();
 
 {installGlobalErrorHandlers();}
 

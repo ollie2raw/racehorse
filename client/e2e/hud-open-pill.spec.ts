@@ -1,9 +1,9 @@
 /**
  * The OPEN pill on a phone in landscape (components/board/useHudMetaSlot.ts, docs/board-camera-baseline.md).
  *
- * On the installed app the board is height-bound, so the pill is drawn into the HUD row instead of over the board's corner,
- * which gives the camera that room back. In the browser (no `.rh-native`) it stays on the board. Either way it must never sit on
- * top of another HUD element.
+ * On the installed app, and on a phone's browser, the board is height-bound, so the pill is drawn into the HUD row instead of over
+ * the board's corner, which gives the camera that room back. A desktop browser in a short window keeps it on the board. Either way
+ * it must never sit on top of another HUD element.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { openRoutingHarness } from './support/boardGeometry';
@@ -66,12 +66,26 @@ for (const vp of PHONES) {
       expect(s!.overlaps).toEqual([]);
     });
 
-    test('the browser keeps it on the board, as before', async ({ page }) => {
+    test('a phone\'s browser draws it in the HUD row too, clear of everything in it', async ({ page }) => {
+      await openRoutingHarness(page, 'fixture=longBoth');
+      expect(await page.evaluate(() => document.documentElement.classList.contains('rh-web-phone'))).toBe(true);
+      const s = await pillState(page);
+      expect(s).not.toBeNull();
+      expect(s!.inHudSlot).toBe(true);
+      expect(s!.onBoard).toBe(false);
+      expect(s!.pill.bottom).toBeLessThanOrEqual(s!.container.top);
+      expect(s!.overlaps).toEqual([]);
+    });
+
+    test('a desktop browser in a short window keeps it on the board, as before', async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, isMobile: false, hasTouch: false });
+      const page = await context.newPage();
       await openRoutingHarness(page, 'fixture=longBoth');
       const s = await pillState(page);
       expect(s).not.toBeNull();
       expect(s!.inHudSlot).toBe(false);
       expect(s!.onBoard).toBe(true);
+      await context.close();
     });
   });
 }

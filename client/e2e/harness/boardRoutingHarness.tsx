@@ -47,6 +47,11 @@ import { AuthProvider } from '../../src/auth/useAuth';
 import { LiveMatchScreen } from '../../src/match/LiveMatchScreen';
 import type { LiveMatchScreenProps } from '../../src/match/liveMatchScreenTypes';
 import { FIXTURES, armSteps, spinnerWithArms, type FixtureName } from '../../src/components/board/boardRoutingFixtures';
+import { installWebPhoneClass } from '../../src/utils/webPhoneClass';
+
+// What main.tsx does at startup: a phone's browser (a touch-only device, not the installed app) gets the compact in-game layout.
+// The installed app is simulated by the specs, which set `rh-native` themselves; the two never apply together.
+installWebPhoneClass();
 
 // The screen's mount animation (match-board-enter) scales the board container, and
 // the camera fits against its transformed getBoundingClientRect: a fit taken

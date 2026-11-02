@@ -44,7 +44,16 @@ describe('BoardOpenEndsPill HUD slot', () => {
     expect(getByTestId('board').querySelector('.open-ends-pill')).toBeNull();
   });
 
-  it('stays on the board in the browser, even on a short landscape phone', () => {
+  it('is drawn into the HUD slot on a phone\'s browser in short landscape too (the web-phone class)', () => {
+    document.documentElement.classList.add('rh-web-phone');
+    mockViewport(true);
+    const { getByTestId } = renderWithSlot();
+    expect(getByTestId('slot').querySelector('.open-ends-pill')).not.toBeNull();
+    expect(getByTestId('board').querySelector('.open-ends-pill')).toBeNull();
+    document.documentElement.classList.remove('rh-web-phone');
+  });
+
+  it('stays on the board in a desktop browser, even in a short landscape window', () => {
     mockViewport(true);
     const { getByTestId } = renderWithSlot();
     expect(getByTestId('board').querySelector('.open-ends-pill')).not.toBeNull();
