@@ -6,6 +6,7 @@ import {
 } from '../../multiplayer/buildPrivateMatchResult';
 import { emitMpAuthorityFunnel } from '../../multiplayer/mpAuthorityTelemetry';
 import { supabaseFetch } from '../../supabaseUtils';
+import { sendServerError } from '../errors';
 
 export type PrivateMatchResultRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
@@ -108,9 +109,7 @@ export function registerPrivateMatchResultRoutes(
       });
       res.json({ ok: true, result: built.result });
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to load match result.',
-      });
+      sendServerError(res, error, 'Failed to load match result.');
     }
   });
 }

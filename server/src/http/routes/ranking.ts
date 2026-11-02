@@ -2,6 +2,7 @@ import { withRatingCompletion, isRatingCutoverQuiescedError } from '../../rankin
 import type { Application, Request } from 'express';
 import { setPublicShortCache } from './cacheControl';
 import type { ProfileRow } from '../../supabaseTypes';
+import { sendServerError } from '../errors';
 
 export type RankingRouteDeps = {
   supabaseFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -89,9 +90,7 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
         currentWinStreak,
       });
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to load ranking profile.',
-      });
+      sendServerError(res, error, 'Failed to load ranking profile.');
     }
   });
 
@@ -159,9 +158,7 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
         rd: Number(profile.glicko_rd ?? DEFAULT_RD),
       });
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to load rating history.',
-      });
+      sendServerError(res, error, 'Failed to load rating history.');
     }
   });
 
@@ -188,9 +185,7 @@ export function registerRankingRoutes(app: Application, deps: RankingRouteDeps):
         res.status(503).json({ error: 'rating_cutover_quiesced' });
         return;
       }
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to process rating period.',
-      });
+      sendServerError(res, error, 'Failed to process rating period.');
     }
   });
 }
