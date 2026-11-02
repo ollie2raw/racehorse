@@ -15,3 +15,4 @@ export declare function legalPlaceholdersOutstanding(config?: LegalConfig): Lega
 export declare function legalText(key: LegalConfigKey, config?: LegalConfig): string;
 export declare function supportEmailAddress(config?: LegalConfig): string | null;
 export declare function posthogDerivesLocation(config?: LegalConfig): boolean;
+export declare function guestPlayDisclosed(env?: Record<string, unknown>): boolean;

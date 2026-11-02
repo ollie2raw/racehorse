@@ -23,7 +23,7 @@
  * Shape: each section is a heading plus blocks. A string block is a
  * paragraph; an array block is a bulleted list.
  */
-import { legalText, posthogDerivesLocation } from './legalConfig.mjs';
+import { guestPlayDisclosed, legalText, posthogDerivesLocation } from './legalConfig.mjs';
 
 const operator = legalText('LEGAL_ENTITY_NAME');
 const supportEmail = legalText('SUPPORT_EMAIL');
@@ -39,7 +39,7 @@ const analyticsLocationSentence = posthogDerivesLocation()
   ? 'When analytics events reach PostHog, PostHog may work out an approximate location, such as your country, region or city, from your IP address.'
   : 'PostHog is set to discard IP addresses, so analytics does not work out your location.';
 
-export const PRIVACY_POLICY = {
+const PRIVACY_POLICY_BASE = {
   id: 'privacy',
   eyebrow: 'Legal',
   title: 'Privacy Policy',
@@ -188,6 +188,39 @@ export const PRIVACY_POLICY = {
     },
   ],
 };
+
+/**
+ * What the policy adds once guest play exists (docs/guest-play-design.md). Each sentence is true of the code: the guest account is a Supabase anonymous
+ * session (no email, no password); games attach to its user id and become the account's when it is upgraded; guests are kept off leaderboards and out of
+ * tournaments by the server (server/src/guests/guestEligibility.ts, tournament routes); the server removes guests idle for 30 days
+ * (server/src/guests/guestCleanup.ts). If one of those changes, this copy has to change with it.
+ */
+const GUEST_COLLECTION_BLOCKS = [
+  'If you play as a guest, without an account:',
+  [
+    'Racehorse creates an anonymous guest account for you: a random identifier, with no email address and no password.',
+    'Your games, streak and history are saved to that guest account, the same way they are for any account. They stay on it until you create an account, when they become part of your account, or until the guest account is removed.',
+    'Your guest session is kept on your device. If you clear your browser data or delete the app, you lose access to it and to the games saved on it.',
+    'Guests do not appear on leaderboards and cannot enter tournaments.',
+  ],
+];
+const GUEST_RETENTION_BLOCK =
+  'Guest accounts with no activity for 30 days are deleted automatically, together with the games saved to them. Creating an account before then keeps them.';
+
+/** The Privacy Policy, with the guest-account paragraphs only when guest play is on. Pure: the base document is never changed. */
+export function privacyPolicy(guestPlay) {
+  if (!guestPlay) return PRIVACY_POLICY_BASE;
+  return {
+    ...PRIVACY_POLICY_BASE,
+    sections: PRIVACY_POLICY_BASE.sections.map((section) => {
+      if (section.id === 'what-we-collect') return { ...section, blocks: [...GUEST_COLLECTION_BLOCKS, ...section.blocks] };
+      if (section.id === 'retention') return { ...section, blocks: [...section.blocks, GUEST_RETENTION_BLOCK] };
+      return section;
+    }),
+  };
+}
+
+export const PRIVACY_POLICY = privacyPolicy(guestPlayDisclosed());
 
 export const TERMS_OF_USE = {
   id: 'terms',
