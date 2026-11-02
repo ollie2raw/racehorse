@@ -2110,18 +2110,22 @@
      Design-handoff §3 at 844×390: HUD 48–56px, board ~205–225px, hand
      tiles 74×38. The existing short-landscape rules in match-live-theme.css
      are long !important chains, so these mirror that selector with
-     .rh-native in front. Presentation only — no gameplay logic. */
+     .rh-native in front. Presentation only — no gameplay logic.
+
+     `.rh-web-phone` (a phone's browser, set by utils/webPhoneClass.ts) gets the same compact match
+     layout as the installed app in this block: the board is height-bound there too, and without it a
+     phone's browser had a 204px board against the app's 250px (docs/board-camera-baseline.md). */
 
   /* The shell behind the match was a lighter navy than the match surface,
      which showed as bands beside the camera cutout. */
-  .rh-native .app.rh-presentation.rh-presentation--gameplay {
+  :is(.rh-native, .rh-web-phone) .app.rh-presentation.rh-presentation--gameplay {
     background: #04070c;
   }
 
   /* HUD row */
   /* Fixed 420/121/220px columns overflowed the 730px safe width and
      pushed the YOU chip off-screen. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) !important;
     column-gap: 10px !important;
     min-height: 0 !important;
@@ -2130,8 +2134,8 @@
     align-items: center !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-pill,
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-pill {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-pill,
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-pill {
     min-width: 0 !important;
     min-height: 0 !important;
     height: 36px !important;
@@ -2139,22 +2143,22 @@
     border-radius: 10px !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-label {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-label {
     font-size: 11px !important;
     letter-spacing: 0.12em !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-score {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-score {
     font-size: 18px !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack {
     height: 32px !important;
     padding: 0 2px !important;
     gap: 3px !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack__tile {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack__tile {
     width: 12px !important;
     height: 18px !important;
     border-radius: 3px !important;
@@ -2162,14 +2166,14 @@
 
   /* Opponent rack: at most 9 tiles, then "+N" — the extras ran under the
      turn pill. (The web shows every tile; its badge stays hidden.) */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack__tile:nth-of-type(n + 10) {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack__tile:nth-of-type(n + 10) {
     display: none !important;
   }
 
   /* Centred both ways: flex centring for the vertical, and the 0.18em
      tracking also trails the last letter, so pad the left by the same
      amount to balance it. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-turn {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-turn {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -2185,17 +2189,17 @@
      container into the HUD grid so the pill keeps the centre column and the
      scrubber centres in the gap between the pill and the YOU chip (the
      margin reserves the chip's width inside the shared right column). */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail > .rh-hud-center {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail > .rh-hud-center {
     display: contents !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail .rh-hud-turn {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail .rh-hud-turn {
     grid-column: 2;
     grid-row: 1;
     justify-self: center;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail .rh-scrubber--docked {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail .rh-scrubber--docked {
     position: static !important;
     grid-column: 3;
     grid-row: 1;
@@ -2206,26 +2210,26 @@
     transform: none !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail > .bot-hud-right-cluster {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail > .bot-hud-right-cluster {
     grid-column: 3;
     grid-row: 1;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail > .bot-hud-left-cluster {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail > .bot-hud-left-cluster {
     grid-column: 1;
     grid-row: 1;
   }
 
   /* Board overlays: small stacked chips top-right, slim control rail. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .bot-hud-left-cluster {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .bot-hud-left-cluster {
     justify-self: start !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .bot-hud-right-cluster {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .bot-hud-right-cluster {
     justify-self: end !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .board-corner-pill {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .board-corner-pill {
     min-height: 0 !important;
     min-width: 0 !important;
     width: auto !important;
@@ -2236,7 +2240,7 @@
 
   /* Boneyard over Open, stacked in the top-right corner; the rail sits
      right under them on the same right edge. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-meta-bar {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-meta-bar {
     top: 10px !important;
     right: 10px !important;
     flex-direction: column-reverse !important;
@@ -2244,47 +2248,47 @@
     gap: 6px !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls {
     top: 80px !important;
     right: 10px !important;
     bottom: auto !important;
   }
 
   /* Online HUD: centre items in the bar like Play vs Fritz (a no-op there)… */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail {
     align-items: center !important;
   }
 
   /* …and gave the pills stray margins (8px) that Fritz's don't have. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail .rh-hud-pill,
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail .rh-hud-turn {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail .rh-hud-pill,
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail .rh-hud-turn {
     margin: 0 !important;
   }
 
   /* Online adds a reactions button to the rail (5 visible): start it
      higher so it still ends inside the board. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls:has(.rr-root) {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls:has(.rr-root) {
     top: 74px !important;
     gap: 2px !important;
   }
 
   /* A two-row hand leaves a ~190px board: tighten chips + rail to fit. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-meta-bar {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-meta-bar {
     top: 8px !important;
     gap: 4px !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .board-corner-pill {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .board-corner-pill {
     height: 24px !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-controls {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-controls {
     top: 62px !important;
     gap: 1px !important;
     padding: 3px !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-control-btn {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-control-btn {
     width: 23px !important;
     height: 23px !important;
   }
@@ -2292,13 +2296,13 @@
   /* Pre-game draw: the scattered face-down tiles are sized for desktop and
      pile on each other here. \`scale\` shrinks each around its own centre and
      composes with the slot's rotate transform, so the scatter keeps its shape. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .pre-game-draw-board__tile-slot {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .pre-game-draw-board__tile-slot {
     scale: 0.6;
   }
 
   /* One slim vertical rail on the right edge (mockup): zoom −/+, sound,
      leave. Fullscreen is meaningless in the app — it is already fullscreen. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls {
     flex-direction: column !important;
     gap: 4px !important;
     width: auto !important;
@@ -2307,13 +2311,13 @@
     border-radius: 18px !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-control-btn {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-control-btn {
     width: 28px !important;
     height: 28px !important;
     border-radius: 50% !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-control-btn[aria-label$='fullscreen'] {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-control-btn[aria-label$='fullscreen'] {
     display: none !important;
   }
 
@@ -2321,7 +2325,7 @@
      ("FRITZ IS THINKING…", 185px) starts at x=241, so a full strip ran under it. Wrap the pill to two lines inside 150px, as the
      844px web layout does, at a fixed 36px so its height is the same in every state. 740px+ is unchanged. */
   @media (max-width: 700px) {
-    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-turn {
+    :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-turn {
       white-space: normal !important;
       max-width: 128px !important;
       height: 36px !important;
@@ -2335,9 +2339,9 @@
      (four buttons, ~170px) a vertical rail under the chips ran 22px past the bottom of the board at 844x390 and cut off the home
      button. Lay it out as a row in the bottom-right corner instead (~160x36), clear of the chips and the play area. */
   @media (max-height: 430px) {
-    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls,
-    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls:has(.rr-root),
-    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-controls {
+    :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls,
+    :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls:has(.rr-root),
+    :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-controls {
       flex-direction: row !important;
       top: auto !important;
       bottom: 8px !important;
@@ -2350,7 +2354,7 @@
 
   /* A two-row hand leaves a ~177px board on every phone height: the 28px-button rail (four 44px steps, 170px) cannot be a column
      under the chips there, so it is the same bottom-right row as on 375px-tall phones. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-controls {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-controls {
     flex-direction: row !important;
     top: auto !important;
     bottom: 8px !important;
@@ -2369,7 +2373,7 @@
 
   /* Rack tiles: 75x36 look, ~75x44 target (5px slop x 0.82 zoom = 4px each side); rows 8px apart so the two rows' targets meet
      exactly instead of overlapping. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-row .domino-tile::before {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-row .domino-tile::before {
     content: '';
     position: absolute;
     left: 0;
@@ -2378,17 +2382,17 @@
     bottom: -4.5px;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-container.is-stacked {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-container.is-stacked {
     gap: 8px !important;
   }
 
   /* Score cards (buttons): 36px tall -> 44px. They clip their contents, so the slop needs overflow visible. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail button.score-card {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail button.score-card {
     overflow: visible !important;
   }
 
   /* match-live-theme.css blanks this pseudo with `content: none !important`; the override has to match it. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail button.score-card::after {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-hud-rail button.score-card::after {
     content: '' !important;
     position: absolute;
     left: 0;
@@ -2399,11 +2403,11 @@
 
   /* Boneyard chip (tap to draw): 24px tall -> 44pt+. The board container clips the slop above the chip (~5px of 12 is lost in the
      real WKWebView, measured in the simulator), so more goes below; the OPEN chip underneath is 18px clear of the 16px slop. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .boneyard-pill {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .boneyard-pill {
     position: relative !important; /* another rule forces static, which anchored the slop to the whole meta bar (OPEN chip included) */
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .boneyard-pill::after {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .boneyard-pill::after {
     content: '';
     position: absolute;
     left: 0;
@@ -2412,25 +2416,25 @@
     bottom: -16px;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-meta-bar,
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-meta-bar {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-meta-bar,
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-meta-bar {
     gap: 18px !important;
   }
 
   /* Board controls (zoom -/+, mute, leave game): 28px buttons on a 44px pitch (16px gaps), each with a 44x44 hit area. Leave game
      used to sit 3px from Mute. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-controls {
     gap: 16px !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-control-btn,
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-control-btn {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-control-btn,
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen):has(.has-multiple-rows) .rh-board-control-btn {
     position: relative;
     width: 28px !important;
     height: 28px !important;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-control-btn::after {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-control-btn::after {
     content: '';
     position: absolute;
     inset: -8px;
@@ -2438,12 +2442,12 @@
 
   /* Move-history scrubber: the chevrons are 44x44 but their boxes are pulled 10px under the (non-interactive) readout, which
      painted over 2px of them. Keep them on top; the 26px LIVE chip gets invisible slop up to 44pt tall. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-step.rh-btn {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-step.rh-btn {
     position: relative;
     z-index: 1;
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live.rh-btn {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live.rh-btn {
     position: relative;
     z-index: 1;
   }
@@ -2452,18 +2456,18 @@
      the opponent score card, so while viewing a past move it overlapped both. The chip drops its decorative pulse dot and "+N"
      count (aria-hidden; the accessible name still says "Back to live, N new moves") and tightens its padding, recovering ~30pt. */
   @media (max-width: 700px) {
-    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live.rh-btn {
+    :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live.rh-btn {
       margin-left: 2px;
       padding: 0 8px;
     }
 
-    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live .rh-scrubber-dot,
-    .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live .rh-scrubber-live-count {
+    :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live .rh-scrubber-dot,
+    :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live .rh-scrubber-live-count {
       display: none;
     }
   }
 
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live.rh-btn::after {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-scrubber-live.rh-btn::after {
     content: '';
     position: absolute;
     left: -2px;
@@ -2473,12 +2477,12 @@
   }
 
   /* Placement zones (tap an open end to place the selected tile): the board scale made them 38-51 x 19-25px. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .placement-zone {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .placement-zone {
     position: absolute;
   }
 
   /* The board camera scales the zone, so the invisible 44pt box is sized by dividing by that scale. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .placement-zone::after {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .placement-zone::after {
     content: '';
     position: absolute;
     left: 50%;
@@ -2489,34 +2493,34 @@
   }
 
   /* Hand: 74×38 tiles, 8px apart. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-row {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-row {
     gap: 8px !important;
   }
 
   /* A single row sat at the top of the tray (the panel runs on into the
      home-indicator area). Nudge it to the visual middle; transform keeps
      layout and the two-row split untouched. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-container.has-single-row:not(.has-multiple-rows) .hand-row {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-container.has-single-row:not(.has-multiple-rows) .hand-row {
     transform: translateY(12px);
   }
 
   /* Online hands have no per-tile wrapper (Fritz wraps each tile with room
      for its underline), so the single row came out 10px shorter and the
      nudge above pushed it off the bottom. Same row height, same position. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-container.has-single-row:not(.has-multiple-rows) .hand-row {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-container.has-single-row:not(.has-multiple-rows) .hand-row {
     min-height: 47px;
     align-items: flex-start !important;
   }
 
   /* Tile faces are drawn at fixed px from a size prop (42px halves), so
      scale the whole tile: 90×46 → 74×38, face and hit area in proportion. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-row .domino-tile {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .hand-row .domino-tile {
     zoom: 0.82;
   }
 
   /* Puzzle Rush hands pass a larger tile size (56 vs the match's 45), so the
      same 0.82 left them ~96px wide and cut off. Scale to the match's 74×37. */
-  .rh-native .screen.game-screen.walnut-live.rh-match-live.puzzle-rush-root .hand-row .domino-tile {
+  :is(.rh-native, .rh-web-phone) .screen.game-screen.walnut-live.rh-match-live.puzzle-rush-root .hand-row .domino-tile {
     zoom: 0.63;
   }
 

@@ -1,6 +1,6 @@
 // client/src/components/board/useHudMetaSlot.ts
 //
-// On the installed phone app in landscape the board is height-bound, and the OPEN pill sitting over the board's corner costs
+// On the installed phone app, or a phone's browser, in landscape the board is height-bound, and the OPEN pill sitting over the board's corner costs
 // real tile size (measured in docs/board-camera-baseline.md). The HUD row above it has room, so there the pill is drawn into
 // the HUD's meta slot (InGameBoardHud) instead. Everywhere else the slot stays empty and the pill sits on the board as before.
 import { useSyncExternalStore } from 'react';
@@ -17,15 +17,18 @@ const readSlot = (): HTMLElement | null =>
   typeof document === 'undefined' ? null : document.querySelector<HTMLElement>(HUD_META_SLOT_SELECTOR);
 const readSlotOnServer = (): HTMLElement | null => null;
 
-// The installed Capacitor app marks `<html class="rh-native">` (main.tsx). This repeats the one-line check in match/rackTileSizing
-// (isNativeShell) rather than importing it: that module would come along into every chunk that contains the pill, the game reviewer's
-// among them, and the bundle ratchet counts it.
-const isNativeApp = (): boolean => typeof document !== 'undefined' && document.documentElement.classList.contains('rh-native');
+// The compact in-game layout is on for the installed Capacitor app (`<html class="rh-native">`, main.tsx) and for a phone's browser
+// (`rh-web-phone`, utils/webPhoneClass.ts). This repeats the one-line native check in match/rackTileSizing (isNativeShell) rather than
+// importing it: that module would come along into every chunk that contains the pill, the game reviewer's among them, and the
+// bundle ratchet counts it.
+const isCompactApp = (): boolean =>
+  typeof document !== 'undefined' &&
+  (document.documentElement.classList.contains('rh-native') || document.documentElement.classList.contains('rh-web-phone'));
 
 /** The HUD slot to draw into, or null when the pill belongs on the board (not the installed app, or not short landscape). */
 export function useHudMetaSlot(): HTMLElement | null {
   const shortLandscape = useShortBoardViewport();
-  const native = isNativeApp();
+  const compact = isCompactApp();
   const slot = useSyncExternalStore(subscribe, readSlot, readSlotOnServer);
-  return shortLandscape && native ? slot : null;
+  return shortLandscape && compact ? slot : null;
 }

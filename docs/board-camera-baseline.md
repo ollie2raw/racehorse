@@ -169,3 +169,16 @@ The first step of the table above shipped in #438: on the installed app in lands
 | 932×430, cannot be whole + 18 px | 2.8 % | **2.1 %** | 0.35 (was 0.34) |
 
 What is left on the board at 844×390 is the tray and the boneyard pill. Collapsing the tray behind one button would take the model from 6.8 % to roughly 4.6 % only if the button itself also left the board, and it would put Leave, Mute, Fullscreen, Zoom and (online) the emote picker one tap further away across two near-duplicate trays and six e2e specs, so it is not worth doing without a device in hand. The phone routing already bends after one tile; what remains unreadable is the largest multi-hub boards.
+
+### Update: a phone's browser gets the same layout as the app
+
+The 204 px board was never a good thing to give phones: it was only the layout the stylesheet applied when `.rh-native` was absent. A phone's browser now gets the app's compact in-game layout (`utils/webPhoneClass.ts` sets `rh-web-phone` on a touch-only device, and the in-game block of `styles/native-landscape.css` matches `.rh-native` or `.rh-web-phone`; the stylesheet already only applies in short landscape). Measured on the real multiplayer screen with touch emulation and no native class:
+
+| Viewport | Layout | Board | `longBoth` fits at | OPEN pill |
+|---|---|---|---|---|
+| 844×390 phone browser | before | 824 × 204 | 0.21 | on the board |
+| 844×390 phone browser | **after** | **824 × 250** | **0.28** | in the HUD row |
+| 932×430 phone browser | before | 876 × 244 | 0.25 | on the board |
+| 932×430 phone browser | **after** | **876 × 290** | **0.35** | in the HUD row |
+
+Both are identical to the app. By the model that takes a phone browser at 844×390 from 19.7 % to 6.8 % of placements that cannot be whole and 18 px. A desktop browser in a short window (a mouse: hover and a fine pointer) is unchanged (0.21, a 204 px board, the pill on the board), which is what the `phone-*` profiles now describe.

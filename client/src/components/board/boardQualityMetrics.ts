@@ -49,6 +49,8 @@ const rect = (left: number, top: number, right: number, bottom: number): Reserve
 export const VIEWPORT_PROFILES: readonly ViewportProfile[] = [
   { name: 'desktop-1512x982', containerWidth: 1456, containerHeight: 756, phoneLandscape: false, reserved: [] },
   { name: 'laptop-1280x720', containerWidth: 1224, containerHeight: 508, phoneLandscape: false, reserved: [] },
+  // 'phone-*' is the roomy layout: a desktop browser in a short window. A phone's browser and the installed app both get the compact
+  // layout (the 'native-*' profiles below; styles/native-landscape.css, utils/webPhoneClass.ts).
   {
     name: 'phone-932x430',
     containerWidth: 876,
