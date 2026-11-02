@@ -8,6 +8,7 @@ import type {
   AppRoutesSocialProps,
 } from '../appRouteTypes';
 import { isSpectatorModeEnabled } from '../config/spectatorModeFeature';
+import { isGuestUser } from '../auth/guestSession';
 
 const RatingHistoryPage = React.lazy(() => import('../ranking/RatingHistoryPage'));
 const GamesPage = React.lazy(() => import('../games/GamesPage'));
@@ -94,7 +95,12 @@ export function GamesRoute({
     <div className={appRootClassName}>
       <ErrorBoundary context="games">
         <Suspense fallback={<ScreenLoader label="Loading your games…" />}>
-          <GamesPage signedIn={Boolean(authUser?.id)} onOpenAuth={handleOpenAuthModal} onBack={() => setAppMode('home')} />
+          <GamesPage
+            signedIn={Boolean(authUser?.id)}
+            isGuest={isGuestUser(authUser)}
+            onOpenAuth={handleOpenAuthModal}
+            onBack={() => setAppMode('home')}
+          />
         </Suspense>
       </ErrorBoundary>
     </div>

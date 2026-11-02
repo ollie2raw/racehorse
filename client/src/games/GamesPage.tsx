@@ -5,7 +5,9 @@ import { usePageTitle } from '../utils/usePageTitle';
 
 interface GamesPageProps {
   signedIn: boolean;
-  /** Opens the sign-in modal; the signed-out state offers it as the next step. */
+  /** A guest session (an anonymous account): the archive is theirs, but only until the session is lost or cleaned up. */
+  isGuest?: boolean;
+  /** Opens the sign-in modal; the signed-out state offers it as the next step, and a guest's as "Create account". */
   onOpenAuth?: () => void;
   onBack: () => void;
 }
@@ -14,7 +16,7 @@ interface GamesPageProps {
  * Your games: the archive of every saved Play vs Fritz game, with your record at a glance, filters, and a review for
  * each one (instant when it has been analyzed, analyzed on demand from the saved record when it has not).
  */
-export default function GamesPage({ signedIn, onOpenAuth, onBack }: GamesPageProps) {
+export default function GamesPage({ signedIn, isGuest = false, onOpenAuth, onBack }: GamesPageProps) {
   usePageTitle('Games');
   return (
     <LayoutScreen
@@ -27,6 +29,17 @@ export default function GamesPage({ signedIn, onOpenAuth, onBack }: GamesPagePro
       contentClassName="screen-shell rating-history-content"
     >
       <div className="rating-history-body" style={{ width: '100%', display: 'grid', gap: 14 }}>
+        {signedIn && isGuest ? (
+          <div className="rh-recent-reviews__guest">
+            <p role="status" className="rh-recent-reviews__status">
+              You are playing as a guest. These games are kept on this guest session only.
+            </p>
+            <p className="rh-recent-reviews__status">Create an account to keep them, with your streak and your history, on any device.</p>
+            {onOpenAuth ? (
+              <Button variant="primary" onClick={onOpenAuth}>Create account</Button>
+            ) : null}
+          </div>
+        ) : null}
         {signedIn ? (
           <HistoricalGameReviewPortal enabled layout="page" />
         ) : (
