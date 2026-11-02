@@ -24,6 +24,8 @@ export type PlayVsFritzResultOverlayProps = {
   /** Re-open post-game review prompt after dismissal or reviewer close. */
   showReviewGame?: boolean;
   onReviewGame?: () => void;
+  /** Shown to a guest: this game is saved to the guest session, and an account keeps it. */
+  savePrompt?: { text: string; actionLabel: string; onAction: () => void };
 };
 
 export function PlayVsFritzResultOverlay({
@@ -41,6 +43,7 @@ export function PlayVsFritzResultOverlay({
   statusNote,
   showReviewGame = false,
   onReviewGame,
+  savePrompt,
 }: PlayVsFritzResultOverlayProps) {
   const margin = Math.abs(youScore - botScore);
   const marginTone = won ? 'is-win' : 'is-loss';
@@ -109,6 +112,15 @@ export function PlayVsFritzResultOverlay({
             ) : null}
 
             {statusNote ? <p className="dfd__note">{statusNote}</p> : null}
+
+            {savePrompt ? (
+              <>
+                <p className="dfd__note">{savePrompt.text}</p>
+                <button type="button" className="dfd__link" onClick={savePrompt.onAction}>
+                  {savePrompt.actionLabel} ↗
+                </button>
+              </>
+            ) : null}
 
             {showReviewGame && onReviewGame ? (
               <button type="button" className="dfd__link" onClick={onReviewGame}>

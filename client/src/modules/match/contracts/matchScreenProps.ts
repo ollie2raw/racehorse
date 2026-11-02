@@ -27,6 +27,8 @@ export interface BotMatchScreenProps {
   ghostProfile?: GhostProfileSummary | null;
   onGhostProfileChange?: ((summary: GhostProfileSummary | null) => void) | null;
   onProfileRefresh?: (() => Promise<void> | void) | null;
+  /** Set only for a guest in a standalone Play vs Fritz match: opens account creation from the result card. */
+  onSaveGuestGame?: (() => void) | null;
   onProfilePatch?: ((patch: { glicko_rating?: number | null }) => void) | null;
   dailyFritzPackage?: DailyFritzStartResponse | null;
   /** Parent-owned stable instance key (Daily Fritz embedded match). Used for remount diagnostics. */

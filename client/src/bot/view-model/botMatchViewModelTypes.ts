@@ -74,6 +74,7 @@ export type BotMatchNavigationViewModel = {
   returnToLearn: () => void;
   startFreshMatch: () => void;
   onProfileRefresh?: (() => Promise<void> | void) | null;
+  onSaveGuestGame?: (() => void) | null;
   onDailyFritzGameComplete?: ((result: {
     winner: 'you' | 'bot' | null;
     yourScore: number;

@@ -3,6 +3,7 @@ import { ScreenLoader } from '../ui/ScreenLoader';
 import AuthoringToolLockedScreen from '../screens/AuthoringToolLockedScreen';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ensureGuestBeforePlay } from '../auth/guestStart';
+import { isGuestUser } from '../auth/guestSession';
 import type {
   AppRoutesShellProps,
   AppRoutesNavigationProps,
@@ -346,7 +347,7 @@ export function BotMatchRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { isAdmin, authUser, authProfile, refreshAuthProfile, applyProfilePatch } = auth;
+  const { isAdmin, authUser, authProfile, refreshAuthProfile, applyProfilePatch, setAuthModalOpen } = auth;
   const { setIsGuidedMode, setIsAuthoringMode, setIsAuthoringV2Mode, setIsGuidedV2Mode } = learn;
   const {
     botDealSize,
@@ -465,6 +466,11 @@ export function BotMatchRoute({
           rankedGamesPlayed={authProfile?.ranked_games_played ?? null}
           onProfileRefresh={refreshAuthProfile}
           onProfilePatch={applyProfilePatch}
+          onSaveGuestGame={
+            isGuestUser(authUser) && !journeyChallenge && !isGuidedMode && !isGuidedV2Mode && !isAuthoringMode && !isAuthoringV2Mode
+              ? () => setAuthModalOpen(true)
+              : null
+          }
         />}
         </ErrorBoundary>
       </Suspense>

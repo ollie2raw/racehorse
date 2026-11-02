@@ -34,6 +34,8 @@ export interface BotPostGameCardProps {
   onHome?: () => void;
   exitJourneyTrial: (success: boolean) => void;
   onReviewGame: () => void;
+  /** Present for a guest: offers to keep this game by creating an account. */
+  onSaveGuestGame?: () => void;
 }
 
 export const BotPostGameCard: React.FC<BotPostGameCardProps> = ({
@@ -63,6 +65,7 @@ export const BotPostGameCard: React.FC<BotPostGameCardProps> = ({
   onHome,
   exitJourneyTrial,
   onReviewGame,
+  onSaveGuestGame,
 }) => {
   if (!showPlayVsFritzResultOverlay) return null;
 
@@ -127,6 +130,19 @@ export const BotPostGameCard: React.FC<BotPostGameCardProps> = ({
       }
       showReviewGame={botPostGameReviewEligible && postGameAnalysis != null && !showPostGameReviewPrompt}
       onReviewGame={onReviewGame}
+      savePrompt={
+        onSaveGuestGame && !isJourneyTrial
+          ? {
+              text: 'Keep this game and your history: create an account. Nothing you have played is lost.',
+              actionLabel: 'Create account',
+              // Leave this card first (back to setup), so the sign-up sheet opens over a normal screen, not under it.
+              onAction: () => {
+                onChangeSetup();
+                onSaveGuestGame();
+              },
+            }
+          : undefined
+      }
     />
   );
 };
