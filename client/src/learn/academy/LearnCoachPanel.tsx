@@ -31,7 +31,8 @@ export function LearnCoachPanel({
         <p className="learn-academy__kicker">
           How to Play <span aria-hidden="true">·</span> {stepLabel}
         </p>
-        <h1 className="learn-academy__title">{title}</h1>
+        {/* A step heading, not the page's: the written article below the tutorial owns the page's only h1 (it is the heading the prerendered HTML carries too). */}
+        <h2 className="learn-academy__title">{title}</h2>
       </header>
 
       <div className="learn-academy__coach-main">

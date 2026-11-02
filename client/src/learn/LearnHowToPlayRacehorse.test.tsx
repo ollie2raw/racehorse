@@ -18,4 +18,15 @@ describe('LearnHowToPlayRacehorse', () => {
       screen.getByText('Fast, forced, scoring-focused dominoes built for the race to 60.'),
     ).toBeInTheDocument();
   });
+
+  it('has exactly one h1: the written article owns the page heading, the tutorial step is an h2', () => {
+    render(
+      <LearnHowToPlayRacehorse onBack={vi.fn()} onNavigate={vi.fn()} onStartGuidedMatch={vi.fn()} />,
+      { wrapper: AuthProvider },
+    );
+    const h1s = screen.getAllByRole('heading', { level: 1 });
+    expect(h1s).toHaveLength(1);
+    expect(h1s[0]!.textContent).toBe('How to Play Racehorse Dominoes');
+    expect(screen.getByRole('heading', { level: 2, name: 'What Racehorse is' })).toBeInTheDocument();
+  });
 });
