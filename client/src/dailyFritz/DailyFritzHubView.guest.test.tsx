@@ -97,11 +97,9 @@ describe('Daily Fritz hub when guest play is available', () => {
     expect(screen.queryByRole('button', { name: /Sign in to play/ })).toBeNull();
   });
 
-  it('still offers a way to sign in to an existing account', () => {
-    const props = renderGuestHub();
-    fireEvent.click(screen.getByRole('button', { name: /Have an account\? Sign in/ }));
-    expect(props.onOpenAuth).toHaveBeenCalledTimes(1);
-    expect(props.onStartGuest).not.toHaveBeenCalled();
+  it('adds no second sign-in control to the hub (the nav already has one, and the viewport-locked hub has no room for a 44px row)', () => {
+    renderGuestHub();
+    expect(screen.queryByRole('button', { name: /Sign in/ })).toBeNull();
   });
 
   it('says why a guest session could not be started', () => {
@@ -114,7 +112,6 @@ describe('Daily Fritz hub when guest play is available', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sign in to play/ }));
     expect(props.onOpenAuth).toHaveBeenCalledTimes(1);
     expect(props.onStartGuest).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: /Have an account/ })).toBeNull();
   });
 
   it('a signed-in player never sees the guest button, whatever the flag says', () => {

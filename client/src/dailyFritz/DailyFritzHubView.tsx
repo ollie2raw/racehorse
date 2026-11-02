@@ -326,11 +326,6 @@ export function DailyFritzHubView({
                 {!isComplete || !isAuthenticated ? <span className="df-start-match-chevron" aria-hidden> ›</span> : null}
               </Button>
               <div className="df-pvf-footer">
-                {guestPlayAvailable ? (
-                  <Button type="button" variant="ghost" className="df-pvf-leaderboard-link" onClick={onOpenAuth}>
-                    Have an account? Sign in
-                  </Button>
-                ) : null}
                 <Button type="button" variant="ghost" className="df-pvf-leaderboard-link" onClick={() => void onOpenLeaderboard()}>
                   View Leaderboard →
                 </Button>
