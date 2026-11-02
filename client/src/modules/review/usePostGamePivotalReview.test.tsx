@@ -168,6 +168,22 @@ describe('usePostGamePivotalReview — deferred analysis failure (F19)', () => {
   });
 });
 
+describe('usePostGamePivotalReview — what the analysis calls the opponent', () => {
+  it('passes the opponent label to the analyzer, so a multiplayer review names the opponent', async () => {
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ fake: true } as never);
+    const { result } = render({ opponentLabel: 'Rival' });
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    expect(analyzeMoveLogDeferred.mock.calls[0]?.[2]).toMatchObject({ opponentLabel: 'Rival' });
+  });
+
+  it('passes none for a Play vs Fritz game, which the analyzer reads as Fritz', async () => {
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ fake: true } as never);
+    const { result } = render();
+    await waitFor(() => expect(result.current.postGameAnalysisPending).toBe(false));
+    expect(analyzeMoveLogDeferred.mock.calls[0]?.[2]?.opponentLabel).toBeUndefined();
+  });
+});
+
 describe('usePostGamePivotalReview — durable Play vs Fritz authority', () => {
   it('enqueues authenticated player snapshots and does not dispatch the browser completion worker', async () => {
     const snapshot = {

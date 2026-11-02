@@ -96,6 +96,8 @@ function SavedGameReviewRun({ record, game, onClose }: { record: SavedGameRecord
     enablePositionalExplanations,
     // A multiplayer game has no Fritz tier: the review grades against the app's default engine tier, as a Play vs Fritz game saved without one does.
     fritzTier: toFritzTier(record.mode === 'mp' ? null : record.fritzTier),
+    // The review's text names the opponent: Fritz for a Fritz game, the opponent's name for a multiplayer one.
+    opponentLabel: labels.opponentLabel,
     winningScore: record.winningScore ?? 60,
     showPostGameOverlays: true,
     // Someone who opened this game asked for the review: start the job now, not after the post-game delay.

@@ -221,7 +221,15 @@ describe('SavedGameReview: a saved multiplayer game', () => {
       fritzTier: 'elite',
       winningScore: 60,
       reviewStartDelayMs: 0,
+      opponentLabel: 'Rival',
     });
+  });
+
+  it('has the review text call a Fritz opponent Fritz', async () => {
+    loadSavedGame.mockResolvedValue(ok());
+    render(<SavedGameReview sourceMatchId="game-1" onClose={vi.fn()} />);
+    await waitFor(() => expect(useReview).toHaveBeenCalled());
+    expect(useReview.mock.calls[0]?.[0]).toMatchObject({ opponentLabel: 'Fritz' });
   });
 
   it('names the opponent in the full review, not Fritz', async () => {

@@ -78,6 +78,8 @@ export type UsePostGamePivotalReviewParams = {
    */
   enablePositionalExplanations?: boolean;
   fritzTier: FritzTier;
+  /** What the review calls the opponent in its text. Omitted for Play vs Fritz (Fritz); a saved multiplayer game passes the opponent's name. */
+  opponentLabel?: string;
   winningScore: number;
   showPostGameOverlays: boolean;
   /** On-demand start: ms on the post-game screen before the review job is requested. */
@@ -117,6 +119,7 @@ export function usePostGamePivotalReview({
   accessToken = null,
   enablePositionalExplanations = false,
   fritzTier,
+  opponentLabel,
   winningScore,
   showPostGameOverlays,
   reviewStartDelayMs = REVIEW_START_DELAY_MS,
@@ -223,6 +226,7 @@ export function usePostGamePivotalReview({
       analyzeMoveLogDeferred(moveLog, true, {
         oracleMode: 'tier',
         tierPlayed: fritzTier,
+        opponentLabel,
         winningScore,
         reviewSnapshots,
         finalScores: { you: match.players.you.score, opponent: match.players.bot.score },
@@ -252,6 +256,7 @@ export function usePostGamePivotalReview({
     botPostGameReviewEligible,
     moveLog,
     fritzTier,
+    opponentLabel,
     winningScore,
     reviewSnapshotRecorder,
     reviewCaptureEnabled,
