@@ -55,10 +55,31 @@ September's production smoke failed on **contradictions**, not strength (a "Blun
 
 **Result: 0 violations on the corpus.** To make sure the check can fail: making heuristic results wear a calibrated "Blunder" badge fails it (the report names the decision, tier, badge and headline), and so does pointing the board's reference at the played move. It runs in about a second and in CI on every PR (`review-engine tests`), so a new contradiction class fails with the exact decision. It checks the *presentation logic*; it does not say the prose is *true* about the position (that is the explanation truth tests), and it is bot play, not human play.
 
+## 5. Do the grades mean something over the whole hand? (rollout calibration)
+
+**What the search actually values.** At its horizon the review's search scores a position as the **current score difference** (`solveMidgameDeterminization`: `leafValue = actor score - opponent score`). So the review's "best move" is the move that scores the most over the next two plies; it assigns no value to hand quality, flexibility, or the points awarded at hand end for the opponent's leftover pips. Whether the grades mean anything depends on how often that agrees with the move that is best over the *whole hand*.
+
+**The check** (`reviewRolloutCalibration.ts`, shared helper `rolloutValue.ts`): for 297 sampled decisions (search or exact, tiles still to draw), every legal move is played out to the end of the hand (including the end-of-hand award) against sampled opponent hands consistent with what the reviewed player could know, both sides then following the Fritz "standard" policy. The same sampled hands are used for every candidate (paired), and two independent sets of 60 hands are drawn so a result that is only sampling chance can be told from one that persists.
+
+| grade the review gave the played move | decisions | review says it costs | rollouts say it costs | review's best really beats the played move | confirmed by > 2 standard errors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| best (loss within tolerance, but not the top move) | 19 | 0.01 | 0.13 | 26% | 21% |
+| inaccuracy | 31 | 0.44 | 0.19 | 68% | 26% |
+| mistake | 48 | 1.86 | 1.38 | 73% | 48% |
+| blunder | 1 | 11.23 | 7.43 | 1 of 1 | 1 of 1 |
+
+- Correlation between the review's loss and the rollout loss (99 decisions where the played move was not the review's best): **0.53**.
+- The review's top move is also the rollout's top move in **68%** of decisions; the move actually played is the rollout's top move in 56%.
+- Of the 198 played moves the review calls **best**, the rollout prefers another by more than 1 point in 22 (half A) and 29 (half B), and in **both halves for 17 (8.6%)**. So roughly **1 in 11 "Best" grades would lose over the hand**, an upper-bound-ish figure since the continuation policy is itself imperfect.
+- Of the 99 decisions where the review says the player erred, its best beats the played move in both halves for 51 (52%) and in half A for 61 (62%): about **40% of "you erred" calls cannot be confirmed** by the long view.
+- Median standard error of one decision's rollout loss: 0.79 points, so single decisions are noisy; the table is about averages.
+
+**Reading it.** The grades are **directionally right and the Mistake band is credible** (73% confirmed, magnitude about 75% of the claim, correlation 0.53). They are weaker where it matters for a premium feel: about 1 in 11 "Best" grades is wrong over the hand, and the **Inaccuracy band is barely real** (rollouts put its real cost at about 0.2 points). This is the first evidence that the review's blind spot (a points-only horizon) costs accuracy. Caveats: rollouts are a *different imperfect* evaluator (a fixed bot policy), not truth, and the corpus is bot play. The open question is whether choosing by the long view actually *plays* better than the review's choice; `reviewRolloutMatch.ts` plays exactly that match.
+
 ## What this means for the goal ("one of the platform's most exceptional features")
 
 1. **The September "36 of 65 analyzed" problem is not what players get today.** Every non-forced decision in a saved review ends on search or exact. That is real progress and should be said plainly, not hidden behind the old numbers.
-2. **Neither sampling nor depth is the limiter.** More samples change nothing (section 2) and one more ply changes the "best move" in about 1 decision in 9 but does not win more games (section 3). So the review's strength is bounded by the **evaluation at the search horizon**, and the right next question is whether the grades mean something against real outcomes (a calibration study), before any engine work.
+2. **Neither sampling nor depth is the limiter, and the horizon value is the likely weakness (section 5).** More samples change nothing (section 2) and one more ply changes the "best move" in about 1 decision in 9 but does not win more games (section 3). So the review's strength is bounded by the **evaluation at the search horizon**, and the right next question is whether the grades mean something against real outcomes (a calibration study), before any engine work.
 3. **Still unmeasured, and what I would measure next:**
    - **Consistency**: the September smoke failure was a *contradiction* (a "Blunder" badge over text saying "Best move"). A corpus-wide check that badge, prose headline and board reference never disagree would guard that class permanently.
    - **Calibration against outcomes**: does a move the review calls a mistake actually cost points on average in real play? This tests that the grades mean something, not just that they are stable.
