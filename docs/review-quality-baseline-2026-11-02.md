@@ -37,6 +37,20 @@ Grades at the production budget in this corpus: 115 best, 15 inaccuracy, 18 mist
 
 **Interim, 44 games over 20 deals:** the 3-ply player won 25 (56.8%, 95% interval 42-70%, sign test p = 0.45); mean margin +2.1 points per game; of 20 deals, 3-ply swept 3, 2-ply swept 2, 15 split. **Not distinguishable from even yet.** A 55-60% edge needs several hundred games to show; the run (168 games planned) was still going when this was written, and its final numbers should replace this paragraph. Machine throughput was the limit (one game takes about 55 s alone and about 4 minutes with 7 running at once on this laptop).
 
+## 4. Consistency: no surface contradicts another (a permanent guard now)
+
+September's production smoke failed on **contradictions**, not strength (a "Blunder" badge over text saying "Best move"). The existing checks (`assertPresentationConsistency`) were spot tests and a synthetic property test. `packages/review-engine/src/devtools/reviewCorpusConsistency.test.ts` now runs the whole real pipeline (evaluation, coaching facts, prose, presentation record) over **all 1,212 recorded decisions, every tier including the heuristic ones**, and requires, for each non-forced decision:
+
+- the existing cross-surface assertions hold (played the reference move means no severity badge and no "miss" prose; "Best move" prose never sits on a Mistake or Blunder; true-equality prose never sits on a Mistake or Blunder);
+- it has a label at all;
+- a heuristic result never wears a calibrated severity badge;
+- the board's best move is the evaluation's best move, and (exact and search) the coaching facts name the same one (the second-recommendation bug class);
+- the facts describe the move that was actually played;
+- for exact and search, the loss is best minus played and never negative;
+- playing the reference move is never graded below Best.
+
+**Result: 0 violations on the corpus.** To make sure the check can fail: making heuristic results wear a calibrated "Blunder" badge fails it (the report names the decision, tier, badge and headline), and so does pointing the board's reference at the played move. It runs in about a second and in CI on every PR (`review-engine tests`), so a new contradiction class fails with the exact decision. It checks the *presentation logic*; it does not say the prose is *true* about the position (that is the explanation truth tests), and it is bot play, not human play.
+
 ## What this means for the goal ("one of the platform's most exceptional features")
 
 1. **The September "36 of 65 analyzed" problem is not what players get today.** Every non-forced decision in a saved review ends on search or exact. That is real progress and should be said plainly, not hidden behind the old numbers.
