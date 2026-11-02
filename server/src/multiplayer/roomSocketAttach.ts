@@ -25,13 +25,14 @@ import {
 } from './matchTerminalJoin';
 import { normalizeMatchmakingRoomShellHydrationResult } from '../matchmaking/roomShellHydration';
 import { clearMatchedPair } from '../matchmaking/matchedPairRegistry';
-import { onPlayerSocketRejoined } from './disconnectGrace';
+import { onActivePlayerSocketDisconnect, onPlayerSocketRejoined } from './disconnectGrace';
 import { markMatchStartReady, tryStartMatchIfReady } from './matchStartReady';
 import { assertRoomDurabilityOperationAllowed } from './roomDurabilityPolicy';
 import { applyActiveMatchForfeit } from './roomForfeit';
 import { isRatingCutoverQuiescedError } from '../ranking/ratingCutoverGate';
 import {
   allocatePlayerSeatId,
+  broadcastStateUpdate,
   buildHandEndedPayload,
   buildMatchStartDeps,
   clearReconnectSeatsForSocket,
@@ -274,6 +275,14 @@ export function createRoomSocketAttach(ctx: RoomSocketAttachContext): RoomSocket
         })),
       );
       log.info({ roomCode, seats: hydrated.restoredRoster.length, via }, 'live-session roster restored');
+      // A crash fires no disconnect event for anyone: every seat's socket died with the old process and the roster above has none. Start the
+      // grace period for each restored seat, as an ordinary disconnect would. The seat that is rejoining right now clears its own below
+      // (onPlayerSocketRejoined), so what is left running is exactly the seats whose player has not come back. Without this a player who never
+      // returns freezes the match, because nothing else would ever time their turn out. Tournament rooms are skipped inside (their turn clock
+      // already times every turn, connected or not).
+      for (const entry of hydrated.restoredRoster) {
+        onActivePlayerSocketDisconnect(roomCode, entry.seatId, io, (code) => broadcastStateUpdate(code));
+      }
     }
     if (hydrated.kind === 'persistence_unavailable') {
       throw new Error('room_persistence_unavailable');
