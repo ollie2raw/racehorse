@@ -25,6 +25,9 @@ import * as livePersistence from '../multiplayer/roomLivePersistence';
 import { resetRoomGameplayLocksForTests } from '../multiplayer/roomGameplayLock';
 import { initRoomSession, resetRoomSessionStoresForTests } from '../multiplayer/roomSession';
 import { deriveMultiplayerRecord, type MultiplayerRecordDraft } from './multiplayerRecord';
+import { replayMultiplayerRecord } from './multiplayerReplay';
+
+const CFG = createInitialState(['a', 'b']).config;
 
 function makeIo() {
   const emit = vi.fn();
@@ -156,7 +159,7 @@ const SEEDS = Array.from({ length: 24 }, (_, i) => 1000 + i * 7);
 describe('multiplayer game records: a derived record replays to the same game', () => {
   it.each(SEEDS)('seed %i: every hand and the final result match', async (seed) => {
     const original = await playGame(`DIFF${seed}`, seed);
-    const derived = deriveMultiplayerRecord({ players: original.players, events: original.events, ghostMoveLogs: original.ghostMoveLogs });
+    const derived = deriveMultiplayerRecord({ players: original.players, config: original.state!.config, tileSetSize: original.activeTileSetSize, events: original.events, ghostMoveLogs: original.ghostMoveLogs });
     expect(derived.ok, JSON.stringify(derived)).toBe(true);
     if (!derived.ok) return;
 
@@ -169,6 +172,11 @@ describe('multiplayer game records: a derived record replays to the same game', 
     expect(room.state!.gameOver).toBe(true);
     expect(room.state!.winnerId).toBe(original.state!.winnerId);
     expect(derived.record.winnerId).toBe(original.state!.winnerId);
+
+    // The same record, replayed by the engine alone (no room): this is the one that can run in production.
+    const pure = replayMultiplayerRecord(derived.record);
+    expect(pure, JSON.stringify(pure)).toMatchObject({ ok: true, finalScores: finalOriginal, winnerId: original.state!.winnerId });
+    if (pure.ok) expect(pure.handScores).toEqual(handScores);
   });
 
   it('records more than one hand in a typical game, including draws and passes, so the coverage above means something', async () => {
@@ -177,7 +185,7 @@ describe('multiplayer game records: a derived record replays to the same game', 
     let passes = 0;
     for (const seed of SEEDS) {
       const original = await playGame(`COV${seed}`, seed);
-      const derived = deriveMultiplayerRecord({ players: original.players, events: original.events, ghostMoveLogs: original.ghostMoveLogs });
+      const derived = deriveMultiplayerRecord({ players: original.players, config: original.state!.config, tileSetSize: original.activeTileSetSize, events: original.events, ghostMoveLogs: original.ghostMoveLogs });
       if (!derived.ok) continue;
       if (derived.record.hands.length > 1) multiHand += 1;
       for (const hand of derived.record.hands) {
@@ -194,6 +202,85 @@ describe('multiplayer game records: a derived record replays to the same game', 
   });
 });
 
+describe('the pure replay does not trust a record that does not add up', () => {
+  async function goodRecord(seed = 2024): Promise<MultiplayerRecordDraft> {
+    const original = await playGame(`TAMP${seed}`, seed);
+    const derived = deriveMultiplayerRecord({ players: original.players, config: original.state!.config, tileSetSize: original.activeTileSetSize, events: original.events, ghostMoveLogs: original.ghostMoveLogs });
+    if (!derived.ok) throw new Error(derived.reason);
+    return structuredClone(derived.record);
+  }
+  const reasonOf = (r: ReturnType<typeof replayMultiplayerRecord>) => (r.ok ? 'ok' : r.reason);
+
+  it('the untouched record replays', async () => {
+    expect(reasonOf(replayMultiplayerRecord(await goodRecord()))).toBe('ok');
+  });
+
+  it('a swapped tile in a deal', async () => {
+    const rec = await goodRecord();
+    const [a, b] = rec.players;
+    [rec.hands[0].deals[a][0], rec.hands[0].deals[b][0]] = [rec.hands[0].deals[b][0], rec.hands[0].deals[a][0]];
+    expect(reasonOf(replayMultiplayerRecord(rec))).not.toBe('ok');
+  });
+
+  it('a deal of the wrong size, a repeated tile, and a malformed tile', async () => {
+    const short = await goodRecord();
+    short.hands[0].deals[short.players[0]].pop();
+    expect(reasonOf(replayMultiplayerRecord(short))).toMatch(/^bad_deal_size:/);
+
+    const repeated = await goodRecord();
+    repeated.hands[0].deals[repeated.players[1]][0] = repeated.hands[0].deals[repeated.players[0]][0];
+    expect(reasonOf(replayMultiplayerRecord(repeated))).toMatch(/^bad_or_repeated_tile:/);
+
+    const malformed = await goodRecord();
+    malformed.hands[0].deals[malformed.players[0]][0] = 'banana';
+    expect(reasonOf(replayMultiplayerRecord(malformed))).toMatch(/^bad_or_repeated_tile:/);
+  });
+
+  it('an action by the wrong seat, or of a tile the seat does not hold', async () => {
+    const wrongSeat = await goodRecord();
+    const first = wrongSeat.hands[0].actions[0];
+    first.seat = wrongSeat.players.find((p) => p !== first.seat)!;
+    expect(reasonOf(replayMultiplayerRecord(wrongSeat))).toMatch(/^illegal_action:/);
+
+    const notHeld = await goodRecord();
+    const move = notHeld.hands[0].actions.find((a) => a.type === 'MOVE');
+    if (move?.type === 'MOVE') move.tile = '9|9';
+    expect(reasonOf(replayMultiplayerRecord(notHeld))).toMatch(/^illegal_action:/);
+  });
+
+  it('a missing last action leaves the hand unfinished', async () => {
+    const rec = await goodRecord();
+    rec.hands[0].actions.pop();
+    expect(reasonOf(replayMultiplayerRecord(rec))).not.toBe('ok');
+  });
+
+  it('a recorded score that is not what the engine produces', async () => {
+    const hand = await goodRecord();
+    hand.hands[0].endScores![hand.players[0]] += 5;
+    expect(reasonOf(replayMultiplayerRecord(hand))).toBe('score_mismatch:hand_1');
+
+    const final = await goodRecord();
+    final.finalScores[final.players[1]] += 5;
+    expect(reasonOf(replayMultiplayerRecord(final))).toBe('final_score_mismatch');
+
+    const winner = await goodRecord();
+    winner.winnerId = winner.players.find((p) => p !== winner.winnerId) ?? null;
+    expect(reasonOf(replayMultiplayerRecord(winner))).toBe('winner_mismatch');
+  });
+
+  it('draws that do not add up to the recorded draw order', async () => {
+    const rec = await goodRecord();
+    const hand = rec.hands.find((h) => h.drawn.length > 0)!;
+    hand.drawn.pop();
+    expect(reasonOf(replayMultiplayerRecord(rec))).not.toBe('ok');
+  });
+
+  it('never throws on garbage', () => {
+    expect(replayMultiplayerRecord({ players: ['a', 'b'], config: CFG, hands: [{ handNumber: 1, starterId: 'a', deals: {}, actions: [], drawn: [], endScores: null }], finalScores: {}, winnerId: null }).ok).toBe(false);
+    expect(replayMultiplayerRecord({ players: ['a', 'b'], config: CFG, hands: [], finalScores: {}, winnerId: null }).ok).toBe(false);
+  });
+});
+
 describe('deriveMultiplayerRecord refuses what it cannot rebuild', () => {
   it('a game that has not finished', async () => {
     const io = makeIo();
@@ -204,14 +291,14 @@ describe('deriveMultiplayerRecord refuses what it cannot rebuild', () => {
     room.players = ['seat-a', 'seat-b'];
     room.state = null;
     await startGame('UNFIN', io);
-    const result = deriveMultiplayerRecord({ players: room.players, events: room.events, ghostMoveLogs: room.ghostMoveLogs });
+    const result = deriveMultiplayerRecord({ players: room.players, config: room.state!.config, tileSetSize: room.activeTileSetSize, events: room.events, ghostMoveLogs: room.ghostMoveLogs });
     expect(result).toEqual({ ok: false, reason: 'not_finished' });
   });
 
   it('a game whose move log has a gap (a seat with no logged action in a hand)', async () => {
     const original = await playGame('GAP1', 4242);
     const gappy = { ...original.ghostMoveLogs, 'seat-a': [] };
-    const result = deriveMultiplayerRecord({ players: original.players, events: original.events, ghostMoveLogs: gappy });
+    const result = deriveMultiplayerRecord({ players: original.players, config: original.state!.config, tileSetSize: original.activeTileSetSize, events: original.events, ghostMoveLogs: gappy });
     expect(result.ok).toBe(false);
     expect(!result.ok && result.reason).toMatch(/^missing_deal:seat-a:/);
   });
@@ -227,7 +314,7 @@ describe('deriveMultiplayerRecord refuses what it cannot rebuild', () => {
     ];
     const logs = { a: [{ hand_number: 1, hand_before: ['1|2'] }], b: [{ hand_number: 1, hand_before: ['3|4'] }] } as never;
     const actionsOf = (events: unknown[]) => {
-      const r = deriveMultiplayerRecord({ players: ['a', 'b'], events: events as never, ghostMoveLogs: logs });
+      const r = deriveMultiplayerRecord({ players: ['a', 'b'], config: CFG, tileSetSize: 28, events: events as never, ghostMoveLogs: logs });
       if (!r.ok) throw new Error(r.reason);
       return r.record.hands[0].actions;
     };
@@ -247,6 +334,8 @@ describe('deriveMultiplayerRecord refuses what it cannot rebuild', () => {
     it('tiles drawn by a forced draw after a play are recorded as drawn, not as actions', () => {
       const result = deriveMultiplayerRecord({
         players: ['a', 'b'],
+        config: CFG,
+        tileSetSize: 28,
         events: [...base, ev(2, 'tile_played', 'a', { tile: '1|2', position: 'left', forcedDraw: true }), ev(3, 'tile_drawn', 'a', { tile: '5|6' }), ...end] as never,
         ghostMoveLogs: logs,
       });
@@ -255,7 +344,15 @@ describe('deriveMultiplayerRecord refuses what it cannot rebuild', () => {
     });
   });
 
+  it('a room that dealt from a custom deck (a replay from the standard set would see locked hands differently)', async () => {
+    const original = await playGame('CUSTOM1', 77);
+    const result = deriveMultiplayerRecord({ players: original.players, config: original.state!.config, tileSetSize: 10, events: original.events, ghostMoveLogs: original.ghostMoveLogs });
+    expect(result).toEqual({ ok: false, reason: 'custom_tile_set' });
+    const standard = deriveMultiplayerRecord({ players: original.players, config: original.state!.config, tileSetSize: 28, events: original.events, ghostMoveLogs: original.ghostMoveLogs });
+    expect(standard.ok).toBe(true);
+  });
+
   it('anything but two players', () => {
-    expect(deriveMultiplayerRecord({ players: ['a', 'b', 'c'], events: [], ghostMoveLogs: {} })).toEqual({ ok: false, reason: 'not_two_players' });
+    expect(deriveMultiplayerRecord({ players: ['a', 'b', 'c'], config: CFG, tileSetSize: 28, events: [], ghostMoveLogs: {} })).toEqual({ ok: false, reason: 'not_two_players' });
   });
 });

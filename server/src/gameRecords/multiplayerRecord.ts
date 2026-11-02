@@ -1,5 +1,7 @@
 import type { GhostMoveLogEntry } from '../ghost/service';
 import type { RoomMatchEvent } from '../roomEvents';
+import { generateFullSet } from '../game/engine';
+import type { Config } from '../game/types';
 
 /**
  * A finished multiplayer game, as a record that can be replayed (docs/review-game-record-architecture.md, "Multiplayer: what the code shows").
@@ -38,6 +40,8 @@ export type RecordedHand = {
 export type MultiplayerRecordDraft = {
   /** Seat ids in engine order (the order hands are dealt). */
   players: string[];
+  /** The rules the game was played under, needed to replay it. */
+  config: Config;
   hands: RecordedHand[];
   finalScores: Record<string, number>;
   winnerId: string | null;
@@ -47,6 +51,10 @@ export type DeriveResult = { ok: true; record: MultiplayerRecordDraft } | { ok: 
 
 type DeriveInput = {
   players: readonly string[];
+  /** The game's rules (`room.state.config`). */
+  config: Config;
+  /** `room.activeTileSetSize`: set only when the room dealt from a custom deck; undefined means the standard set. */
+  tileSetSize: number | undefined;
   events: readonly Pick<RoomMatchEvent, 'type' | 'actorSocketId' | 'payload' | 'sequence'>[];
   ghostMoveLogs: Readonly<Record<string, readonly GhostMoveLogEntry[]>>;
 };
@@ -73,6 +81,8 @@ function scoresOf(payload: Record<string, unknown>, players: readonly string[]):
 export function deriveMultiplayerRecord(input: DeriveInput): DeriveResult {
   const { players, ghostMoveLogs } = input;
   if (players.length !== 2) return { ok: false, reason: 'not_two_players' };
+  // A room dealt from a custom or smaller set has a different boneyard, so a replay from the standard set would see locked hands differently.
+  if (input.tileSetSize !== undefined && input.tileSetSize !== generateFullSet(input.config.maxPips).length) return { ok: false, reason: 'custom_tile_set' };
   const events = [...input.events].sort((a, b) => a.sequence - b.sequence);
 
   const hands: RecordedHand[] = [];
@@ -136,5 +146,5 @@ export function deriveMultiplayerRecord(input: DeriveInput): DeriveResult {
     }
   }
 
-  return { ok: true, record: { players: [...players], hands, finalScores, winnerId } };
+  return { ok: true, record: { players: [...players], config: input.config, hands, finalScores, winnerId } };
 }
