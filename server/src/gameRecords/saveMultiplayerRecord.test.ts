@@ -101,6 +101,11 @@ describe('the rows saved for a finished game', () => {
     expect(text).toContain('"opponent"');
   });
 
+  it('keep the version of the rules the game was played under', async () => {
+    const room = await playGame('SAVE3B', 4712);
+    for (const row of prepared(inputFor(room))) expect(row.moves.record.rulesVersion).toBe(1);
+  });
+
   it('are the same game under new names: each relabelled record still replays to the same result', async () => {
     const room = await playGame('SAVE3', 4711);
     for (const row of prepared(inputFor(room))) {

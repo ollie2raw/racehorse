@@ -54,6 +54,7 @@ export function relabelRecord(record: MultiplayerRecordDraft, mySeat: string): M
   return {
     players: record.players.map(label),
     config: record.config,
+    ...(record.rulesVersion === undefined ? {} : { rulesVersion: record.rulesVersion }),
     hands: record.hands.map((hand) => ({
       handNumber: hand.handNumber,
       starterId: label(hand.starterId),

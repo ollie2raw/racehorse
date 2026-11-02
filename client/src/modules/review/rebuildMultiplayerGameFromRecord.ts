@@ -1,3 +1,4 @@
+import { GAME_RULES_VERSION } from '@racehorse/game-core';
 import type { PlacementPosition, Tile } from '../../types.ts';
 import {
   createFixedBotMatchWithStarter,
@@ -31,6 +32,8 @@ export type SavedMultiplayerRecord = {
 
 export type MultiplayerRecordPayload = {
   players: ReadonlyArray<'you' | 'opponent'>;
+  /** The version of the game's rules the record was made under. Absent on records saved before it existed, which means 1. */
+  rulesVersion?: number;
   config: { maxPips: number; tilesPerPlayer: number; deadTileCount: number; winningScore: number };
   hands: ReadonlyArray<{
     handNumber: number;
@@ -132,6 +135,8 @@ export function rebuildMultiplayerGameFromRecord(saved: SavedMultiplayerRecord):
 
 function rebuildUnchecked(saved: SavedMultiplayerRecord): RebuildResult {
   const rec = saved.record;
+  const rulesVersion = rec.rulesVersion ?? 1;
+  if (rulesVersion !== GAME_RULES_VERSION) return fail(`This game was saved under version ${rulesVersion} of the rules; this app replays version ${GAME_RULES_VERSION}.`);
   if (rec.config.maxPips !== 6) return fail('Only double-six games can be replayed.');
   const dealSize: BotDealSize = rec.config.tilesPerPlayer === 14 ? 14 : 7;
   const winningScore = saved.winningScore ?? rec.config.winningScore ?? 60;
