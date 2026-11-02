@@ -5,7 +5,7 @@
  * v3.2: Codex review — null guard, depth cap 12, threshold ≤ 8, DEV-only logs
  * v3.3: draw-until-playable modeled inside minimax; pip burden 0.8 → 1.5
  * v3.4: perf guard (150ms budget); greedy fallback; consistent timing coverage
- * v3.5: deadlineMs propagated into minimax itself (single branch can't overrun);
+ * v3.5: the search budget propagated into minimax itself (single branch can't overrun);
  *       done() uses typed overloads — no brittle as-casts anywhere
  * v3.6: master difficulty uses sampled-hand endgame search (fair IS-MCTS style)
  * v3.7: master gets elevated MC samples (20 vs 8), wider chain search, two-ply
@@ -20,6 +20,7 @@ export type { Move, Tile };
 import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import { computeOpenEndsSum, getLegalMoves, previewPlayMove } from '../match/runtime/botEngine.ts';
 import { drawableBoneyardCount, estimateDrawCostFromPublicInfo } from './publicDrawCost.ts';
+import { createSearchBudget, UNLIMITED_BUDGET, type SearchBudget } from './searchBudget.ts';
 
 export type BotDifficulty = 'casual' | 'standard' | 'hard' | 'master';
 
@@ -516,7 +517,7 @@ function isBetterChain(a: ChainNode, b: ChainNode): boolean {
 function searchExactTurnChain(
   state: BotMatchState,
   firstMove: Move,
-  deadlineMs: number,
+  budget: SearchBudget,
 ): ChainNode | null {
   const firstPreview = previewPlayMove(state, 'bot', firstMove);
   if (!firstPreview) return null;
@@ -535,7 +536,7 @@ function searchExactTurnChain(
   let best: ChainNode = root;
 
   const dfs = (node: ChainNode): void => {
-    if (performance.now() > deadlineMs) return;
+    if (budget.exhausted()) return;
 
     const tempState = cloneState(state, {
       board: node.finalBoard,
@@ -552,7 +553,7 @@ function searchExactTurnChain(
     }
 
     for (const m of continuations) {
-      if (performance.now() > deadlineMs) return;
+      if (budget.exhausted()) return;
       const p = previewPlayMove(tempState, 'bot', m);
       if (!p) continue;
 
@@ -1293,9 +1294,9 @@ function minimaxFull(
   pointsAccum: number,
   rng: () => number,
   passDepth: number = 0,
-  deadlineMs: number = Infinity,
+  budget: SearchBudget = UNLIMITED_BUDGET,
 ): number {
-  if (performance.now() > deadlineMs) {
+  if (budget.exhausted()) {
     const botPips = pipSum(state.players.bot.hand);
     const youPips = pipSum(state.players.you.hand);
     return pointsAccum * 100 + (youPips - botPips);
@@ -1320,11 +1321,11 @@ function minimaxFull(
     if (state.boneyard.length > BONEYARD_LOCKED) {
       const drawnState = simulateDrawUntilPlayable(state, player, rng);
       const afterDrawState = cloneState(drawnState, { currentPlayer: player });
-      return minimaxFull(afterDrawState, depth - 1, isBot, alpha, beta, pointsAccum, rng, passDepth, deadlineMs);
+      return minimaxFull(afterDrawState, depth - 1, isBot, alpha, beta, pointsAccum, rng, passDepth, budget);
     }
 
     const passedState = cloneState(state, { currentPlayer: isBot ? 'you' : 'bot' });
-    return minimaxFull(passedState, depth - 1, !isBot, alpha, beta, pointsAccum, rng, passDepth + 1, deadlineMs);
+    return minimaxFull(passedState, depth - 1, !isBot, alpha, beta, pointsAccum, rng, passDepth + 1, budget);
   }
 
   const orderedMoves = [...moves].sort((a, b) => {
@@ -1354,7 +1355,7 @@ function minimaxFull(
         pointsAccum + p.immediateScore,
         rng,
         0,
-        deadlineMs,
+        budget,
       );
       best = Math.max(best, val);
       alpha = Math.max(alpha, best);
@@ -1380,7 +1381,7 @@ function minimaxFull(
         pointsAccum - p.immediateScore,
         rng,
         0,
-        deadlineMs,
+        budget,
       );
       best = Math.min(best, val);
       beta = Math.min(beta, best);
@@ -1736,7 +1737,7 @@ export function chooseBotMove(
   if (difficulty === 'master' && totalTiles <= masterEndgameThreshold) {
     const SAMPLE_COUNT = 16;
     const depth = endgameDepth(totalTiles);
-    const deadlineMs = performance.now() + MASTER_ENDGAME_BUDGET_MS;
+    const budget = createSearchBudget(MASTER_ENDGAME_BUDGET_MS);
     const drawRng = createStatePrng(state, 'minimax-draw');
     const moveVotes = new Map<Move, number>();
     const moveScoreTotals = new Map<Move, number>();
@@ -1750,7 +1751,7 @@ export function chooseBotMove(
     );
 
     for (const sampledHand of sampledHands) {
-      if (performance.now() > deadlineMs) break;
+      if (budget.exhausted()) break;
 
       const knownState = {
         ...state,
@@ -1764,7 +1765,7 @@ export function chooseBotMove(
       let bestVal = -Infinity;
 
       for (const move of candidates) {
-        if (performance.now() > deadlineMs) break;
+        if (budget.exhausted()) break;
         const p = previewPlayMove(knownState, 'bot', move);
         if (!p) continue;
         const next = cloneState(knownState, {
@@ -1785,7 +1786,7 @@ export function chooseBotMove(
             p.immediateScore,
             drawRng,
             0,
-            deadlineMs,
+            budget,
           ) -
           threatPenalty * endgameDefenseWeight;
         if (val > bestVal) {
@@ -1866,11 +1867,11 @@ export function chooseBotMove(
     });
 
   if (totalTiles <= 16 && prelim.length > 1) {
-    const exactDeadlineMs = performance.now() + EXACT_CHAIN_BUDGET_MS;
+    const exactBudget = createSearchBudget(EXACT_CHAIN_BUDGET_MS);
     const topN = Math.min(4, prelim.length);
     for (let i = 0; i < topN; i++) {
-      if (performance.now() > exactDeadlineMs) break;
-      const exact = searchExactTurnChain(state, prelim[i].move, exactDeadlineMs);
+      if (exactBudget.exhausted()) break;
+      const exact = searchExactTurnChain(state, prelim[i].move, exactBudget);
       if (!exact) continue;
       prelim[i].strategicScore +=
         exact.totalPoints * (strength === 'master' ? 26 : 22) +
