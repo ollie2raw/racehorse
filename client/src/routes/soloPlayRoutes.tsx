@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { ScreenLoader } from '../ui/ScreenLoader';
 import AuthoringToolLockedScreen from '../screens/AuthoringToolLockedScreen';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { ensureGuestBeforePlay } from '../auth/guestStart';
 import type {
   AppRoutesShellProps,
   AppRoutesNavigationProps,
@@ -306,7 +307,7 @@ export function BotSetupRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { setAuthModalOpen, handleSignOut } = auth;
+  const { setAuthModalOpen, handleSignOut, authUser, ensureGuestSession } = auth;
   const { setBotFritzTier, setBotDealSize } = botMatch;
   return withAuthModals(
     <div className={appRootClassName}>
@@ -316,7 +317,8 @@ export function BotSetupRoute({
           onStart={({ difficulty, dealSize }) => {
             setBotFritzTier(difficulty);
             setBotDealSize(dealSize);
-            setAppMode('bot');
+            // A visitor with no session gets a guest one first, so the game is recorded; it never holds up the match.
+            void ensureGuestBeforePlay(Boolean(authUser), ensureGuestSession).then(() => setAppMode('bot'));
           }}
           onBack={() => setAppMode('singlePlayerHub')}
           onNavigate={setAppMode}
