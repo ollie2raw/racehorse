@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HistoricalGameReviewPortal } from './HistoricalGameReviewPortal';
+import { HistoricalGameReviewPortal, reviewOpponentLabel } from './HistoricalGameReviewPortal';
 import type { SavedGameSummary } from './savedGames';
 
 const { fetchReviews, loadReview, fetchGames } = vi.hoisted(() => ({
@@ -12,8 +12,8 @@ const { fetchReviews, loadReview, fetchGames } = vi.hoisted(() => ({
 vi.mock('./historicalGameReviewApi', () => ({ fetchRecentGameReviews: fetchReviews, loadHistoricalGameReview: loadReview }));
 vi.mock('./savedGames', () => ({ fetchRecentGames: fetchGames }));
 vi.mock('../../analyzer/GameReviewer', () => ({
-  default: ({ open, analysis, onClose }: { open: boolean; analysis: { analyzedAt: number }; onClose: () => void }) =>
-    open ? <div role="dialog">Review {analysis.analyzedAt}<button onClick={onClose}>Close review</button></div> : null,
+  default: ({ open, analysis, onClose, opponentLabel }: { open: boolean; analysis: { analyzedAt: number }; onClose: () => void; opponentLabel?: string }) =>
+    open ? <div role="dialog">Review {analysis.analyzedAt}<span data-testid="opp">{opponentLabel ?? 'default'}</span><button onClick={onClose}>Close review</button></div> : null,
 }));
 vi.mock('./SavedGameReview', () => ({
   default: ({ sourceMatchId, onClose }: { sourceMatchId: string; onClose: () => void }) => (
@@ -52,6 +52,61 @@ beforeEach(() => {
 afterEach(() => { window.history.replaceState(null, '', '/'); vi.clearAllMocks(); });
 
 const archive = () => screen.getByRole('region', { name: 'Your games' });
+
+describe('Your games: multiplayer', () => {
+  it('lists a multiplayer game as "vs <name>", not a Fritz tier, next to a Play vs Fritz game', async () => {
+    fetchGames.mockResolvedValue({
+      ok: true,
+      games: [
+        game({ sourceMatchId: 'mp-1', mode: 'mp', fritzTier: null, opponentName: 'Rival', result: { you: 61, opponent: 55, winner: 'you' } }),
+        game({ sourceMatchId: 'game-2', fritzTier: 'master', result: { you: 31, opponent: 60, winner: 'opponent' } }),
+      ],
+    });
+    render(<HistoricalGameReviewPortal enabled />);
+    const rows = await within(archive()).findAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent('Victory 61–55');
+    expect(rows[0]).toHaveTextContent('vs Rival');
+    expect(rows[0]).not.toHaveTextContent('Fritz');
+    expect(rows[1]).toHaveTextContent('Master');
+  });
+
+  it('calls an opponent with no stored name "Opponent"', async () => {
+    fetchGames.mockResolvedValue({ ok: true, games: [game({ mode: 'mp', fritzTier: null, opponentName: null })] });
+    render(<HistoricalGameReviewPortal enabled />);
+    expect(await within(archive()).findByRole('listitem')).toHaveTextContent('vs Opponent');
+  });
+
+  it('opens a multiplayer game\'s saved review with the opponent\'s name, and a Fritz game\'s with the default', async () => {
+    fetchGames.mockResolvedValue({
+      ok: true,
+      games: [
+        game({ sourceMatchId: 'mp-1', mode: 'mp', fritzTier: null, opponentName: 'Rival', review: { id: 'review-mp', accuracy: null, grade: null } }),
+        game({ sourceMatchId: 'game-2', review: { id: 'review-pvf', accuracy: null, grade: null } }),
+      ],
+    });
+    render(<HistoricalGameReviewPortal enabled />);
+    const buttons = await within(archive()).findAllByRole('button', { name: 'Review' });
+    fireEvent.click(buttons[0]!);
+    expect((await screen.findByTestId('opp')).textContent).toBe('Rival');
+    fireEvent.click(screen.getByRole('button', { name: 'Close review' }));
+    fireEvent.click((await within(archive()).findAllByRole('button', { name: 'Review' }))[1]!);
+    expect((await screen.findByTestId('opp')).textContent).toBe('default');
+  });
+
+  it('reviewOpponentLabel: the name for a multiplayer review, nothing (the default) otherwise', () => {
+    const games = [game({ mode: 'mp', fritzTier: null, opponentName: 'Rival', review: { id: 'r1', accuracy: null, grade: null } }), game({ sourceMatchId: 'g2', review: { id: 'r2', accuracy: null, grade: null } })];
+    expect(reviewOpponentLabel(games, 'r1')).toBe('Rival');
+    expect(reviewOpponentLabel(games, 'r2')).toBeUndefined();
+    expect(reviewOpponentLabel(games, 'nope')).toBeUndefined();
+    expect(reviewOpponentLabel(null, 'r1')).toBeUndefined();
+    expect(reviewOpponentLabel(games, null)).toBeUndefined();
+  });
+
+  it('tells a player with no games they can come from Fritz or from another player', async () => {
+    render(<HistoricalGameReviewPortal enabled />);
+    expect(await screen.findByText(/Finish a game against Fritz or another player/)).toBeTruthy();
+  });
+});
 
 describe('Your games', () => {
   it('lists saved games with result, tier and whether the review is ready', async () => {

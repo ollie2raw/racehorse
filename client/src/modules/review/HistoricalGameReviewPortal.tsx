@@ -41,6 +41,13 @@ const GAMES_SHOWN = { strip: 20, page: 100 } as const;
 /** The reviews list is only used for older reviews that have no saved game; the server caps it at 20. */
 const REVIEWS_SHOWN = 20;
 
+/** The reopened review's opponent: a multiplayer game's opponent by name, otherwise the reviewer's default (Fritz). */
+export function reviewOpponentLabel(games: readonly SavedGameSummary[] | null, reviewId: string | null): string | undefined {
+  if (!games || !reviewId) return undefined;
+  const game = games.find((candidate) => candidate.review?.id === reviewId);
+  return game?.mode === 'mp' ? game.opponentName ?? 'Opponent' : undefined;
+}
+
 function gameWhen(game: SavedGameSummary): string {
   const date = new Date(game.playedAt ?? game.savedAt);
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -49,7 +56,7 @@ function gameWhen(game: SavedGameSummary): string {
 /**
  * The games archive and the review history, on the Rating History page.
  *
- * "Your games": every saved Play vs Fritz game, newest first. A game whose review was already saved reopens instantly
+ * "Your games": every saved Play vs Fritz and multiplayer game, newest first. A game whose review was already saved reopens instantly
  * (zero recomputation); one that was never analyzed is replayed from its saved record and analyzed on demand, and its
  * review is then saved so the next open is instant. "Recent reviews" keeps older reviews that have no saved game.
  */
@@ -67,6 +74,7 @@ export function HistoricalGameReviewPortal({ enabled, layout = 'strip', onOpenGa
   const [listKey, setListKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [hydration, setHydration] = useState<HistoricalGameReviewHydration | null>(null);
+  const [openReviewId, setOpenReviewId] = useState<string | null>(null);
   const requestRef = useRef(0);
   const [open, setOpen] = useState(false);
   const [loadingReview, setLoadingReview] = useState(false);
@@ -137,6 +145,7 @@ export function HistoricalGameReviewPortal({ enabled, layout = 'strip', onOpenGa
           return;
         }
         setHydration(loaded);
+        setOpenReviewId(reviewId);
         setOpen(true);
         const url = new URL(window.location.href);
         url.searchParams.set('review', reviewId);
@@ -233,7 +242,7 @@ export function HistoricalGameReviewPortal({ enabled, layout = 'strip', onOpenGa
         ) : null}
         {loadingGames ? <p className="rh-recent-reviews__status">Loading…</p> : null}
         {!loadingGames && allGames.length === 0 && !gamesError ? (
-          <p className="rh-recent-reviews__status">No saved games yet. Finish a Play vs Fritz game and it will appear here.</p>
+          <p className="rh-recent-reviews__status">No saved games yet. Finish a game against Fritz or another player and it will appear here.</p>
         ) : null}
         {!loadingGames && allGames.length > 0 && visibleGames.length === 0 ? (
           <p className="rh-recent-reviews__status">
@@ -254,7 +263,7 @@ export function HistoricalGameReviewPortal({ enabled, layout = 'strip', onOpenGa
                     <strong className={won ? 'rh-saved-games__win' : lost ? 'rh-saved-games__loss' : undefined}>
                       {won ? 'Victory' : lost ? 'Defeat' : 'Final'} {game.result.you}–{game.result.opponent}
                     </strong>
-                    {' · '}{titleCase(game.fritzTier)} · {gameWhen(game)}
+                    {' · '}{game.mode === 'mp' ? `vs ${game.opponentName ?? 'Opponent'}` : titleCase(game.fritzTier)} · {gameWhen(game)}
                   </span>
                   <span className="rh-saved-games__state">
                     {reviewId ? 'Review ready' : 'Not analyzed yet'}
@@ -350,6 +359,7 @@ export function HistoricalGameReviewPortal({ enabled, layout = 'strip', onOpenGa
             }
             historicalLegacyNotice={hydration.legacyNotice}
             title="Game Review"
+            opponentLabel={reviewOpponentLabel(games, openReviewId)}
           />
         </Suspense>
       ) : null}

@@ -4,19 +4,21 @@ import type { GameRecordVerification } from './gameRecordPayload';
 type GameRecordRow = {
   source_match_id: string;
   local_match_id: string | null;
-  mode: 'pvf';
+  mode: 'pvf' | 'mp';
   fritz_tier: string | null;
   deal_size: number | null;
   winning_score: number | null;
   match_starter: string | null;
   deal_seed: string | null;
   result: { you: number; opponent: number; winner: 'you' | 'opponent' | null };
-  moves: unknown[];
+  /** Play vs Fritz: the ordered move list. Multiplayer: `{ kind: 'mp', version, record }`. */
+  moves: unknown;
   move_count: number;
   record_version: number;
   verification: GameRecordVerification;
   played_at: string | null;
   created_at: string;
+  opponent_name: string | null;
 };
 
 /** A game's saved review, when it has one that can be reopened (it carries its frozen explanations). */
@@ -30,7 +32,9 @@ export type GameRecordReviewSummary = {
 /** What the games archive shows: no actions, no deal seed. */
 export type GameRecordListEntry = {
   sourceMatchId: string;
-  mode: 'pvf';
+  mode: 'pvf' | 'mp';
+  /** The opponent's display name as it was in that game (multiplayer only). */
+  opponentName: string | null;
   fritzTier: string | null;
   dealSize: number | null;
   winningScore: number | null;
@@ -47,12 +51,12 @@ export type GameRecordReadResult = GameRecordListEntry & {
   localMatchId: string | null;
   matchStarter: string | null;
   dealSeed: string | null;
-  moves: unknown[];
+  moves: unknown;
   recordVersion: number;
 };
 
 const LIST_COLUMNS =
-  'source_match_id,mode,fritz_tier,deal_size,winning_score,result,move_count,verification,played_at,created_at';
+  'source_match_id,mode,opponent_name,fritz_tier,deal_size,winning_score,result,move_count,verification,played_at,created_at';
 const FULL_COLUMNS =
   `${LIST_COLUMNS},local_match_id,match_starter,deal_seed,moves,record_version`;
 
@@ -69,6 +73,7 @@ export function toGameRecordListEntry(row: GameRecordRow, review: GameRecordRevi
   return {
     sourceMatchId: row.source_match_id,
     mode: row.mode,
+    opponentName: row.opponent_name ?? null,
     fritzTier: row.fritz_tier,
     dealSize: row.deal_size,
     winningScore: row.winning_score,
@@ -131,12 +136,24 @@ export async function queryReviewsBySourceMatch(
 }
 
 /**
- * Newest first. Scoped to `userId` in the query itself, never by filtering afterwards.
- * Play vs Fritz only (`mode=eq.pvf`): multiplayer records (`mp`) exist in the same table but the app cannot rebuild them yet, so they are not served until it can.
+ * Which kinds of game a caller can open. Multiplayer records (`mp`) are only sent to a client that says it understands them (`?modes=pvf,mp`): an app build
+ * from before they existed would not know how to show one, and App Store builds lag.
  */
-export async function queryRecentGameRecords(userId: string, limit: number): Promise<GameRecordListEntry[]> {
+export type GameRecordModes = { includeMultiplayer: boolean };
+export const PVF_ONLY: GameRecordModes = { includeMultiplayer: false };
+
+/** `?modes=pvf,mp` -> multiplayer included. Anything else (absent, malformed) is Play vs Fritz only. */
+export function parseGameRecordModes(raw: unknown): GameRecordModes {
+  const text = typeof raw === 'string' ? raw : '';
+  return { includeMultiplayer: text.split(',').map((m) => m.trim()).includes('mp') };
+}
+
+const modeFilter = (modes: GameRecordModes) => (modes.includeMultiplayer ? '' : '&mode=eq.pvf');
+
+/** Newest first. Scoped to `userId` in the query itself, never by filtering afterwards. */
+export async function queryRecentGameRecords(userId: string, limit: number, modes: GameRecordModes = PVF_ONLY): Promise<GameRecordListEntry[]> {
   const rows = await supabaseFetch<GameRecordRow[]>(
-    `/rest/v1/game_records?select=${LIST_COLUMNS}&user_id=eq.${encodeURIComponent(userId)}&mode=eq.pvf&order=created_at.desc&limit=${limit}`,
+    `/rest/v1/game_records?select=${LIST_COLUMNS}&user_id=eq.${encodeURIComponent(userId)}${modeFilter(modes)}&order=created_at.desc&limit=${limit}`,
     { method: 'GET' },
   );
   const records = rows ?? [];
@@ -144,9 +161,9 @@ export async function queryRecentGameRecords(userId: string, limit: number): Pro
   return records.map((row) => toGameRecordListEntry(row, reviews.get(row.source_match_id) ?? null));
 }
 
-export async function queryGameRecord(userId: string, sourceMatchId: string): Promise<GameRecordReadResult | null> {
+export async function queryGameRecord(userId: string, sourceMatchId: string, modes: GameRecordModes = PVF_ONLY): Promise<GameRecordReadResult | null> {
   const rows = await supabaseFetch<GameRecordRow[]>(
-    `/rest/v1/game_records?select=${FULL_COLUMNS}&user_id=eq.${encodeURIComponent(userId)}&source_match_id=eq.${encodeURIComponent(sourceMatchId)}&mode=eq.pvf&limit=1`,
+    `/rest/v1/game_records?select=${FULL_COLUMNS}&user_id=eq.${encodeURIComponent(userId)}&source_match_id=eq.${encodeURIComponent(sourceMatchId)}${modeFilter(modes)}&limit=1`,
     { method: 'GET' },
   );
   const row = rows?.[0];

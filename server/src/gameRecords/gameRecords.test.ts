@@ -6,7 +6,7 @@ import { playHonestGhostShapedGame } from '../testing/rankedDealSelfPlay';
 import { buildGameRecordInsertPayload, parseGameRecordRequestBody } from './gameRecordPayload';
 import { verifyGameRecord } from './verifyGameRecord';
 import { registerGameRecordsRoute } from '../http/routes/gameRecordsRoute';
-import { GAME_RECORD_LIST_DEFAULT_LIMIT, GAME_RECORD_LIST_MAX_LIMIT, clampGameRecordListLimit } from './queryGameRecords';
+import { GAME_RECORD_LIST_DEFAULT_LIMIT, GAME_RECORD_LIST_MAX_LIMIT, clampGameRecordListLimit, parseGameRecordModes } from './queryGameRecords';
 
 const USER = 'record-user-1';
 let requestUser: string | null = USER;
@@ -285,13 +285,36 @@ describe('GET /api/game-records', () => {
     supabaseFetch.mockReset();
   });
 
-  it('asks only for Play vs Fritz records: multiplayer records share the table but the app cannot rebuild them yet', async () => {
+  it('serves only Play vs Fritz records to a client that does not say it understands multiplayer ones (App Store builds lag)', async () => {
     answer({ records: [] });
     await fetch(`${apiBase}/api/game-records/recent`);
     await fetch(`${apiBase}/api/game-records/match-9`);
+    await fetch(`${apiBase}/api/game-records/recent?modes=banana`);
+    await fetch(`${apiBase}/api/game-records/recent?modes=pvf`);
+    const recordPaths = supabaseFetch.mock.calls.map((call) => (call as [string])[0]).filter((path) => path.includes('/game_records?'));
+    expect(recordPaths).toHaveLength(4);
+    for (const path of recordPaths) expect(path).toContain('&mode=eq.pvf');
+  });
+
+  it('serves multiplayer records too to a client that asks for them with ?modes=pvf,mp, with the opponent\'s name', async () => {
+    const row = {
+      source_match_id: 'mp-1', mode: 'mp', opponent_name: 'Rival', fritz_tier: null, deal_size: 7, winning_score: 60,
+      result: { you: 61, opponent: 40, winner: 'you' }, move_count: 30, verification: 'replay_verified', played_at: null, created_at: 'now',
+    };
+    answer({ records: [row] });
+    const list = await (await fetch(`${apiBase}/api/game-records/recent?modes=pvf,mp`)).json() as { games: Array<Record<string, unknown>> };
+    await fetch(`${apiBase}/api/game-records/mp-1?modes=pvf,mp`);
     const recordPaths = supabaseFetch.mock.calls.map((call) => (call as [string])[0]).filter((path) => path.includes('/game_records?'));
     expect(recordPaths).toHaveLength(2);
-    for (const path of recordPaths) expect(path).toContain('&mode=eq.pvf');
+    for (const path of recordPaths) expect(path).not.toContain('mode=eq.pvf');
+    expect(recordPaths[0]).toContain('opponent_name');
+    expect(list.games[0]).toMatchObject({ sourceMatchId: 'mp-1', mode: 'mp', opponentName: 'Rival' });
+  });
+
+  it('parseGameRecordModes: multiplayer only when "mp" is asked for', () => {
+    expect(parseGameRecordModes('pvf,mp').includeMultiplayer).toBe(true);
+    expect(parseGameRecordModes(' mp ').includeMultiplayer).toBe(true);
+    for (const raw of [undefined, '', 'pvf', 'mpx', 'banana', ['mp'], 5]) expect(parseGameRecordModes(raw).includeMultiplayer).toBe(false);
   });
 
   it('requires a signed-in user for both reads', async () => {
