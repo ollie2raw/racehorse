@@ -142,3 +142,4 @@ export type {
   ReviewCaptureRecord,
   ReviewCaptureManifest,
 } from './reviewCaptureSchema';
+export * from './secondOpinion';

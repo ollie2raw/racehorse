@@ -25,7 +25,7 @@ import {
 } from '@racehorse/game-core';
 import { createReviewPositionSnapshotV2, type ReviewAction, type ReviewKnownMissingPipEvidence } from '@racehorse/game-core/review';
 import { evaluateReviewPosition } from '../evaluateReviewPosition';
-import { rolloutGain, sampleAllocations } from './rolloutValue';
+import { rolloutGain, sampleAllocations } from '../rolloutValue';
 
 const shard = Number(process.argv[2] ?? '0');
 const deals = Number(process.argv[3] ?? '10');

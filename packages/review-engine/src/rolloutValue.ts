@@ -14,8 +14,8 @@ import {
   type GameState,
 } from '@racehorse/game-core';
 import type { ReviewAction, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
-import { sampleHiddenAllocation } from '../sampleHiddenAllocation';
-import { commandForAction } from '../searchGameTree';
+import { sampleHiddenAllocation } from './sampleHiddenAllocation';
+import { commandForAction } from './searchGameTree';
 
 export type HiddenAllocation = NonNullable<ReturnType<typeof sampleHiddenAllocation>>;
 

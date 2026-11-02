@@ -21,7 +21,7 @@ import { ADAPTIVE_COVERAGE_THRESHOLD, SEARCH_ESCALATION_TIERS } from '../adaptiv
 import { evaluateReviewPosition } from '../evaluateReviewPosition';
 import { LOSS_BAND_BOUNDARIES } from '../accuracyModelCalibration';
 import { replayRecordedSelfPlay } from './replayRecordedSelfPlay';
-import { rolloutGain, sampleAllocations } from './rolloutValue';
+import { rolloutGain, sampleAllocations } from '../rolloutValue';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const dir = resolve(process.argv[2] ?? resolve(ROOT, 'packages/review-engine/fixtures/recorded-self-play'));
