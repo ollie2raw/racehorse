@@ -29,7 +29,7 @@ export function DailyFritzRoute({
 }) {
   const { withAuthModals, appRootClassName } = shell;
   const { setAppMode } = navigation;
-  const { authUser, authProfile, refreshAuthProfile, applyProfilePatch, setAuthModalOpen, handleSignOut } = auth;
+  const { authUser, authProfile, refreshAuthProfile, applyProfilePatch, setAuthModalOpen, handleSignOut, ensureGuestSession } = auth;
   const { ghostProfile, setGhostProfile } = ghost;
   const { socket } = social;
   return withAuthModals(
@@ -45,6 +45,7 @@ export function DailyFritzRoute({
           onProfileRefresh={refreshAuthProfile}
           onProfilePatch={applyProfilePatch}
           onOpenAuth={() => setAuthModalOpen(true)}
+          ensureGuestSession={ensureGuestSession}
           onSignOut={handleSignOut}
           onBack={() => setAppMode('home')}
           onNavigate={setAppMode}

@@ -329,6 +329,7 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
       handleDeleteAccount: auth.handleDeleteAccount,
       updatePassword: auth.updatePassword,
       updateEmail: auth.updateEmail,
+      ensureGuestSession: auth.ensureGuestSession,
       isAdmin: auth.isAdmin,
       authUser: auth.authUser,
       authProfile: auth.authProfile,

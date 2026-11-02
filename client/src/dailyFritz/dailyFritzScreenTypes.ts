@@ -39,6 +39,8 @@ export interface DailyFritzScreenProps {
   onProfileRefresh?: () => Promise<void> | void;
   onProfilePatch?: (patch: Partial<UserProfile>) => void;
   onOpenAuth: () => void;
+  /** Creates a guest session when there is none (see `auth/useAuth`). Absent when guest play is not wired. */
+  ensureGuestSession?: () => Promise<{ error: string | null }>;
   onSignOut?: () => void;
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;

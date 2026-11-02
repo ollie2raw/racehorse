@@ -22,6 +22,10 @@ export type DailyFritzHubViewProps = {
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth: () => void;
+  /** Starts a guest session and plays on it. Only used when `hub.guestPlayAvailable`. */
+  onStartGuest?: () => void;
+  /** Why a guest session could not be started, shown above the button. */
+  guestError?: string | null;
   onSignOut?: () => void;
   onSetAction: () => void;
   onOpenLeaderboard: () => void;
@@ -35,6 +39,8 @@ export function DailyFritzHubView({
   onBack,
   onNavigate,
   onOpenAuth,
+  onStartGuest,
+  guestError,
   onSignOut,
   onSetAction,
   onOpenLeaderboard,
@@ -52,6 +58,7 @@ export function DailyFritzHubView({
     fritzTierShort,
     leaderboardSupportLine,
     isAuthenticated,
+    guestPlayAvailable,
     setStatusLabel,
     setStakesLabel,
     opponentBadgeLabel,
@@ -137,7 +144,9 @@ export function DailyFritzHubView({
                         ? leaderboardSupportLine
                         : isAuthenticated
                           ? 'Fair, consistent, leaderboard eligible.'
-                          : 'Sign in to compete.'}
+                          : guestPlayAvailable
+                            ? 'Play now, no account needed.'
+                            : 'Sign in to compete.'}
                     </div>
                   </div>
                 </div>
@@ -294,6 +303,11 @@ export function DailyFritzHubView({
                   {hubError}
                 </p>
               ) : null}
+              {guestError ? (
+                <p className="df-hub-error" role="alert">
+                  {guestError}
+                </p>
+              ) : null}
               <Button
                 variant="tier-elite"
                 size="lg"
@@ -305,13 +319,18 @@ export function DailyFritzHubView({
                 ]
                   .filter(Boolean)
                   .join(' ')}
-                onClick={() => (isAuthenticated ? void onSetAction() : onOpenAuth())}
+                onClick={() => (isAuthenticated ? void onSetAction() : guestPlayAvailable && onStartGuest ? onStartGuest() : onOpenAuth())}
                 disabled={startActionPending}
               >
                 {primaryCtaLabel}
                 {!isComplete || !isAuthenticated ? <span className="df-start-match-chevron" aria-hidden> ›</span> : null}
               </Button>
               <div className="df-pvf-footer">
+                {guestPlayAvailable ? (
+                  <Button type="button" variant="ghost" className="df-pvf-leaderboard-link" onClick={onOpenAuth}>
+                    Have an account? Sign in
+                  </Button>
+                ) : null}
                 <Button type="button" variant="ghost" className="df-pvf-leaderboard-link" onClick={() => void onOpenLeaderboard()}>
                   View Leaderboard →
                 </Button>

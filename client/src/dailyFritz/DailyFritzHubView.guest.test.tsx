@@ -79,3 +79,47 @@ describe('Daily Fritz hub for a signed-in player', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Could not start the set.');
   });
 });
+
+describe('Daily Fritz hub when guest play is available', () => {
+  function renderGuestHub(overrides: Partial<DailyFritzHubViewProps> = {}) {
+    return renderHub(false, {
+      hub: buildDailyFritzHubViewModel(null, null, 0, false, false, true),
+      onStartGuest: vi.fn(),
+      ...overrides,
+    });
+  }
+
+  it('the main button starts a guest session instead of opening sign-in', () => {
+    const props = renderGuestHub();
+    fireEvent.click(screen.getByRole('button', { name: /Play as guest/ }));
+    expect(props.onStartGuest).toHaveBeenCalledTimes(1);
+    expect(props.onOpenAuth).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Sign in to play/ })).toBeNull();
+  });
+
+  it('still offers a way to sign in to an existing account', () => {
+    const props = renderGuestHub();
+    fireEvent.click(screen.getByRole('button', { name: /Have an account\? Sign in/ }));
+    expect(props.onOpenAuth).toHaveBeenCalledTimes(1);
+    expect(props.onStartGuest).not.toHaveBeenCalled();
+  });
+
+  it('says why a guest session could not be started', () => {
+    renderGuestHub({ guestError: 'Unable to start a guest session.' });
+    expect(screen.getByRole('alert')).toHaveTextContent('Unable to start a guest session.');
+  });
+
+  it('falls back to sign-in when the build has guest play off', () => {
+    const props = renderHub(false, { onStartGuest: vi.fn() });
+    fireEvent.click(screen.getByRole('button', { name: /Sign in to play/ }));
+    expect(props.onOpenAuth).toHaveBeenCalledTimes(1);
+    expect(props.onStartGuest).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Have an account/ })).toBeNull();
+  });
+
+  it('a signed-in player never sees the guest button, whatever the flag says', () => {
+    renderHub(true, { hub: buildDailyFritzHubViewModel(TODAY, null, 0, false, true, true) });
+    expect(screen.queryByRole('button', { name: /Play as guest/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /Play Today's Set/ })).toBeTruthy();
+  });
+});
