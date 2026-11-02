@@ -20,6 +20,7 @@ export interface LegalDocument {
 }
 
 export declare const PRIVACY_POLICY: LegalDocument;
+export declare function privacyPolicy(guestPlay: boolean): LegalDocument;
 export declare const TERMS_OF_USE: LegalDocument;
 export declare const SUPPORT_PAGE: LegalDocument;
 export declare const LEGAL_DOCUMENTS: Record<LegalDocumentId, LegalDocument>;

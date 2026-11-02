@@ -63,6 +63,14 @@ export const LEGAL_CONFIG = {
   POSTHOG_LOCATION: configured('POSTHOG_LOCATION'),
 };
 
+/**
+ * Whether guest play is on in this build, read from the SAME flag the app uses (VITE_ENABLE_GUEST_PLAY, exactly "true"), so the Privacy Policy talks
+ * about guest accounts exactly when guest accounts can exist, and the two can never be switched separately. The prerender step loads this variable too.
+ */
+export function guestPlayDisclosed(env = legalEnv) {
+  return env.VITE_ENABLE_GUEST_PLAY === 'true';
+}
+
 /** What each placeholder shows on the page until the owner fills it in. */
 export const LEGAL_PLACEHOLDER_LABELS = {
   LEGAL_ENTITY_NAME: '[operator name — to be confirmed]',

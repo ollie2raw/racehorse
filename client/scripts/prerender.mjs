@@ -3,7 +3,8 @@ import { NOINDEX, crawlTargets, isIndexable, navLabel } from './prerenderNav.mjs
 import { PRERENDER_ROUTES as routes } from './prerenderRoutes.mjs';
 import { HOW_TO_PLAY_ARTICLE } from '../src/learn/howToPlay/howToPlayArticleContent.mjs';
 import { loadEnv } from 'vite';
-const legalBuildEnv = loadEnv(process.env.RACEHORSE_BUILD_MODE ?? 'production', process.cwd(), 'VITE_LEGAL_');
+// The legal copy also follows the guest-play flag, so the served /privacy says what the app does (legalConfig.mjs, guestPlayDisclosed).
+const legalBuildEnv = loadEnv(process.env.RACEHORSE_BUILD_MODE ?? 'production', process.cwd(), ['VITE_LEGAL_', 'VITE_ENABLE_GUEST_PLAY']);
 for (const [key, value] of Object.entries(legalBuildEnv)) process.env[key] ??= value;
 const { LEGAL_DOCUMENTS } = await import('../src/legal/legalContent.mjs');
 import path from 'node:path';
