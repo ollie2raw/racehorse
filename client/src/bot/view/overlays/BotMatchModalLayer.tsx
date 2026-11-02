@@ -109,6 +109,7 @@ export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
         onHome={navigation.onNavigate ? navigation.goHome : undefined}
         exitJourneyTrial={navigation.exitJourneyTrial}
         onReviewGame={modals.reopenPostGameReview}
+        onSaveGuestGame={navigation.onSaveGuestGame ?? undefined}
       />
       <BotGameOverModal
         showPostGameOverlays={modals.showPostGameOverlays}

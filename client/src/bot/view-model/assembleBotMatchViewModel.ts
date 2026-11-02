@@ -29,6 +29,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     dailyFritzSetOverlay = null,
     onDailyFritzGameComplete = null,
     onProfileRefresh = null,
+    onSaveGuestGame = null,
   } = props;
 
   const {
@@ -83,6 +84,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
     returnToLearn: navigation.returnToLearn,
     startFreshMatch: navigation.startFreshMatch,
     onProfileRefresh,
+    onSaveGuestGame,
     onDailyFritzGameComplete,
   };
 
