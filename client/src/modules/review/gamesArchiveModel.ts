@@ -18,6 +18,41 @@ export type ArchiveStats = {
   averageAccuracy: number | null;
 };
 
+const whenOf = (game: SavedGameSummary): number => {
+  const time = Date.parse(game.playedAt ?? game.savedAt);
+  return Number.isNaN(time) ? 0 : time;
+};
+
+/**
+ * The archive and the Daily Fritz games as one list, newest first, at most `limit`. A game that appears in both (it cannot today, the ids differ) is listed once.
+ * An unparseable date sorts as the oldest, so it can never push a real game out.
+ */
+export function mergeArchiveGames(archive: readonly SavedGameSummary[], dailyFritz: readonly SavedGameSummary[], limit: number): SavedGameSummary[] {
+  const seen = new Set<string>();
+  return [...archive, ...dailyFritz]
+    .filter((game) => (seen.has(game.sourceMatchId) ? false : (seen.add(game.sourceMatchId), true)))
+    .sort((a, b) => whenOf(b) - whenOf(a))
+    .slice(0, Math.max(0, limit));
+}
+
+/**
+ * Daily Fritz games are not in the game archive, so the server cannot join their saved review to the row. Do it here from the saved-reviews list, by the game's own
+ * id: a game whose review was saved reopens instantly. Its accuracy is not in that list, so the row says "Review ready" without one. Other games are untouched.
+ */
+export function attachSavedReviews(
+  games: readonly SavedGameSummary[],
+  reviews: readonly { id: string; sourceMatchId: string | null }[],
+): SavedGameSummary[] {
+  if (reviews.length === 0) return [...games];
+  const bySource = new Map<string, string>();
+  for (const review of reviews) if (review.sourceMatchId && !bySource.has(review.sourceMatchId)) bySource.set(review.sourceMatchId, review.id);
+  return games.map((game) => {
+    if (game.mode !== 'dfz' || game.review) return game;
+    const id = bySource.get(game.sourceMatchId);
+    return id ? { ...game, review: { id, accuracy: null, grade: null } } : game;
+  });
+}
+
 export function gameResult(game: SavedGameSummary): 'win' | 'loss' | 'none' {
   return game.result.winner === 'you' ? 'win' : game.result.winner === 'opponent' ? 'loss' : 'none';
 }

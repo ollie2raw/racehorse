@@ -57,6 +57,22 @@ describe('DailyFritzFinalResultOverlay', () => {
     expect(getByRole('button', { name: 'Share Result' }).className).not.toContain('dfd__btn--primary');
   });
 
+  it('offers to review the games when it can, and Share stays the primary action', () => {
+    const onAction = vi.fn();
+    const { getByRole, queryByRole } = render(
+      <DailyFritzFinalResultOverlay overlay={{ ...overlay, reviewPrompt: { actionLabel: 'Review games', onAction } }} shareDone={false} onShare={() => {}} />,
+    );
+    act(() => getByRole('button', { name: 'Review games' }).click());
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(getByRole('button', { name: 'Share Result' }).className).toContain('dfd__btn--primary');
+    expect(queryByRole('button', { name: 'Create account' })).toBeNull();
+  });
+
+  it('shows no review action when there is none to offer', () => {
+    const { queryByRole } = render(<DailyFritzFinalResultOverlay overlay={overlay} shareDone={false} onShare={() => {}} />);
+    expect(queryByRole('button', { name: 'Review games' })).toBeNull();
+  });
+
   it('shows no prompt to a signed-in player, and Share stays the primary action', () => {
     const { queryByRole, getByRole } = render(
       <DailyFritzFinalResultOverlay overlay={overlay} shareDone={false} onShare={() => {}} />,

@@ -172,4 +172,48 @@ describe('buildDailyFritzSetOverlayViewModel', () => {
       expect(vm.savePrompt).toBeUndefined();
     });
   });
+
+  describe('the review action on the final card (Daily Fritz review, DF-5)', () => {
+    const finalState = {
+      kind: 'final' as const,
+      completedGame,
+      setResult: { ...setResult, setWinner: 'player' as const, playerGamesWon: 2 },
+      rank: 4,
+      canViewLeaderboard: true,
+    };
+
+    it('is offered only when the screen can open the Games page', () => {
+      expect(buildDailyFritzSetOverlayViewModel(finalState, makeActions(), {}).reviewPrompt).toBeNull();
+      const vm = buildDailyFritzSetOverlayViewModel(finalState, makeActions(), { reviewGames: { onOpen: vi.fn() } });
+      expect(vm.reviewPrompt?.actionLabel).toBe('Review games');
+    });
+
+    it('closes the card and the embedded run first, as every other way off the card does, then opens the Games page', () => {
+      const order: string[] = [];
+      const actions = makeActions();
+      actions.clearOverlay.mockImplementation(() => order.push('clear'));
+      actions.closeEmbeddedRun.mockImplementation(() => order.push('close'));
+      const vm = buildDailyFritzSetOverlayViewModel(finalState, actions, { reviewGames: { onOpen: () => order.push('games') } });
+      vm.reviewPrompt?.onAction();
+      expect(order).toEqual(['clear', 'close', 'games']);
+    });
+
+    it('is independent of the guest save prompt: a guest sees both', () => {
+      const vm = buildDailyFritzSetOverlayViewModel(finalState, makeActions(), {
+        guestSavePrompt: { onCreateAccount: vi.fn() },
+        reviewGames: { onOpen: vi.fn() },
+      });
+      expect(vm.savePrompt?.actionLabel).toBe('Create account');
+      expect(vm.reviewPrompt?.actionLabel).toBe('Review games');
+    });
+
+    it('is not shown while the set is still in progress', () => {
+      const vm = buildDailyFritzSetOverlayViewModel(
+        { kind: 'saving', completedGame, message: 'Saving…' },
+        makeActions(),
+        { reviewGames: { onOpen: vi.fn() } },
+      );
+      expect(vm.reviewPrompt).toBeUndefined();
+    });
+  });
 });

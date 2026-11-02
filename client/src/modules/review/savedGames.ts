@@ -18,7 +18,8 @@ const MODES_QUERY = 'modes=pvf,mp';
 /** One row of the games archive (no actions, no deal seed). */
 export type SavedGameSummary = {
   sourceMatchId: string;
-  mode: 'pvf' | 'mp';
+  /** 'dfz' is a Daily Fritz game: listed from the Daily Fritz endpoint, not from the game archive (see `fetchDailyFritzGames`). */
+  mode: 'pvf' | 'mp' | 'dfz';
   /** The opponent's display name as it was in that game (multiplayer only). */
   opponentName?: string | null;
   fritzTier: string | null;
@@ -42,6 +43,52 @@ export async function fetchRecentGames(limit = 20): Promise<RecentGamesResult> {
   const result = await apiGet<{ games: SavedGameSummary[] }>(`/api/game-records/recent?limit=${limit}&${MODES_QUERY}`);
   if (result.error || !result.data) return { ok: false, reason: 'unreachable' };
   return { ok: true, games: result.data.games };
+}
+
+/** One verified Daily Fritz game, as GET /api/daily-fritz/games lists it (server/src/dailyFritzSavedGame.ts `DailyFritzGameListEntry`). */
+export type DailyFritzGameListEntry = {
+  sourceMatchId: string;
+  attemptId: string;
+  runDate: string;
+  gameNumber: number;
+  result: { you: number; opponent: number; winner: 'you' | 'opponent' | null };
+  hands: number;
+  completedAt: string | null;
+  /** Every hand of the game was kept, so a review can be offered. */
+  reviewable: boolean;
+};
+
+/** A Daily Fritz game as an archive row, so it lists, filters and counts like any other game. */
+export function dailyFritzGameToSummary(entry: DailyFritzGameListEntry): SavedGameSummary {
+  const when = entry.completedAt ?? `${entry.runDate}T00:00:00.000Z`;
+  return {
+    sourceMatchId: entry.sourceMatchId,
+    mode: 'dfz',
+    opponentName: 'Fritz',
+    fritzTier: null,
+    dealSize: null,
+    winningScore: null,
+    result: entry.result,
+    moveCount: entry.hands,
+    verification: 'replay_verified',
+    playedAt: entry.completedAt,
+    savedAt: when,
+    review: null,
+  };
+}
+
+/**
+ * The player's Daily Fritz games that can be reviewed, as archive rows. A game whose hands were not kept (played before that started) is left out: listing it
+ * would offer a review that cannot open. Never throws and never blocks the archive: if this list cannot be fetched, the player simply sees their other games.
+ */
+export async function fetchDailyFritzGames(): Promise<SavedGameSummary[]> {
+  try {
+    const result = await apiGet<{ games: DailyFritzGameListEntry[] }>('/api/daily-fritz/games');
+    if (result.error || !result.data || !Array.isArray(result.data.games)) return [];
+    return result.data.games.filter((game) => game.reviewable).map(dailyFritzGameToSummary);
+  } catch {
+    return [];
+  }
 }
 
 export type LoadSavedGameResult =

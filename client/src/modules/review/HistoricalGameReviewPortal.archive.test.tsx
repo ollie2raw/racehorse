@@ -4,13 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HistoricalGameReviewPortal, reviewOpponentLabel } from './HistoricalGameReviewPortal';
 import type { SavedGameSummary } from './savedGames';
 
-const { fetchReviews, loadReview, fetchGames } = vi.hoisted(() => ({
+const { fetchReviews, loadReview, fetchGames, fetchDaily } = vi.hoisted(() => ({
   fetchReviews: vi.fn(),
   loadReview: vi.fn(),
   fetchGames: vi.fn(),
+  fetchDaily: vi.fn(),
 }));
 vi.mock('./historicalGameReviewApi', () => ({ fetchRecentGameReviews: fetchReviews, loadHistoricalGameReview: loadReview }));
-vi.mock('./savedGames', () => ({ fetchRecentGames: fetchGames }));
+vi.mock('./savedGames', () => ({ fetchRecentGames: fetchGames, fetchDailyFritzGames: fetchDaily }));
 vi.mock('../../analyzer/GameReviewer', () => ({
   default: ({ open, analysis, onClose, opponentLabel }: { open: boolean; analysis: { analyzedAt: number }; onClose: () => void; opponentLabel?: string }) =>
     open ? <div role="dialog">Review {analysis.analyzedAt}<span data-testid="opp">{opponentLabel ?? 'default'}</span><button onClick={onClose}>Close review</button></div> : null,
@@ -47,6 +48,7 @@ const review = (overrides: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   fetchReviews.mockResolvedValue([]);
   fetchGames.mockResolvedValue({ ok: true, games: [] });
+  fetchDaily.mockResolvedValue([]);
   loadReview.mockResolvedValue(hydration);
 });
 afterEach(() => { window.history.replaceState(null, '', '/'); vi.clearAllMocks(); });
@@ -105,6 +107,75 @@ describe('Your games: multiplayer', () => {
   it('tells a player with no games they can come from Fritz or from another player', async () => {
     render(<HistoricalGameReviewPortal enabled />);
     expect(await screen.findByText(/Finish a game against Fritz or another player/)).toBeTruthy();
+  });
+});
+
+const DFZ = 'dfz:11111111-1111-4111-8111-111111111111';
+const dailyFritz = (n: number, overrides: Partial<SavedGameSummary> = {}): SavedGameSummary =>
+  game({
+    sourceMatchId: `${DFZ}:${n}`,
+    mode: 'dfz',
+    fritzTier: null,
+    opponentName: 'Fritz',
+    dealSize: null,
+    winningScore: null,
+    result: { you: 28, opponent: 25, winner: 'you' },
+    playedAt: '2026-11-02T18:30:00.000Z',
+    savedAt: '2026-11-02T18:30:00.000Z',
+    ...overrides,
+  });
+
+describe('Your games: Daily Fritz', () => {
+  it('lists a Daily Fritz game as "Daily Fritz" with its verified result, newest first among the other games', async () => {
+    fetchGames.mockResolvedValue({ ok: true, games: [game({ sourceMatchId: 'older', playedAt: '2026-11-01T21:04:00.000Z', savedAt: '2026-11-01T21:04:05.000Z' })] });
+    fetchDaily.mockResolvedValue([dailyFritz(1), dailyFritz(2, { result: { you: 12, opponent: 61, winner: 'opponent' }, playedAt: '2026-11-02T19:10:00.000Z', savedAt: '2026-11-02T19:10:00.000Z' })]);
+    render(<HistoricalGameReviewPortal enabled />);
+    const rows = await within(archive()).findAllByRole('listitem');
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent('Defeat 12–61');
+    expect(rows[0]).toHaveTextContent('Daily Fritz');
+    expect(rows[1]).toHaveTextContent('Victory 28–25');
+    expect(rows[1]).toHaveTextContent('Daily Fritz');
+    expect(rows[1]).not.toHaveTextContent('Elite');
+    expect(rows[2]).toHaveTextContent('Elite'); // the ordinary game, older, last
+  });
+
+  it('opens a game whose review was saved instantly, from that saved review (found by the game\'s own id)', async () => {
+    fetchDaily.mockResolvedValue([dailyFritz(1)]);
+    fetchReviews.mockResolvedValue([review({ id: 'review-dfz', sourceMatchId: `${DFZ}:1` })]);
+    render(<HistoricalGameReviewPortal enabled />);
+    const row = (await within(archive()).findAllByRole('listitem'))[0]!;
+    await waitFor(() => expect(row).toHaveTextContent('Review ready'));
+    fireEvent.click(within(row).getByRole('button', { name: 'Review' }));
+    await waitFor(() => expect(loadReview).toHaveBeenCalledWith('review-dfz'));
+    expect(await screen.findByTestId('opp')).toBeTruthy();
+    // shown against its game, not a second time under Recent reviews
+    expect(screen.queryByRole('region', { name: 'Recent game reviews' })?.textContent ?? '').not.toMatch(/PVF/);
+  });
+
+  it('analyzes a game that has no saved review from its own id', async () => {
+    fetchDaily.mockResolvedValue([dailyFritz(2)]);
+    render(<HistoricalGameReviewPortal enabled />);
+    const row = (await within(archive()).findAllByRole('listitem'))[0]!;
+    expect(row).toHaveTextContent('Not analyzed yet');
+    fireEvent.click(within(row).getByRole('button', { name: 'Analyze' }));
+    expect(await screen.findByRole('dialog', { name: 'analyzing' })).toHaveTextContent(`Analyzing ${DFZ}:2`);
+  });
+
+  it('counts Daily Fritz games in the record at a glance like any other game', async () => {
+    fetchGames.mockResolvedValue({ ok: true, games: [game({ result: { you: 20, opponent: 61, winner: 'opponent' } })] });
+    fetchDaily.mockResolvedValue([dailyFritz(1)]);
+    render(<HistoricalGameReviewPortal enabled layout="page" />);
+    const stats = await screen.findByLabelText('Your games at a glance');
+    expect(stats).toHaveTextContent(/Games\s*2/);
+    expect(stats).toHaveTextContent(/Win rate\s*50%/);
+  });
+
+  it('is unchanged for a player with no Daily Fritz games, and never shows an error because that list is empty', async () => {
+    fetchGames.mockResolvedValue({ ok: true, games: [game()] });
+    render(<HistoricalGameReviewPortal enabled />);
+    expect(await within(archive()).findAllByRole('listitem')).toHaveLength(1);
+    expect(screen.queryByText('Could not load your games.')).toBeNull();
   });
 });
 

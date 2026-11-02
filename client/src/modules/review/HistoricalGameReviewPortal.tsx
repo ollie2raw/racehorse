@@ -7,15 +7,17 @@ import {
 import type { HistoricalGameReviewHydration } from './hydrateHistoricalGameReview';
 import {
   NO_FILTERS,
+  attachSavedReviews,
   computeArchiveStats,
   filterGames,
   formatAccuracy,
+  mergeArchiveGames,
   tiersPresent,
   titleCase,
   type ArchiveFilters,
 } from './gamesArchiveModel';
 import { AccuracyTrend } from './AccuracyTrend';
-import { fetchRecentGames, type SavedGameSummary } from './savedGames';
+import { fetchDailyFritzGames, fetchRecentGames, type SavedGameSummary } from './savedGames';
 import './HistoricalGameReviewPortal.css';
 
 const GameReviewer = lazy(() => import('../../analyzer/GameReviewer'));
@@ -119,11 +121,12 @@ export function HistoricalGameReviewPortal({ enabled, layout = 'strip', onOpenGa
       .catch(() => {
         if (!cancelled) { setEntries([]); setError('Could not load saved reviews. Please try again.'); }
       });
-    void fetchRecentGames(GAMES_SHOWN[layout])
-      .then((result) => {
+    // Daily Fritz games are listed by their own endpoint; that list never fails the archive (it returns nothing instead).
+    void Promise.all([fetchRecentGames(GAMES_SHOWN[layout]), fetchDailyFritzGames()])
+      .then(([result, dailyFritz]) => {
         if (cancelled) return;
         setGamesError(!result.ok);
-        setGames(result.ok ? result.games : []);
+        setGames(result.ok ? mergeArchiveGames(result.games, dailyFritz, GAMES_SHOWN[layout]) : []);
       })
       .catch(() => {
         if (!cancelled) { setGamesError(true); setGames([]); }
@@ -172,7 +175,7 @@ export function HistoricalGameReviewPortal({ enabled, layout = 'strip', onOpenGa
     };
   }, [accessEnabled, openReview]);
 
-  const allGames = useMemo(() => games ?? [], [games]);
+  const allGames = useMemo(() => attachSavedReviews(games ?? [], entries ?? []), [games, entries]);
   const stats = useMemo(() => computeArchiveStats(allGames), [allGames]);
   const tiers = useMemo(() => tiersPresent(allGames), [allGames]);
   const visibleGames = useMemo(() => filterGames(allGames, filters), [allGames, filters]);
@@ -263,7 +266,7 @@ export function HistoricalGameReviewPortal({ enabled, layout = 'strip', onOpenGa
                     <strong className={won ? 'rh-saved-games__win' : lost ? 'rh-saved-games__loss' : undefined}>
                       {won ? 'Victory' : lost ? 'Defeat' : 'Final'} {game.result.you}–{game.result.opponent}
                     </strong>
-                    {' · '}{game.mode === 'mp' ? `vs ${game.opponentName ?? 'Opponent'}` : titleCase(game.fritzTier)} · {gameWhen(game)}
+                    {' · '}{game.mode === 'mp' ? `vs ${game.opponentName ?? 'Opponent'}` : game.mode === 'dfz' ? 'Daily Fritz' : titleCase(game.fritzTier)} · {gameWhen(game)}
                   </span>
                   <span className="rh-saved-games__state">
                     {reviewId ? 'Review ready' : 'Not analyzed yet'}

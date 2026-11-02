@@ -1,5 +1,5 @@
 {
-  "total": 3500631,
+  "total": 3502309,
   "chunks": {
     "ActivityFeedLobbyBridge": 34071,
     "analyzer": 96133,
@@ -10,14 +10,14 @@
     "bot-heuristics": 24076,
     "BotMatchScreen": 256880,
     "DailyFritzLeaderboardRoute": 20213,
-    "DailyFritzScreen": 55636,
+    "DailyFritzScreen": 55822,
     "FriendsScreenLobbyBridge": 20629,
     "game-reviewer": 137461,
     "GameOverModal": 29642,
     "GhostSetupScreen": 14907,
     "GuidedMatchRecorderScreen": 36116,
     "GuidedMatchSourceEditor": 11234,
-    "HistoricalGameReviewPortal": 24159,
+    "HistoricalGameReviewPortal": 25252,
     "HomeScreen": 41496,
     "index": 577665,
     "LearnHome": 14968,
