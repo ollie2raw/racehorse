@@ -130,11 +130,33 @@ describe('respondLeaderboardWeekly', () => {
       { winner_user_id: 'alice', loser_user_id: 'cara' },
       { winner_user_id: 'bob', loser_user_id: 'cara' },
     ]);
+    mockFetch.mockResolvedValueOnce([]); // guest lookup: nobody here is a guest
     mockFetch.mockResolvedValueOnce([
       { id: 'alice', username: 'alice', glicko_rating: 1200, provisional: false },
       { id: 'bob', username: 'bob', glicko_rating: 1100, provisional: false },
     ]);
   }
+
+  it('leaves a guest off the board however many games they won', async () => {
+    mockFetch.mockResolvedValueOnce([
+      { winner_user_id: 'guesty', loser_user_id: 'bob' },
+      { winner_user_id: 'guesty', loser_user_id: 'cara' },
+      { winner_user_id: 'bob', loser_user_id: 'cara' },
+    ]);
+    mockFetch.mockResolvedValueOnce([{ id: 'guesty' }]); // guest lookup
+    mockFetch.mockResolvedValueOnce([
+      { id: 'bob', username: 'bob', glicko_rating: 1100, provisional: false },
+    ]);
+
+    const res = makeRes();
+    await respondLeaderboardWeekly('bob', res as never);
+
+    const body = res.body as { leaderboard: Array<{ userId: string; rank: number }> };
+    expect(body.leaderboard.map((r) => r.userId)).toEqual(['bob']);
+    expect(body.leaderboard[0].rank).toBe(1);
+    // the profile lookup never asked for the guest
+    expect(String(mockFetch.mock.calls[2][0])).not.toContain('guesty');
+  });
 
   it('ranks by wins this week and marks the caller', async () => {
     primeWeeklyResponses();
@@ -189,6 +211,7 @@ describe('respondLeaderboardWeekly', () => {
         created_at: '2026-09-04T00:00:00.000Z', room_code: 'QRST',
       },
     ]);
+    mockFetch.mockResolvedValueOnce([]); // guest lookup
     mockFetch.mockResolvedValueOnce([
       { id: 'alice', username: 'alice', glicko_rating: 1200, provisional: false },
     ]);

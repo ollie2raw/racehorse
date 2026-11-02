@@ -184,6 +184,8 @@ describe('buildDailyFritzLeaderboard — the public ranked query', () => {
         ]);
       }
       if (String(url).includes('/rest/v1/profiles')) {
+        // The guest lookup (is_guest=eq.true): nobody here is a guest.
+        if (String(url).includes('is_guest=eq.true')) return jsonResponse([]);
         return jsonResponse([
           { id: 'user-rejected', username: 'Rejected Player' },
           { id: 'user-legacy', username: 'Legacy Player' },
@@ -196,6 +198,27 @@ describe('buildDailyFritzLeaderboard — the public ranked query', () => {
     const leaderboard = await buildDailyFritzLeaderboard(RUN_DATE);
 
     expect(leaderboard.map((entry) => entry.userId)).toEqual(['user-verified']);
+    expect(leaderboard[0]?.rank).toBe(1);
+  });
+
+  it('leaves a guest off the board even with a verified run (guests are recorded but not ranked)', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (String(url).includes('/rest/v1/daily_fritz_attempts')) {
+        return jsonResponse([
+          attemptRow({ id: 'a-guest', userId: 'user-guest', verificationStatus: 'verified', pointDiff: 60 }),
+          attemptRow({ id: 'a-member', userId: 'user-member', verificationStatus: 'verified', pointDiff: 20 }),
+        ]);
+      }
+      if (String(url).includes('/rest/v1/profiles')) {
+        if (String(url).includes('is_guest=eq.true')) return jsonResponse([{ id: 'user-guest' }]);
+        return jsonResponse([{ id: 'user-member', username: 'Member Player' }]);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    const leaderboard = await buildDailyFritzLeaderboard('2026-11-02');
+
+    expect(leaderboard.map((entry) => entry.userId)).toEqual(['user-member']);
     expect(leaderboard[0]?.rank).toBe(1);
   });
 });

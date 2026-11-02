@@ -2,6 +2,7 @@
 import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFritzConfig, isFritzId, isProvisional, type MatchOutcome } from './glicko2';
 import { mayContinueDecay } from './ratingCutoverGate';
 import { supabaseFetch } from '../supabaseUtils';
+import { fetchProfilesExcludingGuests } from '../guests/guestEligibility';
 import { fetchAllPages } from '../supabasePagination';
 import { childLogger } from '../logger';
 import { readRankedRatingContext, rankedRatingWeight } from './ratingContext';
@@ -533,7 +534,7 @@ export async function decayInactivePlayers() {
 }
 
 export async function getLeaderboard(limit: number = 50) {
-  const users = await supabaseFetch<Profile[]>(`/rest/v1/profiles?provisional=eq.false&order=glicko_rating.desc&limit=${limit}`);
+  const users = await fetchProfilesExcludingGuests<Profile[]>(`/rest/v1/profiles?provisional=eq.false&order=glicko_rating.desc&limit=${limit}`);
   return users.map((u) => ({
     userId: u.id,
     username: u.username,

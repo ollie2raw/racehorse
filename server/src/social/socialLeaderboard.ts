@@ -3,6 +3,7 @@ import { supabaseFetch } from '../supabaseUtils';
 import { getFriendIds } from './socialAuth';
 import { dedupeMatchRows } from '../stats/dedupeMatchRows';
 import { sendServerError } from '../http/errors';
+import { fetchGuestUserIds, fetchProfilesExcludingGuests } from '../guests/guestEligibility';
 
 /**
  * Online win counts for a set of users, in one round-trip.
@@ -110,7 +111,10 @@ async function buildWeeklyLeaderboard(): Promise<WeeklyRow[]> {
     return [];
   }
 
-  const topIds = [...winCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 100).map(([id]) => id);
+  // Guests win games too, but are not ranked: look at a few extra so removing them still leaves a full board.
+  const candidateIds = [...winCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 120).map(([id]) => id);
+  const guestIds = await fetchGuestUserIds(candidateIds);
+  const topIds = candidateIds.filter((id) => !guestIds.has(id)).slice(0, 100);
   const profileFilter = topIds.map((id) => `id.eq.${encodeURIComponent(id)}`).join(',');
   const profiles = await supabaseFetch<Array<{ id: string; username: string; glicko_rating: number; provisional: boolean }>>(
     `/rest/v1/profiles?or=(${profileFilter})&select=id,username,glicko_rating,provisional`,
@@ -132,7 +136,7 @@ async function buildWeeklyLeaderboard(): Promise<WeeklyRow[]> {
 
 export async function respondLeaderboardGlobal(userId: string, res: Response): Promise<void> {
   try {
-    const profiles = await supabaseFetch<Array<{
+    const profiles = await fetchProfilesExcludingGuests<Array<{
       id: string; username: string; glicko_rating: number;
       ranked_games_played: number; provisional: boolean;
     }>>(
@@ -146,14 +150,15 @@ export async function respondLeaderboardGlobal(userId: string, res: Response): P
       provisional: false, global_rank: i + 1, is_self: p.id === userId,
     }));
     let selfEntry = topRows.find((r) => r.is_self);
-    if (!selfEntry) {
+    // A guest is not ranked, so they have no place of their own on this board.
+    if (!selfEntry && !(await fetchGuestUserIds([userId])).has(userId)) {
       const enc = encodeURIComponent(userId);
       const selfProfile = await supabaseFetch<Array<{
         id: string; username: string; glicko_rating: number; ranked_games_played: number; provisional: boolean;
       }>>(`/rest/v1/profiles?id=eq.${enc}&select=id,username,glicko_rating,ranked_games_played,provisional&limit=1`);
       if (selfProfile?.[0]) {
         const sp = selfProfile[0];
-        const aboveCount = await supabaseFetch<Array<{ id: string }>>(
+        const aboveCount = await fetchProfilesExcludingGuests<Array<{ id: string }>>(
           `/rest/v1/profiles?provisional=eq.false&glicko_rating=gte.${encodeURIComponent(String(sp.glicko_rating))}&select=id`,
         );
         selfEntry = {
