@@ -3,6 +3,7 @@ import './platform/env/refuseProductionSupabaseInDev'; // B4: must stay the firs
 import { processAdmissionMiddleware, trackSocketHandlers, isProcessClosing, processInterval, onProcessStop } from './platform/processLifecycle';
 import * as Sentry from '@sentry/node';
 import { config } from './config';
+import { runBootEnvCheck } from './envBootCheck';
 import { sentryBeforeSend } from './sentryScrubbers';
 import { startEventLoopLagMonitor } from './platform/health/eventLoopLagMonitor';
 import { startResourceUsageLog } from './platform/health/resourceUsageLog';
@@ -340,6 +341,10 @@ const corsOptions: CorsOptions = {
   },
   credentials: true,
 };
+
+// Reports settings that will be misread (a flag that is quietly off, a number that quietly becomes its default). Report-only unless
+// ENV_VALIDATION_MODE=enforce.
+runBootEnvCheck();
 
 const app = express();
 // AU-3 (HARDENING_PLAN §6.3), corrected 2026-09-04. Render fronts this app with
