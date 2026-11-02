@@ -70,6 +70,8 @@ export type AppRoutesAuthProps = {
   handleDeleteAccount: (confirmation: string) => Promise<{ error: string | null }>;
   updatePassword: (password: string) => Promise<{ error: string | null; message?: string | null }>;
   updateEmail: (email: string) => Promise<{ error: string | null; message?: string | null }>;
+  /** Creates an anonymous session when there is none; resolves with an error message on failure. Guest play only. */
+  ensureGuestSession: () => Promise<{ error: string | null }>;
   isAdmin: boolean;
   authLoading?: boolean;
   authUser: User | null;

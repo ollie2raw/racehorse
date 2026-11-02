@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { isGuestPlayEnabled } from '../config/guestPlayFeature';
 import { useDeferredAsset } from '../ui/useDeferredAsset';
 import '../screens/RacehorseHomeArt.css';
 
@@ -22,6 +23,7 @@ export default function DailyFritzScreen({
   onProfileRefresh,
   onProfilePatch,
   onOpenAuth,
+  ensureGuestSession,
   onSignOut,
   onBack,
   onNavigate,
@@ -155,10 +157,35 @@ export default function DailyFritzScreen({
     [today],
   );
 
+  const guestPlayEnabled = isGuestPlayEnabled() && Boolean(ensureGuestSession);
   const hubViewModel = useMemo(
-    () => buildDailyFritzHubViewModel(today, todaySetResult, countdownTick, startActionPending, Boolean(user)),
-    [today, todaySetResult, countdownTick, startActionPending, user],
+    () => buildDailyFritzHubViewModel(today, todaySetResult, countdownTick, startActionPending, Boolean(user), guestPlayEnabled),
+    [today, todaySetResult, countdownTick, startActionPending, user, guestPlayEnabled],
   );
+
+  // "Play as guest": create the session, and once the set has loaded for the new user carry straight on into it, so the
+  // visitor taps once, not twice.
+  const [guestError, setGuestError] = useState<string | null>(null);
+  const [guestStarting, setGuestStarting] = useState(false);
+  const autoBeginRef = useRef(false);
+  const startGuest = useCallback(async () => {
+    if (!ensureGuestSession || guestStarting) return;
+    setGuestError(null);
+    setGuestStarting(true);
+    autoBeginRef.current = true;
+    const { error } = await ensureGuestSession();
+    setGuestStarting(false);
+    if (error) {
+      autoBeginRef.current = false;
+      setGuestError(error);
+    }
+  }, [ensureGuestSession, guestStarting]);
+
+  useEffect(() => {
+    if (!autoBeginRef.current || !user || !today) return;
+    autoBeginRef.current = false;
+    if (resolveTodayNextAction(today) === 'play_hand' && today.attempt_status !== 'started') handleSetAction();
+  }, [user, today, handleSetAction]);
 
   if (hasEmbeddedMatch && activeRun && embeddedMatchKey) {
     return (
@@ -209,10 +236,12 @@ export default function DailyFritzScreen({
       hub={hubViewModel}
       heroSrc={heroSrc}
       hubError={hubError}
-      startActionPending={startActionPending}
+      startActionPending={startActionPending || guestStarting}
       onBack={onBack}
       onNavigate={onNavigate}
       onOpenAuth={onOpenAuth}
+      onStartGuest={() => void startGuest()}
+      guestError={guestError}
       onSignOut={onSignOut}
       onSetAction={handleSetAction}
       onOpenLeaderboard={openLeaderboard}

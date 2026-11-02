@@ -47,6 +47,8 @@ export type DailyFritzHubViewModel = {
   opponentBadgeLabel: string;
   resetCountdownLabel: string;
   isAuthenticated: boolean;
+  /** Signed out, and the build lets a visitor play on a guest session: the main button starts one instead of opening sign-in. */
+  guestPlayAvailable: boolean;
 };
 
 export function buildDailyFritzHubGameCards(
@@ -127,6 +129,7 @@ export function buildDailyFritzHubViewModel(
   countdownTick: number,
   startActionPending: boolean,
   isAuthenticated: boolean,
+  guestPlayEnabled = false,
 ): DailyFritzHubViewModel {
   void countdownTick;
 
@@ -148,8 +151,11 @@ export function buildDailyFritzHubViewModel(
   const isComplete = nextAction === 'view_results';
   const isStarted = today?.attempt_status === 'started';
 
+  const guestPlayAvailable = !isAuthenticated && guestPlayEnabled;
   const primaryCtaLabel = !isAuthenticated
-    ? 'Sign in to play'
+    ? guestPlayAvailable
+      ? 'Play as guest'
+      : 'Sign in to play'
     : nextAction === 'view_results'
       ? "View Today's Result"
       : nextAction === 'locked'
@@ -210,5 +216,6 @@ export function buildDailyFritzHubViewModel(
     opponentBadgeLabel,
     resetCountdownLabel,
     isAuthenticated,
+    guestPlayAvailable,
   };
 }
