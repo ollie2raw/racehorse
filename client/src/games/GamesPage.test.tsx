@@ -47,6 +47,33 @@ describe('GamesPage', () => {
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
   });
 
+  describe('for a guest', () => {
+    it('still shows their archive, with a notice that the games live on the guest session', () => {
+      render(<GamesPage signedIn isGuest onOpenAuth={vi.fn()} onBack={vi.fn()} />);
+      expect(screen.getByTestId('archive')).toHaveTextContent('archive:page');
+      expect(screen.getByRole('status')).toHaveTextContent('playing as a guest');
+    });
+
+    it('offers Create account (not Sign in), and it opens the account sheet', () => {
+      const onOpenAuth = vi.fn();
+      render(<GamesPage signedIn isGuest onOpenAuth={onOpenAuth} onBack={vi.fn()} />);
+      expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+      expect(onOpenAuth).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows no dead button without a handler', () => {
+      render(<GamesPage signedIn isGuest onBack={vi.fn()} />);
+      expect(screen.queryByRole('button', { name: 'Create account' })).toBeNull();
+    });
+
+    it('shows a permanent account no guest notice', () => {
+      render(<GamesPage signedIn isGuest={false} onOpenAuth={vi.fn()} onBack={vi.fn()} />);
+      expect(screen.queryByText(/playing as a guest/)).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Create account' })).toBeNull();
+    });
+  });
+
   it('goes back home', () => {
     const onBack = vi.fn();
     render(<GamesPage signedIn onBack={onBack} />);
