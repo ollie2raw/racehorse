@@ -24,13 +24,28 @@ const CORPUS = resolve(dirname(fileURLToPath(import.meta.url)), '../../fixtures/
 const same = (a: ReviewAction | null | undefined, b: ReviewAction | null | undefined) => JSON.stringify(a) === JSON.stringify(b);
 const isForced = (e: ReviewEvaluationV1) => e.candidates.length <= 1;
 
-type Audit = { violations: string[]; decisions: number; byTier: Record<string, number> };
+type Audit = { violations: string[]; decisions: number; byTier: Record<string, number>; softened: number };
 
-function auditCorpus(): Audit {
+/**
+ * The worst case for the second opinion: every search decision with a real choice comes back UNCONFIRMED (no rollouts needed to test the
+ * presentation). The recorded corpus predates the field, so this is how the softened path meets real positions.
+ */
+function withUnconfirmedOpinion(evaluation: ReviewEvaluationV1): ReviewEvaluationV1 {
+  if (evaluation.evidence.source !== 'search' || isForced(evaluation)) return evaluation;
+  const kind = same(evaluation.played.action, evaluation.best.action) ? 'best' : 'error';
+  return { ...evaluation, secondOpinion: { verdict: 'unconfirmed', kind, samples: 60, rolloutMargin: kind === 'best' ? 1.5 : -0.5 } };
+}
+
+/** Independent literal of the documented softening (one grade milder), not imported from the implementation. */
+const ONE_GRADE_SOFTER: Record<string, string> = { Best: 'Good', Inaccuracy: 'Good', Mistake: 'Inaccuracy', Blunder: 'Inaccuracy' };
+
+function auditCorpus(mode: 'as-recorded' | 'all-unconfirmed' = 'as-recorded'): Audit {
   const violations: string[] = [];
   const byTier: Record<string, number> = {};
   let decisions = 0;
-  for (const { snapshot, evaluation, file } of replayRecordedSelfPlay(CORPUS)) {
+  let softened = 0;
+  for (const { snapshot, evaluation: recorded, file } of replayRecordedSelfPlay(CORPUS)) {
+    const evaluation = mode === 'all-unconfirmed' ? withUnconfirmedOpinion(recorded) : recorded;
     const ctx = `${file}#${snapshot.identifiers.decisionId}`;
     const facts = buildReviewCoachingFacts(evaluation, snapshot, true);
     const record = buildReviewPresentationRecord(evaluation, facts);
@@ -68,12 +83,24 @@ function auditCorpus(): Audit {
       if (Math.abs(evaluation.loss.expectedPointDifferential - Math.max(0, gap)) > 0.01) add(`loss ${evaluation.loss.expectedPointDifferential} is not best minus played (${gap})`);
     }
 
-    // H. playing the reference move is never graded below Best
-    if (record.playedMatchesPrimary && label && label !== 'Best' && label !== 'Estimate' && label !== 'Forced' && label !== 'Unclear' && label !== 'Unavailable') {
+    // H. playing the reference move is never graded below Best, except a Best the whole-hand second opinion did not confirm (shown as Good on purpose)
+    const softenedBest = record.softenedBySecondOpinion === true && label === 'Good';
+    if (record.playedMatchesPrimary && !softenedBest && label && label !== 'Best' && label !== 'Estimate' && label !== 'Forced' && label !== 'Unclear' && label !== 'Unavailable') {
       add('played the reference move but graded below Best');
     }
+
+    // I. a softened verdict is strictly milder than the same decision without the opinion, never states a gap as settled, and never claims "Best move."
+    if (record.softenedBySecondOpinion) {
+      softened += 1;
+      const unsoftened = presentationLabel(buildReviewPresentationRecord(recorded, buildReviewCoachingFacts(recorded, snapshot, true)));
+      if (ONE_GRADE_SOFTER[unsoftened ?? ''] !== label) add(`softened label is not exactly one grade softer than ${unsoftened}`);
+      if (/\bby about\b|^Best move\.|\b(weakest|significant miss|meaningful miss|costliest|noticeably weaker|major miss)\b/i.test(headline)) add('softened verdict still states the severity in the headline');
+    } else if (mode === 'all-unconfirmed' && evaluation.secondOpinion && label !== 'Best' && source === 'search') {
+      // a search decision given an unconfirmed opinion was softened or was a Best-tolerance error: either way it must be flagged when it changed
+      if (label !== presentationLabel(buildReviewPresentationRecord(recorded, buildReviewCoachingFacts(recorded, snapshot, true)))) add('label changed without the softened flag');
+    }
   }
-  return { violations, decisions, byTier };
+  return { violations, decisions, byTier, softened };
 }
 
 describe('review presentation: no surface contradicts another, on the whole recorded corpus', () => {
@@ -86,6 +113,19 @@ describe('review presentation: no surface contradicts another, on the whole reco
 
   it('finds no contradiction between the badge, the prose, the board and the numbers', () => {
     // Printed in full on failure, so the failing decision is identifiable from the report alone.
+    expect(audit.violations.slice(0, 25)).toEqual([]);
+    expect(audit.violations.length).toBe(0);
+  });
+});
+
+describe('review presentation: still no contradiction when EVERY search verdict is softened by the second opinion', () => {
+  const audit = auditCorpus('all-unconfirmed');
+
+  it('softens a real share of the corpus (so a clean result means something)', () => {
+    expect(audit.softened).toBeGreaterThan(200);
+  });
+
+  it('finds no contradiction between the softened badge, the prose, the board and the numbers', () => {
     expect(audit.violations.slice(0, 25)).toEqual([]);
     expect(audit.violations.length).toBe(0);
   });

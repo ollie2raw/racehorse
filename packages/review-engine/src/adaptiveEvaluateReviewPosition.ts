@@ -14,6 +14,7 @@ import { resolveCausalEvidence } from './evidenceLifecycle';
 import { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
 import { countCombinations } from './combinations';
 import { decideSearchConvergence } from './evaluationConvergence';
+import { computeSecondOpinion } from './secondOpinion';
 
 /**
  * Search escalation ladder. After tier 4, progressive chunks continue until
@@ -110,6 +111,20 @@ function withProvenance(
       ...(args.detail ? { detail: args.detail } : {}),
     },
   };
+}
+
+/**
+ * Adds the whole-hand second opinion to a SCORED search evaluation (nothing when it does not apply); the loss and candidates are untouched.
+ * Completion phase only: the live pass is for fast feedback during the game and the post-game completion owns the final verdict.
+ */
+function withSecondOpinion(
+  snapshot: ReviewPositionSnapshotV2,
+  evaluation: ReviewEvaluationV1,
+  phase: 'live' | 'completion',
+): ReviewEvaluationV1 {
+  if (phase !== 'completion') return evaluation;
+  const secondOpinion = computeSecondOpinion(snapshot, evaluation);
+  return secondOpinion ? { ...evaluation, secondOpinion } : evaluation;
 }
 
 function isEngineScored(evaluation: ReviewEvaluationV1): boolean {
@@ -269,7 +284,7 @@ export function adaptiveEvaluateReviewPosition(
     }
     if (isEngineScored(raw)) {
       return {
-        evaluation: withProvenance(raw, {
+        evaluation: withProvenance(withSecondOpinion(snapshot, raw, phase), {
           lifecycle: 'SCORED',
           phase,
           positionHash,
@@ -337,7 +352,7 @@ export function adaptiveEvaluateReviewPosition(
       if (isEngineScored(raw)) {
         const conv = raw.diagnostics.find((d) => d.startsWith('eval-convergence:'))?.slice('eval-convergence:'.length);
         return {
-          evaluation: withProvenance(raw, {
+          evaluation: withProvenance(withSecondOpinion(snapshot, raw, phase), {
             lifecycle: 'SCORED',
             phase,
             positionHash,
@@ -396,7 +411,7 @@ export function adaptiveEvaluateReviewPosition(
           const life = isForcedDecision(raw.candidates) ? 'FORCED' : 'SCORED';
           const conv = raw.diagnostics.find((d) => d.startsWith('eval-convergence:'))?.slice('eval-convergence:'.length);
           return {
-            evaluation: withProvenance(raw, {
+            evaluation: withProvenance(withSecondOpinion(snapshot, raw, phase), {
               lifecycle: life,
               phase,
               positionHash,

@@ -210,6 +210,21 @@ export type ReviewEvaluationV1 = {
   };
   readonly diagnostics: readonly string[];
   /**
+   * Whole-hand second opinion (additive; absent on historical evaluations, on exact and heuristic results, on forced decisions and
+   * on live-phase results -- treat missing as "no second opinion", never as confirmed or unconfirmed). The search values a position
+   * at its horizon as the current score difference, so a rollout to the end of the hand is asked too. `confirmed`: for an error
+   * verdict the review's best beats the played move in the rollout; for a "Best" no other move beats it by more than 1 point.
+   * `unconfirmed` means the two views disagree, so presentation should not state the severity (or "Best") with full confidence.
+   * The loss and the candidate values are NOT changed by this, only how the verdict is presented. Measured in
+   * docs/review-quality-baseline-2026-11-02.md section 7.
+   */
+  readonly secondOpinion?: {
+    readonly verdict: 'confirmed' | 'unconfirmed';
+    readonly kind: 'error' | 'best';
+    readonly samples: number;
+    readonly rolloutMargin: number;
+  };
+  /**
    * Structured sample-stability signal from the search (B3) path only --
    * absent for exact and heuristic results. Promotes B-integration's
    * original diagnostics-string folding of this same data into a real

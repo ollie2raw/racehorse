@@ -24,7 +24,7 @@ export type HeuristicClassification =
   | { readonly kind: 'unavailable'; readonly reason: string }
   | { readonly kind: 'unclear'; readonly reason: 'globally-infeasible' | 'flat-spread' | 'primary-absent' }
   | { readonly kind: 'bucket'; readonly bucket: 'Good' | 'Inaccuracy' | 'Blunder' }
-  | { readonly kind: 'calibrated'; readonly label: 'Best' | 'Inaccuracy' | 'Mistake' | 'Blunder' };
+  | { readonly kind: 'calibrated'; readonly label: 'Best' | 'Good' | 'Inaccuracy' | 'Mistake' | 'Blunder' };
 
 // Provisional, from a real but tiny (n=3) dataset -- see issue #231.
 // Kept only for researchClassifierHeuristicSeverity below — NOT production.

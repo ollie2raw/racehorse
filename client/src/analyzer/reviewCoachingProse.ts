@@ -259,6 +259,25 @@ function buildMatchedReferenceProse(facts: ReviewCoachingFacts): ReviewCoachingP
   };
 }
 
+/**
+ * The whole-hand second opinion did not confirm the verdict, so the copy says the two views disagree instead of stating a severity or a
+ * "Best move" as settled. It names the move the review prefers but quotes no point gap and gives no takeaway.
+ */
+function buildUnconfirmedProse(facts: ReviewCoachingFacts, kind: 'error' | 'best'): ReviewCoachingProse {
+  if (kind === 'best') {
+    return {
+      headline: 'Strong move.',
+      detail: 'The review ranks it first, but playing the hand out finds a slightly better option.',
+      takeaway: '',
+    };
+  }
+  return {
+    headline: `The review leans toward ${preferredValueGapSubject(facts)}, but it is not clear-cut.`,
+    detail: 'Playing the hand out does not consistently back that up, so this is not marked as a clear miss.',
+    takeaway: '',
+  };
+}
+
 function buildTrueEqualityProse(facts: ReviewCoachingFacts): ReviewCoachingProse {
   const immediateGap = facts.deltas.immediatePoints;
   const referenceAction = actionLabel(facts.best.action);
@@ -606,6 +625,7 @@ export function buildReviewCoachingProse(
     fritzMove: undefined,
     oracleMove: undefined,
   };
+  if (facts.secondOpinionUnconfirmed && facts.missKind !== 'forced') return buildUnconfirmedProse(facts, facts.secondOpinionUnconfirmed);
   if (enablePositionalExplanations && facts.featureDeltas && facts.missKind !== 'forced') {
     return buildFeatureDeltaProse(facts, includeTrueReferenceEquality);
   }

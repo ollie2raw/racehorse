@@ -104,12 +104,28 @@ export function moveRatingCoachingCopy(
  * to legacy Good/"solid option" wording.
  */
 export function calibratedRatingCoachingCopy(
-  label: 'Best' | 'Inaccuracy' | 'Mistake' | 'Blunder',
+  label: 'Best' | 'Good' | 'Inaccuracy' | 'Mistake' | 'Blunder',
   scoreGap?: number,
+  /**
+   * Set when the whole-hand second opinion did not confirm the verdict, so the label was softened one grade. The copy then says the
+   * two views disagree and does not quote the search's score gap as if it were settled.
+   */
+  unconfirmed?: 'error' | 'best',
 ): string {
   const gapLabel = scoreGap === undefined ? undefined : formatScoreGapForDisplay(scoreGap);
 
+  if (unconfirmed === 'best') {
+    return 'A strong move. The review ranks it first, but playing the hand out finds a slightly better option.';
+  }
+  if (unconfirmed === 'error') {
+    return label === 'Good'
+      ? 'A reasonable move. The review\'s search prefers another option, but playing the hand out does not clearly agree.'
+      : 'A small miss at most. The review\'s search prefers another option, but playing the hand out only partly agrees.';
+  }
+
   switch (label) {
+    case 'Good':
+      return 'A reasonable move among the options available.';
     case 'Best':
       return gapLabel == null
         ? 'Top move — matches the review reference for this position.'

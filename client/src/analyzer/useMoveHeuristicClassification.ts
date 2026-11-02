@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { ReviewAction } from '@racehorse/game-core/review';
 import type { ReviewBatchState } from '../modules/review/useReviewWorkerBatch';
 import { classifyHeuristicResult, type HeuristicClassification } from './classifyHeuristicResult';
-import { lossBandLabelForEvaluation } from './gameAccuracyModel';
+import { presentedLabelForEvaluation } from './gameAccuracyModel';
 
 export type SelectMoveClassificationOptions = {
   /** D2 primary reference for heuristic tier (Fritz action when available). */
@@ -45,7 +45,7 @@ export function selectMoveHeuristicClassification(
       reason: evaluation.evaluationProvenance.unavailableReason,
     };
   }
-  const label = lossBandLabelForEvaluation(evaluation);
+  const label = presentedLabelForEvaluation(evaluation);
   return label ? { kind: 'calibrated', label } : null;
 }
 

@@ -314,7 +314,8 @@ export default function GameReviewer({
     }
     if (classification?.kind === 'calibrated') {
       const scoreGap = Math.abs(resolvedEvaluation?.loss.expectedPointDifferential ?? 0);
-      return calibratedRatingCoachingCopy(classification.label, scoreGap);
+      const opinion = resolvedEvaluation?.secondOpinion;
+      return calibratedRatingCoachingCopy(classification.label, scoreGap, opinion?.verdict === 'unconfirmed' ? opinion.kind : undefined);
     }
 
     // Legacy fallback only when no modern evaluation path is wired.
