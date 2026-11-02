@@ -1,20 +1,17 @@
 import { createDeterministicDoubleSixDeal } from '@racehorse/game-core';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import type { PlacementPosition, Tile } from '../../types.ts';
-import { snapshotBoardState, toTileTuple, type MoveEntry } from '../../game/moveLogger.ts';
+import type { MoveEntry } from '../../game/moveLogger.ts';
 import {
-  applyPlayMove,
   createFixedBotMatchWithStarter,
-  drawOne,
-  passTurn,
   startNextBotHand,
   type BotDealSize,
   type BotMatchState,
   type BotPlayerId,
 } from '../match/runtime/botEngine.ts';
 import type { RecordMoveEntry } from '../ghost/ghostMatchHelpers.ts';
-import { observeActorDrawPastOpenEnds, observeActorPassOnOpenEnds } from './missingPipEvidenceAccumulate.ts';
-import { ReviewSnapshotRecorder, type ReviewActorAction } from './ReviewSnapshotRecorder.ts';
+import type { ReviewSnapshotRecorder, ReviewActorAction } from './ReviewSnapshotRecorder.ts';
+import { createReplayStepper } from './replayStepper.ts';
 
 /**
  * A saved game record as the server returns it (docs/review-game-record-architecture.md, Phase 3): the settings, the
@@ -101,11 +98,8 @@ export function rebuildGameFromRecord(record: SavedGameRecord): RebuildResult {
     ...createFixedBotMatchWithStarter(firstHandDeal(record.dealSeed, dealSize), starter, winningScore, dealSize),
     dealSeed: record.dealSeed,
   };
-  const recorder = new ReviewSnapshotRecorder({ sessionId: record.sourceMatchId, gameId: record.sourceMatchId });
-  const moveLog: MoveEntry[] = [];
-  const snapshots: ReviewPositionSnapshotV2[] = [];
-  let moveNumber = 0;
-  let previous: { actor: BotPlayerId; kind: ReviewActorAction['kind']; hand: number } | null = null;
+  const stepper = createReplayStepper(record.sourceMatchId);
+  const { moveLog, snapshots, recorder } = stepper;
 
   for (let i = 0; i < record.moves.length; i += 1) {
     const entry = record.moves[i]!;
@@ -128,49 +122,9 @@ export function rebuildGameFromRecord(record: SavedGameRecord): RebuildResult {
       return fail('not_replayable', `${actor} acted but it was ${state.currentPlayer}'s turn.`, i);
     }
 
-    // The same public evidence the live turn stack attaches before a draw or a pass.
-    if (action.kind === 'draw') state = observeActorDrawPastOpenEnds(state, actor);
-    if (action.kind === 'pass') state = observeActorPassOnOpenEnds(state, actor);
-
-    const pre = state;
-    const snapshot = recorder.recordActorDecision(pre, actor, action, true);
-    if (!snapshot) {
-      const failure = recorder.getCaptureFailures().at(-1);
-      return fail('not_replayable', `A decision could not be captured${failure ? `: ${failure.reason}` : '.'}`, i);
-    }
-    snapshots.push(snapshot);
-
-    const result = action.kind === 'play'
-      ? applyPlayMove(pre, actor, { type: 'play', tile: action.tile, position: action.position })
-      : action.kind === 'draw' ? drawOne(pre, actor) : passTurn(pre, actor);
-    if ('error' in result && result.error) {
-      return fail('not_replayable', `An action was not legal from the replayed position: ${String((result.error as { message?: unknown }).message ?? result.error)}`, i);
-    }
-    state = result.state;
-
-    // One row per decision as production logs it: a run of draws by the same seat in the same hand is one row.
-    const continuesDrawRun = action.kind === 'draw' && previous?.kind === 'draw' && previous.actor === actor && previous.hand === pre.handNumber;
-    previous = { actor, kind: action.kind, hand: pre.handNumber };
-    if (continuesDrawRun) continue;
-    moveNumber += 1;
-    const hand = pre.players[actor].hand.map((t) => toTileTuple(t));
-    const plays = snapshot.legalActions.flatMap((legal) => (legal.kind === 'play' ? [toTileTuple(legal.tile)] : []));
-    moveLog.push({
-      moveNumber,
-      handNumber: pre.handNumber,
-      player: actor === 'you' ? 'you' : 'opponent',
-      action: action.kind === 'play' ? 'place' : action.kind,
-      ...(action.kind === 'play' ? { tile: toTileTuple(action.tile), position: action.position } : {}),
-      boardEnds: [-1, -1],
-      handBefore: hand,
-      validMoves: action.kind === 'play' ? plays : [],
-      pipDelta: 0,
-      pointsScored: action.kind === 'play' ? snapshot.outcome.immediatePoints : 0,
-      boardState: snapshotBoardState(pre.board),
-      boardRenderState: pre.board,
-      handSnapshot: hand,
-      engineBestMove: null,
-    });
+    const stepped = stepper.step(state, actor, action);
+    if (!stepped.ok) return fail('not_replayable', stepped.detail, i);
+    state = stepped.state;
   }
 
   if (!state.gameOver) return fail('incomplete_game', 'The record does not finish the game.');
