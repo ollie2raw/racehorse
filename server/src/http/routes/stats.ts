@@ -1,6 +1,8 @@
 import type { Application, Request } from 'express';
 import type { Server } from 'socket.io';
 import { setPrivateShortCache, setPublicShortCache } from './cacheControl';
+import { recordMatchBody } from '../requestSchemas';
+import { validateBody } from '../validation';
 import type { HomeDailyCompletionMap, HomeDailySummaryPayload } from '../../homeDailySummary';
 import type { recordUserMatch as RecordUserMatchFn } from '../../stats/recordUserMatch';
 import { sendServerError } from '../errors';
@@ -108,7 +110,7 @@ export function registerStatsRoutes(app: Application, deps: StatsRouteDeps): voi
     }
   });
 
-  app.post('/api/stats/record-match', async (req, res) => {
+  app.post('/api/stats/record-match', validateBody('stats/record-match', recordMatchBody), async (req, res) => {
     try {
       const authenticatedUserId = await getAuthenticatedUserId(req);
       if (!authenticatedUserId) {
