@@ -31,11 +31,15 @@ Sampling is not the weak point. But **one more ply changes the "best move" in ab
 
 Grades at the production budget in this corpus: 115 best, 15 inaccuracy, 18 mistake, 0 blunder (it is two bots).
 
-## 3. Does the deeper search pick better moves? (interim, not yet conclusive)
+## 3. Does the deeper search pick better moves? (no evidence that it does)
 
 `reviewDepthMatch.ts`: two players choose every move with the review engine, identical but for depth (2 vs 3 plies, same 2,500 samples), complete games to 60 on identical deals with seats swapped. `reviewDepthMatchSummary.ts` aggregates.
 
-**Interim, 44 games over 20 deals:** the 3-ply player won 25 (56.8%, 95% interval 42-70%, sign test p = 0.45); mean margin +2.1 points per game; of 20 deals, 3-ply swept 3, 2-ply swept 2, 15 split. **Not distinguishable from even yet.** A 55-60% edge needs several hundred games to show; the run (168 games planned) was still going when this was written, and its final numbers should replace this paragraph. Machine throughput was the limit (one game takes about 55 s alone and about 4 minutes with 7 running at once on this laptop).
+**Result, 62 games over 29 deals:** the 3-ply player won **32 (51.6%, 95% interval 39-64%, sign test p = 0.90)**; mean margin **+0.7 points per game**; of 29 deals, 3-ply swept 4, 2-ply swept 2, 23 split one each. (An earlier interim read of 56.8% after 44 games did not hold up.) The run was planned for 168 games and was stopped at 62 because it saturated the machine (a game takes about 55 s alone and about 5 minutes with 7 running at once on a laptop), so the interval is wide: **an edge of up to roughly 13 points of win rate for the deeper search is not ruled out**, but a large one is, and the point estimate is zero.
+
+What that means: one more ply changes the "best move" in about 1 decision in 9 (section 2), yet the player who follows those changed moves does not win more. The disagreements are mostly between near-equal moves (consistent with grade flips happening at band edges), so the extra ply is **not** the weak point, and tripling the compute for it is **not justified by this evidence**. If depth is ever revisited it should be with a longer, quieter run (about 200 or more games, run overnight, two shards at most).
+
+Because the search is not the limiter, the question for strength moves to the **evaluation at the horizon** and to whether the grades *mean* something against real outcomes (a calibration study, below).
 
 ## 4. Consistency: no surface contradicts another (a permanent guard now)
 
@@ -54,7 +58,7 @@ September's production smoke failed on **contradictions**, not strength (a "Blun
 ## What this means for the goal ("one of the platform's most exceptional features")
 
 1. **The September "36 of 65 analyzed" problem is not what players get today.** Every non-forced decision in a saved review ends on search or exact. That is real progress and should be said plainly, not hidden behind the old numbers.
-2. **The review's "best move" is only as good as a 2-ply search.** If the match confirms depth helps, the lever is search quality (depth, or a better value estimate at the horizon), not more samples. If it does not, the next lever is the evaluation itself. Either way the question is now measurable.
+2. **Neither sampling nor depth is the limiter.** More samples change nothing (section 2) and one more ply changes the "best move" in about 1 decision in 9 but does not win more games (section 3). So the review's strength is bounded by the **evaluation at the search horizon**, and the right next question is whether the grades mean something against real outcomes (a calibration study), before any engine work.
 3. **Still unmeasured, and what I would measure next:**
    - **Consistency**: the September smoke failure was a *contradiction* (a "Blunder" badge over text saying "Best move"). A corpus-wide check that badge, prose headline and board reference never disagree would guard that class permanently.
    - **Calibration against outcomes**: does a move the review calls a mistake actually cost points on average in real play? This tests that the grades mean something, not just that they are stable.
