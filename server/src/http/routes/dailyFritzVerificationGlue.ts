@@ -7,6 +7,7 @@ import {
   type DailyFritzSetGameNumber,
 } from '../../dailyFritz';
 import { buildDailyFritzChallengeId } from '../../dailyFritzIdentity';
+import { saveVerifiedDailyFritzHandRecord } from '../../dailyFritzHandRecords';
 import {
   DailyFritzVerificationError,
   createOfficialDailyFritzHandState,
@@ -427,14 +428,23 @@ export type AttemptHandVerificationResult =
  * advance the run when verification fails instead of stranding the player.
  */
 export function attemptVerifyHand(input: Parameters<typeof verifyAttemptHand>[0]): AttemptHandVerificationResult {
+  let verified: ReturnType<typeof verifyAttemptHand>;
   try {
-    return { ok: true, verified: verifyAttemptHand(input) };
+    verified = verifyAttemptHand(input);
   } catch (error) {
     if (error instanceof DailyFritzVerificationError) {
       return { ok: false, error };
     }
     throw error;
   }
+  // The review's copy of the verified transcript (DF-2, flag DF_HAND_RECORDS_ENABLED, off by default). It returns nothing, does its insert in the background and
+  // already swallows its own failures; the catch here is a second wall so that saving a copy can never turn a verified hand into an error.
+  try {
+    saveVerifiedDailyFritzHandRecord(verified);
+  } catch {
+    // never affects verification
+  }
+  return { ok: true, verified };
 }
 
 export function isDailyFritzGameEndingScore(
