@@ -1,5 +1,5 @@
 {
-  "total": 3498946,
+  "total": 3500631,
   "chunks": {
     "ActivityFeedLobbyBridge": 34071,
     "analyzer": 96133,
@@ -17,7 +17,7 @@
     "GhostSetupScreen": 14907,
     "GuidedMatchRecorderScreen": 36116,
     "GuidedMatchSourceEditor": 11234,
-    "HistoricalGameReviewPortal": 22800,
+    "HistoricalGameReviewPortal": 24159,
     "HomeScreen": 41496,
     "index": 577665,
     "LearnHome": 14968,

@@ -20,7 +20,13 @@ import type { RebuildResult } from './rebuildGameFromRecord.ts';
  */
 export type SavedMultiplayerRecord = {
   sourceMatchId: string;
-  mode: 'mp';
+  /**
+   * 'dfz' is a Daily Fritz game (docs/daily-fritz-review-design.md): the server derives it into this very format, with Fritz as the opponent, so the rebuild
+   * and the review run on it unchanged. Only the labels and the engine tier differ.
+   */
+  mode: 'mp' | 'dfz';
+  /** The tier Fritz played at (Daily Fritz only); the review grades against the same tier. */
+  fritzTier?: string | null;
   dealSize: 7 | 14 | null;
   winningScore: number | null;
   result: { you: number; opponent: number; winner: 'you' | 'opponent' | null };
@@ -72,6 +78,32 @@ export function parseSavedMultiplayerRecord(raw: unknown): SavedMultiplayerRecor
     verification: r.verification === 'replay_verified' || r.verification === 'replay_mismatch' ? r.verification : 'unverified',
     playedAt: typeof r.playedAt === 'string' ? r.playedAt : null,
     opponentName: typeof r.opponentName === 'string' && r.opponentName ? r.opponentName : null,
+    record: record as MultiplayerRecordPayload,
+  };
+}
+
+/**
+ * Reads what GET /api/daily-fritz/game-record returns for a Daily Fritz game (docs/daily-fritz-review-design.md, DF-3b) into the same shape. The server has
+ * already derived the game into the multiplayer record format and checked it against the verified ledger, so this only reads and validates the envelope.
+ * Null when it is not a Daily Fritz game, so a caller can say so instead of guessing.
+ */
+export function parseSavedDailyFritzGame(raw: unknown): SavedMultiplayerRecord | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const record = r.record as { hands?: unknown } | null | undefined;
+  if (r.mode !== 'dfz' || typeof r.sourceMatchId !== 'string' || !record || typeof record !== 'object' || !Array.isArray(record.hands)) return null;
+  const result = r.result as SavedMultiplayerRecord['result'] | undefined;
+  if (!result || typeof result.you !== 'number' || typeof result.opponent !== 'number') return null;
+  return {
+    sourceMatchId: r.sourceMatchId,
+    mode: 'dfz',
+    fritzTier: typeof r.fritzTier === 'string' ? r.fritzTier : null,
+    dealSize: r.dealSize === 14 ? 14 : r.dealSize === 7 ? 7 : null,
+    winningScore: typeof r.winningScore === 'number' ? r.winningScore : null,
+    result,
+    verification: r.verification === 'replay_verified' ? 'replay_verified' : 'unverified',
+    playedAt: typeof r.playedAt === 'string' ? r.playedAt : null,
+    opponentName: 'Fritz',
     record: record as MultiplayerRecordPayload,
   };
 }

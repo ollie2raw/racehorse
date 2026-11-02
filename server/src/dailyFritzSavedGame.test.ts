@@ -37,6 +37,7 @@ describe('deriveDailyFritzSavedGame', () => {
         gameNumber,
         verification: 'replay_verified',
         opponentName: 'Fritz',
+        fritzTier: 'elite',
         inferredStepCount: 0,
         winningScore: 60,
         dealSize: 7,

@@ -62,13 +62,22 @@ export function makeAttempt(result: Record<string, unknown>): DailyFritzAttemptR
   };
 }
 
-export type VerifiedGameFixture = { attempt: DailyFritzAttemptRecord; rows: StoredDailyFritzHandRecord[]; you: number; fritz: number };
+export type VerifiedGameFixture = {
+  attempt: DailyFritzAttemptRecord;
+  /** The run the game was verified against (its winning score is the one passed, 60 by default). */
+  run: DailyFritzRunRecord;
+  rows: StoredDailyFritzHandRecord[];
+  you: number;
+  fritz: number;
+};
 
 export function verifiedGame(
   gameNumber: DailyFritzSetGameNumber,
   playerPolicy: 'first_legal' | 'last_legal',
   base: Record<string, unknown> = { authority: { version: 1, hands: [], games: [] } },
+  winningScore = 60,
 ): VerifiedGameFixture {
+  const gameRun: DailyFritzRunRecord = { ...run, winningScore };
   let result: Record<string, unknown> = base;
   const rows: StoredDailyFritzHandRecord[] = [];
   let you = 0;
@@ -77,18 +86,18 @@ export function verifiedGame(
   for (let handIndex = 0; handIndex < 40; handIndex += 1) {
     const { transcript } = buildHonestDailyFritzHandTranscript({
       challengeId: CHALLENGE_ID, attemptId: ATTEMPT_ID, gameNumber, handIndex,
-      deal: getDailyFritzHandForGame(run, gameNumber, handIndex), drawWinner, winningScore: 60, dealSize: 7,
+      deal: getDailyFritzHandForGame(gameRun, gameNumber, handIndex), drawWinner, winningScore, dealSize: 7,
       // the driver types the policy as 1 | 2; the current policy (3) drives and verifies fine, as it does in the other tests
       playerScore: you, fritzScore: fritz, fritzTier: 'elite', fritzPolicyVersion: FRITZ_POLICY_VERSION as 1 | 2, playerPolicy,
     });
-    const outcome = attemptVerifyHand({ transcript, attempt: makeAttempt(result), run, userId: USER_ID, gameNumber, handIndex, publishedChallenge: null });
+    const outcome = attemptVerifyHand({ transcript, attempt: makeAttempt(result), run: gameRun, userId: USER_ID, gameNumber, handIndex, publishedChallenge: null });
     if (!outcome.ok) throw new Error(`${outcome.error.code}: ${outcome.error.message}`);
     const { verified } = outcome;
     result = writeVerifiedHand(result, verified.result);
     rows.push({ hand_index: handIndex, transcript_digest: verified.result.transcriptDigest, transcript: verified.transcript });
     you = verified.result.playerScoreAfter;
     fritz = verified.result.fritzScoreAfter;
-    if (Math.max(you, fritz) >= 60 && you !== fritz) break;
+    if (Math.max(you, fritz) >= winningScore && you !== fritz) break;
   }
   const hands = (result.authority as { hands: Array<{ gameNumber: number; transcriptDigest: string }> }).hands.filter((h) => h.gameNumber === gameNumber);
   const handDigests = hands.map((h) => h.transcriptDigest);
@@ -100,5 +109,5 @@ export function verifiedGame(
     handDigests,
     resultDigest: createHash('sha256').update(`${ATTEMPT_ID}:${gameNumber}:${you}:${fritz}:${handDigests.join(':')}`).digest('hex'),
   });
-  return { attempt: makeAttempt(result), rows, you, fritz };
+  return { attempt: makeAttempt(result), run: gameRun, rows, you, fritz };
 }

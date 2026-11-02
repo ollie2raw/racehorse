@@ -39,6 +39,13 @@ export function savedGameFailureCopy(result: Extract<LoadSavedGameResult, { ok: 
   if (result.reason === 'unreachable') {
     return { title: "Couldn't load your game", message: 'Check your connection and try again.', retryable: true };
   }
+  if (result.reason === 'not_reviewable') {
+    return {
+      title: "This game can't be reviewed",
+      message: 'Daily Fritz games can be reviewed once their moves have been kept, so games played before that started are not available.',
+      retryable: false,
+    };
+  }
   return {
     title: "This game can't be replayed",
     message: 'It was saved, but its moves do not replay cleanly, so it cannot be reviewed.',
@@ -48,9 +55,14 @@ export function savedGameFailureCopy(result: Extract<LoadSavedGameResult, { ok: 
 
 /** Who the player faced and what to call the mode: Fritz for Play vs Fritz, the opponent's name (as it was in that game) for multiplayer. */
 export function savedGameLabels(record: SavedGameRecord | SavedMultiplayerRecord): { modeLabel: string; opponentLabel: string } {
-  return record.mode === 'mp'
-    ? { modeLabel: 'Multiplayer', opponentLabel: record.opponentName ?? 'Opponent' }
-    : { modeLabel: 'Play vs Fritz', opponentLabel: 'Fritz' };
+  if (record.mode === 'mp') return { modeLabel: 'Multiplayer', opponentLabel: record.opponentName ?? 'Opponent' };
+  if (record.mode === 'dfz') return { modeLabel: 'Daily Fritz', opponentLabel: 'Fritz' };
+  return { modeLabel: 'Play vs Fritz', opponentLabel: 'Fritz' };
+}
+
+/** The tier the review grades against: the one Fritz played at. A multiplayer game has none (the app's default engine tier is used). */
+export function savedGameFritzTier(record: SavedGameRecord | SavedMultiplayerRecord): string | null {
+  return record.mode === 'mp' ? null : record.fritzTier ?? null;
 }
 
 function SavedGameStatus(props: { title: string; message?: string; onClose: () => void; onRetry?: () => void; busy?: boolean; eyebrow?: string }) {
@@ -95,7 +107,8 @@ function SavedGameReviewRun({ record, game, onClose }: { record: SavedGameRecord
     accessToken,
     enablePositionalExplanations,
     // A multiplayer game has no Fritz tier: the review grades against the app's default engine tier, as a Play vs Fritz game saved without one does.
-    fritzTier: toFritzTier(record.mode === 'mp' ? null : record.fritzTier),
+    // A Daily Fritz game is graded at the tier Fritz played it at.
+    fritzTier: toFritzTier(savedGameFritzTier(record)),
     // The review's text names the opponent: Fritz for a Fritz game, the opponent's name for a multiplayer one.
     opponentLabel: labels.opponentLabel,
     winningScore: record.winningScore ?? 60,

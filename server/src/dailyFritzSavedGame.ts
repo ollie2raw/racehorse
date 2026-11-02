@@ -1,4 +1,4 @@
-import type { DailyFritzSetGameNumber } from './dailyFritz';
+import type { DailyFritzSetGameNumber, DailyFritzTier } from './dailyFritz';
 import type { DailyFritzPublishedChallenge } from './dailyFritzPublishedChallenge';
 import { replayVerifiedDailyFritzHand } from './dailyFritzHandReplay';
 import type { StoredDailyFritzHandRecord } from './dailyFritzHandRecords';
@@ -31,6 +31,8 @@ export type DailyFritzSavedGame = {
   playedAt: string | null;
   /** The opponent is always Fritz. */
   opponentName: 'Fritz';
+  /** The tier Fritz played at (the review grades against the same tier). */
+  fritzTier: DailyFritzTier;
   /** Engine steps the verifier had to infer for this game (0 means the client's transcripts were complete). */
   inferredStepCount: number;
   record: MultiplayerRecordDraft;
@@ -151,6 +153,7 @@ export function deriveDailyFritzSavedGame(input: {
       verification: 'replay_verified',
       playedAt: completedAt,
       opponentName: 'Fritz',
+      fritzTier: publishedChallenge?.fritzTier ?? run.fritzTier,
       inferredStepCount: built.inferredStepCount,
       record: built.record,
     },
