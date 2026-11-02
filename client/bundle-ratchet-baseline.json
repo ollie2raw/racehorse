@@ -1,10 +1,10 @@
 {
-  "total": 3489643,
+  "total": 3495031,
   "chunks": {
     "ActivityFeedLobbyBridge": 34071,
     "analyzer": 92544,
     "AppRoutes": 64163,
-    "bot-engine": 227722,
+    "bot-engine": 227731,
     "bot-guided": 113248,
     "bot-hand-lifecycle": 52778,
     "bot-heuristics": 24076,
@@ -17,7 +17,7 @@
     "GhostSetupScreen": 14907,
     "GuidedMatchRecorderScreen": 36116,
     "GuidedMatchSourceEditor": 11234,
-    "HistoricalGameReviewPortal": 17667,
+    "HistoricalGameReviewPortal": 22665,
     "HomeScreen": 41496,
     "index": 577664,
     "LearnHome": 14968,

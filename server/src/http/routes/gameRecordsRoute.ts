@@ -6,6 +6,7 @@ import { verifyGameRecord } from '../../gameRecords/verifyGameRecord';
 import { insertGameRecordIdempotent } from '../../gameRecords/insertGameRecord';
 import {
   clampGameRecordListLimit,
+  parseGameRecordModes,
   queryGameRecord,
   queryRecentGameRecords,
 } from '../../gameRecords/queryGameRecords';
@@ -58,7 +59,7 @@ export function registerGameRecordsRoute(app: Application): void {
       return;
     }
     try {
-      const games = await queryRecentGameRecords(authenticatedUserId, clampGameRecordListLimit(req.query.limit));
+      const games = await queryRecentGameRecords(authenticatedUserId, clampGameRecordListLimit(req.query.limit), parseGameRecordModes(req.query.modes));
       res.status(200).json({ games });
     } catch (error) {
       log.error({ err: error, userId: authenticatedUserId }, 'game record list failed');
@@ -79,7 +80,7 @@ export function registerGameRecordsRoute(app: Application): void {
       return;
     }
     try {
-      const record = await queryGameRecord(authenticatedUserId, sourceMatchId);
+      const record = await queryGameRecord(authenticatedUserId, sourceMatchId, parseGameRecordModes(req.query.modes));
       if (!record) {
         res.status(404).json({ error: 'This game has not been saved.' });
         return;

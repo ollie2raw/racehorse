@@ -10,6 +10,7 @@ import { PostGameReviewPrompt } from '../../training/pivotalReview/PostGameRevie
 import type { FritzTier } from '../fritz/fritzConfig';
 import type { SavedGameRecord } from './rebuildGameFromRecord';
 import type { RebuiltGame } from './rebuildGameFromRecord';
+import type { SavedMultiplayerRecord } from './rebuildMultiplayerGameFromRecord';
 import { loadSavedGame, type LoadSavedGameResult } from './savedGames';
 import { usePostGamePivotalReview } from './usePostGamePivotalReview';
 import '../../styles/dossierRecord.css';
@@ -28,7 +29,7 @@ type SavedGameReviewProps = {
 type LoadState =
   | { status: 'loading' }
   | { status: 'failed'; result: Extract<LoadSavedGameResult, { ok: false }> }
-  | { status: 'ready'; record: SavedGameRecord; game: RebuiltGame };
+  | { status: 'ready'; record: SavedGameRecord | SavedMultiplayerRecord; game: RebuiltGame };
 
 /** What a player is told for each way a saved game can fail to open. Never a raw code. */
 export function savedGameFailureCopy(result: Extract<LoadSavedGameResult, { ok: false }>): { title: string; message: string; retryable: boolean } {
@@ -45,14 +46,21 @@ export function savedGameFailureCopy(result: Extract<LoadSavedGameResult, { ok: 
   };
 }
 
-function SavedGameStatus(props: { title: string; message?: string; onClose: () => void; onRetry?: () => void; busy?: boolean }) {
+/** Who the player faced and what to call the mode: Fritz for Play vs Fritz, the opponent's name (as it was in that game) for multiplayer. */
+export function savedGameLabels(record: SavedGameRecord | SavedMultiplayerRecord): { modeLabel: string; opponentLabel: string } {
+  return record.mode === 'mp'
+    ? { modeLabel: 'Multiplayer', opponentLabel: record.opponentName ?? 'Opponent' }
+    : { modeLabel: 'Play vs Fritz', opponentLabel: 'Fritz' };
+}
+
+function SavedGameStatus(props: { title: string; message?: string; onClose: () => void; onRetry?: () => void; busy?: boolean; eyebrow?: string }) {
   return (
     <GameOverlayPortal>
       <div className="game-over-overlay df-result-overlay pgr-prompt-overlay" role="dialog" aria-modal="true" aria-label="Saved game review">
         <div className="dfd" onClick={(event) => event.stopPropagation()}>
           <div className="dfd__body">
             <header>
-              <span className="dfd__eyebrow">Play vs Fritz</span>
+              <span className="dfd__eyebrow">{props.eyebrow ?? 'Your game'}</span>
               <h2 className="dfd__headline">{props.title}</h2>
               {props.message ? <p className="dfd__sub" role={props.busy ? 'status' : 'alert'}>{props.message}</p> : null}
             </header>
@@ -72,7 +80,8 @@ function SavedGameStatus(props: { title: string; message?: string; onClose: () =
  * enqueues the review job, polls it, builds the analysis and saves the finished review, so the next time this game is
  * opened from History it comes back instantly with no recomputation.
  */
-function SavedGameReviewRun({ record, game, onClose }: { record: SavedGameRecord; game: RebuiltGame; onClose: () => void }) {
+function SavedGameReviewRun({ record, game, onClose }: { record: SavedGameRecord | SavedMultiplayerRecord; game: RebuiltGame; onClose: () => void }) {
+  const labels = savedGameLabels(record);
   const { user, accessToken } = useAuth();
   const reviewAudience = Boolean(user?.id) && isPostGameReviewAudience(user?.email);
   const durable = isDurablePvfReviewEnabled({ production: import.meta.env.PROD, authenticated: Boolean(accessToken) });
@@ -85,7 +94,8 @@ function SavedGameReviewRun({ record, game, onClose }: { record: SavedGameRecord
     reviewPersistenceEnabled: durable,
     accessToken,
     enablePositionalExplanations,
-    fritzTier: toFritzTier(record.fritzTier),
+    // A multiplayer game has no Fritz tier: the review grades against the app's default engine tier, as a Play vs Fritz game saved without one does.
+    fritzTier: toFritzTier(record.mode === 'mp' ? null : record.fritzTier),
     winningScore: record.winningScore ?? 60,
     showPostGameOverlays: true,
     // Someone who opened this game asked for the review: start the job now, not after the post-game delay.
@@ -115,7 +125,7 @@ function SavedGameReviewRun({ record, game, onClose }: { record: SavedGameRecord
           scopeHandNumber={review.reviewerScopeHandNumber}
           initialMoveIndex={review.reviewerInitialMoveIndex}
           title="Game Review"
-          opponentLabel="Fritz"
+          opponentLabel={labels.opponentLabel}
         />
       </Suspense>
     );
@@ -127,12 +137,12 @@ function SavedGameReviewRun({ record, game, onClose }: { record: SavedGameRecord
       <PostGameReviewPrompt
         open
         accent="gold"
-        modeLabel="Play vs Fritz"
+        modeLabel={labels.modeLabel}
         resultLabel={won === true ? 'Victory' : won === false ? 'Defeat' : 'Final score'}
         won={won}
         youScore={record.result.you}
         opponentScore={record.result.opponent}
-        opponentLabel="Fritz"
+        opponentLabel={labels.opponentLabel}
         analysis={review.postGameAnalysis}
         accuracyModelPending={review.accuracyModelPending}
         reviewUnavailable={review.reviewUnavailable}

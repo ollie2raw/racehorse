@@ -48,6 +48,31 @@ export type MultiplayerRecordPayload = {
   winnerId: 'you' | 'opponent' | null;
 };
 
+/**
+ * Reads what GET /api/game-records/:id returns for a multiplayer game (the list entry's fields, plus `moves: { kind: 'mp', version, record }`) into the shape
+ * the rebuild takes. Null when it is not a multiplayer record, so a caller can say so instead of guessing.
+ */
+export function parseSavedMultiplayerRecord(raw: unknown): SavedMultiplayerRecord | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const moves = r.moves as { kind?: unknown; record?: unknown } | null | undefined;
+  const record = moves?.record as { hands?: unknown } | null | undefined;
+  if (r.mode !== 'mp' || moves?.kind !== 'mp' || !record || typeof record !== 'object' || !Array.isArray(record.hands)) return null;
+  const result = r.result as SavedMultiplayerRecord['result'] | undefined;
+  if (!result || typeof result.you !== 'number' || typeof result.opponent !== 'number' || typeof r.sourceMatchId !== 'string') return null;
+  return {
+    sourceMatchId: r.sourceMatchId,
+    mode: 'mp',
+    dealSize: r.dealSize === 14 ? 14 : r.dealSize === 7 ? 7 : null,
+    winningScore: typeof r.winningScore === 'number' ? r.winningScore : null,
+    result,
+    verification: r.verification === 'replay_verified' || r.verification === 'replay_mismatch' ? r.verification : 'unverified',
+    playedAt: typeof r.playedAt === 'string' ? r.playedAt : null,
+    opponentName: typeof r.opponentName === 'string' && r.opponentName ? r.opponentName : null,
+    record: record as MultiplayerRecordPayload,
+  };
+}
+
 const seatToActor = (seat: 'you' | 'opponent'): BotPlayerId => (seat === 'you' ? 'you' : 'bot');
 const tileKey = (t: Tile) => `${Math.min(t.low, t.high)}|${Math.max(t.low, t.high)}`;
 
@@ -97,6 +122,15 @@ const hasPlay = (state: BotMatchState, actor: BotPlayerId) => getLegalMoves(stat
  * anything else is an honest failure, never a guess.
  */
 export function rebuildMultiplayerGameFromRecord(saved: SavedMultiplayerRecord): RebuildResult {
+  // A record from the server is data: a malformed one is a refusal, never a throw that takes the screen down.
+  try {
+    return rebuildUnchecked(saved);
+  } catch (err) {
+    return fail(`The record could not be read: ${err instanceof Error ? err.message : 'unknown error'}`);
+  }
+}
+
+function rebuildUnchecked(saved: SavedMultiplayerRecord): RebuildResult {
   const rec = saved.record;
   if (rec.config.maxPips !== 6) return fail('Only double-six games can be replayed.');
   const dealSize: BotDealSize = rec.config.tilesPerPlayer === 14 ? 14 : 7;

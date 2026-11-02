@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadSavedGameResult } from './savedGames';
 import type { RebuiltGame, SavedGameRecord } from './rebuildGameFromRecord';
+import type { SavedMultiplayerRecord } from './rebuildMultiplayerGameFromRecord';
 
 const { loadSavedGame, useReview } = vi.hoisted(() => ({ loadSavedGame: vi.fn(), useReview: vi.fn() }));
 vi.mock('./savedGames', () => ({ loadSavedGame }));
@@ -11,11 +12,11 @@ vi.mock('../../auth/useAuth', () => ({
   useAuth: () => ({ user: { id: 'user-1', email: 'player@example.com' }, accessToken: 'token-1' }),
 }));
 vi.mock('../../analyzer/GameReviewer', () => ({
-  default: ({ open, onClose, title }: { open: boolean; onClose: () => void; title: string }) =>
-    open ? <div role="dialog" aria-label="reviewer">{title}<button onClick={onClose}>Close reviewer</button></div> : null,
+  default: ({ open, onClose, title, opponentLabel }: { open: boolean; onClose: () => void; title: string; opponentLabel?: string }) =>
+    open ? <div role="dialog" aria-label="reviewer">{title}<span data-testid="reviewer-opponent">{opponentLabel}</span><button onClick={onClose}>Close reviewer</button></div> : null,
 }));
 
-import SavedGameReview, { savedGameFailureCopy } from './SavedGameReview';
+import SavedGameReview, { savedGameFailureCopy, savedGameLabels } from './SavedGameReview';
 
 const record: SavedGameRecord = {
   sourceMatchId: 'game-1',
@@ -186,6 +187,55 @@ describe('SavedGameReview: running the review on the rebuilt game', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close reviewer' }));
     expect(closeAnalyzer).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+const mpRecord = {
+  sourceMatchId: 'mp-1',
+  mode: 'mp',
+  dealSize: 7,
+  winningScore: 60,
+  result: { you: 61, opponent: 40, winner: 'you' },
+  verification: 'replay_verified',
+  playedAt: null,
+  opponentName: 'Rival',
+  record: {},
+} as unknown as SavedMultiplayerRecord;
+
+describe('SavedGameReview: a saved multiplayer game', () => {
+  it('says who the game was against and what kind it was', () => {
+    expect(savedGameLabels(mpRecord)).toEqual({ modeLabel: 'Multiplayer', opponentLabel: 'Rival' });
+    expect(savedGameLabels({ ...mpRecord, opponentName: null })).toEqual({ modeLabel: 'Multiplayer', opponentLabel: 'Opponent' });
+    expect(savedGameLabels(record)).toEqual({ modeLabel: 'Play vs Fritz', opponentLabel: 'Fritz' });
+  });
+
+  it('runs the same review hook on the rebuilt game, with no Fritz tier of its own (the default engine tier)', async () => {
+    loadSavedGame.mockResolvedValue({ ok: true, record: mpRecord, game });
+    render(<SavedGameReview sourceMatchId="mp-1" onClose={vi.fn()} />);
+    await waitFor(() => expect(useReview).toHaveBeenCalled());
+    expect(useReview.mock.calls[0]?.[0]).toMatchObject({
+      match: game.finalState,
+      moveLog: game.moveLog,
+      reviewSnapshotRecorder: game.recorder,
+      sourceMatchId: 'mp-1',
+      fritzTier: 'elite',
+      winningScore: 60,
+      reviewStartDelayMs: 0,
+    });
+  });
+
+  it('names the opponent in the full review, not Fritz', async () => {
+    useReview.mockReturnValue(hookResult({ analyzerOpen: true, currentAnalysis: analysis }));
+    loadSavedGame.mockResolvedValue({ ok: true, record: mpRecord, game });
+    render(<SavedGameReview sourceMatchId="mp-1" onClose={vi.fn()} />);
+    expect((await screen.findByTestId('reviewer-opponent')).textContent).toBe('Rival');
+  });
+
+  it('keeps calling the opponent Fritz in a Play vs Fritz review', async () => {
+    useReview.mockReturnValue(hookResult({ analyzerOpen: true, currentAnalysis: analysis }));
+    loadSavedGame.mockResolvedValue(ok());
+    render(<SavedGameReview sourceMatchId="game-1" onClose={vi.fn()} />);
+    expect((await screen.findByTestId('reviewer-opponent')).textContent).toBe('Fritz');
   });
 });
 
