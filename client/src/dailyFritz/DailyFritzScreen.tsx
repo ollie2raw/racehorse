@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isGuestPlayEnabled } from '../config/guestPlayFeature';
+import { isGuestUser } from '../auth/guestSession';
 import { useDeferredAsset } from '../ui/useDeferredAsset';
 import '../screens/RacehorseHomeArt.css';
 
@@ -135,6 +136,7 @@ export default function DailyFritzScreen({
         activeRunDate: activeRun?.run_date,
         activeFritzTier: activeRun?.fritz_tier,
         profileGlickoRating: profile?.glicko_rating,
+        guestSavePrompt: isGuestUser(user) ? { onCreateAccount: onOpenAuth } : undefined,
       },
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is onNavigate, a stable callback prop
@@ -145,6 +147,8 @@ export default function DailyFritzScreen({
     today,
     activeRun,
     profile?.glicko_rating,
+    user,
+    onOpenAuth,
     openLeaderboardForRunDate,
     handleDailyFritzGameComplete,
     closeEmbeddedRun,

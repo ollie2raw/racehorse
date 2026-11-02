@@ -133,4 +133,43 @@ describe('buildDailyFritzSetOverlayViewModel', () => {
     expect(vm.setScoreValue).toBe('2–0');
     expect(vm.subheadline).toContain('2–0');
   });
+
+  describe('save prompt for a guest', () => {
+    const finalState = {
+      kind: 'final' as const,
+      completedGame,
+      setResult: { ...setResult, setWinner: 'player' as const, playerGamesWon: 2 },
+      rank: 4,
+      canViewLeaderboard: true,
+    };
+
+    it('offers to create an account only when the player is a guest', () => {
+      expect(buildDailyFritzSetOverlayViewModel(finalState, makeActions(), {}).savePrompt).toBeNull();
+      const vm = buildDailyFritzSetOverlayViewModel(finalState, makeActions(), { guestSavePrompt: { onCreateAccount: vi.fn() } });
+      expect(vm.savePrompt?.actionLabel).toBe('Create account');
+      expect(vm.savePrompt?.text).toMatch(/streak/);
+    });
+
+    it('goes back to the hub first, then opens sign-up, so the sheet is not buried under the result card', () => {
+      const order: string[] = [];
+      const actions = makeActions();
+      actions.clearOverlay.mockImplementation(() => order.push('clear'));
+      actions.closeEmbeddedRun.mockImplementation(() => order.push('close'));
+      actions.loadToday.mockImplementation(() => order.push('load'));
+      const vm = buildDailyFritzSetOverlayViewModel(finalState, actions, {
+        guestSavePrompt: { onCreateAccount: () => order.push('auth') },
+      });
+      vm.savePrompt?.onAction();
+      expect(order).toEqual(['clear', 'close', 'load', 'auth']);
+    });
+
+    it('is not shown while the set is still in progress', () => {
+      const vm = buildDailyFritzSetOverlayViewModel(
+        { kind: 'saving', completedGame, message: 'Saving…' },
+        makeActions(),
+        { guestSavePrompt: { onCreateAccount: vi.fn() } },
+      );
+      expect(vm.savePrompt).toBeUndefined();
+    });
+  });
 });

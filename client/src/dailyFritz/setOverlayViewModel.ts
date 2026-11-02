@@ -57,6 +57,8 @@ export interface DailyFritzSetOverlayViewModel {
     skunkLabel?: string | null;
   }>;
   practiceHint?: string | null;
+  /** Shown to a guest on the final card: the result is saved to the guest session, and an account keeps it. */
+  savePrompt?: { text: string; actionLabel: string; onAction: () => void } | null;
   /** Em-dash / incomplete stats while saving or posting */
   statsPending?: boolean;
   onPrimary: () => void;

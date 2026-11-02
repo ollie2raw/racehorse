@@ -99,8 +99,19 @@ export function DailyFritzFinalResultOverlay({
 
           {overlay.practiceHint ? <p className="dfd__note">{overlay.practiceHint}</p> : null}
 
+          {overlay.savePrompt ? <p className="dfd__note">{overlay.savePrompt.text}</p> : null}
+
           <div className="dfd__actions">
-            <button type="button" className="dfd__btn dfd__btn--primary" onClick={onShare}>
+            {overlay.savePrompt ? (
+              <button type="button" className="dfd__btn dfd__btn--primary" onClick={overlay.savePrompt.onAction}>
+                {overlay.savePrompt.actionLabel}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={`dfd__btn${overlay.savePrompt ? '' : ' dfd__btn--primary'}`}
+              onClick={onShare}
+            >
               {shareDone ? 'Copied' : 'Share Result'}
             </button>
             <div className="dfd__row">

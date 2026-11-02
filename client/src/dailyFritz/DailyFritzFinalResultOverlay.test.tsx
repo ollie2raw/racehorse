@@ -42,6 +42,29 @@ describe('DailyFritzFinalResultOverlay', () => {
     expect(container.textContent).toContain('7');
   });
 
+  it('shows a guest the save prompt, with Create account first and Share demoted', () => {
+    const onAction = vi.fn();
+    const { getByRole, getByText } = render(
+      <DailyFritzFinalResultOverlay
+        overlay={{ ...overlay, savePrompt: { text: 'Keep this result.', actionLabel: 'Create account', onAction } }}
+        shareDone={false}
+        onShare={() => {}}
+      />,
+    );
+    expect(getByText('Keep this result.')).toBeTruthy();
+    act(() => getByRole('button', { name: 'Create account' }).click());
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(getByRole('button', { name: 'Share Result' }).className).not.toContain('dfd__btn--primary');
+  });
+
+  it('shows no prompt to a signed-in player, and Share stays the primary action', () => {
+    const { queryByRole, getByRole } = render(
+      <DailyFritzFinalResultOverlay overlay={overlay} shareDone={false} onShare={() => {}} />,
+    );
+    expect(queryByRole('button', { name: 'Create account' })).toBeNull();
+    expect(getByRole('button', { name: 'Share Result' }).className).toContain('dfd__btn--primary');
+  });
+
   it('leaves nothing running when dismissed mid-count', () => {
     const cancel = vi.spyOn(window, 'cancelAnimationFrame');
     const { unmount } = render(

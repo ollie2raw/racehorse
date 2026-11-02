@@ -17,7 +17,9 @@ vi.mock('./dailyFritz.css', () => ({}));
 vi.mock('../presentation/gameplayPresentation', () => ({ useGameplayPresentation: () => undefined }));
 vi.mock('./DailyFritzLoadingScreen', () => ({ DailyFritzLoadingScreen: () => null }));
 vi.mock('./DailyFritzEmbeddedMatchView', () => ({ DailyFritzEmbeddedMatchView: () => null }));
-vi.mock('./buildDailyFritzSetOverlayViewModel', () => ({ buildDailyFritzSetOverlayViewModel: () => null }));
+const buildOverlay = vi.hoisted(() => vi.fn(() => null));
+const overlayState = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock('./buildDailyFritzSetOverlayViewModel', () => ({ buildDailyFritzSetOverlayViewModel: buildOverlay }));
 vi.mock('./useDailyFritzInit', () => ({
   useDailyFritzInit: () => ({
     today: init.today,
@@ -35,7 +37,7 @@ vi.mock('./useDailyFritzRunController', () => ({
   useDailyFritzRunController: () => ({
     activeRun: null,
     embeddedMatchKey: null,
-    setOverlay: null,
+    setOverlay: overlayState.value,
     startActionPending: false,
     dailyFritzPackageForMatch: null,
     beginRun,
@@ -103,6 +105,8 @@ async function tap(name: string) {
 beforeEach(() => {
   init.today = null;
   guestFlag.on = true;
+  overlayState.value = null;
+  buildOverlay.mockClear();
   beginRun.mockReset();
   continueSet.mockReset();
 });
@@ -147,6 +151,28 @@ describe('Daily Fritz screen: Play as guest', () => {
     init.today = TODAY;
     rerender(<DailyFritzScreen {...props({ ensureGuestSession: ensure, user: GUEST })} />);
     expect(beginRun).not.toHaveBeenCalled();
+  });
+
+  describe('the save prompt on the finished-set card', () => {
+    const contextOf = () => (buildOverlay.mock.calls.at(-1) as unknown as [unknown, unknown, { guestSavePrompt?: { onCreateAccount: () => void } }])[2];
+
+    it('is offered to a guest, and its action opens sign-up', () => {
+      overlayState.value = { kind: 'final' };
+      const onOpenAuth = vi.fn();
+      render(<DailyFritzScreen {...props({ user: { id: 'g', is_anonymous: true } as unknown as User, onOpenAuth })} />);
+      contextOf().guestSavePrompt?.onCreateAccount();
+      expect(onOpenAuth).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not offered to a permanent account, or when the flag is off', () => {
+      overlayState.value = { kind: 'final' };
+      render(<DailyFritzScreen {...props({ user: { id: 'u', is_anonymous: false } as unknown as User })} />);
+      expect(contextOf().guestSavePrompt).toBeUndefined();
+      cleanup();
+      guestFlag.on = false;
+      render(<DailyFritzScreen {...props({ user: { id: 'g', is_anonymous: true } as unknown as User })} />);
+      expect(contextOf().guestSavePrompt).toBeUndefined();
+    });
   });
 
   it('does not start a set that is already finished or underway', async () => {

@@ -40,6 +40,8 @@ export type BuildDailyFritzSetOverlayContext = {
   activeRunDate?: string;
   activeFritzTier?: string;
   profileGlickoRating?: number | null;
+  /** Present when the player is a guest: the final card offers to turn the guest session into an account. */
+  guestSavePrompt?: { onCreateAccount: () => void };
 };
 
 export function buildDailyFritzSetOverlayViewModel(
@@ -271,6 +273,17 @@ export function buildDailyFritzSetOverlayViewModel(
       tertiaryLabel: setOverlay.canViewLeaderboard ? 'Return Home' : null,
       onTertiary: setOverlay.canViewLeaderboard ? returnToHub : (): void => {},
       practiceHint: !setWonPlayer ? DAILY_FRITZ_CLASSIC_PRACTICE_HINT : null,
+      savePrompt: context.guestSavePrompt
+        ? {
+            text: 'Keep this result, your streak and your games: create an account. Nothing you have played is lost.',
+            actionLabel: 'Create account',
+            // Back to the hub first (the result stays there), so the sign-up sheet opens over a normal screen, not over this card.
+            onAction: () => {
+              returnToHub();
+              context.guestSavePrompt?.onCreateAccount();
+            },
+          }
+        : null,
     };
   }
 
