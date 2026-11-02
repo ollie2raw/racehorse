@@ -86,6 +86,7 @@ export const ENV_SPECS: readonly EnvSpec[] = [
   runtime('REVIEW_COMPLETION_STORE', 'The review completion store; "memory" is for tests only.', { kind: 'enum', values: ['memory', 'durable'] }),
   runtime('REQUEST_VALIDATION_MODE', 'Request body validation: shadow (default), enforce or off (roadmap 3.3).', { kind: 'enum', values: ['shadow', 'enforce', 'off'] }),
   runtime('PROTOCOL_VERSION_MODE', 'Wire-protocol version check at the socket handshake: report (default, counts and logs), enforce (refuse a client below the minimum) or off.', { kind: 'enum', values: ['report', 'enforce', 'off'] }),
+  runtime('MP_RECORDS_ENABLED', 'Saves each finished private or matchmaking multiplayer game to both players\' Games archive (roadmap 3.9). Needs 2026-11-02_game_records_multiplayer.sql applied first.', { kind: 'flagTrue' }),
   runtime('GUEST_CLEANUP_MODE', 'Removal of guest accounts inactive for 30 days: delete (default), report (count only) or off. Anything else counts as report.', { kind: 'enum', values: ['delete', 'report', 'off'] }),
   runtime('ENV_VALIDATION_MODE', 'This check: warn (default), enforce (refuse to boot on a misread setting) or off.', { kind: 'enum', values: ['warn', 'enforce', 'off'] }),
 

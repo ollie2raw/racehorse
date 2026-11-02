@@ -25,6 +25,7 @@ import {
 } from '../shared/fritzMatchLifecycle';
 import type { GameOverPersistInput } from '../multiplayer/roomSession';
 import { emitMpAuthorityFunnel } from '../multiplayer/mpAuthorityTelemetry';
+import { saveMultiplayerGameRecords } from '../gameRecords/saveMultiplayerRecord';
 import { recordOperationalFailure } from '../operationalTelemetry';
 import { isRatingCutoverQuiescedError, withRatingCompletion } from '../ranking/ratingCutoverGate';
 import { isAnyTournamentRoom } from '../multiplayer/roomKind';
@@ -612,6 +613,13 @@ export function createGameOverPersistScheduler(io: Server) {
         try {
           await persistGameOverWaitingForCutoverGate(io, input);
           markGameOverPersistSucceeded(room);
+          // The completion has succeeded. Saving the game for each player's archive is a separate, flag-gated step that can no longer affect it. It does not throw,
+          // but this is inside the retry loop, where a throw would re-run the whole completion, so the guarantee is made here as well.
+          try {
+            saveMultiplayerGameRecords(input);
+          } catch {
+            /* never part of the completion */
+          }
           // Make "logged" durable so a later restart does not replay a finished completion.
           // Best effort: a missed write only means an idempotent replay.
           if (!isTournamentLikeRoom(room)) {

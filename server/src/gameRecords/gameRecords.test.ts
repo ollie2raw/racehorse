@@ -285,6 +285,15 @@ describe('GET /api/game-records', () => {
     supabaseFetch.mockReset();
   });
 
+  it('asks only for Play vs Fritz records: multiplayer records share the table but the app cannot rebuild them yet', async () => {
+    answer({ records: [] });
+    await fetch(`${apiBase}/api/game-records/recent`);
+    await fetch(`${apiBase}/api/game-records/match-9`);
+    const recordPaths = supabaseFetch.mock.calls.map((call) => (call as [string])[0]).filter((path) => path.includes('/game_records?'));
+    expect(recordPaths).toHaveLength(2);
+    for (const path of recordPaths) expect(path).toContain('&mode=eq.pvf');
+  });
+
   it('requires a signed-in user for both reads', async () => {
     requestUser = null;
     expect((await fetch(`${apiBase}/api/game-records/recent`)).status).toBe(401);
