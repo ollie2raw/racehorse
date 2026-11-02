@@ -76,22 +76,40 @@ September's production smoke failed on **contradictions**, not strength (a "Blun
 
 **Reading it.** The grades are **directionally right and the Mistake band is credible** (73% confirmed, magnitude about 75% of the claim, correlation 0.53). They are weaker where it matters for a premium feel: about 1 in 11 "Best" grades is wrong over the hand, and the **Inaccuracy band is barely real** (rollouts put its real cost at about 0.2 points). This is the first evidence that the review's blind spot (a points-only horizon) costs accuracy. Caveats: rollouts are a *different imperfect* evaluator (a fixed bot policy), not truth, and the corpus is bot play. The open question is whether choosing by the long view actually *plays* better than the review's choice; `reviewRolloutMatch.ts` plays exactly that match.
 
+## 6. Does choosing by the whole hand play better? (no)
+
+`reviewRolloutMatch.ts`: two players on identical deals with seats swapped, games to 60. "review" picks the review's own top move (2 plies, 2,500 sampled hands, horizon value = score gap). "rollout" plays every legal move out to the end of the hand against 40 sampled opponent hands (both sides continuing with the Fritz standard policy) and picks the best average.
+
+**Result, 100 games over 50 deals: rollout won 49 (49.0%, 95% interval 39-59%, sign test p = 0.92); mean margin -0.5 points per game; deals swept 9 by rollout, 10 by review, 31 split.**
+
+So the whole-hand chooser plays **no better** than the review's score-gap chooser, even though section 5 found the review's grade disagrees with the whole-hand view for about 1 move in 11. Together with section 3 this is a consistent pattern: three quite different move-choosers (2 plies, 3 plies, whole-hand rollouts) are **indistinguishable in actual play** at this sample size (about plus or minus 10 points of win rate). Reading it honestly:
+
+- The disagreements are mostly **between near-equal moves**, which is why following either does not win more games. A per-decision cost of about 1.4 points is real in expectation but small against the variance of a game to 60.
+- It is also consistent with an earlier finding in the review work (the oracle against Fritz Master was 49.8%, indistinguishable): these evaluators sit on the **same plateau**, and a stronger one is not available by searching deeper or by this style of rollout.
+- Rollouts here are only as good as the fixed policy they continue with, and 40 samples is noisy. A better continuation policy could change this; it is untested.
+
+**What it means for the product.** Making the review's "best move" *stronger* by these routes is not supported by evidence. What the evidence does support is making its **claims more honest**: section 5 shows about 1 in 11 "Best" grades and most "Inaccuracy" grades are not backed by the whole-hand view. The better investment is to use the second opinion to **suppress low-confidence verdicts** (call a move a Mistake only when the search and the whole-hand view agree; otherwise say it is a close call), which fixes false accusations without needing a stronger engine.
+
 ## What this means for the goal ("one of the platform's most exceptional features")
 
-1. **The September "36 of 65 analyzed" problem is not what players get today.** Every non-forced decision in a saved review ends on search or exact. That is real progress and should be said plainly, not hidden behind the old numbers.
-2. **Neither sampling nor depth is the limiter, and the horizon value is the likely weakness (section 5).** More samples change nothing (section 2) and one more ply changes the "best move" in about 1 decision in 9 but does not win more games (section 3). So the review's strength is bounded by the **evaluation at the search horizon**, and the right next question is whether the grades mean something against real outcomes (a calibration study), before any engine work.
-3. **Still unmeasured, and what I would measure next:**
-   - **Consistency**: the September smoke failure was a *contradiction* (a "Blunder" badge over text saying "Best move"). A corpus-wide check that badge, prose headline and board reference never disagree would guard that class permanently.
-   - **Calibration against outcomes**: does a move the review calls a mistake actually cost points on average in real play? This tests that the grades mean something, not just that they are stable.
-   - **Human games**: everything above is bot play. A human pass on a phone with real games is still the gate before anyone calls this validated.
-4. **Not engine work, but part of "exceptional"**: Daily Fritz and tournaments have no review; the in-match multiplayer review still says "Fritz" about a person; the review's explanation covers about 73% of the decisions where the player's move differed from the reference.
+1. **The September "36 of 65 analyzed" problem is not what players get today.** Every non-forced decision in a saved review ends on search or exact (section 1). That is real progress and should be said plainly, not hidden behind the old numbers.
+2. **A stronger engine is not the lever.** More samples change nothing (section 2). A deeper search and a whole-hand rollout chooser both play the same as the review's own choice (sections 3 and 6: 51.6% and 49.0%), even though they disagree with it on 1 decision in 9 or so. These evaluators sit on the same plateau, so **spending effort on engine strength has no evidence behind it.**
+3. **The lever is how honest the verdicts are.** Section 5: the Mistake band is credible (73% confirmed), but about 1 in 11 "Best" grades and most "Inaccuracy" grades are not backed by the whole-hand view. A review that wrongly says "you erred" or "best" erodes trust faster than a weaker engine would. The measured plan: use the whole-hand view as a **second opinion** and only state a severity when both the search and the long view agree; otherwise call it a close call. The corpus consistency audit (section 4) is the guard that the surfaces then stay coherent.
+4. **Done so far:** tier mix measured (1), stability (2), depth (3), consistency guard in CI (4), calibration (5), strength match (6). All on **bot play**.
+5. **Still open, and not engine work:**
+   - **Human games.** Everything here is bot self-play. A human pass on a phone with real games is still the gate before anyone calls this validated, and I cannot do it.
+   - Daily Fritz and tournaments have no review at all; the in-match multiplayer review still says "Fritz" about a person; the explanation covers about 73% of the decisions where the player's move differed from the reference.
 
 ## Re-running
 
 ```
 cd packages/review-engine
-npx tsx src/devtools/reviewProductionTierMix.ts fixtures/recorded-self-play 100000 out.md   # ~4 min
-npx tsx src/devtools/reviewSearchStability.ts fixtures/recorded-self-play 150 out.md        # ~10 min
-npx tsx src/devtools/reviewDepthMatch.ts <shard> <deals> out.jsonl                          # ~1 min per game, run shards in parallel
+npx tsx src/devtools/reviewProductionTierMix.ts fixtures/recorded-self-play 100000 out.md          # ~4 min
+npx tsx src/devtools/reviewSearchStability.ts fixtures/recorded-self-play 150 out.md               # ~10 min
+npx tsx src/devtools/reviewRolloutCalibration.ts fixtures/recorded-self-play 300 60 out.md         # ~2 min
+npx vitest run src/devtools/reviewCorpusConsistency.test.ts                                        # ~1 s, also runs in CI
+# engine-vs-engine matches: ~25-60 s per game. Run AT MOST 2 shards, niced (7 in parallel drove a laptop to load 120).
+nice -n 15 npx tsx src/devtools/reviewDepthMatch.ts <shard> <deals> out.jsonl
+nice -n 15 npx tsx src/devtools/reviewRolloutMatch.ts <shard> <deals> out.jsonl
 npx tsx src/devtools/reviewDepthMatchSummary.ts out.md shard1.jsonl shard2.jsonl ...
 ```
