@@ -61,6 +61,12 @@ type Row = {
   preferOtherB: boolean;
   reviewBestBeatsPlayedA: boolean;
   reviewBestBeatsPlayedB: boolean;
+  /** the review's best minus the played move, in rollout points, in each half (positive = the review's best really is better) */
+  diffA: number;
+  diffB: number;
+  /** the rollout's own best move minus the played move, in each half (how much the long view thinks the played move leaves on the table) */
+  otherAdvA: number;
+  otherAdvB: number;
 };
 const rows: Row[] = [];
 const started = Date.now();
@@ -100,6 +106,10 @@ for (const { snapshot } of chosen) {
     preferOtherB: half(gainsB, topOf(gainsB)) - half(gainsB, played) > 1,
     reviewBestBeatsPlayedA: half(gainsA, best) - half(gainsA, played) > 0,
     reviewBestBeatsPlayedB: half(gainsB, best) - half(gainsB, played) > 0,
+    diffA: half(gainsA, best) - half(gainsA, played),
+    diffB: half(gainsB, best) - half(gainsB, played),
+    otherAdvA: half(gainsA, topOf(gainsA)) - half(gainsA, played),
+    otherAdvB: half(gainsB, topOf(gainsB)) - half(gainsB, played),
   });
   n += 1;
   if (n % 5 === 0) process.stderr.write(`${n}/${chosen.length} (${Math.round((Date.now() - started) / 1000)}s)\n`);
@@ -108,6 +118,47 @@ for (const { snapshot } of chosen) {
 const pct = (k: number, d: number) => (d === 0 ? '—' : `${((k / d) * 100).toFixed(0)}%`);
 const bands = ['best', 'inaccuracy', 'mistake', 'blunder'];
 const graded = rows.filter((r) => !r.playedIsReviewBest);
+
+/**
+ * Second opinion, cross-validated. The review calls the played move worse than its best (an error verdict) or best. Would asking the whole-hand view first, and
+ * only keeping the verdict when it agrees, make the verdicts that remain more trustworthy? The rule is decided on one independent set of sampled hands and judged on
+ * the OTHER (A decides and B judges, then B decides and A judges, pooled), so the rule never grades itself.
+ *   error verdict kept   when the deciding half also finds the review's best better than the played move (by more than 0)
+ *   "Best" kept          unless the deciding half finds another move better than the played one by more than 1 point
+ * A verdict "holds up" if the judging half agrees: for an error, the review's best beats the played move by more than 0.25; for "Best", no other move beats it by more than 1.
+ */
+function secondOpinionSection(all: Row[]): string[] {
+  type Pair = { decide: { diff: number; adv: number }; judge: { diff: number; adv: number }; row: Row };
+  const pairs: Pair[] = all.flatMap((row) => [
+    { decide: { diff: row.diffA, adv: row.otherAdvA }, judge: { diff: row.diffB, adv: row.otherAdvB }, row },
+    { decide: { diff: row.diffB, adv: row.otherAdvB }, judge: { diff: row.diffA, adv: row.otherAdvA }, row },
+  ]);
+  const errorPairs = (bandsIn: string[]) => pairs.filter((p) => !p.row.playedIsReviewBest && bandsIn.includes(p.row.band));
+  const errLine = (label: string, ps: Pair[]) => {
+    const holds = (p: Pair) => p.judge.diff > 0.25;
+    const kept = ps.filter((p) => p.decide.diff > 0);
+    const dropped = ps.filter((p) => !(p.decide.diff > 0));
+    return `| ${label} | ${ps.length} | ${pct(ps.filter(holds).length, ps.length)} | ${kept.length} (${pct(kept.length, ps.length)}) | ${pct(kept.filter(holds).length, kept.length)} | ${dropped.length} | ${pct(dropped.filter(holds).length, dropped.length)} |`;
+  };
+  const bestPairs = pairs.filter((p) => p.row.playedIsReviewBest);
+  const suppressed = bestPairs.filter((p) => p.decide.adv > 1);
+  const remaining = bestPairs.filter((p) => !(p.decide.adv > 1));
+  const bad = (p: Pair) => p.judge.adv > 1;
+  return [
+    '### Second opinion: would asking the whole-hand view first make the verdicts more trustworthy? (cross-validated)',
+    '',
+    'Each decision is judged twice (one independent half of the sampled hands decides, the other judges, and the reverse). An **error verdict** is kept only if the deciding half also finds the review\'s best better than the played move; a verdict **holds up** if the judging half finds it better by more than 0.25 points.',
+    '',
+    '| error verdicts | judged | holds up as the review stands | kept by the rule | holds up among the kept | dropped | holds up among the dropped |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+    errLine('inaccuracy', errorPairs(['inaccuracy'])),
+    errLine('mistake or blunder', errorPairs(['mistake', 'blunder'])),
+    errLine('all error verdicts', errorPairs(['inaccuracy', 'mistake', 'blunder'])),
+    '',
+    `"Best" verdicts (the played move is the review's best): ${bestPairs.length} judged. As the review stands, the judging half finds another move better by more than 1 point in ${pct(bestPairs.filter(bad).length, bestPairs.length)}. The rule suppresses ${suppressed.length} (${pct(suppressed.length, bestPairs.length)}) as a close call; among those the judging half agrees in ${pct(suppressed.filter(bad).length, suppressed.length)}. Among the ${remaining.length} still called Best it finds a better move in ${pct(remaining.filter(bad).length, remaining.length)}.`,
+    '',
+  ];
+}
 const lines = [
   '# Review rollout calibration',
   '',
@@ -135,6 +186,7 @@ const lines = [
   `- median standard error of the rollout loss on the ${graded.length} graded decisions (pooled): ${[...graded].map((r) => r.rolloutSe).sort((a, b) => a - b)[Math.floor(graded.length / 2)]!.toFixed(2)} points`,
   `- legal candidates per decision, mean: ${mean(rows.map((r) => r.nCandidates)).toFixed(1)}`,
   '',
+  ...secondOpinionSection(rows),
   `Took ${Math.round((Date.now() - started) / 1000)} s.`,
   '',
 ].join('\n');
