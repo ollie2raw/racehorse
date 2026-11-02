@@ -23,6 +23,7 @@ const {
   recordOperationalFailureMock,
   sentryCaptureMessageMock,
   countRecentMoveLogFailuresMock,
+  saveMultiplayerGameRecordsMock,
 } = vi.hoisted(() => ({
   applyTournamentGameOverFromRoomMock: vi.fn(),
   findTournamentMatchByRoomMock: vi.fn(),
@@ -42,6 +43,11 @@ const {
   recordOperationalFailureMock: vi.fn(),
   sentryCaptureMessageMock: vi.fn(),
   countRecentMoveLogFailuresMock: vi.fn(async () => 0),
+  saveMultiplayerGameRecordsMock: vi.fn(),
+}));
+
+vi.mock('../gameRecords/saveMultiplayerRecord', () => ({
+  saveMultiplayerGameRecords: (...args: unknown[]) => saveMultiplayerGameRecordsMock(...args),
 }));
 
 vi.mock('../ghost/verifier', () => ({
@@ -213,6 +219,38 @@ describe('createGameOverPersistScheduler', () => {
     expect(outcome).toBe('succeeded');
     expect(input.room.matchLogged).toBe(true);
     expect(input.room.gameOverPersistStatus).toBe('succeeded');
+  });
+
+  describe('saving the game for each player\'s archive (roadmap 3.9)', () => {
+    it('is asked once, with the same input, after the completion has succeeded', async () => {
+      const input = buildInput();
+      expect(await runPersist(input)).toBe('succeeded');
+      expect(saveMultiplayerGameRecordsMock).toHaveBeenCalledTimes(1);
+      expect(saveMultiplayerGameRecordsMock).toHaveBeenCalledWith(input);
+    });
+
+    it('is never asked when the completion fails, so a game that did not complete is not saved', async () => {
+      vi.useFakeTimers();
+      appendMatchMock.mockRejectedValue(new Error('db_down'));
+      const pending = runPersist(buildInput());
+      await vi.runAllTimersAsync();
+      expect(await pending).toBe('failed');
+      expect(saveMultiplayerGameRecordsMock).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('cannot change the outcome or re-run the completion, even if it throws', async () => {
+      saveMultiplayerGameRecordsMock.mockImplementation(() => {
+        throw new Error('record boom');
+      });
+      const input = buildInput();
+      expect(await runPersist(input)).toBe('succeeded');
+      expect(input.room.matchLogged).toBe(true);
+      expect(input.room.gameOverPersistStatus).toBe('succeeded');
+      expect(appendMatchMock).toHaveBeenCalledTimes(1); // the completion ran once, not again after the hook threw
+      expect(saveMultiplayerGameRecordsMock).toHaveBeenCalledTimes(1);
+      saveMultiplayerGameRecordsMock.mockReset();
+    });
   });
 
   it('retries appendMatch failures then gives up without latching matchLogged', async () => {

@@ -5,50 +5,15 @@
  * holds (events + the server's per-player move log), and that record is then REPLAYED in a second room from explicit deals. Every hand's score and the final
  * result must come out identical. If this holds, a multiplayer game can be saved and rebuilt without changing any authority code.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  act,
-  createReservedRoom,
-  getRoom,
-  getRoomCanDraw,
-  getRoomLegalMoves,
-  joinRoom,
-  nextHand,
-  resetRoomRuntimeForTests,
-  startGame,
-  type ActionPayload,
-  type Room,
-} from '../rooms';
+import { describe, expect, it, vi } from 'vitest';
+import { act, createReservedRoom, getRoom, joinRoom, resetRoomRuntimeForTests, startGame, type ActionPayload, type Room } from '../rooms';
 import { createInitialState, generateFullSet, startNewHand } from '../game/engine';
 import type { Tile } from '../game/types';
-import * as livePersistence from '../multiplayer/roomLivePersistence';
-import { resetRoomGameplayLocksForTests } from '../multiplayer/roomGameplayLock';
-import { initRoomSession, resetRoomSessionStoresForTests } from '../multiplayer/roomSession';
 import { deriveMultiplayerRecord, type MultiplayerRecordDraft } from './multiplayerRecord';
 import { replayMultiplayerRecord } from './multiplayerReplay';
+import { installRoomHarness, makeIo, playGame } from './multiplayerRecord.testkit';
 
 const CFG = createInitialState(['a', 'b']).config;
-
-function makeIo() {
-  const emit = vi.fn();
-  return {
-    sockets: { sockets: new Map(), adapter: { rooms: new Map() } },
-    to: vi.fn(() => ({ emit, except: vi.fn(() => ({ emit })) })),
-    emit,
-  } as any;
-}
-
-/** mulberry32: a small seeded generator, used for both the dealing shuffle and the move choices so a failing seed reproduces. */
-function seeded(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 const tileOf = (key: string): Tile => {
   const [low, high] = key.split('|').map(Number);
@@ -56,63 +21,7 @@ const tileOf = (key: string): Tile => {
 };
 const keyOf = (t: Tile) => `${Math.min(t.low, t.high)}|${Math.max(t.low, t.high)}`;
 
-beforeEach(() => {
-  vi.restoreAllMocks();
-  resetRoomRuntimeForTests();
-  resetRoomGameplayLocksForTests();
-  resetRoomSessionStoresForTests();
-  initRoomSession(makeIo(), {
-    resolveSocketIdentity: async () => ({ username: 'P', userId: null }),
-    normalizeUsername: (v: unknown) => String(v ?? 'Guest'),
-    normalizeUserId: (v: unknown) => (typeof v === 'string' ? v : null),
-    tryHydrateMatchmakingRoomShell: async () => 'skipped',
-    waitUntilMatchmakingRoomSocketsReady: async () => undefined,
-    onAfterMatchStarted: async () => undefined,
-    notifyRoomPlayersInGame: () => undefined,
-    persistRoomMatchLog: async () => undefined,
-    onGameOver: () => null,
-  } as any);
-  vi.spyOn(livePersistence, 'flushScheduledLiveRoomPersistence').mockResolvedValue({ flushedRoomCodes: [] });
-  vi.spyOn(livePersistence, 'isLiveRoomDurablyRecoverable').mockReturnValue(true);
-});
-
-afterEach(() => vi.restoreAllMocks());
-
-/** Plays a whole game with the seeded policy. Returns the finished room. */
-async function playGame(code: string, seed: number, config: Record<string, unknown> = {}): Promise<Room> {
-  const rng = seeded(seed);
-  vi.spyOn(Math, 'random').mockImplementation(rng); // the dealing shuffle
-  const io = makeIo();
-  createReservedRoom(code, { skipPregameDraw: true, ...config });
-  joinRoom(code, 'seat-a');
-  joinRoom(code, 'seat-b');
-  const room = getRoom(code);
-  room.players = ['seat-a', 'seat-b'];
-  room.state = null;
-  await startGame(code, io);
-
-  for (let guard = 0; guard < 2000; guard += 1) {
-    const state = getRoom(code).state!;
-    if (state.gameOver) return getRoom(code);
-    if (state.handOver) {
-      await nextHand(code, io);
-      continue;
-    }
-    const seat = state.playerIds[state.currentPlayerIndex];
-    const plays = getRoomLegalMoves(code, seat).filter((m) => m.type === 'play');
-    let action: ActionPayload;
-    if (plays.length > 0) {
-      const pick = plays[Math.floor(rng() * plays.length)] as { type: 'play'; tile: Tile; position: string };
-      action = { type: 'MOVE', move: { tile: pick.tile, position: pick.position as never } };
-    } else if (getRoomCanDraw(code, seat)) {
-      action = { type: 'DRAW' };
-    } else {
-      action = { type: 'PASS' };
-    }
-    await act(code, seat, action, io, () => {});
-  }
-  throw new Error(`game did not finish (seed ${seed})`);
-}
+installRoomHarness();
 
 /** Replays a derived record in a fresh room from its explicit deals. Returns the per-hand scores it produced and the final state. */
 async function replay(record: MultiplayerRecordDraft, original: Room): Promise<{ handScores: Array<Record<string, number>>; room: Room }> {

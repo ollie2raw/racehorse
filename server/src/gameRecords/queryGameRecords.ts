@@ -130,10 +130,13 @@ export async function queryReviewsBySourceMatch(
   return byMatch;
 }
 
-/** Newest first. Scoped to `userId` in the query itself, never by filtering afterwards. */
+/**
+ * Newest first. Scoped to `userId` in the query itself, never by filtering afterwards.
+ * Play vs Fritz only (`mode=eq.pvf`): multiplayer records (`mp`) exist in the same table but the app cannot rebuild them yet, so they are not served until it can.
+ */
 export async function queryRecentGameRecords(userId: string, limit: number): Promise<GameRecordListEntry[]> {
   const rows = await supabaseFetch<GameRecordRow[]>(
-    `/rest/v1/game_records?select=${LIST_COLUMNS}&user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=${limit}`,
+    `/rest/v1/game_records?select=${LIST_COLUMNS}&user_id=eq.${encodeURIComponent(userId)}&mode=eq.pvf&order=created_at.desc&limit=${limit}`,
     { method: 'GET' },
   );
   const records = rows ?? [];
@@ -143,7 +146,7 @@ export async function queryRecentGameRecords(userId: string, limit: number): Pro
 
 export async function queryGameRecord(userId: string, sourceMatchId: string): Promise<GameRecordReadResult | null> {
   const rows = await supabaseFetch<GameRecordRow[]>(
-    `/rest/v1/game_records?select=${FULL_COLUMNS}&user_id=eq.${encodeURIComponent(userId)}&source_match_id=eq.${encodeURIComponent(sourceMatchId)}&limit=1`,
+    `/rest/v1/game_records?select=${FULL_COLUMNS}&user_id=eq.${encodeURIComponent(userId)}&source_match_id=eq.${encodeURIComponent(sourceMatchId)}&mode=eq.pvf&limit=1`,
     { method: 'GET' },
   );
   const row = rows?.[0];
