@@ -41,7 +41,7 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 - [ ] 2.2 Apple Developer team, signing, App Store Connect record, privacy questionnaire
 - [ ] 2.3 TestFlight pass on a real device; resolve old PRs #352 / #353
 - [ ] 2.4 Decision: turn clock / idle-forfeit for casual and rated games
-- [ ] 2.5 Decision: node-budgeted Fritz (changes bot strength; needs calibration rerun)
+- [ ] 2.5 Decision: node-budgeted Fritz. Built behind a flag and calibrated (docs/fritz-node-budget.md): no measured strength change on the dev laptop; the open question is the slowest phone. Owner switches it on
 - [ ] 2.6 Play one signed-in game and run Analyze from Games; run the event-night monitor on Monday
 - [ ] 2.7 Guest play, phase G0 (owner, Supabase dashboard): enable anonymous sign-ins; pick a captcha provider (Turnstile preferred) and add its secret; review the anonymous sign-in rate limit. Decisions already made: upgraded guests may appear on the same day's leaderboard, a captcha guards guest creation, Play vs Fritz guests are recorded too
 
@@ -68,7 +68,7 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 
 | # | Item |
 |---|---|
-| [ ] 4.1 | Node-budgeted Fritz search (per 2.5), then split `botHeuristics.ts` into eval / search / tiers |
+| [~] 4.1 | Node-budgeted Fritz search (per 2.5): done and off by default (flag `VITE_FRITZ_NODE_BUDGET`, `searchBudget.ts`, calibration script, doc). Still to do: split `botHeuristics.ts` into eval / search / tiers |
 | [ ] 4.2 | Shared Fritz engine package; server bot stops being a copy |
 | [ ] 4.3 | One client match engine: core owns dealing, starters, hand lifecycle; `phase` union replaces the three booleans (state-version bump and migration) |
 | [ ] 4.4 | `useHandLifecycle` becomes a pure reducer with injected clock; `MultiplayerGameShell` controller hooks; recovery-machine fuzzer |
