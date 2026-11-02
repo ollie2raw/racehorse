@@ -25,6 +25,11 @@ export function DailyFritzFinalResultOverlay({
   const rows = buildDossierGameRows(overlay.games);
   const ranked = overlay.ranked !== false;
   const marginTone = overlay.marginTone === 'win' ? 'is-win' : overlay.marginTone === 'loss' ? 'is-loss' : '';
+  const shareButton = (
+    <button type="button" className={`dfd__btn${overlay.savePrompt ? '' : ' dfd__btn--primary'}`} onClick={onShare}>
+      {shareDone ? 'Copied' : 'Share Result'}
+    </button>
+  );
 
   return (
     <div className="game-over-overlay df-result-overlay" role="dialog" aria-label="Daily Fritz result">
@@ -107,13 +112,20 @@ export function DailyFritzFinalResultOverlay({
                 {overlay.savePrompt.actionLabel}
               </button>
             ) : null}
-            <button
-              type="button"
-              className={`dfd__btn${overlay.savePrompt ? '' : ' dfd__btn--primary'}`}
-              onClick={onShare}
-            >
-              {shareDone ? 'Copied' : 'Share Result'}
-            </button>
+            {/*
+              Share and Review share one row when there is a review action, so the card is no taller than before: it is clipped
+              (not scrolled) in native landscape, where an extra full-width row would push the bottom actions out of view.
+            */}
+            {overlay.reviewPrompt ? (
+              <div className="dfd__row">
+                {shareButton}
+                <button type="button" className="dfd__btn" onClick={overlay.reviewPrompt.onAction}>
+                  {overlay.reviewPrompt.actionLabel}
+                </button>
+              </div>
+            ) : (
+              shareButton
+            )}
             <div className="dfd__row">
               <button
                 type="button"

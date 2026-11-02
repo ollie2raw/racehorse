@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { playSeededGame } from '../../../../packages/review-engine/src/__tests__/support/seededSelfPlay';
-import { fetchRecentGames, loadSavedGame, parseDailyFritzSavedGameId } from './savedGames.ts';
+import {
+  dailyFritzGameToSummary,
+  fetchDailyFritzGames,
+  fetchRecentGames,
+  loadSavedGame,
+  parseDailyFritzSavedGameId,
+  type DailyFritzGameListEntry,
+} from './savedGames.ts';
 import type { SavedGameRecord } from './rebuildGameFromRecord.ts';
 import mpFixture from './fixtures/multiplayerSavedGame.json';
 import dfFixture from './fixtures/dailyFritzSavedGame.json';
@@ -155,6 +162,64 @@ describe('loadSavedGame for a Daily Fritz game', () => {
     apiGet.mockResolvedValue({ data: record(), error: null, status: 200 });
     await loadSavedGame('src-1');
     expect(apiGet).toHaveBeenCalledWith('/api/game-records/src-1?modes=pvf,mp');
+  });
+});
+
+describe('fetchDailyFritzGames', () => {
+  // No beforeEach(mockReset) here: each test sets its own answer, and a reset ahead of an async-rejecting mock makes vitest report the (handled) rejection as a failure.
+  const entry = (n: number, extra: Partial<DailyFritzGameListEntry> = {}): DailyFritzGameListEntry => ({
+    sourceMatchId: `dfz:11111111-1111-4111-8111-111111111111:${n}`,
+    attemptId: '11111111-1111-4111-8111-111111111111',
+    runDate: '2026-11-02',
+    gameNumber: n,
+    result: { you: 61, opponent: 40, winner: 'you' },
+    hands: 6,
+    completedAt: '2026-11-02T18:30:00.000Z',
+    reviewable: true,
+    ...extra,
+  });
+
+  it('turns each reviewable game into an archive row that says Daily Fritz, against Fritz, with the verified result', async () => {
+    apiGet.mockResolvedValue({ data: { games: [entry(1), entry(2, { result: { you: 20, opponent: 61, winner: 'opponent' } })] }, error: null, status: 200 });
+    const games = await fetchDailyFritzGames();
+    expect(apiGet).toHaveBeenCalledWith('/api/daily-fritz/games');
+    expect(games).toHaveLength(2);
+    expect(games[0]).toMatchObject({
+      sourceMatchId: 'dfz:11111111-1111-4111-8111-111111111111:1',
+      mode: 'dfz',
+      opponentName: 'Fritz',
+      result: { you: 61, opponent: 40, winner: 'you' },
+      verification: 'replay_verified',
+      playedAt: '2026-11-02T18:30:00.000Z',
+      review: null,
+    });
+    expect(games[1]!.result.winner).toBe('opponent');
+  });
+
+  it('leaves out a game whose hands were not kept, since its review could not open', async () => {
+    apiGet.mockResolvedValue({ data: { games: [entry(1), entry(2, { reviewable: false })] }, error: null, status: 200 });
+    expect((await fetchDailyFritzGames()).map((g) => g.sourceMatchId)).toEqual([entry(1).sourceMatchId]);
+  });
+
+  it('dates a game with no completion time by its run date, never as undefined', () => {
+    const row = dailyFritzGameToSummary(entry(3, { completedAt: null }));
+    expect(row.playedAt).toBeNull();
+    expect(row.savedAt).toBe('2026-11-02T00:00:00.000Z');
+  });
+
+  it('never fails the archive: an error, an outage, a malformed answer and a throw all give an empty list', async () => {
+    for (const answer of [
+      { data: null, error: 'down', status: 503 },
+      { data: { games: 'nope' }, error: null, status: 200 },
+      { data: null, error: null, status: 200 },
+    ]) {
+      apiGet.mockResolvedValue(answer);
+      expect(await fetchDailyFritzGames()).toEqual([]);
+    }
+    apiGet.mockImplementation(async () => {
+      throw new Error('network');
+    });
+    expect(await fetchDailyFritzGames()).toEqual([]);
   });
 });
 

@@ -42,6 +42,8 @@ export type BuildDailyFritzSetOverlayContext = {
   profileGlickoRating?: number | null;
   /** Present when the player is a guest: the final card offers to turn the guest session into an account. */
   guestSavePrompt?: { onCreateAccount: () => void };
+  /** Present when the screen can open the Games page: the final card then offers to review the games of the set. */
+  reviewGames?: { onOpen: () => void };
 };
 
 export function buildDailyFritzSetOverlayViewModel(
@@ -281,6 +283,17 @@ export function buildDailyFritzSetOverlayViewModel(
             onAction: () => {
               returnToHub();
               context.guestSavePrompt?.onCreateAccount();
+            },
+          }
+        : null,
+      reviewPrompt: context.reviewGames
+        ? {
+            actionLabel: 'Review games',
+            // Close the card and the embedded run first, as every other way off this card does, then open the Games page.
+            onAction: () => {
+              actions.clearOverlay();
+              actions.closeEmbeddedRun();
+              context.reviewGames?.onOpen();
             },
           }
         : null,

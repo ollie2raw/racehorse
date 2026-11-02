@@ -137,6 +137,8 @@ export default function DailyFritzScreen({
         activeFritzTier: activeRun?.fritz_tier,
         profileGlickoRating: profile?.glicko_rating,
         guestSavePrompt: isGuestUser(user) ? { onCreateAccount: onOpenAuth } : undefined,
+        // Signed-in players (a guest has a user id too) can review the games of the set from their Games page.
+        reviewGames: user && onNavigate ? { onOpen: () => onNavigate('games') } : undefined,
       },
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is onNavigate, a stable callback prop

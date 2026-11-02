@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   NO_FILTERS,
   TREND_MAX_POINTS,
+  attachSavedReviews,
   computeAccuracyTrend,
   computeArchiveStats,
   filterGames,
   formatAccuracy,
   gameResult,
+  mergeArchiveGames,
   tiersPresent,
   titleCase,
 } from './gamesArchiveModel.ts';
@@ -156,6 +158,60 @@ describe('computeAccuracyTrend', () => {
     expect(change).toBe(10);
     const worse = computeAccuracyTrend([90, 90, 90, 90, 90, 80, 80, 80, 80, 80].map((a, i) => on(i + 1, a)));
     expect(worse.change).toBe(-10);
+  });
+});
+
+describe('mergeArchiveGames', () => {
+  const at = (id: string, when: string, extra: Partial<SavedGameSummary> = {}) => game({ sourceMatchId: id, playedAt: when, savedAt: when, ...extra });
+
+  it('lists the archive and the Daily Fritz games as one list, newest first, at most the limit', () => {
+    const archive = [at('a-old', '2026-10-01T10:00:00.000Z'), at('a-new', '2026-11-02T10:00:00.000Z')];
+    const daily = [at('dfz-mid', '2026-10-20T10:00:00.000Z', { mode: 'dfz' }), at('dfz-newest', '2026-11-02T12:00:00.000Z', { mode: 'dfz' })];
+    expect(mergeArchiveGames(archive, daily, 10).map((g) => g.sourceMatchId)).toEqual(['dfz-newest', 'a-new', 'dfz-mid', 'a-old']);
+    expect(mergeArchiveGames(archive, daily, 2).map((g) => g.sourceMatchId)).toEqual(['dfz-newest', 'a-new']);
+    expect(mergeArchiveGames(archive, daily, 0)).toEqual([]);
+  });
+
+  it('lists a game once, and sorts an unreadable date as the oldest instead of dropping or promoting it', () => {
+    const merged = mergeArchiveGames([at('x', '2026-11-01T00:00:00.000Z'), at('bad', 'not a date')], [at('x', '2026-11-01T00:00:00.000Z', { mode: 'dfz' })], 10);
+    expect(merged.map((g) => g.sourceMatchId)).toEqual(['x', 'bad']);
+    expect(merged[0]!.mode).toBe('pvf'); // the first one listed wins
+  });
+
+  it('does not change its inputs', () => {
+    const archive = [at('a', '2026-11-01T00:00:00.000Z')];
+    const daily = [at('d', '2026-11-02T00:00:00.000Z', { mode: 'dfz' })];
+    const copy = JSON.stringify([archive, daily]);
+    mergeArchiveGames(archive, daily, 5);
+    expect(JSON.stringify([archive, daily])).toBe(copy);
+  });
+});
+
+describe('attachSavedReviews', () => {
+  const dfz = (id: string, extra: Partial<SavedGameSummary> = {}) => game({ sourceMatchId: id, mode: 'dfz', ...extra });
+
+  it('joins a Daily Fritz game to its saved review by the game\'s own id, with no accuracy to show', () => {
+    const [joined, other] = attachSavedReviews(
+      [dfz('dfz:1:1'), dfz('dfz:1:2')],
+      [{ id: 'review-a', sourceMatchId: 'dfz:1:1' }, { id: 'review-b', sourceMatchId: 'something-else' }],
+    );
+    expect(joined!.review).toEqual({ id: 'review-a', accuracy: null, grade: null });
+    expect(other!.review).toBeNull();
+  });
+
+  it('leaves every other kind of game, and a game that already has its review, exactly as it is', () => {
+    const pvf = game({ sourceMatchId: 'p1' });
+    const mp = game({ sourceMatchId: 'm1', mode: 'mp' });
+    const ready = dfz('dfz:2:1', { review: { id: 'server-joined', accuracy: 88, grade: 'A' } });
+    const out = attachSavedReviews([pvf, mp, ready], [{ id: 'r1', sourceMatchId: 'p1' }, { id: 'r2', sourceMatchId: 'm1' }, { id: 'r3', sourceMatchId: 'dfz:2:1' }]);
+    expect(out).toEqual([pvf, mp, ready]);
+  });
+
+  it('ignores a review with no game id, and keeps the first review when a game has several', () => {
+    const out = attachSavedReviews([dfz('dfz:3:1')], [{ id: 'orphan', sourceMatchId: null }, { id: 'first', sourceMatchId: 'dfz:3:1' }, { id: 'second', sourceMatchId: 'dfz:3:1' }]);
+    expect(out[0]!.review!.id).toBe('first');
+    const lone = dfz('dfz:4:1');
+    expect(attachSavedReviews([lone], [])).toEqual([lone]);
   });
 });
 
