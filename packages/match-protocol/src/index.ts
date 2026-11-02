@@ -14,4 +14,10 @@ export type {
 export type { MatchCommand, MatchCommandType } from './commands.ts';
 export * from './spectator.ts';
 export type { UpgradeRequiredPayload, ProtocolCheck } from './wire.ts';
-export { PROTOCOL_VERSION, MIN_SUPPORTED_PROTOCOL_VERSION, checkProtocolVersion } from './wire.ts';
+export {
+  PROTOCOL_VERSION,
+  MIN_SUPPORTED_PROTOCOL_VERSION,
+  UPGRADE_REQUIRED_ERROR,
+  announcedProtocolVersion,
+  checkProtocolVersion,
+} from './wire.ts';

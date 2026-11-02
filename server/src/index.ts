@@ -4,6 +4,7 @@ import { processAdmissionMiddleware, trackSocketHandlers, isProcessClosing, proc
 import * as Sentry from '@sentry/node';
 import { config } from './config';
 import { runBootEnvCheck } from './envBootCheck';
+import { protocolHandshakeMiddleware } from './socketProtocol';
 import { sentryBeforeSend } from './sentryScrubbers';
 import { startEventLoopLagMonitor } from './platform/health/eventLoopLagMonitor';
 import { startResourceUsageLog } from './platform/health/resourceUsageLog';
@@ -511,6 +512,9 @@ io.use((socket, next) => {
   }
   next();
 });
+
+// The app announces its wire-protocol version in the handshake. Report-only unless PROTOCOL_VERSION_MODE=enforce (socketProtocol.ts).
+io.use(protocolHandshakeMiddleware());
 
 // Presence lives in social/presenceRegistry so the HTTP routes and the socket
 // handlers answer from one structure instead of two that can disagree.
