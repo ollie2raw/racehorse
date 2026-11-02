@@ -52,11 +52,14 @@ describe('computeSecondOpinion', () => {
   });
 
   it('says nothing about evidence that is not a search, a forced decision, or a position without a draw pile', () => {
-    for (const { snapshot, evaluation } of all) {
-      const result = computeSecondOpinion(snapshot, evaluation, { samples: SAMPLES });
-      const eligible =
-        evaluation.evidence.source === 'search' && evaluation.candidates.length > 1 && snapshot.preAction.boneyard.drawableCount > 0;
-      if (!eligible) expect(result).toBeNull();
+    // Only the ineligible decisions are asked: they return before any rollout, so this is cheap on any machine.
+    const ineligible = all.filter(
+      ({ snapshot, evaluation }) =>
+        !(evaluation.evidence.source === 'search' && evaluation.candidates.length > 1 && snapshot.preAction.boneyard.drawableCount > 0),
+    );
+    expect(ineligible.length).toBeGreaterThan(100);
+    for (const { snapshot, evaluation } of ineligible) {
+      expect(computeSecondOpinion(snapshot, evaluation, { samples: SAMPLES })).toBeNull();
     }
   });
 
@@ -78,12 +81,12 @@ describe('second opinion in the production escalation', () => {
       if (result.evaluation.secondOpinion) attached += 1;
     }
     expect(attached).toBeGreaterThan(0);
-  });
+  }, 120_000); // real searches: about 1.5 s here, 6.5 s on a loaded CI runner, so well past vitest's 5 s default
 
   it('is left off the live pass', () => {
     for (const { snapshot } of sample) {
       const result = adaptiveEvaluateReviewPosition(snapshot, { phase: 'live', startTier: 1, maxTier: 1 });
       expect(result.evaluation.secondOpinion).toBeUndefined();
     }
-  });
+  }, 120_000);
 });
