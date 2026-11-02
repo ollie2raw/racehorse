@@ -3,7 +3,7 @@ import type express from 'express';
 import { config } from '../../config';
 import { findProductionSupabaseVars, isHostedProduction } from '../env/productionSupabaseGuard';
 
-const authenticatedUserIdCache = new Map<string, { userId: string | null; expiresAt: number }>();
+const authenticatedUserIdCache = new Map<string, { userId: string | null; expiresAt: number; isAnonymous?: boolean }>();
 /**
  * AU-1 (HARDENING_PLAN §6.3): a successful `/auth/v1/user` result is trusted for
  * this long before re-checking upstream. This is the server-side half of the
@@ -45,9 +45,9 @@ function pruneAuthenticatedUserIdCache(now: number): void {
   }
 }
 
-function rememberAuthenticatedUserId(key: string, userId: string | null, ttlMs: number): void {
+function rememberAuthenticatedUserId(key: string, userId: string | null, ttlMs: number, isAnonymous = false): void {
   const now = Date.now();
-  authenticatedUserIdCache.set(key, { userId, expiresAt: now + ttlMs });
+  authenticatedUserIdCache.set(key, { userId, expiresAt: now + ttlMs, isAnonymous });
   pruneAuthenticatedUserIdCache(now);
 }
 
@@ -106,6 +106,19 @@ export async function verifyBearerToken(token: string | null | undefined): Promi
   return getAuthenticatedUserIdFromToken(token ?? null);
 }
 
+/**
+ * Whether a bearer token belongs to a guest (a Supabase anonymous session). Answers from the same cached, de-duplicated validation as
+ * `verifyBearerToken`, so it costs no extra upstream call after the token has been verified. False for a token that does not verify:
+ * callers check the token first and use this only to decide what a verified user may do (guest play, docs/guest-play-design.md).
+ */
+export async function isGuestBearerToken(token: string | null | undefined): Promise<boolean> {
+  if (!token) return false;
+  const userId = await getAuthenticatedUserIdFromToken(token);
+  if (!userId) return false;
+  const entry = authenticatedUserIdCache.get(tokenCacheKey(token));
+  return entry?.isAnonymous === true;
+}
+
 export async function getAuthenticatedUserIdFromToken(token: string | null): Promise<string | null> {
   if (!token) return null;
   const key = tokenCacheKey(token);
@@ -157,8 +170,9 @@ async function validateTokenUpstream(token: string, key: string): Promise<string
     return null;
   }
 
-  const user = (await response.json()) as { id?: unknown };
+  const user = (await response.json()) as { id?: unknown; is_anonymous?: unknown };
   const userId = typeof user.id === 'string' ? user.id : null;
-  rememberAuthenticatedUserId(key, userId, AUTHENTICATED_USER_ID_TTL_MS);
+  // Supabase marks a guest (anonymous sign-in) session with is_anonymous; a permanent account has it false or absent.
+  rememberAuthenticatedUserId(key, userId, AUTHENTICATED_USER_ID_TTL_MS, user.is_anonymous === true);
   return userId;
 }

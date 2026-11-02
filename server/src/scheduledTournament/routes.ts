@@ -275,7 +275,8 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
     let withinLimit = false;
     fritzCupRateLimit(req, res, () => { withinLimit = true; });
     if (!withinLimit) return;
-    const userId = await requireAuthUserId(req, res);
+    // A guest (anonymous session) is signed in but may not take part in tournaments until they make an account.
+    const userId = await requireAuthUserId(req, res, { rejectGuests: true });
     if (!userId) return;
     if (!io) {
       log.error('fritz cup route registered without a socket server');
@@ -566,7 +567,8 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
     if (respondIfTournamentsDisabled(res, 'refuse')) return;
     const tournamentId = requireTournamentId(req, res);
     if (!tournamentId) return;
-    const userId = await requireAuthUserId(req, res);
+    // A guest (anonymous session) is signed in but may not take part in tournaments until they make an account.
+    const userId = await requireAuthUserId(req, res, { rejectGuests: true });
     if (!userId) return;
     const mismatch = rejectMismatchedPayloadUserId(userId, req.body?.userId);
     if (mismatch) {

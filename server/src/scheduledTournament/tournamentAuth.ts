@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import type { Socket } from 'socket.io';
-import { verifyBearerToken } from '../platform/auth/supabaseAuth';
+import { isGuestBearerToken, verifyBearerToken } from '../platform/auth/supabaseAuth';
 import { fetchMatchById, fetchMatchByRoomCode, isValidUuid } from './persistence';
 import { isTournamentRoomCode } from './tournamentRoomCode';
 import type { MatchRow } from './types';
@@ -24,7 +24,9 @@ export async function getUserIdFromBearerToken(token: string | null | undefined)
 export async function requireAuthUserId(
   req: Request,
   res: Response,
-  opts: { allowAnonymous?: boolean } = {},
+  // `allowAnonymous` means "not signed in at all is fine". `rejectGuests` is different: a guest (an anonymous Supabase session) IS signed in, but
+  // tournaments need an account (docs/guest-play-design.md, decision 4).
+  opts: { allowAnonymous?: boolean; rejectGuests?: boolean } = {},
 ): Promise<string | null> {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -37,6 +39,10 @@ export async function requireAuthUserId(
   if (!userId) {
     if (opts.allowAnonymous) return null;
     res.status(401).json({ ok: false, error: 'not_authenticated' });
+    return null;
+  }
+  if (opts.rejectGuests && (await isGuestBearerToken(token))) {
+    res.status(403).json({ ok: false, error: 'account_required' });
     return null;
   }
   return userId;
