@@ -6,6 +6,7 @@ import {
   type DailyFritzTranscript,
 } from '@racehorse/game-core';
 import { generateSingleDailyFritzGameHand, type DailyFritzHandDeal } from '../../dailyFritz';
+import { replayVerifiedDailyFritzHand } from '../../dailyFritzHandReplay';
 import {
   DailyFritzVerificationError,
   createOfficialDailyFritzHandState,
@@ -630,6 +631,58 @@ describe('capDailyFritzDrawLogCount — real interrupted-draw-sequence trigger (
     const fixture = findHandWithDroppedDrawSnapshot(false);
     expect(() => verifyDroppedSnapshotFixture(fixture)).toThrow(DailyFritzVerificationError);
   });
+});
+
+/**
+ * DF-1 (docs/daily-fritz-review-design.md): the post-game review replays a verified hand. Same REAL client pipeline as above; every hand
+ * the verifier accepts must also replay, to the verifier's own terminal state, with its steps being the engine commands.
+ */
+function replaySweep(dropObservation?: (action: MoveEntry['action'], rng: () => number) => boolean, useJournal = false) {
+  const outcome = { handsPlayed: 0, replayed: 0, withInferredSteps: 0, notReplayed: {} as Record<string, number> };
+  for (let seed = 1; seed <= 100; seed += 1) {
+    const rng = makeRng(seed * 7919);
+    for (let handIndex = 0; handIndex < 4; handIndex += 1) {
+      const deal = generateSingleDailyFritzGameHand(RUN_DATE, 1, handIndex + seed * 4, DEAL_SIZE);
+      const noiseRng = makeRng(seed * 104729 + handIndex);
+      const hand = simulateHand(deal, handIndex, rng, dropObservation ? (action) => dropObservation(action, noiseRng) : undefined);
+      if (!hand.match.handOver) continue;
+      outcome.handsPlayed += 1;
+      const replay = replayVerifiedDailyFritzHand({
+        transcript: buildTranscriptForHand(hand, handIndex, useJournal),
+        initialState: createOfficialDailyFritzHandState({
+          deal, handIndex, drawWinner: handIndex % 2 === 0 ? 'you' : 'fritz', winningScore: WINNING_SCORE, dealSize: DEAL_SIZE, playerScore: 0, fritzScore: 0,
+        }),
+        expectedChallengeId: CHALLENGE_ID,
+        expectedAttemptId: ATTEMPT_ID,
+        expectedGameNumber: 1,
+        expectedHandIndex: handIndex,
+        userId: 'user-fidelity',
+        fritzTier: FRITZ_TIER,
+      });
+      if (replay.ok) {
+        outcome.replayed += 1;
+        if (replay.inferredStepCount > 0) outcome.withInferredSteps += 1;
+      } else {
+        outcome.notReplayed[replay.code] = (outcome.notReplayed[replay.code] ?? 0) + 1;
+      }
+    }
+  }
+  return outcome;
+}
+
+describe('Daily Fritz hand replay (post-game review, DF-1) on the real client pipeline', () => {
+  it('every cleanly observed hand replays, from either evidence source, with no step inferred', () => {
+    for (const result of [replaySweep(), replaySweep(undefined, true)]) {
+      expect(result.handsPlayed).toBeGreaterThan(150);
+      expect(result).toMatchObject({ replayed: result.handsPlayed, notReplayed: {}, withInferredSteps: 0 });
+    }
+  }, 120_000);
+
+  it('with the journal as evidence, every hand still replays under 35% observation loss', () => {
+    const result = replaySweep(DROPPED_OBSERVATION, true);
+    expect(result.handsPlayed).toBeGreaterThan(150);
+    expect({ replayed: result.replayed, notReplayed: result.notReplayed }).toEqual({ replayed: result.handsPlayed, notReplayed: {} });
+  }, 120_000);
 });
 
 describe('Daily Fritz transcript fidelity', () => {
