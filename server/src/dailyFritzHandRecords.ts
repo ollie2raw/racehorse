@@ -92,6 +92,30 @@ export async function insertDailyFritzHandRecordRow(row: DailyFritzHandRecordRow
   });
 }
 
+/** A stored hand as the review reads it back. */
+export type StoredDailyFritzHandRecord = { hand_index: number; transcript_digest: string; transcript: unknown };
+
+/** The stored hands of one game of one attempt, owner only (the user id is part of the query). Several rows can share a hand index (see the digest note above). */
+export async function loadDailyFritzHandRecords(userId: string, attemptId: string, gameNumber: number): Promise<StoredDailyFritzHandRecord[]> {
+  return supabaseFetch<StoredDailyFritzHandRecord[]>(
+    `/rest/v1/daily_fritz_hand_records?select=hand_index,transcript_digest,transcript&user_id=eq.${encodeURIComponent(userId)}&attempt_id=eq.${encodeURIComponent(attemptId)}&game_number=eq.${Math.trunc(gameNumber)}&order=hand_index.asc&limit=200`,
+    { method: 'GET' },
+  );
+}
+
+/** Which hands are stored for these attempts, digests only (no transcripts), so a list can say which games are reviewable. */
+export async function listDailyFritzHandDigests(
+  userId: string,
+  attemptIds: readonly string[],
+): Promise<Array<{ attempt_id: string; game_number: number; transcript_digest: string }>> {
+  const ids = attemptIds.filter((id) => UUID.test(id));
+  if (ids.length === 0) return [];
+  return supabaseFetch<Array<{ attempt_id: string; game_number: number; transcript_digest: string }>>(
+    `/rest/v1/daily_fritz_hand_records?select=attempt_id,game_number,transcript_digest&user_id=eq.${encodeURIComponent(userId)}&attempt_id=in.(${ids.join(',')})&limit=3000`,
+    { method: 'GET' },
+  );
+}
+
 /** A missing table (flag set before the migration) would otherwise warn on every verified hand. */
 const WARN_EVERY_MS = 60_000;
 let lastFailureWarnAt = 0;

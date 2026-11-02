@@ -586,7 +586,7 @@ export async function recordDailyFritzAsyncVerificationScheduled(input: {
   });
 }
 
-export function verifyAttemptHand(input: {
+type AttemptHandVerificationInput = {
   transcript: unknown;
   attempt: DailyFritzAttemptRecord;
   run: DailyFritzRunRecord;
@@ -594,7 +594,14 @@ export function verifyAttemptHand(input: {
   gameNumber: DailyFritzSetGameNumber;
   handIndex: number;
   publishedChallenge: DailyFritzPublishedChallenge | null;
-}) {
+};
+
+/**
+ * Everything the pure verifier needs for one hand of an attempt: the attempt-level checks (seed, challenge identity, retired policy), the hand's deal and draw
+ * winner (published or generated), its starting scores from the ledger, and the pinned policy contract. Split out of `verifyAttemptHand` unchanged so the
+ * post-game review rebuilds a hand from EXACTLY the inputs verification used, instead of a second copy of this logic.
+ */
+export function buildHandVerificationInput(input: AttemptHandVerificationInput): Parameters<typeof verifyDailyFritzHand>[0] {
   const expectedSeed = getDailyFritzSeed(input.run.runDate);
   if (input.run.seed !== expectedSeed) {
     throw new DailyFritzVerificationError('Daily Fritz challenge seed is invalid.', 'challenge_mismatch');
@@ -640,7 +647,7 @@ export function verifyAttemptHand(input: {
   const fritzTier = input.publishedChallenge?.fritzTier ?? input.run.fritzTier;
   const winningScore = input.publishedChallenge?.winningScore ?? input.run.winningScore;
   const dealSize = input.publishedChallenge?.dealSize ?? input.run.dealSize;
-  return verifyDailyFritzHand({
+  return {
     transcript: input.transcript,
     initialState: createOfficialDailyFritzHandState({
       deal,
@@ -660,7 +667,11 @@ export function verifyAttemptHand(input: {
     expectedFritzPolicyVersion: authorityContract?.fritzPolicyVersion,
     expectedFritzPolicyContract: authorityContract?.fritzPolicyContract,
     requireStateDigests: authorityContract?.stateDigestRequired === true,
-  });
+  };
+}
+
+export function verifyAttemptHand(input: AttemptHandVerificationInput) {
+  return verifyDailyFritzHand(buildHandVerificationInput(input));
 }
 
 export function respondVerificationError(

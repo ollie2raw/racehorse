@@ -21,6 +21,7 @@ import { registerDailyFritzRecordGameRoute } from './dailyFritzRecordGameRoute';
 import { registerDailyFritzCompletionRoutes } from './dailyFritzCompletionRoutes';
 import { registerDailyFritzAdminRoutes } from './dailyFritzAdminRoutes';
 import { registerDailyFritzCheckpointRoute } from './dailyFritzCheckpointRoute';
+import { registerDailyFritzGameRecordRoutes } from './dailyFritzGameRecordRoute';
 
 export function registerDailyFritzRoutes(app: Application): void {
   registerDailyFritzTodayRoutes(app);
@@ -29,5 +30,6 @@ export function registerDailyFritzRoutes(app: Application): void {
   registerDailyFritzNextHandRoute(app);
   registerDailyFritzRecordGameRoute(app);
   registerDailyFritzCompletionRoutes(app);
+  registerDailyFritzGameRecordRoutes(app);
   registerDailyFritzAdminRoutes(app);
 }
