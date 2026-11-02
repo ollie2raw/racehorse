@@ -49,7 +49,7 @@ The single execution list. Sources: `launch-audit-2026-11-01.md` (UI, App Store,
 
 | # | Item | PR |
 |---|---|---|
-| [ ] 3.1 | Shared HTTP error handler (no raw error text) and request-id middleware; replace `console.*` with the logger | |
+| [~] 3.1 | Shared HTTP error handler and request ids. **Done (this PR):** `server/src/http/errors.ts` adds `X-Request-Id` on every response (a caller's own id is reused only if plain and 8 to 64 characters), `sendServerError(res, err, "fixed sentence")` (logs the real error with the request id; production callers see only the sentence and the id), and a final `errorHandler` registered after every route (the old one was registered before most routes, so errors thrown in stats, ranking, Puzzle Rush, Daily Fritz and others fell to Express's default page): JSON, request id, 400 for bad JSON, the existing 413 message, a 4xx an error carries, otherwise 500 "Something went wrong." with a Sentry capture. **Fixed a leak:** the 15 social routes returned the raw `err.message` (database error text) in production; a guard test now fails on any response built from an error's `.message`. **Still open:** fold the two older `prodSafeError` copies (Daily Fritz, Puzzle Rush: 29 call sites) into the shared helper, replace the 57 remaining `console.*` calls with the logger, and show the request id in the client's error text ("Reference: ...") | `server/src/http/errors.ts` | this PR |
 | [ ] 3.2 | Server dependency updates (`proxy-addr`, `body-parser`, `engine.io`, `socket.io-parser`, `compression`) | |
 | [ ] 3.3 | Zod validation at every socket event and HTTP route, shadow mode first, money paths first | |
 | [ ] 3.4 | Protocol version enforced in the handshake with explicit `upgrade_required` | |

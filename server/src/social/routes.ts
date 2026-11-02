@@ -10,6 +10,7 @@ import {
 import { registerSocialFeedRoutes } from './socialFeed';
 import { registerSocialFriendsRoutes } from './socialFriends';
 import { registerSocialProfileRoutes } from './socialProfile';
+import { sendServerError } from '../http/errors';
 
 export const socialRouter = Router();
 
@@ -38,7 +39,7 @@ socialRouter.get('/rivals', async (req, res) => {
     const rivals = await getAutoRivals(userId);
     res.json({ ok: true, rivals });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Rivals unavailable.' });
+    sendServerError(res, err, 'Rivals unavailable.');
   }
 });
 
@@ -88,7 +89,7 @@ socialRouter.get('/leaderboard/mode/:mode', async (req, res) => {
     const self = sorted.find((r) => r.is_self) ?? null;
     res.json({ ok: true, leaderboard: sorted, self });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Leaderboard unavailable.' });
+    sendServerError(res, err, 'Leaderboard unavailable.');
   }
 });
 

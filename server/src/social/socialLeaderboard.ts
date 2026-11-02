@@ -2,6 +2,7 @@ import type { Response } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
 import { getFriendIds } from './socialAuth';
 import { dedupeMatchRows } from '../stats/dedupeMatchRows';
+import { sendServerError } from '../http/errors';
 
 /**
  * Online win counts for a set of users, in one round-trip.
@@ -166,7 +167,7 @@ export async function respondLeaderboardGlobal(userId: string, res: Response): P
     }
     res.json({ ok: true, leaderboard: topRows, self: selfEntry ?? null });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Leaderboard unavailable.' });
+    sendServerError(res, err, 'Leaderboard unavailable.');
   }
 }
 
@@ -198,7 +199,7 @@ export async function respondLeaderboardFriends(userId: string, res: Response): 
       }),
     });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Leaderboard unavailable.' });
+    sendServerError(res, err, 'Leaderboard unavailable.');
   }
 }
 
@@ -209,6 +210,6 @@ export async function respondLeaderboardWeekly(userId: string, res: Response): P
     const self = leaderboard.find((r) => r.is_self) ?? null;
     res.json({ ok: true, leaderboard, self });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Leaderboard unavailable.' });
+    sendServerError(res, err, 'Leaderboard unavailable.');
   }
 }

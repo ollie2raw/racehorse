@@ -3,6 +3,7 @@ import { supabaseFetch } from '../supabaseUtils';
 import { friendIdsFromRows, getFriendRows, requireAuth } from './socialAuth';
 import { getPresenceBatch } from './presenceRegistry';
 import { blockStatus } from '../moderation/blockStore';
+import { sendServerError } from '../http/errors';
 
 /**
  * A block in either direction stops new friend requests. The message is the
@@ -69,7 +70,7 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
         .map((r) => ({ id: r.id, userId: r.friend_user_id, username: profileMap.get(r.friend_user_id) ?? 'player', created_at: r.created_at }));
       res.json({ ok: true, incoming, outgoing });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Requests unavailable.' });
+      sendServerError(res, err, 'Requests unavailable.');
     }
   });
 
@@ -106,7 +107,7 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
 
       res.json({ ok: true, friends });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Friends unavailable.' });
+      sendServerError(res, err, 'Friends unavailable.');
     }
   });
 
@@ -136,7 +137,7 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
         res.status(409).json({ error: 'A friend request between you already exists.' });
         return;
       }
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to send request.' });
+      sendServerError(res, err, 'Failed to send request.');
     }
   });
 
@@ -173,7 +174,7 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
         res.status(409).json({ error: 'A friend request between you already exists.' });
         return;
       }
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to send request.' });
+      sendServerError(res, err, 'Failed to send request.');
     }
   });
 
@@ -190,7 +191,7 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
       });
       res.json({ ok: true });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to accept request.' });
+      sendServerError(res, err, 'Failed to accept request.');
     }
   });
 
@@ -206,7 +207,7 @@ export function registerSocialFriendsRoutes(socialRouter: Router): void {
       );
       res.json({ ok: true });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to remove friend.' });
+      sendServerError(res, err, 'Failed to remove friend.');
     }
   });
 }

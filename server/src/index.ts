@@ -24,6 +24,7 @@ import compression from 'compression';
 import cors, { type CorsOptions } from 'cors';
 import http from 'http';
 import { createHash, randomUUID } from 'crypto';
+import { errorHandler, requestIdMiddleware } from './http/errors';
 import { Server, Socket } from 'socket.io';
 import { registerSpectatorHandlersIfEnabled } from './spectator/spectatorIntegration';
 import {
@@ -351,6 +352,7 @@ const app = express();
 // real client regardless of the exact hop count; `requestIp()` additionally
 // prefers the Cloudflare-verified `CF-Connecting-IP`.
 app.set('trust proxy', TRUSTED_PROXY);
+app.use(requestIdMiddleware);
 app.use(cors(corsOptions));
 app.use(processAdmissionMiddleware);
 /**
@@ -457,19 +459,6 @@ app.use('/api/moderation', moderationLimit);
 app.use('/api/moderation', moderationRouter);
 app.use('/api/social', socialRouter);
 app.use('/api/profile', socialRouter);
-
-app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (
-    error &&
-    typeof error === 'object' &&
-    'type' in error &&
-    (error as { type?: string }).type === 'entity.too.large'
-  ) {
-    res.status(413).json({ error: 'Match result payload is too large.' });
-    return;
-  }
-  next(error);
-});
 
 function getProcessErrorLogPayload(error: unknown): { name?: string; message: string; stack?: string } {
   if (error instanceof Error) {
@@ -602,6 +591,8 @@ registerPrivateMatchResultRoutes(app, {
   queryRankedGameForMatch,
 });
 
+// Last, so it sees what every route above threw (an error handler only catches routes registered before it).
+app.use(errorHandler);
 
 const SOCKET_EVENT_LIMITS: Record<string, RateLimitRule> = {
   'room:create': { windowMs: 60_000, max: config.limitRoomCreateMax },

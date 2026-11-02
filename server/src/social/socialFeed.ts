@@ -1,6 +1,7 @@
 import type { Router } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
 import { getFriendIds, requireAuth } from './socialAuth';
+import { sendServerError } from '../http/errors';
 
 // The public response includes only fields used to describe the result.
 // In particular, internal match IDs and future metadata stay private.
@@ -53,7 +54,7 @@ export function registerSocialFeedRoutes(socialRouter: Router): void {
         })),
       });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Feed unavailable.' });
+      sendServerError(res, err, 'Feed unavailable.');
     }
   });
 
@@ -90,7 +91,7 @@ export function registerSocialFeedRoutes(socialRouter: Router): void {
         })),
       });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Feed unavailable.' });
+      sendServerError(res, err, 'Feed unavailable.');
     }
   });
 
@@ -120,7 +121,7 @@ export function registerSocialFeedRoutes(socialRouter: Router): void {
         })),
       });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Activity unavailable.' });
+      sendServerError(res, err, 'Activity unavailable.');
     }
   });
 }
