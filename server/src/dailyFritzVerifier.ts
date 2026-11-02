@@ -200,21 +200,36 @@ function toCommand(state: GameState, action: DailyFritzTranscript['actions'][num
     : { ...base, kind: action.kind };
 }
 
+/**
+ * Read-only observer of every engine command the verifier applies, in order: the transcript's own actions AND the two kinds the
+ * verifier infers (an omitted mandatory draw, an omitted official Fritz turn). Those inferred commands really happened in the
+ * official game, so a replay of the hand (the post-game review) needs them too. Called only after the command was applied.
+ * Observing never changes what is verified.
+ */
+export type DailyFritzOfficialStep = {
+  readonly origin: 'transcript' | 'inferred-draw' | 'recovered-fritz';
+  readonly command: GameCommand;
+};
+export type DailyFritzStepObserver = (step: DailyFritzOfficialStep) => void;
+
 function applyOmittedMandatoryDraws(
   state: GameState,
   actorId: string,
   transcriptSequence: number,
+  onStep?: DailyFritzStepObserver,
 ): GameState {
   let current = state;
   const maxDraws = state.boneyard.length;
   for (let drawIndex = 0; drawIndex < maxDraws && canDraw(current, actorId); drawIndex += 1) {
-    current = applyGameCommand(current, {
+    const command: GameCommand = {
       version: 1,
       commandId: `daily-fritz:${transcriptSequence}:inferred-draw:${drawIndex}`,
       sequence: current.sequence,
       actorId,
       kind: 'draw',
-    }).state;
+    };
+    current = applyGameCommand(current, command).state;
+    onStep?.({ origin: 'inferred-draw', command });
   }
   return current;
 }
@@ -230,8 +245,9 @@ function applyOmittedOfficialFritzTurn(
   transcriptSequence: number,
   policyVersion: FritzPolicyVersion,
   tier: DailyFritzTier,
+  onStep?: DailyFritzStepObserver,
 ): { state: GameState; recoveredPlay: boolean } {
-  const current = applyOmittedMandatoryDraws(state, 'fritz', transcriptSequence);
+  const current = applyOmittedMandatoryDraws(state, 'fritz', transcriptSequence, onStep);
   const decision = chooseOfficialFritzDecisionForVersion({
     version: policyVersion,
     state: current,
@@ -248,7 +264,10 @@ function applyOmittedOfficialFritzTurn(
       }
     : { sequence: transcriptSequence, actor: 'fritz', kind: decision.kind };
   try {
-    return { state: applyGameCommand(current, toCommand(current, action)).state, recoveredPlay: action.kind === 'play' };
+    const command = toCommand(current, action);
+    const next = applyGameCommand(current, command).state;
+    onStep?.({ origin: 'recovered-fritz', command });
+    return { state: next, recoveredPlay: action.kind === 'play' };
   } catch (error) {
     throw new DailyFritzVerificationError(
       `The official Fritz recovery action could not be applied before transcript action ${transcriptSequence}: ${error instanceof Error ? error.message : 'illegal action.'}`,
@@ -274,7 +293,18 @@ export function verifyDailyFritzHand(input: {
   expectedFritzPolicyContract?: string;
   requireStateDigests?: boolean;
   now?: () => string;
+  /** Read-only observer of every applied engine command (see DailyFritzOfficialStep). Its errors are swallowed; it cannot change the verdict. */
+  onStep?: DailyFritzStepObserver;
 }): { transcript: DailyFritzTranscript; result: VerifiedDailyFritzHandRecord; terminalState: GameState } {
+  const observeStep = input.onStep
+    ? (step: DailyFritzOfficialStep) => {
+        try {
+          input.onStep!(step);
+        } catch {
+          // an observer must never change verification
+        }
+      }
+    : undefined;
   let transcript: DailyFritzTranscript;
   try {
     transcript = parseDailyFritzTranscript(input.transcript);
@@ -342,6 +372,7 @@ export function verifyDailyFritzHand(input: {
         action.sequence,
         transcript.fritzPolicyVersion,
         input.fritzTier,
+        observeStep,
       );
       state = recovered.state;
       // The command that precedes this player action is now Fritz's recovered one, not the player's earlier play.
@@ -392,7 +423,7 @@ export function verifyDailyFritzHand(input: {
     // comparison. This cannot grant an optional draw: the engine stops at the
     // first legal play and rejects any substituted tile.
     if (action.kind !== 'draw' && canDraw(state, action.actor)) {
-      state = applyOmittedMandatoryDraws(state, action.actor, action.sequence);
+      state = applyOmittedMandatoryDraws(state, action.actor, action.sequence, observeStep);
     }
     if (action.actor === 'fritz') {
       // GC-5: compare against the digest ALGORITHM the transcript is pinned to
@@ -441,7 +472,9 @@ export function verifyDailyFritzHand(input: {
       }
     }
     try {
-      state = applyGameCommand(state, toCommand(state, action)).state;
+      const command = toCommand(state, action);
+      state = applyGameCommand(state, command).state;
+      observeStep?.({ origin: 'transcript', command });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Illegal action.';
       throw new DailyFritzVerificationError(
