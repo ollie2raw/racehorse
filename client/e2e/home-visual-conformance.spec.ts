@@ -97,6 +97,21 @@ for (const viewport of [...MOBILE_LANDSCAPE_VIEWPORTS, MOBILE_PORTRAIT_VIEWPORT,
   });
 }
 
+for (const viewport of [{ width: 1280, height: 720 }, { width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  // The streak strip once had a fixed 56px inset while the cards and mode bar scale with the root font size, so on desktop it sat about 19px inside both.
+  test(`Home streak strip shares its edges with the cards and mode bar at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await openHome(page, 'home/not-played');
+    const left = async (selector: string) => (await page.locator(selector).first().boundingBox())?.x ?? NaN;
+    const right = async (selector: string) => {
+      const box = await page.locator(selector).first().boundingBox();
+      return (box?.x ?? NaN) + (box?.width ?? NaN);
+    };
+    expect(Math.abs((await left('.streak-strip')) - (await left('.daily-fritz-card-container')))).toBeLessThan(1);
+    expect(Math.abs((await right('.streak-strip')) - (await right('.daily-puzzle-card-container')))).toBeLessThan(1);
+  });
+}
+
 test('Home actions use real daily destinations', async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await openHome(page, 'home/not-played');
