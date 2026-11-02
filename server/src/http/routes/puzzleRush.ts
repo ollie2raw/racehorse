@@ -12,6 +12,7 @@ import {
   buildPuzzleRushLeaderboard,
   findPersonalBestRun,
 } from '../../puzzleRush/leaderboard';
+import { removeGuests } from '../../guests/guestEligibility';
 import { buildHomeDailySummary, createHomeDailyCompletionMap } from '../../homeDailySummary';
 import { listCompletedPuzzleRushDatesForUser } from '../stores/homeCompletionDates';
 import {
@@ -404,6 +405,7 @@ export function registerPuzzleRushRoutes(app: Application): void {
         fetchRankedRushLeaderboard({ limit, offset, userId }),
         listOfficialRushRunsForDate(runDate),
       ]);
+      const todayRanked = await removeGuests(todayOfficial, (run) => run.userId);
       let leaderboard: PuzzleRushLeaderboardEntry[];
       let totalPlayers: number | null = null;
       let selfRank: number | null = null;
@@ -412,10 +414,10 @@ export function registerPuzzleRushRoutes(app: Application): void {
         totalPlayers = ranked.totalPlayers;
         selfRank = ranked.self?.rank ?? null;
       } else {
-        leaderboard = buildPuzzleRushLeaderboard(await listCompletedRushRuns());
+        leaderboard = buildPuzzleRushLeaderboard(await removeGuests(await listCompletedRushRuns(), (run) => run.userId));
         if (userId) selfRank = leaderboard.find((entry) => entry.userId === userId)?.rank ?? null;
       }
-      const daily = buildDailyPuzzleRushLeaderboard(todayOfficial);
+      const daily = buildDailyPuzzleRushLeaderboard(todayRanked);
 
       let personalBest = null;
       if (userId) {

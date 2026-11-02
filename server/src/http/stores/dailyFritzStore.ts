@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { removeGuests } from '../../guests/guestEligibility';
 import {
   generateDailyFritzRun,
   generateSingleDailyFritzGameHand,
@@ -771,7 +772,7 @@ export async function buildDailyFritzLeaderboard(
   }
   pruneLeaderboardCache(now);
 
-  const attempts = await listDailyFritzAttemptsForDate(runDate);
+  const attempts = await removeGuests(await listDailyFritzAttemptsForDate(runDate), (attempt) => attempt.userId);
   const names = await fetchProfileNames(attempts.map((attempt) => attempt.userId));
   const sorted = sortDailyFritzLeaderboard(
     attempts
