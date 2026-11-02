@@ -11,6 +11,8 @@ export type AnalyzeMoveLogOptions = {
   oracleMode?: OracleMode;
   tierPlayed?: FritzTier;
   winningScore?: number;
+  /** What the review calls the opponent in its consequence text ("<name> scored 10 on the next move"). Defaults to Fritz; a multiplayer game passes the opponent's name. */
+  opponentLabel?: string;
   /**
    * A5: when non-empty, the analyzer refuses to fabricate placeholder
    * opponent-hand/boneyard state in buildEvalState — see moveAnalyzer.ts.

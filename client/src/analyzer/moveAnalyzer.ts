@@ -165,7 +165,8 @@ function botDifficultyForTier(tier: FritzTier): BotDifficulty {
 }
 
 type ResolvedAnalyzeOptions = Required<Pick<AnalyzeMoveLogOptions, 'oracleMode' | 'tierPlayed' | 'winningScore' | 'reviewSnapshots'>>
-  & Pick<AnalyzeMoveLogOptions, 'finalScores' | 'scoreboardSnapshots' | 'youActorId'>;
+  & Pick<AnalyzeMoveLogOptions, 'finalScores' | 'scoreboardSnapshots' | 'youActorId'>
+  & { opponentLabel: string };
 
 function resolveAnalyzeOptions(options?: AnalyzeMoveLogOptions): ResolvedAnalyzeOptions {
   return {
@@ -176,6 +177,7 @@ function resolveAnalyzeOptions(options?: AnalyzeMoveLogOptions): ResolvedAnalyze
     finalScores: options?.finalScores,
     scoreboardSnapshots: options?.scoreboardSnapshots,
     youActorId: options?.youActorId,
+    opponentLabel: options?.opponentLabel?.trim() || 'Fritz',
   };
 }
 
@@ -829,7 +831,7 @@ export function analyzeMoveLog(
     const analysis = analyzeHandMoves(
       segment.entries,
       gradeTier,
-      'Fritz',
+      resolved.opponentLabel,
       segment.handNumber,
       segment.startingScores,
       segment.endingScores,
