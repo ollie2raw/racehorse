@@ -10,6 +10,7 @@ import {
   listLegacyDailyPuzzleDayResultsForUser,
 } from '../http/stores/puzzleStatsStore';
 import { buildPuzzleStatsSummary } from '../puzzleRush/puzzleStatsSummary';
+import { sendServerError } from '../http/errors';
 
 export function registerSocialProfileRoutes(socialRouter: Router): void {
   socialRouter.get('/:username', async (req, res) => {
@@ -168,7 +169,7 @@ export function registerSocialProfileRoutes(socialRouter: Router): void {
         recent_matches: recentMatches,
       });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Profile unavailable.' });
+      sendServerError(res, err, 'Profile unavailable.');
     }
   });
 }
