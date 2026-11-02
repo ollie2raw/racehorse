@@ -2,6 +2,7 @@ import { logger } from '../utils/logger';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import { PROTOCOL_VERSION } from '@racehorse/match-protocol';
 import { dispatchSocketEvent } from './socketEventBus';
 import {
   applyGameRematchStartedSocketEvent,
@@ -447,6 +448,8 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
+      // Announced in the handshake so the server can tell which wire protocol this copy of the app speaks (roadmap 3.4).
+      auth: { protocolVersion: PROTOCOL_VERSION },
     });
 
     // Latency probe. Its only consumer is the DEV `mp_debug` console readout, so

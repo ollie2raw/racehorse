@@ -2,6 +2,7 @@ import type { Socket } from 'socket.io-client';
 import { logger } from '../utils/logger';
 import type { RoomEmoteEvent } from './protocol';
 import { wrapSocketHandler } from './socketGuards';
+import { isUpgradeRequiredError, UPGRADE_REQUIRED_TEXT } from './upgradeRequired';
 import type { MultiplayerConnectionScope } from './multiplayerConnectionScope';
 import type { TournamentMatchAssignedPayload } from './legacyTournamentTypes';
 import type { RecoveryEvent } from './recoveryMachine';
@@ -210,14 +211,21 @@ export function registerMultiplayerConnectionSocketHandlers(options: {
 
   register(
     SOCKET_EVENTS.CONNECT_ERROR,
-    wrapSocketHandler(SOCKET_EVENTS.CONNECT_ERROR, () => {
+    wrapSocketHandler(SOCKET_EVENTS.CONNECT_ERROR, (error: unknown) => {
       const scope = getScope();
       scope.ui.setIsConnecting(false);
+      // The server refused this version of the app (wire protocol too old). Retrying cannot help, and this is not "the server is waking up".
+      const upgradeRequired = isUpgradeRequiredError(error);
+      if (upgradeRequired) {
+        scope.ui.setServerWaking(false);
+        scope.ui.setError(UPGRADE_REQUIRED_TEXT);
+      }
       const machineState = recoveryMachineRef.current?.getSnapshot().state;
       if (machineState === 'connecting' || machineState === 'joining') {
         dispatchSocketEvent({ type: 'TRANSPORT_FAIL', payload: { reason: 'connect_error' } });
         return;
       }
+      if (upgradeRequired) return;
       scope.ui.setServerWaking(true);
       scope.ui.setError('');
     }),

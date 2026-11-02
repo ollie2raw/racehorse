@@ -14,6 +14,7 @@ export * from './fritzPolicy';
 export * from './invariants';
 export * from './openEndsGeometry';
 export * from './pregameDraw';
+export * from './protocolVersion';
 export * from './random';
 export * from './scoring';
 export * from './types';
