@@ -1,0 +1,41 @@
+# Daily Fritz post-game review: design (2026-11-02)
+
+Goal: a player who finishes a Daily Fritz game can open the same review they get after Play vs Fritz and multiplayer. Today they get none. The owner approved starting this; the choices below are mine ("think like chess.com").
+
+## What exists today (checked in the code)
+
+- **Review is deliberately off for Daily Fritz.** `postGameReviewPolicy.ts` says Daily Fritz is "structurally excluded", and live snapshot capture excludes it "so DF verification payloads stay untouched". That second reason is the real constraint: Daily Fritz verification has been the most fragile system in the app (503 strandings in 18 days before the engine journal fix), so nothing in live play may change.
+- **The server keeps only a digest.** For every hand it verifies, the server stores a summary and a sha256 of the transcript (`VerifiedDailyFritzHandRecord`: scores before and after, winner, `actionCount`, `transcriptDigest`). It does **not** keep the actions. A finished Daily Fritz game therefore cannot be reconstructed later.
+- **The server does see the full actions, once.** `verifyDailyFritzHand` receives the whole transcript (`actions`, each with actor, kind, tile, position) and replays it against the official state built from the published challenge. The deal is deterministic from the challenge and hand index (`createOfficialDailyFritzHandState`), so actions plus challenge are enough to rebuild a hand.
+- **The saved-game plumbing exists.** `game_records` (modes `pvf`, `mp`), list and read endpoints, a saved-game reopen screen, and a review that runs from a rebuilt game (`SavedGameReview`) are all in place from the multiplayer work.
+
+## Decision
+
+Build the Daily Fritz review **from what the server has already verified**, as a best-effort side effect after verification succeeds, and open it from the saved-games list. **Live Daily Fritz play, capture and verification do not change at all.** A hand that does not replay exactly is simply "review unavailable for this hand"; it never affects scoring, the leaderboard or the run.
+
+Why this and not the alternatives:
+
+| Option | Verdict |
+| --- | --- |
+| Capture review snapshots during live Daily Fritz play, like Play vs Fritz | **Rejected.** Touches the fragile live path; the code comment says to keep it untouched. |
+| Review locally on the finished-set card from the client's own journal | **Rejected.** Client-asserted, lost on reload or another device, and nothing to reopen from the Games list (chess.com keeps every game). |
+| Save the game on the server from the verified transcripts, review derives from the saved game | **Chosen.** Server-authoritative, reopenable anywhere, same model as multiplayer, no change to live play. |
+
+## Plan: one PR each, in order
+
+1. **DF-1 (server, no SQL): a strict hand replay.** A pure function that turns a verified transcript plus the official initial state into the ordered engine steps (state before, command, state after). Strict: protocol 2 transcripts that replay exactly; anything that needs the verifier's tolerance (omitted Fritz turn, legacy recovery draws) returns `unavailable` with a reason. Tested against the real client pipeline the way `dailyFritzTranscriptFidelity.test.ts` does, plus mutation checks. Reports how often real hands replay strictly (the go/no-go number for the rest).
+2. **DF-2 (server + SQL for the owner): keep the verified transcripts.** A small `daily_fritz_hand_records` table (attempt, game, hand, user, transcript JSON, digest), written best-effort right after `writeVerifiedHand` succeeds (try/catch, never fails the request, a flag to switch it off). Owner-readable through the server only.
+3. **DF-3 (server + SQL): assemble a game record.** When a game ends, build a `game_records` row of mode `dfz` from its stored hands (every hand strict-replayed again, scores checked against the verified ledger), behind `DF_RECORDS_ENABLED`. List and read serve it only with `?modes=pvf,mp,dfz` (older app builds do not ask for it).
+4. **DF-4 (client): rebuild and review.** Rebuild the game from the record (as `rebuildMultiplayerGameFromRecord` does), reuse `SavedGameReview`; opponent label "Fritz", title "Daily Fritz, <date>, Game N".
+5. **DF-5 (client): the entry points.** A "Review" button on the finished-set card and each game in the Games list. The set-final overlay is where the old comment said hand interstitials fight the prompt, so the button goes on the card the player already reaches, not into the interstitial.
+
+## Risks and how each is held
+
+- **A transcript that does not replay.** Handled by DF-1 returning `unavailable`, and DF-1's measured rate decides whether to continue.
+- **Verification impact.** DF-2 runs after the response is decided, inside try/catch, behind a flag; a test asserts that a throwing store does not change the response.
+- **Storage.** A hand is tens of actions; a full set is a few hundred small objects. Measured in DF-1.
+- **Honesty.** Daily Fritz is played against Elite Fritz with a fixed deal; the review grades the player's moves against the same engine as every other review, with the second-opinion rule from #472.
+
+## What I need from the owner
+
+Only SQL, in DF-2 and DF-3 (two small migrations, each with its own rollback comment, applied by the owner as before). Nothing else is gated.
