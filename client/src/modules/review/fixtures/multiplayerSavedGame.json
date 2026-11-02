@@ -1,0 +1,1904 @@
+{
+ "sourceMatchId": "fixture-mp-1",
+ "mode": "mp",
+ "dealSize": 7,
+ "winningScore": 60,
+ "result": {
+  "you": 65,
+  "opponent": 67,
+  "winner": "opponent"
+ },
+ "verification": "replay_verified",
+ "playedAt": "2026-11-02T12:00:00.000Z",
+ "opponentName": "Bob",
+ "record": {
+  "players": [
+   "you",
+   "opponent"
+  ],
+  "config": {
+   "maxPips": 6,
+   "tilesPerPlayer": 7,
+   "deadTileCount": 2,
+   "scoringMultiple": 5,
+   "blockedHandRule": "lowestPips",
+   "endHandBonus": "sumOpponentPenalties",
+   "winningScore": 60,
+   "skipPregameDraw": true
+  },
+  "hands": [
+   {
+    "handNumber": 1,
+    "starterId": "you",
+    "deals": {
+     "you": [
+      "2|3",
+      "4|5",
+      "0|0",
+      "0|6",
+      "1|4",
+      "1|5",
+      "2|4"
+     ],
+     "opponent": [
+      "1|2",
+      "2|5",
+      "6|6",
+      "4|6",
+      "3|3",
+      "0|1",
+      "0|2"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|0",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|6",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|5",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|5",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|1",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "DRAW"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|4",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|2",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|4",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "3|4",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|4",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|3",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|5",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|5",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|4",
+      "position": "branch-1-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|2",
+      "position": "branch-1-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "3|5",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "DRAW"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|6",
+      "position": "branch-2-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|3",
+      "position": "branch-2-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|1",
+      "position": "branch-2-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|3",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|6",
+      "position": "branch-2-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|2",
+      "position": "branch-1-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "5|5",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|3",
+      "position": "right"
+     }
+    ],
+    "drawn": [
+     "3|4",
+     "4|4",
+     "1|1",
+     "2|2",
+     "1|3",
+     "3|5",
+     "0|4",
+     "1|6",
+     "0|5",
+     "3|6",
+     "5|5",
+     "0|3"
+    ],
+    "endScores": {
+     "you": 10,
+     "opponent": 5
+    }
+   },
+   {
+    "handNumber": 2,
+    "starterId": "opponent",
+    "deals": {
+     "you": [
+      "2|4",
+      "1|5",
+      "0|4",
+      "3|3",
+      "1|2",
+      "3|6",
+      "0|2"
+     ],
+     "opponent": [
+      "0|0",
+      "1|4",
+      "1|3",
+      "1|6",
+      "0|5",
+      "4|5",
+      "2|2"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|0",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|5",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|5",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|4",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|4",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|3",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|2",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|2",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|4",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|4",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|3",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|4",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "DRAW"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|3",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|2",
+      "position": "branch-1-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|1",
+      "position": "branch-1-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|6",
+      "position": "branch-1-1"
+     }
+    ],
+    "drawn": [
+     "4|4",
+     "3|4",
+     "2|3",
+     "1|1",
+     "0|3"
+    ],
+    "endScores": {
+     "you": 10,
+     "opponent": 16
+    }
+   },
+   {
+    "handNumber": 3,
+    "starterId": "you",
+    "deals": {
+     "you": [
+      "0|1",
+      "0|0",
+      "1|3",
+      "1|1",
+      "0|3",
+      "4|4",
+      "0|2"
+     ],
+     "opponent": [
+      "1|5",
+      "5|5",
+      "2|2",
+      "3|6",
+      "1|6",
+      "4|6",
+      "1|2"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|1",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|3",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|1",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|6",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|3",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|6",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|6",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|4",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|6",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|5",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|0",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|2",
+      "position": "left"
+     }
+    ],
+    "drawn": [
+     "0|6"
+    ],
+    "endScores": {
+     "you": 14,
+     "opponent": 18
+    }
+   },
+   {
+    "handNumber": 4,
+    "starterId": "opponent",
+    "deals": {
+     "you": [
+      "4|5",
+      "3|5",
+      "4|4",
+      "0|3",
+      "3|4",
+      "1|6",
+      "2|3"
+     ],
+     "opponent": [
+      "5|6",
+      "6|6",
+      "1|1",
+      "3|6",
+      "0|2",
+      "2|2",
+      "0|0"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "6|6",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|6",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "5|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "3|4",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "DRAW"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|4",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|5",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|4",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|6",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|5",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|2",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|2",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|2",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|5",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "DRAW"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|5",
+      "position": "branch-2-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "3|5",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "DRAW"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|4",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|3",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "5|5",
+      "position": "branch-2-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|4",
+      "position": "branch-1-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|3",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|1",
+      "position": "branch-1-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|1",
+      "position": "branch-1-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|6",
+      "position": "branch-1-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|3",
+      "position": "branch-0-0"
+     }
+    ],
+    "drawn": [
+     "1|2",
+     "1|4",
+     "0|5",
+     "1|5",
+     "0|1",
+     "2|5",
+     "2|4",
+     "3|3",
+     "5|5",
+     "0|4",
+     "4|6"
+    ],
+    "endScores": {
+     "you": 17,
+     "opponent": 32
+    }
+   },
+   {
+    "handNumber": 5,
+    "starterId": "you",
+    "deals": {
+     "you": [
+      "2|6",
+      "2|4",
+      "1|6",
+      "0|5",
+      "4|4",
+      "5|6",
+      "5|5"
+     ],
+     "opponent": [
+      "0|6",
+      "0|0",
+      "3|5",
+      "3|3",
+      "2|5",
+      "0|3",
+      "2|3"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|4",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|4",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|6",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|5",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|5",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "DRAW"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|3",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "DRAW"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|4",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|6",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|3",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "5|6",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|5",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|6",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "5|5",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|5",
+      "position": "left"
+     }
+    ],
+    "drawn": [
+     "1|3",
+     "3|4",
+     "0|2",
+     "1|2",
+     "3|6",
+     "0|1",
+     "2|2",
+     "4|6",
+     "1|5"
+    ],
+    "endScores": {
+     "you": 25,
+     "opponent": 34
+    }
+   },
+   {
+    "handNumber": 6,
+    "starterId": "opponent",
+    "deals": {
+     "you": [
+      "0|1",
+      "6|6",
+      "2|4",
+      "0|2",
+      "4|6",
+      "4|4",
+      "1|2"
+     ],
+     "opponent": [
+      "2|6",
+      "0|3",
+      "2|3",
+      "0|6",
+      "0|4",
+      "5|5",
+      "2|2"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|2",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|3",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|2",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|4",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|6",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|6",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|4",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|1",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|3",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|4",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "6|6",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|2",
+      "position": "right"
+     }
+    ],
+    "drawn": [],
+    "endScores": {
+     "you": 30,
+     "opponent": 34
+    }
+   },
+   {
+    "handNumber": 7,
+    "starterId": "you",
+    "deals": {
+     "you": [
+      "1|4",
+      "0|5",
+      "1|3",
+      "2|6",
+      "1|6",
+      "0|1",
+      "2|3"
+     ],
+     "opponent": [
+      "4|5",
+      "0|4",
+      "6|6",
+      "4|6",
+      "3|3",
+      "3|6",
+      "5|5"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|5",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|1",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|5",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|3",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|6",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|6",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "6|6",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|6",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|4",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|3",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|3",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|4",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|5",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "DRAW"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|5",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "DRAW"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|4",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|4",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|3",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "DRAW"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|1",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "5|6",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|0",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|2",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "5|5",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|2",
+      "position": "branch-0-1"
+     }
+    ],
+    "drawn": [
+     "0|6",
+     "3|4",
+     "1|5",
+     "0|0",
+     "2|5",
+     "2|4",
+     "4|4",
+     "0|3",
+     "1|1",
+     "5|6",
+     "1|2",
+     "2|2"
+    ],
+    "endScores": {
+     "you": 33,
+     "opponent": 43
+    }
+   },
+   {
+    "handNumber": 8,
+    "starterId": "opponent",
+    "deals": {
+     "you": [
+      "0|0",
+      "2|3",
+      "5|5",
+      "2|2",
+      "3|3",
+      "4|4",
+      "3|5"
+     ],
+     "opponent": [
+      "5|6",
+      "3|4",
+      "1|5",
+      "4|6",
+      "6|6",
+      "1|3",
+      "0|1"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "6|6",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|4",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|6",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|2",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|4",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "3|3",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "3|5",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|3",
+      "position": "branch-2-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|3",
+      "position": "branch-2-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "5|6",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "5|5",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|2",
+      "position": "branch-2-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|4",
+      "position": "branch-1-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|5",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "DRAW"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|5",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|1",
+      "position": "branch-2-1"
+     }
+    ],
+    "drawn": [
+     "1|2",
+     "2|6",
+     "2|4",
+     "0|5"
+    ],
+    "endScores": {
+     "you": 39,
+     "opponent": 43
+    }
+   },
+   {
+    "handNumber": 9,
+    "starterId": "you",
+    "deals": {
+     "you": [
+      "2|4",
+      "0|5",
+      "2|2",
+      "1|2",
+      "0|6",
+      "0|0",
+      "4|6"
+     ],
+     "opponent": [
+      "2|5",
+      "2|6",
+      "5|6",
+      "0|1",
+      "4|5",
+      "0|3",
+      "4|4"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|2",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|4",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|5",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|2",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|5",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|0",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|6",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|1",
+      "position": "branch-1-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|6",
+      "position": "right"
+     }
+    ],
+    "drawn": [],
+    "endScores": {
+     "you": 51,
+     "opponent": 43
+    }
+   },
+   {
+    "handNumber": 10,
+    "starterId": "opponent",
+    "deals": {
+     "you": [
+      "0|4",
+      "3|5",
+      "2|5",
+      "4|4",
+      "1|2",
+      "6|6",
+      "1|1"
+     ],
+     "opponent": [
+      "5|6",
+      "3|4",
+      "1|5",
+      "1|3",
+      "3|3",
+      "3|6",
+      "2|6"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|3",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|3",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|1",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "3|5",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|5",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|2",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|6",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "5|6",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|5",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|4",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|6",
+      "position": "branch-0-1"
+     }
+    ],
+    "drawn": [],
+    "endScores": {
+     "you": 51,
+     "opponent": 52
+    }
+   },
+   {
+    "handNumber": 11,
+    "starterId": "you",
+    "deals": {
+     "you": [
+      "0|6",
+      "4|6",
+      "3|6",
+      "5|6",
+      "1|5",
+      "0|2",
+      "5|5"
+     ],
+     "opponent": [
+      "3|4",
+      "0|4",
+      "1|3",
+      "0|3",
+      "0|0",
+      "2|6",
+      "1|4"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "5|5",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "5|6",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|5",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|3",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|3",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|2",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|0",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|4",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "3|6",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|4",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|6",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|5",
+      "position": "right"
+     }
+    ],
+    "drawn": [
+     "4|5"
+    ],
+    "endScores": {
+     "you": 58,
+     "opponent": 53
+    }
+   },
+   {
+    "handNumber": 12,
+    "starterId": "opponent",
+    "deals": {
+     "you": [
+      "1|2",
+      "1|1",
+      "0|4",
+      "2|5",
+      "6|6",
+      "1|5",
+      "0|3"
+     ],
+     "opponent": [
+      "3|6",
+      "1|4",
+      "2|2",
+      "3|3",
+      "2|6",
+      "0|0",
+      "5|5"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "5|5",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "5|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "6|6",
+      "position": "right"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|5",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|6",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|5",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|4",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|4",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|0",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|6",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|3",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|1",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|2",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|2",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|4",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|3",
+      "position": "branch-0-0"
+     }
+    ],
+    "drawn": [
+     "1|3",
+     "5|6",
+     "2|4"
+    ],
+    "endScores": {
+     "you": 59,
+     "opponent": 58
+    }
+   },
+   {
+    "handNumber": 13,
+    "starterId": "you",
+    "deals": {
+     "you": [
+      "0|1",
+      "0|4",
+      "4|6",
+      "1|5",
+      "2|6",
+      "3|3",
+      "2|5"
+     ],
+     "opponent": [
+      "2|2",
+      "3|4",
+      "4|5",
+      "3|6",
+      "2|3",
+      "6|6",
+      "2|4"
+     ]
+    },
+    "actions": [
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "3|3",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|3",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|3",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|4",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|4",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "4|6",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|6",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "1|5",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|6",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|4",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|5",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|5",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|2",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|1",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "6|6",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|1",
+      "position": "left"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "3|5",
+      "position": "branch-0-1"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "2|6",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "2|2",
+      "position": "branch-0-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "4|4",
+      "position": "right"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|3",
+      "position": "left"
+     },
+     {
+      "seat": "you",
+      "type": "DRAW"
+     },
+     {
+      "seat": "you",
+      "type": "MOVE",
+      "tile": "0|6",
+      "position": "branch-1-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "0|0",
+      "position": "branch-1-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|2",
+      "position": "branch-2-0"
+     },
+     {
+      "seat": "opponent",
+      "type": "MOVE",
+      "tile": "1|4",
+      "position": "branch-2-1"
+     }
+    ],
+    "drawn": [
+     "1|6",
+     "0|2",
+     "5|5",
+     "0|3",
+     "0|0",
+     "1|1",
+     "3|5",
+     "4|4",
+     "1|3",
+     "0|6",
+     "1|2",
+     "1|4"
+    ],
+    "endScores": {
+     "you": 65,
+     "opponent": 67
+    }
+   }
+  ],
+  "finalScores": {
+   "you": 65,
+   "opponent": 67
+  },
+  "winnerId": "opponent"
+ }
+}
