@@ -117,6 +117,14 @@
   white-space: nowrap;
 }
 
+.rh-jt-intro {
+  margin: 8px 0 0;
+  max-width: 460px;
+  color: var(--rh-jt-text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .rh-jt-stat-card {
   display: flex;
   align-items: center;
@@ -126,6 +134,9 @@
   border-radius: 10px;
   padding: 14px 20px;
   flex-shrink: 0;
+  /* never wider than its row: the two stats do not shrink, so on a phone the card must wrap (see the max-width: 520px rules) rather than run off the screen */
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .rh-jt-stat-icon {
@@ -345,6 +356,8 @@
   font-weight: 600;
   color: var(--rh-jt-text-secondary);
   text-align: center;
+  /* a completed node's name sits where the trail arrives, so the dotted line cut through the letters: knock the line out behind the text */
+  text-shadow: 0 0 3px var(--rh-jt-bg-page), 0 0 6px var(--rh-jt-bg-page), 0 0 10px var(--rh-jt-bg-page);
 }
 
 .rh-jt-node__caption {
@@ -620,5 +633,35 @@
   }
   .rh-jt-rail {
     right: 10px;
+  }
+}
+
+/*
+ * Phone: the progress card is 386px wide with a short node name ("Read the Gate") and wider still with a longer one ("Doubles Aren't Free"), so on a 390px screen
+ * it ran 20px off the right edge and clipped the current node. Full width, with the current-node button on its own row; a very long name ends in an ellipsis
+ * (the button's aria-label carries the whole name).
+ */
+@media (max-width: 520px) {
+  .rh-jt-stat-card {
+    width: 100%;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .rh-jt-stat-divider {
+    display: none;
+  }
+  .rh-jt-stat-card__jump {
+    flex: 1 1 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 6px 0;
+    box-sizing: border-box;
+  }
+  .rh-jt-stat-card__jump > div {
+    min-width: 0;
+  }
+  .rh-jt-stat-value--name {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }

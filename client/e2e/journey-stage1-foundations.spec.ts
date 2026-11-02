@@ -137,6 +137,75 @@ test.describe('Journey Chapter One trail (Stage 1)', () => {
   });
 });
 
+const ALL_NINE = ['ch1-n07', 'ch1-n02', 'ch1-n11', 'ch1-n08', 'ch1-n04', 'ch1-n05', 'ch1-n09', 'ch1-n12', 'ch1-n10'];
+
+test.describe('Journey Chapter One polish (phone): the progress card fits, the first run is explained, the ending is honest', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  async function expectProgressCardFits(page: Page) {
+    const card = page.locator('.rh-jt-stat-card');
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    const box = (await card.boundingBox())!;
+    const viewport = page.viewportSize()!;
+    expect(box.x, 'card starts on screen').toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, 'card ends on screen (it ran 20px off a 390px phone)').toBeLessThanOrEqual(viewport.width);
+    const jump = (await page.locator('.rh-jt-stat-card__jump').boundingBox())!;
+    expect(jump.x + jump.width, 'the current-node button is fully on screen').toBeLessThanOrEqual(viewport.width);
+    expect(jump.height, 'the current-node button is a 44px tap target').toBeGreaterThanOrEqual(44);
+  }
+
+  test('the progress card fits a 390px phone on a first run and with a long current-node name', async ({ page }) => {
+    await page.goto('/journey');
+    await expectProgressCardFits(page);
+    await expect(page.locator('.rh-jt-stat-card__jump')).toContainText('Read the Gate');
+  });
+
+  test('a long current-node name ("Doubles Aren’t Free") still fits, even on a 360px phone', async ({ page }) => {
+    await seedProgress(page, ALL_NINE.slice(0, 6));
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/journey');
+    await expect(page.getByLabel('Doubles Aren’t Free, Current')).toBeVisible({ timeout: 20_000 });
+    await expectProgressCardFits(page);
+  });
+
+  test('a first run says what the trail is', async ({ page }) => {
+    await page.goto('/journey');
+    await expect(page.locator('.rh-jt-intro')).toContainText('Nine stages from your first lesson at the gate', { timeout: 20_000 });
+  });
+
+  test('the intro is not shown once the player has started', async ({ page }) => {
+    await seedProgress(page, ['ch1-n07']);
+    await page.goto('/journey');
+    await expect(page.locator('.rh-jt-stat-card')).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('.rh-jt-intro')).toHaveCount(0);
+  });
+
+  test('clearing the trail ends honestly: no promise of a reveal, and the buttons go somewhere', async ({ page }) => {
+    await seedProgress(page, ALL_NINE);
+    await page.goto('/journey');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await expect(dialog).toContainText('The Fritz Trail conquered.');
+    await expect(dialog).not.toContainText('reveal the next chapter');
+    await expect(dialog).toContainText('More chapters of Racehorse Journey are on the way.');
+    await expect(dialog.getByRole('button', { name: 'Continue the Journey' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Play Fritz' })).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Back to the trail' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('.rh-journey-chapter-complete-banner')).toBeVisible();
+  });
+
+  test('"Play Fritz" leaves the Journey for Play vs Fritz', async ({ page }) => {
+    await seedProgress(page, ALL_NINE);
+    await page.goto('/journey');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await dialog.getByRole('button', { name: 'Play Fritz' }).click();
+    await expect(page).not.toHaveURL(/\/journey/);
+  });
+});
+
 test.describe('Journey progress saved under the old ten-node layout (corrective fixes)', () => {
   async function seedOldLayout(page: Page, chapter: Record<string, unknown>) {
     await page.addInitScript(
