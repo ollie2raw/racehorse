@@ -16,7 +16,7 @@ vi.mock('../../analyzer/GameReviewer', () => ({
     open ? <div role="dialog" aria-label="reviewer">{title}<span data-testid="reviewer-opponent">{opponentLabel}</span><button onClick={onClose}>Close reviewer</button></div> : null,
 }));
 
-import SavedGameReview, { savedGameFailureCopy, savedGameLabels } from './SavedGameReview';
+import SavedGameReview, { savedGameFailureCopy, savedGameFritzTier, savedGameLabels } from './SavedGameReview';
 
 const record: SavedGameRecord = {
   sourceMatchId: 'game-1',
@@ -252,5 +252,56 @@ describe('savedGameFailureCopy', () => {
     expect(savedGameFailureCopy({ ok: false, reason: 'unreachable' }).retryable).toBe(true);
     expect(savedGameFailureCopy({ ok: false, reason: 'not_found' }).retryable).toBe(false);
     expect(savedGameFailureCopy({ ok: false, reason: 'not_replayable', detail: 'x' }).retryable).toBe(false);
+    expect(savedGameFailureCopy({ ok: false, reason: 'not_reviewable' }).retryable).toBe(false);
+  });
+
+  it('explains a Daily Fritz game with no review in words, never a code', () => {
+    const copy = savedGameFailureCopy({ ok: false, reason: 'not_reviewable' });
+    expect(copy.title).toBe("This game can't be reviewed");
+    expect(copy.message).toMatch(/Daily Fritz games can be reviewed once their moves have been kept/);
+    expect(`${copy.title} ${copy.message}`).not.toMatch(/not_reviewable|missing_hand|404/);
+  });
+});
+
+const dfRecord = {
+  sourceMatchId: 'dfz:11111111-1111-4111-8111-111111111111:2',
+  mode: 'dfz',
+  fritzTier: 'master',
+  dealSize: 7,
+  winningScore: 60,
+  result: { you: 31, opponent: 61, winner: 'opponent' },
+  verification: 'replay_verified',
+  playedAt: null,
+  opponentName: 'Fritz',
+  record: {},
+} as unknown as SavedMultiplayerRecord;
+
+describe('SavedGameReview: a saved Daily Fritz game', () => {
+  it('is called Daily Fritz, against Fritz, graded at the tier Fritz played', () => {
+    expect(savedGameLabels(dfRecord)).toEqual({ modeLabel: 'Daily Fritz', opponentLabel: 'Fritz' });
+    expect(savedGameFritzTier(dfRecord)).toBe('master');
+    expect(savedGameFritzTier({ ...dfRecord, fritzTier: null })).toBeNull();
+    expect(savedGameFritzTier(mpRecord)).toBeNull(); // multiplayer still uses the default engine tier
+    expect(savedGameFritzTier(record)).toBe(record.fritzTier);
+  });
+
+  it('runs the same review hook with the game\'s own id, Fritz as the opponent and the Fritz tier', async () => {
+    loadSavedGame.mockResolvedValue({ ok: true, record: dfRecord, game });
+    render(<SavedGameReview sourceMatchId={dfRecord.sourceMatchId} onClose={vi.fn()} />);
+    await waitFor(() => expect(useReview).toHaveBeenCalled());
+    expect(useReview.mock.calls[0]?.[0]).toMatchObject({
+      match: game.finalState,
+      sourceMatchId: 'dfz:11111111-1111-4111-8111-111111111111:2',
+      fritzTier: 'master',
+      opponentLabel: 'Fritz',
+      winningScore: 60,
+      reviewStartDelayMs: 0,
+    });
+  });
+
+  it('says in words that a game has no review when the server has none', async () => {
+    loadSavedGame.mockResolvedValue({ ok: false, reason: 'not_reviewable' });
+    render(<SavedGameReview sourceMatchId={dfRecord.sourceMatchId} onClose={vi.fn()} />);
+    expect(await screen.findByText("This game can't be reviewed")).toBeTruthy();
   });
 });
