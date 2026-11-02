@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { onJourneyProgressApplied } from './journeyProgressEvents';
 import {
   getChapterRuntimeStatus,
   getJourneyChapterById,
@@ -102,6 +103,9 @@ export function useJourneyProgress() {
     recoverPendingJourneyCompletions();
     setProgress(loadJourneyProgress());
   }, []);
+
+  // Progress from another device arrives through the account sync (docs/progress-sync.md); show it without a reload.
+  useEffect(() => onJourneyProgressApplied(syncProgressFromStorage), [syncProgressFromStorage]);
 
   const celebrateChapterCompletion = useCallback((chapterId: string) => {
     setProgress((current) => acknowledgeChapterCompletion(chapterId, current));
