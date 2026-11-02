@@ -90,11 +90,29 @@ So the whole-hand chooser plays **no better** than the review's score-gap choose
 
 **What it means for the product.** Making the review's "best move" *stronger* by these routes is not supported by evidence. What the evidence does support is making its **claims more honest**: section 5 shows about 1 in 11 "Best" grades and most "Inaccuracy" grades are not backed by the whole-hand view. The better investment is to use the second opinion to **suppress low-confidence verdicts** (call a move a Mistake only when the search and the whole-hand view agree; otherwise say it is a close call), which fixes false accusations without needing a stronger engine.
 
+## 7. Would a second opinion make the verdicts more trustworthy? (yes, measured; not shipped)
+
+Sections 3 and 6 say a stronger engine is not the lever; section 5 says the verdicts are the weak spot (about 1 in 11 "Best" grades and most "Inaccuracy" grades are not backed by the whole-hand view). The obvious fix that needs no stronger engine is a **second opinion**: ask the whole-hand view too, and state a severity only when it agrees. `reviewRolloutCalibration.ts` now measures that, **cross-validated** so the rule never grades itself: one independent set of 60 sampled hands decides, the other judges, and then the reverse (pooled). 595 decisions, 316 error verdicts and 796 "Best" verdicts judged.
+
+An error verdict is **kept** only if the deciding half also finds the review's best better than the played move; it **holds up** if the judging half finds it better by more than 0.25 points. "Best" is **kept** unless the deciding half finds another move better than the played one by more than 1 point.
+
+| error verdicts | holds up as the review stands | kept by the rule | holds up among the kept | dropped | holds up among the dropped |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| inaccuracy (118) | 54% | 62% | **64%** | 38% of them | 38% |
+| mistake or blunder (198) | 72% | 75% | **85%** | 25% of them | 33% |
+| all error verdicts (316) | 66% | 70% | **78%** | 30% of them | 35% |
+
+"Best" verdicts: as the review stands the judging half finds a better move (by more than 1 point) in **12%**; the rule marks 12% of them as a close call (the judging half agrees with that call in 61%), and among the 88% still called Best the judging half finds a better move in **6%**, **half as often**.
+
+**Reading it.** A second opinion would raise the share of error verdicts that hold up from 66% to 78% (Mistake/Blunder from 72% to 85%) and halve the false "Best" rate, at the price of calling about 30% of error verdicts and 12% of Best verdicts a "close call" instead. What it drops is mostly what was not confirmed (35% hold up among the dropped). The absolute levels are **lower bounds**: the judging half is itself noisy (one decision's rollout loss has a standard error of about 0.8 points), so even a perfect verdict would not validate 100% of the time. The relative gain is the signal.
+
+**Not shipped.** Showing it changes what players see (some verdicts become "close call") and it needs a new field on the evaluation (a second-opinion result per decision, a contract and accuracy-model version bump) plus rollout compute in the review job (about 0.2 to 0.5 s per decision, in the same order as the search itself). Whether to ship it, and how the "close call" wording should read, is a product decision. Caveats: bot play, not human play; rollouts continue with a fixed Fritz policy; one corpus.
+
 ## What this means for the goal ("one of the platform's most exceptional features")
 
 1. **The September "36 of 65 analyzed" problem is not what players get today.** Every non-forced decision in a saved review ends on search or exact (section 1). That is real progress and should be said plainly, not hidden behind the old numbers.
 2. **A stronger engine is not the lever.** More samples change nothing (section 2). A deeper search and a whole-hand rollout chooser both play the same as the review's own choice (sections 3 and 6: 51.6% and 49.0%), even though they disagree with it on 1 decision in 9 or so. These evaluators sit on the same plateau, so **spending effort on engine strength has no evidence behind it.**
-3. **The lever is how honest the verdicts are.** Section 5: the Mistake band is credible (73% confirmed), but about 1 in 11 "Best" grades and most "Inaccuracy" grades are not backed by the whole-hand view. A review that wrongly says "you erred" or "best" erodes trust faster than a weaker engine would. The measured plan: use the whole-hand view as a **second opinion** and only state a severity when both the search and the long view agree; otherwise call it a close call. The corpus consistency audit (section 4) is the guard that the surfaces then stay coherent.
+3. **The lever is how honest the verdicts are.** Section 5: the Mistake band is credible (73% confirmed), but about 1 in 11 "Best" grades and most "Inaccuracy" grades are not backed by the whole-hand view. A review that wrongly says "you erred" or "best" erodes trust faster than a weaker engine would. The measured plan (section 7): use the whole-hand view as a **second opinion** and only state a severity when both the search and the long view agree; otherwise call it a close call. Cross-validated, that raises the share of error verdicts that hold up from 66% to 78% and halves the false "Best" rate (12% to 6%). The corpus consistency audit (section 4) is the guard that the surfaces then stay coherent.
 4. **Done so far:** tier mix measured (1), stability (2), depth (3), consistency guard in CI (4), calibration (5), strength match (6). All on **bot play**.
 5. **Still open, and not engine work:**
    - **Human games.** Everything here is bot self-play. A human pass on a phone with real games is still the gate before anyone calls this validated, and I cannot do it.
