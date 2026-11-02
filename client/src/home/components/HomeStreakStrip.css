@@ -1,7 +1,8 @@
 .streak-strip {
   display: flex;
   align-items: center;
-  margin: 16px 56px 0;
+  /* Same inset as the mode bar below it (Tailwind mx-14), which scales with the root font size; a fixed 56px sat inside the cards above by about 19px a side. */
+  margin: 16px 3.5rem 0;
   padding: 14px 22px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.06);
