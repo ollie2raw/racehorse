@@ -2,6 +2,8 @@ import * as Sentry from '@sentry/node';
 import type { Application } from 'express';
 import { getAuthenticatedUserId } from '../../platform/auth/supabaseAuth';
 import { PUZZLE_RUSH_CONFIG, isPuzzleRushStageKey } from '../../puzzleRush/config';
+import { puzzleRushCompleteBody, puzzleRushReportBody } from '../requestSchemas';
+import { validateBody } from '../validation';
 import type { PuzzleRushLeaderboardEntry } from '../../puzzleRush/types';
 import { materializeAssignedPuzzles, selectRunPuzzles, summarizeSelectionFallbacks } from '../../puzzleRush/difficulty';
 import { gradeRun, type ReportedPuzzle } from '../../puzzleRush/grading';
@@ -145,7 +147,7 @@ export function registerPuzzleRushRoutes(app: Application): void {
    * Optimistic per-puzzle report. Records only — no engine replay — so the run
    * clock never waits on the server. Grading happens once at /complete.
    */
-  app.post('/api/puzzle-rush/report', async (req, res) => {
+  app.post('/api/puzzle-rush/report', validateBody('puzzle-rush/report', puzzleRushReportBody), async (req, res) => {
     try {
       const userId = await getAuthenticatedUserId(req);
       if (!userId) {
@@ -212,7 +214,7 @@ export function registerPuzzleRushRoutes(app: Application): void {
    * authoritative score, and record it. The server total is always what is
    * stored; a client that over-reported gets the run marked invalidated.
    */
-  app.post('/api/puzzle-rush/complete', async (req, res) => {
+  app.post('/api/puzzle-rush/complete', validateBody('puzzle-rush/complete', puzzleRushCompleteBody), async (req, res) => {
     try {
       const userId = await getAuthenticatedUserId(req);
       if (!userId) {
