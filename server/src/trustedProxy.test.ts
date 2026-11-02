@@ -33,6 +33,29 @@ describe('isTrustedInfraPeer', () => {
   });
 });
 
+/**
+ * proxy-addr (what Express uses to apply the list) had a critical advisory about IPv4-mapped IPv6 addresses and trust subnets
+ * (GHSA-jqcg-44mw-7w3h, fixed in 2.0.8). A peer can arrive as `::ffff:a.b.c.d` on a dual-stack socket, so the trust decision has to be the
+ * same for both spellings of an address: a public peer must never be trusted just because it is written the mapped way, and infrastructure
+ * must still be trusted written either way. This asks Express's own compiled predicate, the exact thing the advisory is about.
+ */
+describe('TRUSTED_PROXY decides the same for an address and its IPv4-mapped IPv6 spelling', () => {
+  const app = express();
+  app.set('trust proxy', TRUSTED_PROXY);
+  const trusts = app.get('trust proxy fn') as (address: string, hop: number) => boolean;
+
+  it.each([
+    ['203.0.113.9', false, 'a public peer'],
+    ['198.51.100.7', false, 'another public peer'],
+    ['10.1.2.3', true, 'a private (Render-internal) peer'],
+    ['127.0.0.1', true, 'loopback'],
+    ['104.16.0.1', true, 'a Cloudflare edge'],
+  ])('%s (%s) is the same mapped as plain', (address, expected, _what) => {
+    expect(trusts(address, 0)).toBe(expected);
+    expect(trusts(`::ffff:${address}`, 0)).toBe(expected);
+  });
+});
+
 describe('TRUSTED_PROXY resolves req.ip to the real client (range-based, hop-count-independent)', () => {
   function withApp(fn: (base: string) => Promise<void>) {
     const app = express();
