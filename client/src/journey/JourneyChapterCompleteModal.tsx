@@ -5,6 +5,13 @@ type JourneyChapterCompleteModalProps = {
   open: boolean;
   chapter: JourneyChapterDefinition | null;
   onClose: () => void;
+  /**
+   * True when this is the last chapter the player can reach, so there is nothing further to continue to. The dialog then offers somewhere real to go
+   * instead of a "Continue the Journey" button that only closes it.
+   */
+  isFinalChapter?: boolean;
+  /** Opens Play vs Fritz. Offered after the final chapter; without it the dialog just closes. */
+  onPlayFritz?: () => void;
 };
 
 function getChapterCompleteBody(chapter: JourneyChapterDefinition): string {
@@ -21,8 +28,11 @@ export function JourneyChapterCompleteModal({
   open,
   chapter,
   onClose,
+  isFinalChapter = false,
+  onPlayFritz,
 }: JourneyChapterCompleteModalProps) {
   if (!chapter) return null;
+  const endsTheJourney = isFinalChapter && Boolean(onPlayFritz);
 
   return (
     <Modal
@@ -42,9 +52,20 @@ export function JourneyChapterCompleteModal({
         </div>
         <p className="rh-journey-chapter-complete__teaser">{chapter.nextChapterCopy}</p>
         <div className="rh-journey-chapter-complete__actions">
-          <Button variant="tier-elite" type="button" onClick={onClose}>
-            Continue the Journey
-          </Button>
+          {endsTheJourney ? (
+            <>
+              <Button variant="tier-elite" type="button" onClick={onPlayFritz}>
+                Play Fritz
+              </Button>
+              <Button variant="ghost" type="button" onClick={onClose}>
+                Back to the trail
+              </Button>
+            </>
+          ) : (
+            <Button variant="tier-elite" type="button" onClick={onClose}>
+              Continue the Journey
+            </Button>
+          )}
         </div>
       </div>
     </Modal>

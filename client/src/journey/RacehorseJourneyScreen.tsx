@@ -5,7 +5,7 @@ import { GlobalNav } from '../components';
 import { Button, Modal } from '../components/primitives';
 import '../screens/RacehorseHomeArt.css';
 import { useJourneyProgress } from './useJourneyProgress';
-import { getChapterProgressRecord, isPlayableChapterId } from './journeyChapters';
+import { getChapterProgressRecord, isFinalVisibleJourneyChapter, isPlayableChapterId } from './journeyChapters';
 import {
   buildJourneyBotTrial,
   getJourneyTrialRuntime,
@@ -610,6 +610,8 @@ export default function RacehorseJourneyScreen({
                   <h1 className="rh-jt-title">{chapterModuleShortTitle(activeChapter.title)}</h1>
                 </div>
                 <div className="rh-jt-subtitle">{activeChapter.subtitle}</div>
+                {/* Someone who has not cleared anything yet is told what this trail is; once they have started, the trail speaks for itself. */}
+                {summary.completed === 0 ? <p className="rh-jt-intro">{activeChapter.description}</p> : null}
               </div>
             </div>
 
@@ -827,6 +829,15 @@ export default function RacehorseJourneyScreen({
         open={chapterCompleteModalOpen}
         chapter={activeChapterComplete ? activeChapter : null}
         onClose={handleDismissChapterComplete}
+        isFinalChapter={isFinalVisibleJourneyChapter(activeChapter)}
+        onPlayFritz={
+          onNavigate
+            ? () => {
+                handleDismissChapterComplete();
+                onNavigate('botSetup');
+              }
+            : undefined
+        }
       />
     </div>
   );

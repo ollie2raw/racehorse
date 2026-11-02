@@ -52,7 +52,9 @@ export const JOURNEY_CHAPTER_DEFINITIONS: JourneyChapterDefinition[] = [
       'Nine stages from your first lesson at the gate to the Handicap Stakes—the opening march of a much longer Journey.',
     totalNodes: CH1_FRITZ_TRAIL_NODES.length,
     finalReward: 'Fritz Trail Conqueror',
-    nextChapterCopy: 'Clear this trail to reveal the next chapter of Racehorse Journey.',
+    // Shown on the home card while the trail is in progress and again in the completion dialog, so it must be true at both moments: no next chapter is
+    // revealed by clearing this one yet (Chapters 2-6 are held back, see JOURNEY_CHAPTER_ONE_SLICE), so it does not promise one.
+    nextChapterCopy: 'More chapters of Racehorse Journey are on the way.',
     releaseStatus: 'playable',
     nodes: CH1_FRITZ_TRAIL_NODES,
   },
@@ -221,6 +223,12 @@ export function isJourneyChapterVisible(chapter: JourneyChapterDefinition): bool
 
 export function getVisibleJourneyChapterDefinitions(): JourneyChapterDefinition[] {
   return JOURNEY_CHAPTER_DEFINITIONS.filter(isJourneyChapterVisible);
+}
+
+/** The last chapter a player can reach today: clearing it ends the Journey for now, so its completion must not point at a chapter that is not there. */
+export function isFinalVisibleJourneyChapter(chapter: JourneyChapterDefinition): boolean {
+  const visible = getVisibleJourneyChapterDefinitions();
+  return visible.length > 0 && visible[visible.length - 1]!.chapterId === chapter.chapterId;
 }
 
 export function getPlayableChapterDefinitions(): JourneyChapterDefinition[] {
