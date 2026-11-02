@@ -46,7 +46,22 @@ What a multiplayer record needs, and the care it takes:
    mismatch is stored and flagged, as for Play vs Fritz.
 7. **Tournaments are excluded at first** (a different completion path and the highest stakes).
 
-**Why this is held:** items 1 and 2 change the multiplayer authority code (`rooms.ts`, the completion path), which also
+**Revision 2026-11-02: item 1 is not needed.** The deal is already on the server, in a place I had not looked. `room.ghostMoveLogs`
+(attached by the server on every accepted action, and what rated multiplayer verification already reads) stores each player's WHOLE hand
+before every action (`hand_before`, with `hand_number`), so a player's dealt hand for a hand is `hand_before` on their first logged action in
+it. Draws carry their tile in the event log, and `startNewHand(state, customDeck)` deals hands sequentially from a supplied deck (and draws
+come off the front), so hands + draw order rebuild a hand exactly; the boneyard tiles nobody drew never matter. The submitted actions are
+`tile_played` (MOVE), `draw_requested` (DRAW) and a `turn_passed` that does not follow a draw (PASS); forced draws and auto-passes are
+reproduced by the engine. `server/src/gameRecords/multiplayerRecord.ts` derives that record from data the room already holds, and
+`multiplayerRecord.differential.test.ts` plays 24 seeded games end to end through the real room code (`startGame`, `act`, `nextHand`),
+derives the record, replays it in a second room from explicit deals, and requires every hand's score and the final result to match (three
+deliberate breakages of the derivation each fail it). So **no authority code has to change to capture a multiplayer game**; the held
+work shrinks to: write the record at terminal completion (item 2), the schema (item 3), the client rebuild with explicit deals (item 4), and
+a pure engine replay for verification (item 6; the test replays through `act`, which must not run in production because it would persist the
+replay room). Caveat: `ghostMoveLogs` is in memory plus live-session persistence, so a game restored after a server restart can have a gap;
+`deriveMultiplayerRecord` then refuses (`missing_deal`) and nothing is saved for that game, which is the safe failure.
+
+**Why this was held:** items 1 and 2 changed the multiplayer authority code (`rooms.ts`, the completion path), which also
 runs tournament matches. That code should not change in the days before the first live tournament events (Monday
 2026-11-02, 6 pm and 9 pm Eastern). The plan is to ship it after the first tournament week is observed stable, behind a
 flag, with a differential test that the replayed final state equals the server's.
