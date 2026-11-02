@@ -122,6 +122,7 @@ import {
   isFritzId,
 } from './ranking/glicko2';
 import { startRankingCron } from './ranking/cron';
+import { scheduleGuestCleanup } from './guests/guestCleanup';
 import { buildApiHealthPayload } from './platform/health/apiHealthPayload';
 import {
   scheduleDailyFritzWarmup,
@@ -950,6 +951,7 @@ server.listen(PORT, () => {
   }
   startMatchmakingReservationSweeper();
   startRankingCron();
+  scheduleGuestCleanup();
   scheduleDailyFritzWarmup();
   scheduleStartupDailyWarmups();
   scheduleStrandedDailyFritzRecovery();
