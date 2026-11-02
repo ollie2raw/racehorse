@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
 import { requireAuth } from '../social/socialAuth';
 import { childLogger } from '../logger';
+import { sendServerError } from '../http/errors';
 
 const log = childLogger('account');
 
@@ -61,9 +62,7 @@ export function registerAccountRoutes(router: Router): void {
       res.json({ ok: true });
     } catch (err) {
       log.error({ err, userId }, 'account deletion failed');
-      res.status(500).json({
-        error: err instanceof Error ? err.message : 'Unable to delete your account.',
-      });
+      sendServerError(res, err, 'Unable to delete your account.');
     }
   });
 }

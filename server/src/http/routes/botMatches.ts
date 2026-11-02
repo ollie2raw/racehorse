@@ -3,6 +3,7 @@ import type { BotMatchPendingRow } from '../../supabaseTypes';
 import type { RankedDealSnapshot } from '../../ghost/rankedDealAuthority';
 import { createRankedDealSnapshot, rankedDealStartPayload } from '../../ghost/rankedDealAuthority';
 import type { VerifiedSinglePlayerMatch } from '../../shared/verifiedSinglePlayerMatch';
+import { sendServerError } from '../errors';
 
 export type BotMatchesRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
@@ -80,9 +81,7 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
 
       res.json({ ok: true, processed });
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to clean stale bot matches.',
-      });
+      sendServerError(res, error, 'Failed to clean stale bot matches.');
     }
   });
 
@@ -145,9 +144,7 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
       console.error('[Local Fritz Start] error', {
         message: error instanceof Error ? error.message : String(error),
       });
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to start pending bot match.',
-      });
+      sendServerError(res, error, 'Failed to start pending bot match.');
     }
   });
 
@@ -178,9 +175,7 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
       );
       res.json({ ok: true });
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to resolve pending bot match.',
-      });
+      sendServerError(res, error, 'Failed to resolve pending bot match.');
     }
   });
 
@@ -226,9 +221,7 @@ export function registerBotMatchesRoutes(app: Application, deps: BotMatchesRoute
       });
       res.json({ ok: true, processed: true });
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to abandon bot match.',
-      });
+      sendServerError(res, error, 'Failed to abandon bot match.');
     }
   });
 }

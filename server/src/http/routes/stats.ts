@@ -3,6 +3,7 @@ import type { Server } from 'socket.io';
 import { setPrivateShortCache, setPublicShortCache } from './cacheControl';
 import type { HomeDailyCompletionMap, HomeDailySummaryPayload } from '../../homeDailySummary';
 import type { recordUserMatch as RecordUserMatchFn } from '../../stats/recordUserMatch';
+import { sendServerError } from '../errors';
 
 export type StatsRouteDeps = {
   io: Server;
@@ -103,7 +104,7 @@ export function registerStatsRoutes(app: Application, deps: StatsRouteDeps): voi
         });
         return;
       }
-      res.status(500).json({ error: message });
+      sendServerError(res, error, 'Failed to load homepage daily summary.');
     }
   });
 
@@ -135,9 +136,7 @@ export function registerStatsRoutes(app: Application, deps: StatsRouteDeps): voi
 
       res.json({ ok: true, replayed: result.replayed ?? false });
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to record match.',
-      });
+      sendServerError(res, error, 'Failed to record match.');
     }
   });
 }

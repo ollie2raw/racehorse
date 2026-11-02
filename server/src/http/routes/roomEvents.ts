@@ -1,5 +1,6 @@
 import type { Application, Request, Response } from 'express';
 import type { PersistedRoomMatchLogRow } from '../../multiplayer/roomMatchLogPersistence';
+import { sendServerError } from '../errors';
 
 export type RoomEventsRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
@@ -65,9 +66,7 @@ export function registerRoomEventsRoutes(app: Application, deps: RoomEventsRoute
         },
       });
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to load room event log.',
-      });
+      sendServerError(res, error, 'Failed to load room event log.');
     }
   };
 

@@ -20,6 +20,7 @@ import { setPublicShortCache } from './cacheControl';
 import { verifyPlayerMoveLog } from '../../ghost/verifier';
 import { withGhostCompletionLock } from '../../ghost/ghostCompletionLock';
 import { isRatingCutoverQuiescedError, withRatingCompletion } from '../../ranking/ratingCutoverGate';
+import { sendServerError } from '../errors';
 
 export type GhostRouteDeps = {
   getAuthenticatedUserId: (req: Request) => Promise<string | null>;
@@ -120,9 +121,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
       setPublicShortCache(res, 60, 300);
       res.json({ ok: true, summary });
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to load ghost profile.',
-      });
+      sendServerError(res, error, 'Failed to load ghost profile.');
     }
   });
 
@@ -138,9 +137,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
       setPublicShortCache(res, 60, 300);
       res.json({ ok: true, ...result });
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to load ghost profile.',
-      });
+      sendServerError(res, error, 'Failed to load ghost profile.');
     }
   });
 
@@ -411,9 +408,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
         res.status(503).json({ error: error.code, retryable: true });
         return;
       }
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to complete ghost game.',
-      });
+      sendServerError(res, error, 'Failed to complete ghost game.');
     }
   });
 
@@ -452,9 +447,7 @@ export function registerGhostRoutes(app: Application, deps: GhostRouteDeps): voi
       });
       res.json(rankedDealStartPayload(verifiedMatch));
     } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to start verified ghost match.',
-      });
+      sendServerError(res, error, 'Failed to start verified ghost match.');
     }
   });
 }
