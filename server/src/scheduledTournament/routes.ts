@@ -35,6 +35,7 @@ import {
 } from './tournamentAuth';
 import { isFritzCupEnabled, respondIfTournamentsDisabled, tournamentFeatures, TOURNAMENTS_DISABLED } from './tournamentsFeature';
 import { tournamentOutcomeKind, userLastMatchOutcome } from './outcomeKind';
+import { HISTORY_READ_CONCURRENCY, mapInBatches, parseHistoryPage, publicBracketMatch } from './publicBracket';
 import { TOURNAMENT_ACTIVE_WINDOW_MS } from './activeWindow';
 
 const log = childLogger('tournament:routes');
@@ -433,10 +434,17 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
     const userId = await requireAuth(req, res);
     if (!userId) return;
     try {
+      const { limit, offset } = parseHistoryPage(req.query ?? {});
       const regs = await fetchRegistrationsForUser(userId);
-      const completedRegs = regs.filter((reg) => reg.placement !== null);
-      const history = await Promise.all(
-        completedRegs.map(async (reg) => {
+      // Newest registration first, so a page is the player's most recent tournaments; each one costs three reads, so only a page is read.
+      const completedRegs = regs
+        .filter((reg) => reg.placement !== null)
+        .sort((a, b) => Date.parse(b.registered_at) - Date.parse(a.registered_at));
+      const pageRegs = completedRegs.slice(offset, offset + limit);
+      const history = await mapInBatches(
+        pageRegs,
+        HISTORY_READ_CONCURRENCY,
+        async (reg) => {
           const [tournament, withProfiles, matches] = await Promise.all([
             fetchTournamentById(reg.tournament_id),
             fetchRegistrationsWithProfile(reg.tournament_id),
@@ -457,7 +465,7 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
             // The user's own last match (their exit, or the final they won) — not the tournament's final.
             myLastMatch: userLastMatchOutcome(matches, userId),
           };
-        }),
+        },
       );
       const filteredHistory = history.filter(
         (entry): entry is NonNullable<typeof entry> => Boolean(entry),
@@ -467,6 +475,10 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
         history: filteredHistory.sort(
           (a, b) => Date.parse(b.scheduledStart) - Date.parse(a.scheduledStart),
         ),
+        total: completedRegs.length,
+        limit,
+        offset,
+        hasMore: offset + pageRegs.length < completedRegs.length,
       });
     } catch (err) {
       sendInternal(res, err);
@@ -485,7 +497,8 @@ export function registerTournamentRoutes(expressApp: Express, io?: Server): void
         view: {
           ...view,
           tournament: publicTournament(view.tournament),
-          matches: view.matches.map((m) => ({ ...m, outcomeKind: tournamentOutcomeKind(m) })),
+          // A fixed list of fields: this endpoint needs no sign-in, so a row's room code and lobby timing are not part of it (publicBracket.ts).
+          matches: view.matches.map(publicBracketMatch),
         },
       });
     } catch (err) {

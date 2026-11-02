@@ -64,7 +64,8 @@ export type TournamentMatch = {
   player1_id: string | null;
   player2_id: string | null;
   winner_id: string | null;
-  room_code: string | null;
+  /** Not sent by the public bracket (server publicBracket.ts): a player's room comes from their own state and socket events. */
+  room_code?: string | null;
   status: MatchStatus;
   bot_tier?: 'standard' | 'elite' | 'master' | null;
   started_at: string | null;
