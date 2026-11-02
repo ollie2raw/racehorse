@@ -6,11 +6,13 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const [outPath, ...files] = process.argv.slice(2);
-type Game = { dealSeed: string; seating: string; winnerDepth: number; scoreDepthA: number; scoreDepthB: number; depthA: number; depthB: number; seconds: number };
+type Game = { dealSeed: string; seating: string; winnerDepth: number; scoreDepthA: number; scoreDepthB: number; depthA: number; depthB: number; seconds: number; labelA?: string; labelB?: string };
 const games: Game[] = files.flatMap((f) => readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as Game));
 if (games.length === 0) throw new Error('no games');
 const A = games[0]!.depthA;
 const B = games[0]!.depthB;
+const nameA = games[0]!.labelA ?? `${A}-ply`;
+const nameB = games[0]!.labelB ?? `${B}-ply`;
 
 const wilson = (k: number, n: number) => {
   const z = 1.96; const p = k / n; const d = 1 + (z * z) / n;
@@ -38,17 +40,19 @@ const meanDiff = games.reduce((s, g) => s + (g.scoreDepthB - g.scoreDepthA), 0) 
 const decided = sweepA + sweepB;
 
 const report = [
-  `# Review depth match: ${B} plies vs ${A} plies`,
+  games[0]!.labelA ? `# Match: ${nameB} vs ${nameA}` : `# Review depth match: ${B} plies vs ${A} plies`,
   '',
-  `Two players choose every move with the review engine, identical but for search depth (both 2,500 sampled hidden states). Games to 60 on identical deals, seats swapped. ${games.length} games over ${complete.length} deals.`,
+  games[0]!.labelA
+    ? `Two players, ${nameB} against ${nameA}. Games to 60 on identical deals, seats swapped. ${games.length} games over ${complete.length} deals.`
+    : `Two players choose every move with the review engine, identical but for search depth (both 2,500 sampled hidden states). Games to 60 on identical deals, seats swapped. ${games.length} games over ${complete.length} deals.`,
   '',
   `| | result |`,
   `| --- | ---: |`,
-  `| games won by the ${B}-ply player | ${bWins} of ${games.length} = ${((bWins / games.length) * 100).toFixed(1)}% ${wilson(bWins, games.length)} |`,
+  `| games won by ${nameB} | ${bWins} of ${games.length} = ${((bWins / games.length) * 100).toFixed(1)}% ${wilson(bWins, games.length)} |`,
   `| sign test vs 50% (games) | p = ${signTestP(bWins, games.length).toFixed(4)} |`,
-  `| mean score margin, ${B}-ply minus ${A}-ply | ${meanDiff.toFixed(1)} points per game |`,
-  `| deals swept by the ${B}-ply player (won both seatings) | ${sweepB} |`,
-  `| deals swept by the ${A}-ply player | ${sweepA} |`,
+  `| mean score margin, ${nameB} minus ${nameA} | ${meanDiff.toFixed(1)} points per game |`,
+  `| deals swept by ${nameB} (won both seatings) | ${sweepB} |`,
+  `| deals swept by ${nameA} | ${sweepA} |`,
   `| deals split one each | ${split} |`,
   decided > 0 ? `| sign test on swept deals | p = ${signTestP(sweepB, decided).toFixed(4)} (${sweepB} of ${decided}) |` : '',
   `| mean seconds per game | ${(games.reduce((s, g) => s + g.seconds, 0) / games.length).toFixed(0)} |`,
