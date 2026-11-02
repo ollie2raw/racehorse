@@ -116,7 +116,7 @@ An error verdict is **kept** only if the deciding half also finds the review's b
 4. **Done so far:** tier mix measured (1), stability (2), depth (3), consistency guard in CI (4), calibration (5), strength match (6). All on **bot play**.
 5. **Still open, and not engine work:**
    - **Human games.** Everything here is bot self-play. A human pass on a phone with real games is still the gate before anyone calls this validated, and I cannot do it.
-   - Daily Fritz and tournaments have no review at all; the in-match multiplayer review still says "Fritz" about a person; the explanation covers about 73% of the decisions where the player's move differed from the reference.
+   - Daily Fritz and tournaments have no review at all; the in-match multiplayer review still says "Fritz" about a person; the explanation covers 95.3% of the decisions where the player's move differed from the reference on the production path (the 73% quoted earlier was measured on a corpus that is 30 to 40% heuristic; see `review-production-explanation-coverage-2026-11-02.md`).
 
 ## Re-running
 
