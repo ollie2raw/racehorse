@@ -40,10 +40,16 @@ export function makeRng(seed: number): () => number {
 
 export type Action = DailyFritzTranscript['actions'][number];
 
-export function playHand(handIndex: number, seed: number): { initialState: GameState; actions: Action[]; terminal: GameState } {
-  const deal = generateSingleDailyFritzGameHand(RUN_DATE, 1, handIndex, DEAL_SIZE);
+export type HandStart = { playerScore: number; fritzScore: number; drawWinner: 'you' | 'bot'; winningScore: number; dealSize: 7 | 14 };
+
+export function playHand(
+  handIndex: number,
+  seed: number,
+  start: HandStart = { playerScore: 0, fritzScore: 0, drawWinner: handIndex % 2 === 0 ? 'you' : 'bot', winningScore: 60, dealSize: DEAL_SIZE },
+): { initialState: GameState; actions: Action[]; terminal: GameState } {
+  const deal = generateSingleDailyFritzGameHand(RUN_DATE, 1, handIndex, start.dealSize);
   const initialState = createOfficialDailyFritzHandState({
-    deal, handIndex, drawWinner: handIndex % 2 === 0 ? 'you' : 'bot', winningScore: 60, dealSize: DEAL_SIZE, playerScore: 0, fritzScore: 0,
+    deal, handIndex, drawWinner: start.drawWinner, winningScore: start.winningScore, dealSize: start.dealSize, playerScore: start.playerScore, fritzScore: start.fritzScore,
   });
   const rng = makeRng(seed);
   const actions: Action[] = [];
@@ -96,6 +102,28 @@ export const inputFor = (handIndex: number, initialState: GameState, transcript:
   fritzTier: TIER,
   now: NOW,
 });
+
+/**
+ * A whole game as the server sees it: hands played in order with the score carried over and the draw winner fixed for the game, until someone has the winning
+ * score and the scores are not tied (the same rule as `isDailyFritzGameEndingScore`).
+ */
+export function playGame(seed: number, options: { winningScore?: number; dealSize?: 7 | 14; drawWinner?: 'you' | 'bot' } = {}) {
+  const winningScore = options.winningScore ?? 60;
+  const dealSize = options.dealSize ?? DEAL_SIZE;
+  const drawWinner = options.drawWinner ?? 'you';
+  const hands: Array<{ handIndex: number; initialState: GameState; actions: Action[]; terminal: GameState }> = [];
+  let playerScore = 0;
+  let fritzScore = 0;
+  for (let handIndex = 0; handIndex < 40; handIndex += 1) {
+    const hand = playHand(handIndex, seed * 1009 + handIndex, { playerScore, fritzScore, drawWinner, winningScore, dealSize });
+    if (!hand.terminal.handOver) return { hands, finished: false as const };
+    hands.push({ handIndex, ...hand });
+    playerScore = hand.terminal.players.player.score;
+    fritzScore = hand.terminal.players.fritz.score;
+    if (Math.max(playerScore, fritzScore) >= winningScore && playerScore !== fritzScore) return { hands, finished: true as const };
+  }
+  return { hands, finished: false as const };
+}
 
 export function finishedHands(count = 12) {
   return Array.from({ length: count }, (_, i) => ({ handIndex: i, ...playHand(i, i * 7919 + 13) })).filter((h) => h.terminal.handOver);
