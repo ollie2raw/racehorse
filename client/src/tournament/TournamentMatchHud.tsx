@@ -46,8 +46,11 @@ export default function TournamentMatchHud(props: TournamentMatchHudProps) {
   // turn (so every tile is dimmed), ask for the room state instead of waiting for the deadline to pass.
   useTournamentViewDesyncRecovery({
     roomCode: props.roomCode,
-    active: props.isHandActive && !props.gameOver,
-    viewIsMyTurn: props.isMyTurn,
+    // Not gated on the hand being active: a clock that names the player is the server saying a hand is in play, and a view still sitting on the
+    // previous hand's end (its state update for the new hand dropped) is exactly the case to recover. And "the view says it is my turn" means
+    // the tiles are enabled, which needs the hand to be in play too (LiveMatchScreen disables them once it is over).
+    active: !props.gameOver,
+    viewIsMyTurn: props.isMyTurn && props.isHandActive,
     you: props.you,
     requestState: (reason) => {
       if (!props.roomCode) return;

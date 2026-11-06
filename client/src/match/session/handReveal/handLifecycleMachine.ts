@@ -39,8 +39,13 @@ export type HandLifecycleState = {
   armedFor: number | null;
   /** The reveal timer is pending. */
   revealTimerPending: boolean;
-  /** The hand whose hand:ready this session has sent. */
+  /** The hand whose reveal has opened (by either timer, or by being seen in the view): its reveal is never armed again, so it cannot reopen after the player has continued. */
+  openedFor: number | null;
+  /** The hand whose hand:ready this session has sent, and on which connection (a send in flight when the connection drops is lost). */
   readySentFor: number | null;
+  readySentSocket: number | null;
+  /** The hand whose hand:ready the server has acknowledged. */
+  readyAckedFor: number | null;
   /** A recovery send is latched, so it is not repeated while the conditions hold. */
   recoveryLatched: boolean;
   /** The reveal and gameOver the auto-continue was last armed for, so it restarts only when they change. */
@@ -84,7 +89,10 @@ export function initialHandLifecycleState(seed: Partial<HandLifecycleState> = {}
   return {
     armedFor: null,
     revealTimerPending: false,
+    openedFor: null,
     readySentFor: null,
+    readySentSocket: null,
+    readyAckedFor: null,
     recoveryLatched: false,
     autoContinueFor: null,
     view: EMPTY_HAND_VIEW,
@@ -126,9 +134,16 @@ function readyHandNumber(view: HandView): number | undefined {
   return view.reveal?.handNumber ?? view.hand?.handNumber;
 }
 
-/** Recover a hand:ready that never went out: only once the reveal for this hand has been armed, has opened and is gone again. */
+/**
+ * Recover a hand:ready that never went out: only once the reveal for this hand has been armed, has opened and is gone again, and the signal
+ * is neither acknowledged nor in flight on the current connection (one sent on a connection that has since dropped is lost, and an unacknowledged
+ * one that failed is retried at once, see `readySettled`).
+ */
 function recoveryStep(state: HandLifecycleState, view: HandView, effects: HandLifecycleEffect[]): HandLifecycleState {
   const hand = view.hand;
+  const handled =
+    hand !== null &&
+    (state.readyAckedFor === hand.handNumber || (state.readySentFor === hand.handNumber && state.readySentSocket === view.socketId));
   const needsReady =
     Boolean(hand?.handOver) &&
     !hand?.gameOver &&
@@ -136,13 +151,12 @@ function recoveryStep(state: HandLifecycleState, view: HandView, effects: HandLi
     !view.preGameDraw &&
     state.armedFor === hand?.handNumber &&
     !state.revealTimerPending &&
-    state.readySentFor !== hand?.handNumber &&
+    !handled &&
     view.roomJoined &&
     view.socketConnected;
   if (!needsReady) return state.recoveryLatched ? { ...state, recoveryLatched: false } : state;
-  if (state.recoveryLatched) return state;
   effects.push({ type: 'sendReady', handNumber: hand?.handNumber, source: 'recovery' });
-  return { ...state, recoveryLatched: true, readySentFor: hand?.handNumber ?? null };
+  return { ...state, recoveryLatched: true, readySentFor: hand?.handNumber ?? null, readySentSocket: view.socketId };
 }
 
 /** Arm the reveal for a hand that is over; cancel a pending one when the hand is no longer over. */
@@ -155,15 +169,20 @@ function armStep(state: HandLifecycleState, view: HandView, effects: HandLifecyc
       next = { ...next, revealTimerPending: false };
     }
   };
-  // Leaving hand-over (or the game) genuinely invalidates a pending reveal.
+  // Leaving hand-over (or the game) genuinely invalidates a pending reveal. A reveal that has not opened yet is then not "armed" any more:
+  // left marked, a reconnect inside the 1.4 s window read as "shown and cleared" and signalled ready for a hand whose reveal the player never saw.
   if (!view.inGame || !hand || hand.gameOver || !hand.handOver || view.preGameDraw) {
+    const hadPending = next.revealTimerPending;
     cancelPending();
+    if (hadPending && next.openedFor !== next.armedFor) next = { ...next, armedFor: null };
     return next;
   }
   // Already armed (or shown) for this hand: the state echo case. The timer is left running.
   if (next.armedFor === hand.handNumber) return next;
   next = { ...next, armedFor: hand.handNumber };
   cancelPending();
+  // Opened already (the other timer won the race, or the player has since continued): nothing to arm.
+  if (next.openedFor === hand.handNumber) return next;
   effects.push({ type: 'armRevealTimer', handNumber: hand.handNumber, delayMs: HAND_REVEAL_OPEN_DELAY_MS });
   return { ...next, revealTimerPending: true };
 }
@@ -193,7 +212,7 @@ function continueStep(state: HandLifecycleState): Step {
   const handNumber = readyHandNumber(view);
   let next = state;
   if (view.socketId !== null && view.roomJoined) {
-    next = { ...next, readySentFor: handNumber ?? null };
+    next = { ...next, readySentFor: handNumber ?? null, readySentSocket: view.socketId };
     effects.push({ type: 'sendReady', handNumber, source: 'continue' });
   }
   effects.push({ type: 'closeReveal' });
@@ -206,6 +225,7 @@ export function reduceHandLifecycle(state: HandLifecycleState, event: HandLifecy
       const effects: HandLifecycleEffect[] = [];
       const steps = event.steps ?? ALL_STEPS;
       let next: HandLifecycleState = { ...state, view: event.view };
+      if (event.view.reveal) next = { ...next, openedFor: event.view.reveal.handNumber };
       // Canonical order, whatever the caller listed: the arm step sets what the recovery step reads on the next view.
       if (steps.includes('recovery')) next = recoveryStep(next, event.view, effects);
       if (steps.includes('arm')) next = armStep(next, event.view, effects);
@@ -214,9 +234,12 @@ export function reduceHandLifecycle(state: HandLifecycleState, event: HandLifecy
       return { state: next, effects };
     }
     case 'revealTimerFired': {
-      // Any timer that fires opens its reveal: a timer overwritten in the shared ref (the hand:ended handler arms its own) is still running.
+      // A hand's reveal opens once: a second timer for it (the hand:ended handler arms its own; a reconnect arms again) finds it already opened.
+      if (state.openedFor === event.handNumber) {
+        return { state: { ...state, revealTimerPending: false }, effects: [] };
+      }
       return {
-        state: { ...state, revealTimerPending: false },
+        state: { ...state, revealTimerPending: false, openedFor: event.handNumber },
         effects: [{ type: 'openReveal', handNumber: event.handNumber }],
       };
     }
@@ -224,18 +247,22 @@ export function reduceHandLifecycle(state: HandLifecycleState, event: HandLifecy
     case 'continue':
       return continueStep(state);
     case 'readySettled': {
-      if (event.ok) return { state, effects: [] };
-      if (event.source === 'continue') {
-        // Not sent after all: let the recovery try again.
-        return {
-          state: state.readySentFor === event.handNumber ? { ...state, readySentFor: null } : state,
-          effects: [],
-        };
+      if (event.ok) {
+        return { state: { ...state, readyAckedFor: event.handNumber }, effects: [] };
       }
-      return {
-        state: { ...state, recoveryLatched: false, readySentFor: null },
-        effects: [{ type: 'warnReadyFailed' }],
+      // Never acknowledged (the connection dropped with it in flight, or the ack timed out): it is not sent after all. Look again at once, on
+      // the current view, rather than waiting for the view to change: nothing else would run the check, and the next-hand clock would ready
+      // the player 45 s after the hand ended.
+      const effects: HandLifecycleEffect[] = [];
+      let next: HandLifecycleState = {
+        ...state,
+        recoveryLatched: false,
+        readySentFor: state.readySentFor === event.handNumber ? null : state.readySentFor,
+        readySentSocket: state.readySentFor === event.handNumber ? null : state.readySentSocket,
       };
+      if (event.source === 'recovery') effects.push({ type: 'warnReadyFailed' });
+      next = recoveryStep(next, next.view, effects);
+      return { state: next, effects };
     }
   }
 }

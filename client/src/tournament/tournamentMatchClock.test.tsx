@@ -345,6 +345,39 @@ describe('a clock that says it is the player\'s turn while the match view does n
     expect(dispatchSocketEvent).toHaveBeenCalledWith({ type: 'RESYNC_NEEDED', payload: { roomCode: 'ROOM-A' } });
   });
 
+  // The fuzzer (match/session/handReveal/handLifecycleFuzz.test.ts) found the hole in the recovery above: a new hand is dealt, its state update is
+  // dropped, and the view stays on the previous hand's end. isHandActive is then false (the hand is "over"), which switched the recovery off
+  // exactly when it was needed, and the tiles stayed dimmed until the 45 s turn clock played for the player.
+  it('the HUD asks for the room state when the clock names the player but the view is still on the hand that ended', () => {
+    dispatchSocketEvent.mockClear();
+    recordTournamentClock('ROOM-A', turn('me', 40_000));
+    hud({ isHandActive: false, isMyTurn: false });
+
+    advance(TOURNAMENT_VIEW_DESYNC_GRACE_MS + 100);
+
+    expect(dispatchSocketEvent).toHaveBeenCalledWith({ type: 'RESYNC_NEEDED', payload: { roomCode: 'ROOM-A' } });
+  });
+
+  it('...even when the stale hand-over view still has the turn on the player (the tiles are disabled once the hand is over)', () => {
+    dispatchSocketEvent.mockClear();
+    recordTournamentClock('ROOM-A', turn('me', 40_000));
+    hud({ isHandActive: false, isMyTurn: true });
+
+    advance(TOURNAMENT_VIEW_DESYNC_GRACE_MS + 100);
+
+    expect(dispatchSocketEvent).toHaveBeenCalledWith({ type: 'RESYNC_NEEDED', payload: { roomCode: 'ROOM-A' } });
+  });
+
+  it('the HUD stays quiet once the match is over', () => {
+    dispatchSocketEvent.mockClear();
+    recordTournamentClock('ROOM-A', turn('me', 40_000));
+    hud({ isHandActive: false, isMyTurn: false, gameOver: true });
+
+    advance(10_000);
+
+    expect(dispatchSocketEvent).not.toHaveBeenCalled();
+  });
+
   it('the HUD stays quiet when the hand agrees with the clock', () => {
     dispatchSocketEvent.mockClear();
     recordTournamentClock('ROOM-A', turn('me', 40_000));

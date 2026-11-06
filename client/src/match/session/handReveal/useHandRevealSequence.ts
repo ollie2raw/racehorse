@@ -69,6 +69,7 @@ export function useHandRevealSequence(
   const handRevealAutoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handRevealAutoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const handReadyRecoveryRef = useRef(false);
+  const ownRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const lastViewRef = useRef<HandView | null>(null);
 
@@ -106,16 +107,26 @@ export function useHandRevealSequence(
       case 'armRevealTimer': {
         // The reveal is built from the state of the render that armed it; a later tile sync (below) brings it up to date.
         const armed: RevealContext = { armedState: p.state, armedYou: p.you };
+        // The shared ref holds one timer and the hand:ended handler overwrites it with its own, so this one is tracked separately: a cancel
+        // must reach both, or the overwritten one still fires and opens a reveal nobody is waiting for.
         if (p.handRevealTimerRef.current) clearTimeout(p.handRevealTimerRef.current);
-        p.handRevealTimerRef.current = window.setTimeout(() => {
+        if (ownRevealTimerRef.current) clearTimeout(ownRevealTimerRef.current);
+        const timer = window.setTimeout(() => {
+          if (ownRevealTimerRef.current === timer) ownRevealTimerRef.current = null;
           dispatchRef.current({ type: 'revealTimerFired', handNumber: effect.handNumber }, armed);
         }, effect.delayMs);
+        ownRevealTimerRef.current = timer;
+        p.handRevealTimerRef.current = timer;
         return;
       }
       case 'cancelRevealTimer':
         if (p.handRevealTimerRef.current) {
           clearTimeout(p.handRevealTimerRef.current);
           p.handRevealTimerRef.current = null;
+        }
+        if (ownRevealTimerRef.current) {
+          clearTimeout(ownRevealTimerRef.current);
+          ownRevealTimerRef.current = null;
         }
         return;
       case 'openReveal': {
@@ -167,15 +178,20 @@ export function useHandRevealSequence(
         if (effect.source === 'recovery' && import.meta.env.DEV) {
           logger.operational('hand:ready', 'recovering lost hand:ready signal after reconnect');
         }
-        emitHandReady(socketNow, room, effect.handNumber).catch((error) => {
-          dispatchRef.current({ type: 'readySettled', handNumber: effect.handNumber ?? null, source: effect.source, ok: false });
-          if (import.meta.env.DEV) {
-            console.warn(
-              effect.source === 'recovery' ? '[hand:ready] recovery failed:' : '[hand:ready] failed:',
-              error instanceof Error ? error.message : error,
-            );
-          }
-        });
+        emitHandReady(socketNow, room, effect.handNumber).then(
+          () => {
+            dispatchRef.current({ type: 'readySettled', handNumber: effect.handNumber ?? null, source: effect.source, ok: true });
+          },
+          (error) => {
+            dispatchRef.current({ type: 'readySettled', handNumber: effect.handNumber ?? null, source: effect.source, ok: false });
+            if (import.meta.env.DEV) {
+              console.warn(
+                effect.source === 'recovery' ? '[hand:ready] recovery failed:' : '[hand:ready] failed:',
+                error instanceof Error ? error.message : error,
+              );
+            }
+          },
+        );
         return;
       }
       case 'warnReadyFailed':
