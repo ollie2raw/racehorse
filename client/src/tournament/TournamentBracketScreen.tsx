@@ -21,6 +21,15 @@ import {
   type BracketDisplayContext,
   isBracketMatchCompletedForDisplay,
 } from './tournamentBracketDisplay';
+import {
+  championConnector,
+  deriveConnectorStates,
+  MATCH_BADGE_LABEL,
+  matchBadge,
+  seedFor,
+  slotResult,
+  type ConnectorState,
+} from './bracketTree';
 import { formatEventTime } from './tournamentTime';
 import { tournamentErrorCopy } from './tournamentErrorCopy';
 import type {
@@ -106,9 +115,12 @@ const CountdownText = memo(function CountdownText({
   return <>{label}</>;
 });
 
+const ROUND_TAG: Record<1 | 2 | 3, string> = { 1: 'QF', 2: 'SF', 3: 'Final' };
+
 const MatchCard = memo(function MatchCard({
   match,
   registrationUsernameByUserId,
+  seeds,
   youUserId,
   assignedMatchId,
   highlightOpponentId,
@@ -116,6 +128,7 @@ const MatchCard = memo(function MatchCard({
 }: {
   match: TournamentMatch;
   registrationUsernameByUserId: ReadonlyMap<string, string | null | undefined>;
+  seeds: ReadonlyMap<string, number | null | undefined>;
   youUserId: string | null;
   assignedMatchId?: string | null;
   highlightOpponentId?: string | null;
@@ -129,15 +142,19 @@ const MatchCard = memo(function MatchCard({
   const isCompleted = isBracketMatchCompletedForDisplay(match, bracketDisplay);
   const isCurrent = assignedMatchId === match.id || (isYours && isLive);
   const isBye = match.status === 'bye';
+  const badge = matchBadge(match, isCompleted);
   // How it was decided (server outcomeKind) — never the internal reason.
   const note = isCompleted ? bracketOutcomeNote(match.outcomeKind) : null;
   const showScores = isCompleted && !isBye && outcomeHasPlayedScore(match.outcomeKind);
+  const tag = match.round === 3 ? ROUND_TAG[3] : `${ROUND_TAG[match.round]} ${match.match_number}`;
 
   const slot = (playerId: string | null, score: number | null) => {
     const isYou = Boolean(playerId) && playerId === youUserId;
-    const won = isCompleted && Boolean(match.winner_id) && match.winner_id === playerId;
+    const result = slotResult(match, playerId, isCompleted);
+    const won = result === 'won';
+    const seed = seedFor(playerId, seeds);
     return (
-      <div className="tb-slot">
+      <div className={`tb-slot${result === 'lost' ? ' tb-slot--out' : ''}${won ? ' tb-slot--won' : ''}`}>
         <span
           className={[
             'tb-slot__name',
@@ -147,10 +164,17 @@ const MatchCard = memo(function MatchCard({
             .filter(Boolean)
             .join(' ')}
         >
+          {seed != null ? (
+            <span className="tb-slot__seed">
+              <span className="tb-sr-only">Seed </span>
+              {seed}
+            </span>
+          ) : null}
           {!playerId ? 'TBD' : isYou ? <span className="tb-name-text">You</span> : (
             <PlayerLabel display={bracketSlotDisplay(playerId, registrationUsernameByUserId.get(playerId) ?? null, match)} />
           )}
           {won ? <span className="tb-won-chip">Won</span> : null}
+          {result === 'lost' ? <span className="tb-sr-only">, did not advance</span> : null}
         </span>
         <span
           className={[
@@ -180,16 +204,85 @@ const MatchCard = memo(function MatchCard({
       ]
         .filter(Boolean)
         .join(' ')}
-      aria-label={isYours ? `${roundLabel(match.round)}, your match` : undefined}
+      role="group"
+      aria-label={isYours ? `${roundLabel(match.round)}, your match` : `${roundLabel(match.round)}${match.round === 3 ? '' : ` ${match.match_number}`}`}
     >
-      <div className="tb-match__round">
-        {roundLabel(match.round)}
-        {isYours ? <span className="tb-yours-chip">Your match</span> : null}
+      <div className="tb-match__top">
+        <span className="tb-match__round">
+          {tag}
+          {isYours ? <span className="tb-yours-chip">Your match</span> : null}
+        </span>
+        {/* A decided match says how it was decided (forfeit, Fritz advanced…) in place of plain "Complete". */}
+        <span className={`tb-badge tb-badge--${badge}`}>{badge === 'done' && note ? note : MATCH_BADGE_LABEL[badge]}</span>
       </div>
       {slot(match.player1_id, match.player1_score)}
       {slot(match.player2_id, match.player2_score)}
-      {note ? <div className="tb-match__note">{note}</div> : null}
     </div>
+  );
+});
+
+function connectorClasses(state: ConnectorState | undefined, pairIndex: number | null): string {
+  return [
+    'tb-mslot',
+    // The first match of a pair draws the top half of the join, the second the bottom half.
+    pairIndex === 0 ? 'tb-mslot--join-down' : '',
+    pairIndex === 1 ? 'tb-mslot--join-up' : '',
+    state?.decided ? 'tb-mslot--decided' : '',
+    state?.youAdvanced ? 'tb-mslot--you' : '',
+    state?.fedDecided ? 'tb-mslot--fed' : '',
+    state?.fedYou ? 'tb-mslot--fed-you' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+const BracketRound = memo(function BracketRound({
+  round,
+  label,
+  sub,
+  matches,
+  connectors,
+  registrationUsernameByUserId,
+  seeds,
+  youUserId,
+  assignedMatchId,
+  highlightOpponentId,
+  bracketDisplay,
+}: {
+  round: 1 | 2 | 3;
+  label: string;
+  sub: string;
+  matches: TournamentMatch[];
+  connectors: ReadonlyMap<string, ConnectorState>;
+  registrationUsernameByUserId: ReadonlyMap<string, string | null | undefined>;
+  seeds: ReadonlyMap<string, number | null | undefined>;
+  youUserId: string | null;
+  assignedMatchId?: string | null;
+  highlightOpponentId?: string | null;
+  bracketDisplay: BracketDisplayContext;
+}) {
+  return (
+    <section className={`tb-col tb-col--r${round}`} data-round={round} aria-labelledby={`tb-col-label-${round}`}>
+      <header className="tb-col-head">
+        <span className="tb-col-label" id={`tb-col-label-${round}`}>{label}</span>
+        <span className="tb-col-sub">{sub}</span>
+      </header>
+      <ol className="tb-col-matches" aria-labelledby={`tb-col-label-${round}`}>
+        {matches.map((match, index) => (
+          <li key={match.id} className={connectorClasses(connectors.get(match.id), round === 3 ? null : index % 2)}>
+            <MatchCard
+              match={match}
+              registrationUsernameByUserId={registrationUsernameByUserId}
+              seeds={seeds}
+              youUserId={youUserId}
+              assignedMatchId={assignedMatchId}
+              highlightOpponentId={highlightOpponentId}
+              bracketDisplay={bracketDisplay}
+            />
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 });
 
@@ -744,6 +837,24 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
     [champion, finalMatch, registrationUsernameByUserId],
   );
 
+  const seeds = useMemo(
+    () => new Map((bracket?.registrations ?? []).map((registration) => [registration.user_id, registration.seed])),
+    [bracket?.registrations],
+  );
+  const connectors = useMemo(
+    () =>
+      deriveConnectorStates({
+        rounds: [qf, sf, fnl],
+        isCompleted: (match) => isBracketMatchCompletedForDisplay(match, bracketDisplay),
+        youUserId: userId,
+      }),
+    [qf, sf, fnl, bracketDisplay, userId],
+  );
+  const championLine = useMemo(
+    () => championConnector(finalMatch, (match) => isBracketMatchCompletedForDisplay(match, bracketDisplay), userId),
+    [finalMatch, bracketDisplay, userId],
+  );
+
   const yourPath = useMemo(
     () =>
       bracket
@@ -887,73 +998,40 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
 
         {bracket && !isWaitingRoom ? (
           <div className="tb-bracket" id="tb-bracket-rounds" data-round={activeRound} aria-labelledby={`tb-tab-${activeRound}`}>
-            <section className="tb-col" data-round="1">
+            {([
+              [1, 'Quarterfinals', 'Round 1', qf],
+              [2, 'Semifinals', 'Round 2', sf],
+              [3, 'Final', 'Round 3', fnl],
+            ] as const).map(([round, label, sub, matches]) => (
+              <BracketRound
+                key={round}
+                round={round}
+                label={label}
+                sub={sub}
+                matches={matches}
+                connectors={connectors}
+                registrationUsernameByUserId={registrationUsernameByUserId}
+                seeds={seeds}
+                youUserId={userId}
+                assignedMatchId={attachMatchId}
+                highlightOpponentId={opponentUserId}
+                bracketDisplay={bracketDisplay}
+              />
+            ))}
+            <section className="tb-col tb-col--champion" data-round="3" aria-labelledby="tb-col-label-champion">
               <header className="tb-col-head">
-                <span className="tb-col-label">Quarterfinals</span>
-                <span className="tb-col-sub">Round 1</span>
-              </header>
-              <div className="tb-col-matches">
-                {qf.map((m) => (
-                  <MatchCard
-                    key={m.id}
-                    match={m}
-                    registrationUsernameByUserId={registrationUsernameByUserId}
-                    youUserId={userId}
-                    assignedMatchId={attachMatchId}
-                    highlightOpponentId={opponentUserId}
-                    bracketDisplay={bracketDisplay}
-                  />
-                ))}
-              </div>
-            </section>
-            <section className="tb-col" data-round="2">
-              <header className="tb-col-head">
-                <span className="tb-col-label">Semifinals</span>
-                <span className="tb-col-sub">Round 2</span>
-              </header>
-              <div className="tb-col-matches">
-                {sf.map((m) => (
-                  <MatchCard
-                    key={m.id}
-                    match={m}
-                    registrationUsernameByUserId={registrationUsernameByUserId}
-                    youUserId={userId}
-                    assignedMatchId={attachMatchId}
-                    highlightOpponentId={opponentUserId}
-                    bracketDisplay={bracketDisplay}
-                  />
-                ))}
-              </div>
-            </section>
-            <section className="tb-col" data-round="3">
-              <header className="tb-col-head">
-                <span className="tb-col-label">Final</span>
-                <span className="tb-col-sub">Round 3</span>
-              </header>
-              <div className="tb-col-matches">
-                {fnl.map((m) => (
-                  <MatchCard
-                    key={m.id}
-                    match={m}
-                    registrationUsernameByUserId={registrationUsernameByUserId}
-                    youUserId={userId}
-                    assignedMatchId={attachMatchId}
-                    highlightOpponentId={opponentUserId}
-                    bracketDisplay={bracketDisplay}
-                  />
-                ))}
-              </div>
-            </section>
-            <section className="tb-col tb-col--champion" data-round="3">
-              <header className="tb-col-head">
-                <span className="tb-col-label">Champion</span>
+                <span className="tb-col-label" id="tb-col-label-champion">Champion</span>
                 <span className="tb-col-sub">Winner</span>
               </header>
-              <div className="tb-champion-card">
-                <span className="tb-champion-label">Tournament Champion</span>
-                <span className="tb-champion-name">
-                  {championDisplay ? <PlayerLabel display={championDisplay} /> : 'TBD'}
-                </span>
+              <div className="tb-col-matches">
+                <div className={connectorClasses(championLine, null)}>
+                  <div className={`tb-champion-card${championDisplay ? ' is-decided' : ''}${championLine.fedYou ? ' is-yours' : ''}`}>
+                    <span className="tb-champion-label">Tournament Champion</span>
+                    <span className="tb-champion-name">
+                      {championDisplay ? <PlayerLabel display={championDisplay} /> : 'TBD'}
+                    </span>
+                  </div>
+                </div>
               </div>
             </section>
           </div>

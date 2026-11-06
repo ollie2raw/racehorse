@@ -179,7 +179,8 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByText('Lost to Master Fritz in the Final')).toBeVisible();
       await expect(page.locator('.tr-chip')).toHaveText('Fritz');
       await expect(page.getByRole('button', { name: 'Join Final' })).toBeVisible();
-      await expectTargets44(page, '.tr-back');
+      await expectTargets44(page, '.tr-action');
+      await expect(page.getByRole('button', { name: 'View Bracket' })).toBeVisible();
       await expectNoHorizontalOverflow(page);
       await page.screenshot({ path: info.outputPath(`result-fritz-champion-${viewport.name}.png`) });
     });
