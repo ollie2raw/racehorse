@@ -8,14 +8,14 @@ import type { ReviewUnavailableReason } from '../../modules/review/reviewComplet
 import '../../styles/dossierRecord.css';
 import './postGameReviewPrompt.css';
 
-const SWITCHED_OFF_NOTE = "Game review is switched off right now, so this game couldn't be analyzed. Nothing is wrong with your game.";
+export const SWITCHED_OFF_NOTE = "Game review is switched off right now, so this game couldn't be analyzed. Nothing is wrong with your game.";
 
 export type PostGameReviewAccent = 'gold' | 'blue';
 
 /** Where the "Analyze again" request stands. */
 export type ReviewRetryUiState = 'idle' | 'retrying' | 'cooldown' | 'error';
 
-const RETRY_NOTE: Record<ReviewRetryUiState, string> = {
+export const RETRY_NOTE: Record<ReviewRetryUiState, string> = {
   idle: "We couldn't finish analyzing this game. You can run the analysis again.",
   retrying: 'Restarting the analysis…',
   cooldown: 'The analysis was just restarted. Please wait a minute, then try again.',
@@ -50,7 +50,7 @@ export type PostGameReviewPromptProps = {
  * - complete with exact decision coverage: accuracy % + letter grade
  * - any incomplete / unavailable decision: analyzing progress, no final grade
  */
-function resolveAccuracyStatValues({
+export function resolveAccuracyStatValues({
   analysis,
   accuracyModelPending,
   reviewUnavailable,
@@ -60,12 +60,22 @@ function resolveAccuracyStatValues({
   accuracyModelPending: boolean;
   reviewUnavailable: boolean;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
-}): { accuracyText: string; gradeText: string; coverageText: string | null } {
+}): {
+  accuracyText: string;
+  gradeText: string;
+  coverageText: string | null;
+  /** True once accuracy and grade are final (every decision resolved). */
+  complete: boolean;
+  /** Decisions scored so far out of those that can be scored; null before a ledger exists. */
+  progress: { done: number; total: number } | null;
+} {
   if (reviewUnavailable) {
     return {
       accuracyText: 'Unavailable',
       gradeText: '—',
       coverageText: 'Review unavailable for this game.',
+      complete: false,
+      progress: null,
     };
   }
   const ledger = decisionLedger;
@@ -88,6 +98,8 @@ function resolveAccuracyStatValues({
       coverageText: totalNonForced !== null && done !== undefined
         ? `Analyzing ${done} / ${totalNonForced} decisions`
         : 'Analyzing…',
+      complete: false,
+      progress: totalNonForced !== null && done !== undefined ? { done, total: totalNonForced } : null,
     };
   }
 
@@ -95,6 +107,8 @@ function resolveAccuracyStatValues({
     accuracyText: `${analysis.accuracyModel.accuracy.toFixed(1)}%`,
     gradeText: analysis.accuracyModel.grade ?? '—',
     coverageText: formatDecisionAccountingSummary(ledger!),
+    complete: true,
+    progress: null,
   };
 }
 

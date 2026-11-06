@@ -1,39 +1,42 @@
 import React from 'react';
 import { PlayVsFritzResultOverlay } from './PlayVsFritzResultOverlay';
+import { buildPostGameReviewView } from './postGameReviewView';
 import { formatRatingDelta } from '../modules/ghost/ghostMatchHelpers.ts';
 
 import type { GhostCompletionResult } from '../ghost/api';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
 import type { AppMode } from '../appRouteTypes';
+import type { PlayerDecisionLedgerSummary } from '../modules/review/reviewDecisionAccounting';
+import type { ReviewUnavailableReason } from '../modules/review/reviewCompletionClient';
+import type { ReviewRetryUiState } from '../training/pivotalReview/PostGameReviewPrompt';
 
 export interface BotPostGameCardProps {
   showPlayVsFritzResultOverlay: boolean;
   winnerId: 'you' | 'bot' | null;
   opponentLabel: string;
-  dealSize: number;
   youScore: number;
   botScore: number;
   isJourneyTrial: boolean;
-  ghostResultLoading: boolean;
-  ghostResultError: string | null;
   hasConfirmedFritzRatingUpdate: boolean;
   fritzNewGlickoRating: number | null;
-  showFritzRatingSyncing: boolean;
-  currentGlickoRating: number | null;
-  matchStartGlickoRating: number | null;
   fritzGlickoDelta: number | null;
   ghostResult: GhostCompletionResult | null;
   onNavigate: ((mode: AppMode) => void) | null;
   botPostGameReviewEligible: boolean;
   postGameAnalysisPending: boolean;
   postGameAnalysis: GameAnalysis | null;
-  showPostGameReviewPrompt: boolean;
+  accuracyModelPending: boolean;
+  reviewUnavailable?: boolean;
+  reviewUnavailableReason?: ReviewUnavailableReason | null;
+  decisionLedger?: PlayerDecisionLedgerSummary | null;
+  reviewRetryState?: ReviewRetryUiState;
 
   onRematch: () => void;
   onChangeSetup: () => void;
   onHome?: () => void;
   exitJourneyTrial: (success: boolean) => void;
   onReviewGame: () => void;
+  onRetryReview?: () => void;
   /** Present for a guest: offers to keep this game by creating an account. */
   onSaveGuestGame?: () => void;
 }
@@ -42,62 +45,58 @@ export const BotPostGameCard: React.FC<BotPostGameCardProps> = ({
   showPlayVsFritzResultOverlay,
   winnerId,
   opponentLabel,
-  dealSize,
   youScore,
   botScore,
   isJourneyTrial,
-  ghostResultLoading,
-  ghostResultError,
   hasConfirmedFritzRatingUpdate,
   fritzNewGlickoRating,
-  showFritzRatingSyncing,
-  currentGlickoRating,
-  matchStartGlickoRating,
   fritzGlickoDelta,
-  ghostResult,
   onNavigate,
   botPostGameReviewEligible,
   postGameAnalysisPending,
   postGameAnalysis,
-  showPostGameReviewPrompt,
+  accuracyModelPending,
+  reviewUnavailable = false,
+  reviewUnavailableReason = null,
+  decisionLedger = null,
+  reviewRetryState = 'idle',
   onRematch,
   onChangeSetup,
   onHome,
   exitJourneyTrial,
   onReviewGame,
+  onRetryReview,
   onSaveGuestGame,
 }) => {
   if (!showPlayVsFritzResultOverlay) return null;
+
+  const review = isJourneyTrial
+    ? null
+    : buildPostGameReviewView({
+        eligible: botPostGameReviewEligible,
+        analysis: postGameAnalysis,
+        analysisPending: postGameAnalysisPending,
+        accuracyModelPending,
+        reviewUnavailable,
+        reviewUnavailableReason,
+        decisionLedger,
+        retryAvailable: Boolean(onRetryReview),
+        retryState: reviewRetryState,
+      });
+
+  // Only a rating change the server has confirmed is shown. A pending sync, a prediction or a missing update shows nothing:
+  // the player's rating is in the header, and "syncing…" that never resolves says nothing true.
+  const confirmedRating = !isJourneyTrial && hasConfirmedFritzRatingUpdate && fritzGlickoDelta != null && fritzNewGlickoRating != null
+    ? `Rating ${formatRatingDelta(fritzGlickoDelta)} · ${fritzNewGlickoRating}`
+    : null;
 
   return (
     <PlayVsFritzResultOverlay
       won={winnerId === 'you'}
       opponentLabel={opponentLabel}
-      dealSize={dealSize}
       youScore={youScore}
       botScore={botScore}
-      ratingSlot={
-        isJourneyTrial ? undefined : ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null ? (
-          <div className="df-result-meta-pill">
-            <span className="df-result-meta-label">Rating</span>
-            <span className="df-result-meta-value">
-              {showFritzRatingSyncing
-                ? (currentGlickoRating ?? matchStartGlickoRating) != null
-                  ? `${Math.round(Number(currentGlickoRating ?? matchStartGlickoRating))}  •  syncing...`
-                  : 'Syncing...'
-                : fritzGlickoDelta != null && fritzNewGlickoRating != null
-                  ? `${formatRatingDelta(fritzGlickoDelta)}  •  ${fritzNewGlickoRating}`
-                  : fritzNewGlickoRating != null
-                    ? `${fritzNewGlickoRating}`
-                    : ghostResultError
-                      ? ghostResultError
-                      : ghostResult
-                        ? 'Saved, rating unavailable'
-                        : 'Rating unavailable'}
-            </span>
-          </div>
-        ) : undefined
-      }
+      ratingSlot={confirmedRating ?? undefined}
       onRematch={onRematch}
       onChangeSetup={onChangeSetup}
       onHome={onHome}
@@ -123,13 +122,9 @@ export const BotPostGameCard: React.FC<BotPostGameCardProps> = ({
               ]
           : undefined
       }
-      statusNote={
-        botPostGameReviewEligible && postGameAnalysisPending && !postGameAnalysis
-          ? 'Analyzing your game…'
-          : undefined
-      }
-      showReviewGame={botPostGameReviewEligible && postGameAnalysis != null && !showPostGameReviewPrompt}
+      review={review}
       onReviewGame={onReviewGame}
+      onRetryReview={onRetryReview}
       savePrompt={
         onSaveGuestGame && !isJourneyTrial
           ? {

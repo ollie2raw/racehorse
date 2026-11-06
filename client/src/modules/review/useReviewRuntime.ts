@@ -118,8 +118,11 @@ export function useReviewRuntime({
     sourceMatchId,
   });
 
+  // Play vs Fritz carries its review inside the result card, so there is one card to read and one place to open the review
+  // from; every other mode that is review-eligible keeps this separate prompt.
   const showPostGameReviewPrompt =
     showPostGameOverlays &&
+    !isPlayVsFritzGameOver &&
     botPostGameReviewEligible &&
     review.postGameAnalysis != null &&
     !review.postGameReviewDismissed &&

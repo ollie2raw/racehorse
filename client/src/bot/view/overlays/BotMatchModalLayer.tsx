@@ -87,29 +87,28 @@ export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
         showPlayVsFritzResultOverlay={modals.showPlayVsFritzResultOverlay}
         winnerId={match.winnerId}
         opponentLabel={opponentLabel}
-        dealSize={match.dealSize}
         youScore={match.players.you.score}
         botScore={match.players.bot.score}
         isJourneyTrial={modals.isJourneyTrial}
-        ghostResultLoading={modals.ghostResultLoading}
-        ghostResultError={modals.ghostResultError}
         hasConfirmedFritzRatingUpdate={modals.hasConfirmedFritzRatingUpdate}
         fritzNewGlickoRating={modals.fritzNewGlickoRating}
-        showFritzRatingSyncing={modals.showFritzRatingSyncing}
-        currentGlickoRating={modals.currentGlickoRating}
-        matchStartGlickoRating={modals.matchStartGlickoRating}
         fritzGlickoDelta={modals.fritzGlickoDelta}
         ghostResult={modals.ghostResult}
         onNavigate={navigation.onNavigate ?? null}
         botPostGameReviewEligible={modals.botPostGameReviewEligible}
         postGameAnalysisPending={modals.postGameAnalysisPending}
         postGameAnalysis={modals.postGameAnalysis}
-        showPostGameReviewPrompt={modals.showPostGameReviewPrompt}
+        accuracyModelPending={modals.accuracyModelPending}
+        reviewUnavailable={modals.reviewUnavailable}
+        reviewUnavailableReason={modals.reviewUnavailableReason}
+        decisionLedger={modals.decisionLedger}
+        reviewRetryState={modals.reviewRetryState}
         onRematch={navigation.startFreshMatch}
         onChangeSetup={navigation.returnToFritzSetup}
         onHome={navigation.onNavigate ? navigation.goHome : undefined}
         exitJourneyTrial={navigation.exitJourneyTrial}
-        onReviewGame={modals.reopenPostGameReview}
+        onReviewGame={modals.openReviewGameFromPrompt}
+        onRetryReview={modals.retryReview}
         onSaveGuestGame={navigation.onSaveGuestGame ?? undefined}
       />
       <BotGameOverModal
