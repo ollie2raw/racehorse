@@ -55,7 +55,23 @@ type Match = {
   outcomeKind: OutcomeKind | null; joined: boolean;
 };
 type Reg = { status: RegStatus; placement: number | null; seed: number | null };
-type Room = { code: string; matchId: string; humanSeat: string; oppSeat: string; game: GameState; sockets: Set<string>; deadlineAt: string | null };
+type Room = {
+  code: string; matchId: string; humanSeat: string; oppSeat: string; game: GameState; sockets: Set<string>; deadlineAt: string | null;
+  /** Fritz opens this match and has not yet moved (realism.fritzMoveMs after the first attach). */
+  pendingFritzOpen?: boolean;
+  /** When the current hand ended, for the real server's minimum hand-over time. */
+  handEndedAt?: number;
+  /** A next hand is already scheduled (the human signalled ready). */
+  dealScheduled?: boolean;
+};
+
+/**
+ * Opt-in fidelity to the real server's timing, off by default (the journeys written before it rely on the instant behaviour). The real server:
+ * Fritz plays its first move 0.8-1.5 s after the deal; the next hand is dealt only once every seat is ready and at least 2.5 s after the hand
+ * ended; the starter alternates, so Fritz opens the next hand when the player opened this one. A live hand end is a `state:update` (handOver)
+ * followed by `hand:ended`.
+ */
+const realism = { fritzOpens: false, fritzMoveMs: 1_000, handDealMinMs: null as number | null, nextHandFritzOpens: false };
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const isBot = (id: string | null | undefined) => Boolean(id && id.startsWith('bot:fritz:'));
@@ -87,6 +103,9 @@ function reset(body: { features?: typeof features; live?: Array<{ id: string; st
   nextFailure = {};
   counters.attach = 0; counters.reattach = 0; counters.myFetches = 0; attachedMatchIds.clear();
   rivalName = 'rival'; missedTurns = 0;
+  Object.assign(realism, { fritzOpens: false, fritzMoveMs: 1_000, handDealMinMs: null, nextHandFritzOpens: false });
+  // A test counts events from its own start; the log was never cleared, and it stops recording at its cap.
+  socketLog.length = 0;
   for (const live of body.live ?? []) {
     const start = Date.now() + live.startsInMin * 60_000;
     tournaments.set(live.id, {
@@ -221,12 +240,76 @@ function openRoom(m: Match): Room {
   const oppSeat = isBot(opp) ? opp : `seat-${opp}`;
   let game = createInitialState([humanSeat, oppSeat], { winningScore: 30 } as never);
   game = startNewHand(game, undefined, humanSeat);
-  // The player opens (the server's opener rule is not what is under test here).
-  game = { ...game, currentPlayerIndex: game.playerIds.indexOf(humanSeat) };
-  const room: Room = { code: m.room_code!, matchId: m.id, humanSeat, oppSeat, game, sockets: new Set(), deadlineAt: null };
+  // The player opens (the server's opener rule is not what is under test here), unless a test asked for Fritz to open.
+  const fritzOpens = realism.fritzOpens && isBot(oppSeat);
+  game = { ...game, currentPlayerIndex: game.playerIds.indexOf(fritzOpens ? oppSeat : humanSeat) };
+  const room: Room = { code: m.room_code!, matchId: m.id, humanSeat, oppSeat, game, sockets: new Set(), deadlineAt: null, pendingFritzOpen: fritzOpens };
   armClock(room);
   rooms.set(room.code, room);
   return room;
+}
+
+/** Fritz's scheduled move (the real server's bot turn): it plays, the clock starts for the player, everyone is sent the new state. */
+function fritzMovesSoon(room: Room): void {
+  setTimeout(() => {
+    if (room.game.gameOver || room.game.handOver) return;
+    opponentTurns(room);
+    broadcast(room);
+  }, realism.fritzMoveMs);
+}
+
+/** After the first attach of a match Fritz is to open: its move follows (once). */
+function startPendingFritzOpen(room: Room): void {
+  if (!room.pendingFritzOpen) return;
+  room.pendingFritzOpen = false;
+  fritzMovesSoon(room);
+}
+
+/** The hand ends: a `state:update` with handOver first, then `hand:ended` to the player, as the real server's broadcast does. */
+function endHand(room: Room): void {
+  const human = room.humanSeat;
+  const opp = room.oppSeat;
+  const handNumber = room.game.handNumber;
+  const you = room.game.players[human];
+  room.game = {
+    ...room.game,
+    handOver: true,
+    players: { ...room.game.players, [human]: { ...you, score: you.score + 5 } },
+    sequence: room.game.sequence + 1,
+  } as GameState;
+  room.handEndedAt = Date.now();
+  room.dealScheduled = false;
+  armClock(room);
+  broadcast(room);
+  for (const sid of room.sockets) {
+    io.sockets.sockets.get(sid)?.emit('hand:ended', {
+      handNumber,
+      yourRemainingTiles: room.game.players[human].hand,
+      opponentRemainingTiles: room.game.players[opp].hand,
+      pointsAwarded: { you: 5, opponent: 0 },
+      whoWentOut: human,
+      winnerId: human,
+      handWinnerId: human,
+    });
+  }
+}
+
+/** The human is ready: with realism on, the next hand is dealt no sooner than the real server's minimum after the hand ended. */
+function dealNextHandAfterReady(room: Room): void {
+  if (room.dealScheduled) return;
+  room.dealScheduled = true;
+  const minMs = realism.handDealMinMs ?? 0;
+  const wait = Math.max(0, minMs - (Date.now() - (room.handEndedAt ?? Date.now())));
+  setTimeout(() => {
+    if (!room.game.handOver || room.game.gameOver) return;
+    const fritzOpens = realism.nextHandFritzOpens && isBot(room.oppSeat);
+    room.game = startNewHand(room.game, undefined, fritzOpens ? room.oppSeat : room.humanSeat);
+    room.game = { ...room.game, currentPlayerIndex: room.game.playerIds.indexOf(fritzOpens ? room.oppSeat : room.humanSeat) };
+    room.dealScheduled = false;
+    armClock(room);
+    broadcast(room);
+    if (fritzOpens) fritzMovesSoon(room);
+  }, wait);
 }
 
 function emitAll(event: string, payload: Record<string, unknown>): void {
@@ -395,6 +478,16 @@ app.use('/api', (_req, res) => { res.status(404).json({ ok: false, error: 'not_f
 // ── test admin ─────────────────────────────────────────────────────────────
 
 app.post('/__e2e/reset', (req, res) => { reset(req.body ?? {}); res.json({ ok: true }); });
+/** Opt in to the real server's timing (see `realism`). */
+app.post('/__e2e/realism', (req, res) => { Object.assign(realism, req.body ?? {}); res.json({ ok: true, realism }); });
+/** End the hand in play now, as the game would (the player goes out): state:update then hand:ended. */
+app.post('/__e2e/match/:id/end-hand', (req, res) => {
+  const m = matches.get(req.params.id);
+  const room = m?.room_code ? rooms.get(m.room_code) : undefined;
+  if (!room || room.game.handOver) { res.status(409).json({ ok: false }); return; }
+  endHand(room);
+  res.json({ ok: true });
+});
 app.post('/__e2e/features', (req, res) => { features = req.body; res.json({ ok: true }); });
 app.post('/__e2e/fail-next', (req, res) => { nextFailure[req.body.key] = { status: req.body.status ?? 500, body: req.body.body ?? { error: 'internal' } }; res.json({ ok: true }); });
 app.get('/__e2e/state', (_req, res) => {
@@ -473,7 +566,7 @@ io = new Server(httpServer, { cors: { origin: true, credentials: true } });
 
 io.on('connection', (socket: Socket) => {
   socketLog.push(`connect ${socket.id} ${String(socket.handshake.query?.transport ?? '')}`);
-  socket.onAny((event) => { if (socketLog.length < 200) socketLog.push(`event ${socket.id} ${event}`); });
+  socket.onAny((event) => { if (socketLog.length < 2_000) socketLog.push(`event ${socket.id} ${event}`); });
   // Identifying does not seat anything, as on the real server: when the client
   // replaces its socket (entering the match screen, reconnecting) it attaches
   // its match again (Phase 4A: this fake used to re-seat on identify, which
@@ -493,6 +586,7 @@ io.on('connection', (socket: Socket) => {
     m.joined = true; m.status = 'in_progress'; m.started_at ??= iso(Date.now());
     attachedMatchIds.add(m.id);
     ack?.(seatSocket(socket, room));
+    startPendingFritzOpen(room);
   });
 
   // A reconnecting client rejoins its room (as on the real server).
@@ -500,6 +594,7 @@ io.on('connection', (socket: Socket) => {
     const room = rooms.get(String(roomCode ?? '').toUpperCase());
     if (!room) { ack?.({ ok: false, error: 'room_not_found' }); return; }
     ack?.(seatSocket(socket, room));
+    startPendingFritzOpen(room);
   });
 
   socket.on('game:action', (roomCode: string, action: { type: string; move?: { tile: { high: number; low: number }; position?: string; end?: string } }, ack?: (r: unknown) => void) => {
@@ -531,7 +626,9 @@ io.on('connection', (socket: Socket) => {
 
   socket.on('hand:ready', (roomCode: string, _payload: unknown, ack?: (r: unknown) => void) => {
     const room = rooms.get(String(roomCode).toUpperCase());
-    if (room && room.game.handOver && !room.game.gameOver) {
+    if (room && room.game.handOver && !room.game.gameOver && realism.handDealMinMs !== null) {
+      dealNextHandAfterReady(room);
+    } else if (room && room.game.handOver && !room.game.gameOver) {
       room.game = startNewHand(room.game, undefined, room.humanSeat);
       room.game = { ...room.game, currentPlayerIndex: room.game.playerIds.indexOf(room.humanSeat) };
       armClock(room);

@@ -1,10 +1,13 @@
 import { createPortal } from 'react-dom';
+import { dispatchSocketEvent } from '../multiplayer/socketEventBus';
+import { logger } from '../utils/logger';
 import { tournamentStageShortLabel, type TournamentPlayerDisplay } from './displayNames';
 import {
   deriveTournamentClockView,
   missedTurnWarning,
   tournamentClockLabel,
   useTournamentMatchClock,
+  useTournamentViewDesyncRecovery,
 } from './tournamentMatchClock';
 import { useTournamentNow } from './useTournamentNow';
 import './tournamentMatchHud.css';
@@ -38,6 +41,20 @@ export default function TournamentMatchHud(props: TournamentMatchHudProps) {
   const view = deriveTournamentClockView({ snapshot, you: props.you, nowServerMs, gameOver: props.gameOver });
   const clockLabel = tournamentClockLabel(view);
   const warning = missedTurnWarning(view);
+
+  // The clock and the hand are separate stores: if the server's clock names this player while the hand still believes it is the opponent's
+  // turn (so every tile is dimmed), ask for the room state instead of waiting for the deadline to pass.
+  useTournamentViewDesyncRecovery({
+    roomCode: props.roomCode,
+    active: props.isHandActive && !props.gameOver,
+    viewIsMyTurn: props.isMyTurn,
+    you: props.you,
+    requestState: (reason) => {
+      if (!props.roomCode) return;
+      logger.operational('tournament', 'clock-view-desync', { roomCode: props.roomCode, reason, you: props.you, isMyTurn: props.isMyTurn });
+      dispatchSocketEvent({ type: 'RESYNC_NEEDED', payload: { roomCode: props.roomCode } });
+    },
+  });
 
   let label: string | null = clockLabel;
   let tone: 'your-turn' | 'opp-turn' = view.kind === 'turn' && view.mine ? 'your-turn' : 'opp-turn';

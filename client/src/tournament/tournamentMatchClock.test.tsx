@@ -18,11 +18,19 @@ import {
   recordTournamentClockFromStateUpdate,
   resetTournamentMatchClockForTests,
   TOURNAMENT_CLOCK_STALE_GRACE_MS,
+  TOURNAMENT_VIEW_DESYNC_GRACE_MS,
   tournamentClockLabel,
   useTournamentClockRecovery,
   useTournamentMatchClock,
+  useTournamentViewDesyncRecovery,
   type TournamentClockState,
 } from './tournamentMatchClock';
+
+const { dispatchSocketEvent } = vi.hoisted(() => ({ dispatchSocketEvent: vi.fn() }));
+vi.mock('../multiplayer/socketEventBus', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../multiplayer/socketEventBus')>()),
+  dispatchSocketEvent,
+}));
 
 const SERVER = Date.parse('2026-10-31T00:00:00.000Z');
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -256,6 +264,103 @@ describe('normal rooms', () => {
     recordTournamentClock('ROOM-A', { kind: 'turn', seatId: 'me', deadlineAt: 'soon' });
     const { result } = renderHook(() => useTournamentMatchClock('ROOM-A'));
     expect(result.current?.clock).toBeNull();
+  });
+});
+
+describe('a clock that says it is the player\'s turn while the match view does not', () => {
+  // Owner report (2026-11-02): the header read "YOUR TURN · 38S" while every hand tile was dimmed (the view believed it was not the player's turn).
+  // The clock and the match state are two separate client stores; if the state ever lags, nothing recovered it until the deadline passed.
+  const desync = (over: Partial<Parameters<typeof useTournamentViewDesyncRecovery>[0]> = {}) => ({
+    roomCode: 'ROOM-A',
+    active: true,
+    viewIsMyTurn: false,
+    you: 'me',
+    requestState: vi.fn(),
+    ...over,
+  });
+
+  it('asks for the room state once, after a short grace, when the clock names the player and the view does not', () => {
+    recordTournamentClock('ROOM-A', turn('me', 40_000));
+    const params = desync();
+    renderHook(() => useTournamentViewDesyncRecovery(params));
+
+    advance(TOURNAMENT_VIEW_DESYNC_GRACE_MS - 100);
+    expect(params.requestState).not.toHaveBeenCalled();
+    advance(200);
+    expect(params.requestState).toHaveBeenCalledTimes(1);
+    expect(params.requestState).toHaveBeenCalledWith('tournament_clock_view_desync');
+
+    advance(10_000);
+    expect(params.requestState).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing when the view agrees (the usual case), including a brief gap that closes inside the grace', () => {
+    recordTournamentClock('ROOM-A', turn('me', 40_000));
+    const requestState = vi.fn();
+    const { rerender } = renderHook((p) => useTournamentViewDesyncRecovery(p), { initialProps: desync({ requestState }) });
+    advance(500); // the state is still catching up
+    rerender(desync({ requestState, viewIsMyTurn: true }));
+    advance(5_000);
+
+    expect(requestState).not.toHaveBeenCalled();
+  });
+
+  it('does nothing while it is the opponent\'s turn, Fritz\'s turn (no clock), a next hand, or the clock is resolving', () => {
+    const cases: Array<[string, () => void]> = [
+      ['the opponent\'s turn', () => recordTournamentClock('ROOM-A', turn('rival', 40_000))],
+      ['no clock (Fritz\'s turn)', () => recordTournamentClock('ROOM-A', null)],
+      ['a next hand', () => recordTournamentClock('ROOM-A', nextHand(20_000))],
+    ];
+    for (const [, setClock] of cases) {
+      resetTournamentMatchClockForTests();
+      setClock();
+      const params = desync();
+      const view = renderHook(() => useTournamentViewDesyncRecovery(params));
+      advance(5_000);
+      expect(params.requestState).not.toHaveBeenCalled();
+      view.unmount();
+    }
+  });
+
+  it('asks again for a later deadline (a new turn), not again for the same one', () => {
+    recordTournamentClock('ROOM-A', turn('me', 40_000));
+    const params = desync();
+    renderHook(() => useTournamentViewDesyncRecovery(params));
+    advance(TOURNAMENT_VIEW_DESYNC_GRACE_MS + 100);
+    expect(params.requestState).toHaveBeenCalledTimes(1);
+
+    act(() => recordTournamentClock('ROOM-A', turn('me', 85_000)));
+    advance(TOURNAMENT_VIEW_DESYNC_GRACE_MS + 100);
+    expect(params.requestState).toHaveBeenCalledTimes(2);
+  });
+
+  it('the HUD asks the room for its state through the shared recovery path when the hand is still dimmed', () => {
+    dispatchSocketEvent.mockClear();
+    recordTournamentClock('ROOM-A', turn('me', 40_000));
+    hud({ isMyTurn: false });
+
+    advance(TOURNAMENT_VIEW_DESYNC_GRACE_MS + 100);
+
+    expect(dispatchSocketEvent).toHaveBeenCalledTimes(1);
+    expect(dispatchSocketEvent).toHaveBeenCalledWith({ type: 'RESYNC_NEEDED', payload: { roomCode: 'ROOM-A' } });
+  });
+
+  it('the HUD stays quiet when the hand agrees with the clock', () => {
+    dispatchSocketEvent.mockClear();
+    recordTournamentClock('ROOM-A', turn('me', 40_000));
+    hud({ isMyTurn: true });
+
+    advance(10_000);
+
+    expect(dispatchSocketEvent).not.toHaveBeenCalled();
+  });
+
+  it('is off when the match is not active', () => {
+    recordTournamentClock('ROOM-A', turn('me', 40_000));
+    const params = desync({ active: false });
+    renderHook(() => useTournamentViewDesyncRecovery(params));
+    advance(5_000);
+    expect(params.requestState).not.toHaveBeenCalled();
   });
 });
 
