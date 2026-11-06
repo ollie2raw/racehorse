@@ -235,6 +235,40 @@ describe('PostGameReviewPrompt — accuracy/grade three-state rendering (C4 UI f
   });
 });
 
+describe('PostGameReviewPrompt — review switched off on the server', () => {
+  it('says the review is switched off and does not offer an Analyze again that cannot work', () => {
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewUnavailable
+        reviewUnavailableReason="sweep_disabled"
+        onRetryReview={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/switched off right now/i)).toBeInTheDocument();
+    expect(screen.queryByText(/couldn't finish analyzing/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Analyze again' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review Game' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();
+  });
+
+  it('a job that really failed still offers Analyze again', () => {
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewUnavailable
+        reviewUnavailableReason="failed"
+        onRetryReview={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Analyze again' })).toBeInTheDocument();
+  });
+});
+
 describe('PostGameReviewPrompt — "Analyze again" when the server gave up', () => {
   it('offers Analyze again, and calls back when pressed', () => {
     const onRetryReview = vi.fn();

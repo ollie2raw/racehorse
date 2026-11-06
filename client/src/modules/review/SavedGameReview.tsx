@@ -161,6 +161,7 @@ function SavedGameReviewRun({ record, game, onClose }: { record: SavedGameRecord
         analysis={review.postGameAnalysis}
         accuracyModelPending={review.accuracyModelPending}
         reviewUnavailable={review.reviewUnavailable}
+        reviewUnavailableReason={review.reviewUnavailableReason}
         decisionLedger={review.decisionLedger}
         onRetryReview={review.retryReview}
         reviewRetryState={review.reviewRetryState}

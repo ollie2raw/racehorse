@@ -112,16 +112,20 @@ describe('deployed review completion HTTP flow', () => {
       const status = await fetch(`${apiBase}/api/review-completion-jobs/${encodeURIComponent(created.jobId)}`, {
         headers: { Authorization: 'Bearer integration-session' },
       });
-      const body = await status.json() as { status: string; complete: boolean; unavailable: boolean };
+      const body = await status.json() as { status: string; complete: boolean; unavailable: boolean; unavailableReason: string | null };
       expect(body.status).toBe('pending');
       expect(body.complete).toBe(false);
       expect(body.unavailable).toBe(true);
+      // The client must be able to tell "switched off, nothing is wrong with your game" from "this job failed".
+      expect(body.unavailableReason).toBe('sweep_disabled');
 
       vi.stubEnv('REVIEW_SWEEP_ENABLED', 'true');
       const again = await fetch(`${apiBase}/api/review-completion-jobs/${encodeURIComponent(created.jobId)}`, {
         headers: { Authorization: 'Bearer integration-session' },
       });
-      expect((await again.json() as { unavailable: boolean }).unavailable).toBe(false);
+      const againBody = await again.json() as { unavailable: boolean; unavailableReason: string | null };
+      expect(againBody.unavailable).toBe(false);
+      expect(againBody.unavailableReason).toBeNull();
     } finally {
       vi.stubEnv('REVIEW_SWEEP_ENABLED', 'true');
     }

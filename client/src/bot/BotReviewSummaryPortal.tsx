@@ -6,6 +6,7 @@ import type { PivotalReviewSession } from '../training/pivotalReview/pivotalRevi
 import type { PivotalTurnSelection } from '../training/pivotalReview/pivotalTurnSelector';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
 import type { PlayerDecisionLedgerSummary } from '../modules/review/reviewDecisionAccounting';
+import type { ReviewUnavailableReason } from '../modules/review/reviewCompletionClient';
 
 export interface BotReviewSummaryPortalProps {
   pivotalReviewWizardEnabled: boolean;
@@ -14,6 +15,7 @@ export interface BotReviewSummaryPortalProps {
   postGameAnalysis: GameAnalysis | null;
   accuracyModelPending: boolean;
   reviewUnavailable?: boolean;
+  reviewUnavailableReason?: ReviewUnavailableReason | null;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
   onRetryReview?: () => void;
   reviewRetryState?: ReviewRetryUiState;
@@ -36,6 +38,7 @@ export const BotReviewSummaryPortal: React.FC<BotReviewSummaryPortalProps> = ({
   postGameAnalysis,
   accuracyModelPending,
   reviewUnavailable = false,
+  reviewUnavailableReason = null,
   decisionLedger = null,
   onRetryReview,
   reviewRetryState = 'idle',
@@ -77,6 +80,7 @@ export const BotReviewSummaryPortal: React.FC<BotReviewSummaryPortalProps> = ({
           analysis={postGameAnalysis}
           accuracyModelPending={accuracyModelPending}
           reviewUnavailable={reviewUnavailable}
+          reviewUnavailableReason={reviewUnavailableReason}
           decisionLedger={decisionLedger}
           onRetryReview={onRetryReview}
           reviewRetryState={reviewRetryState}

@@ -104,6 +104,8 @@ export async function retryServerReviewCompletion(input: {
  * while nothing changes, drop back to 3 s when progress moves; stop entirely
  * once the job is complete or unavailable (both terminal for this screen).
  */
+export type ReviewUnavailableReason = 'sweep_disabled' | 'failed';
+
 export const REVIEW_POLL_INITIAL_MS = 3_000;
 export const REVIEW_POLL_MAX_MS = 5_000;
 
@@ -121,6 +123,8 @@ export async function pollServerReviewCompletion(input: {
   readonly status: string;
   /** Server will not finish this job (failed, or review sweep switched off). */
   readonly unavailable?: boolean;
+  /** Why: `sweep_disabled` = the server's review is switched off (retrying cannot help), `failed` = this job failed (retrying can). Absent on an older server. */
+  readonly unavailableReason?: ReviewUnavailableReason | null;
   readonly progress: EnqueueReviewCompletionResponse['progress'];
   readonly evaluations?: ReviewEvaluationV1[];
   readonly decisions: readonly { decisionId: string; lifecycle: string; positionHash: string }[];
@@ -137,6 +141,7 @@ export async function pollServerReviewCompletion(input: {
       complete: boolean;
       status: string;
       unavailable?: boolean;
+      unavailableReason?: ReviewUnavailableReason | null;
       progress: EnqueueReviewCompletionResponse['progress'];
       evaluations?: ReviewEvaluationV1[];
       decisions: { decisionId: string; lifecycle: string; positionHash: string }[];
