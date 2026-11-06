@@ -25,6 +25,7 @@
       { "dateKey": "2026-09-27", "label": "Sun", "fritzCompleted": false, "puzzleCompleted": false, "complete": false, "isToday": false, "isFuture": true }
     ], "weeklyCompletedCount": 3, "currentStreakCount": 3, "todayComplete": false } },
     { "method": "GET", "path": "/api/daily-fritz/today", "status": 200, "body": { "ok": true, "run_date": "2026-09-25", "time_zone": "America/Los_Angeles", "fritz_tier": "elite", "deal_size": 7, "winning_score": 60, "attempt_status": "none", "next_action": "start_set", "current_game_number": null, "streak": 3, "result": null, "set_result": null, "rank": null, "leaderboard_preview": [] } },
+    { "method": "GET", "path": "/api/progress/journey", "status": 200, "body": { "enabled": false, "reason": "disabled" } },
     { "method": "GET", "path": "/api/social/friends/with-presence", "status": 200, "body": { "ok": true, "friends": [] } },
     { "method": "GET", "path": "/api/social/feed", "status": 200, "body": { "ok": true, "feed": [] } },
     { "method": "GET", "path": "/api/social/rivals", "status": 200, "body": { "ok": true, "rivals": [] } },
