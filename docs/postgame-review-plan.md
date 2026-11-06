@@ -1,6 +1,6 @@
 # Post-game review: from "Analyzing… Unavailable" to chess.com's Game Review
 
-2026-11-06. Written with the fix for the failure the owner hit (Play vs Fritz, Victory 67-23: "Analyzing 0 / 44 decisions", then "Unavailable"). Phase 0 is in the same PR; phases 1 onward are proposals for the owner to order.
+2026-11-06. Written with the fix for the failure the owner hit (Play vs Fritz, Victory 67-23: "Analyzing 0 / 44 decisions", then "Unavailable"). Phase 0 is in the same PR; phases 1 onward are the proposed order, with the owner's five open questions decided in section 8.
 
 ## 1. Why it fails today (verified in code, not guessed)
 
