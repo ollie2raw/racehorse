@@ -264,36 +264,21 @@ export function playDifferentialGame(seed: number, variant: DifferentialVariant)
       expectedWinner = a === b ? null : a < b ? 'you' : 'bot';
     }
 
-    // KNOWN (docs in engineDifferential.test.ts): the adapter infers the winner from who gained more score, so a hand that
-    // ends with no score movement at all reports no winner even though the rules name one.
-    const winnerInferredNull = report.winner === null && expectedWinner !== null && delta('you') === delta('bot');
+    // The report names the winner from the hands and the rules, and awards what game-core awarded: not inferred from the score movement.
     if (report.winner !== expectedWinner) {
-      if (winnerInferredNull) {
-        diverge('handEndedWinnerInferredFromScoreMovement', `hand winner (${reasonHint} by ${mover}): no score moved`, report.winner, expectedWinner);
-      } else {
-        diverge('handEndedWinner', `hand winner (${reasonHint} by ${mover})`, report.winner, expectedWinner);
-      }
+      diverge('handEndedWinner', `hand winner (${reasonHint} by ${mover})`, report.winner, expectedWinner);
     }
 
     // The bonus the hand end actually added, net of the points the final play itself scored.
     const bonusDelta = expectedWinner ? delta(expectedWinner) - (expectedWinner === mover ? playScore : 0) : 0;
     if (report.pointsAwarded !== bonusDelta) {
-      // KNOWN: under endHandBonus 'none' the report still computes the go-out bonus from the loser's hand.
-      if (report.winner === expectedWinner && core.config.endHandBonus === 'none' && bonusDelta === 0) {
-        diverge('handEndedPointsIgnoresEndHandBonusNone', 'points awarded by the hand end', report.pointsAwarded, bonusDelta);
-      } else {
-        diverge('handEndedPoints', 'points awarded by the hand end', report.pointsAwarded, bonusDelta);
-      }
+      diverge('handEndedPoints', 'points awarded by the hand end', report.pointsAwarded, bonusDelta);
     }
 
-    // The loser is whoever is not the winner; with no inferred winner the report measures the wrong hand.
+    // The loser is whoever is not the winner.
     const loser = expectedWinner ? (expectedWinner === 'you' ? 'bot' : 'you') : null;
     if (loser && report.loserPips !== pips(core.players[loser].hand)) {
-      if (winnerInferredNull) {
-        diverge('handEndedLoserPipsFromNullWinner', 'the loser\'s pips', report.loserPips, pips(core.players[loser].hand));
-      } else {
-        diverge('handEndedLoserPips', 'the loser\'s pips', report.loserPips, pips(core.players[loser].hand));
-      }
+      diverge('handEndedLoserPips', 'the loser\'s pips', report.loserPips, pips(core.players[loser].hand));
     }
   };
 
