@@ -8,6 +8,7 @@ import { isGracefulShutdownInProgress } from '../gracefulShutdown';
 import { supabaseFetch } from '../../supabaseUtils';
 import { resolveReleaseVersion } from './releaseVersion';
 import { isReviewSweepEnabled } from '../../reviewCompletion/reviewSweepFlag';
+import { getReviewSweepStatus } from '../../reviewCompletion/reviewSweepStatus';
 import {
   assessDailyPuzzleGenerationHealth,
   type DailyPuzzleGenerationHealthSnapshot,
@@ -128,6 +129,8 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
       uptimeSeconds: Math.round(process.uptime()),
       // Post-game review only runs while this is on; off shows players "Review unavailable".
       reviewSweep: isReviewSweepEnabled(),
+      // Last tick, last claimed job, last error as a short code, and which database functions the review sweep is missing (empty when none): one request to see why a review is stuck.
+      reviewSweepStatus: getReviewSweepStatus(),
     });
   });
 

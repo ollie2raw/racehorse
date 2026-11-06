@@ -269,6 +269,80 @@ describe('PostGameReviewPrompt — review switched off on the server', () => {
   });
 });
 
+describe('PostGameReviewPrompt — a queued or stalled review says so', () => {
+  it('says Queued, not "Analyzing 0 / N", while nothing holds the job', () => {
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewWait={{ stage: 'queued', stalled: false, sweepErrorCode: null }}
+      />,
+    );
+    expect(screen.getByText('Queued…')).toBeInTheDocument();
+    expect(screen.getByText(/waiting for the analysis to start/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Analyzing game/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+
+  it('keeps saying Analyzing once a pass is running', () => {
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewWait={{ stage: 'running', stalled: false, sweepErrorCode: null }}
+      />,
+    );
+    expect(screen.getByText('Analyzing game…')).toBeInTheDocument();
+  });
+
+  it('after a stall says it is taking longer than expected and offers Try again, which calls back', () => {
+    const onRetryReview = vi.fn();
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewWait={{ stage: 'queued', stalled: true, sweepErrorCode: null }}
+        onRetryReview={onRetryReview}
+      />,
+    );
+    expect(screen.getByText(/taking longer than expected/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetryReview).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Analyze again' })).not.toBeInTheDocument();
+  });
+
+  it('names a setup problem on our side, not the game, when the server reports one', () => {
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewWait={{ stage: 'queued', stalled: true, sweepErrorCode: 'rpc_missing' }}
+        onRetryReview={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/setup problem on our side/i)).toBeInTheDocument();
+    expect(screen.getByText(/nothing is wrong with your game/i)).toBeInTheDocument();
+  });
+
+  it('a stalled review is still reviewable: Review Game and Skip stay', () => {
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewWait={{ stage: 'queued', stalled: true, sweepErrorCode: null }}
+        onRetryReview={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Review Game' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();
+  });
+});
+
 describe('PostGameReviewPrompt — "Analyze again" when the server gave up', () => {
   it('offers Analyze again, and calls back when pressed', () => {
     const onRetryReview = vi.fn();

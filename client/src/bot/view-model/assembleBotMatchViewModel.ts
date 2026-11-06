@@ -307,6 +307,7 @@ export function assembleBotMatchViewModel(args: CreateBotMatchViewModelArgs): Bo
       accuracyModelPending: review.accuracyModelPending,
       reviewUnavailable: review.reviewUnavailable,
       reviewUnavailableReason: review.reviewUnavailableReason,
+      reviewWait: review.reviewWait,
       retryReview: review.retryReview,
       reviewRetryState: review.reviewRetryState,
       decisionLedger: review.decisionLedger,

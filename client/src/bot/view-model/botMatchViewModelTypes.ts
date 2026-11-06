@@ -281,6 +281,7 @@ export type ModalOverlayViewModel = {
   accuracyModelPending: boolean;
   reviewUnavailable: boolean;
   reviewUnavailableReason: import('../../modules/review/reviewCompletionClient').ReviewUnavailableReason | null;
+  reviewWait: import('../../modules/review/reviewCompletionClient').ReviewWaitState | null;
   retryReview: () => Promise<void>;
   reviewRetryState: 'idle' | 'retrying' | 'cooldown' | 'error';
   decisionLedger: PlayerDecisionLedgerSummary | null;

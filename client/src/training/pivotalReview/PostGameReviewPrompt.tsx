@@ -4,9 +4,14 @@ import {
   formatDecisionAccountingSummary,
   type PlayerDecisionLedgerSummary,
 } from '../../modules/review/reviewDecisionAccounting';
-import type { ReviewUnavailableReason } from '../../modules/review/reviewCompletionClient';
+import type { ReviewUnavailableReason, ReviewWaitState } from '../../modules/review/reviewCompletionClient';
 import '../../styles/dossierRecord.css';
 import './postGameReviewPrompt.css';
+
+const STALLED_NOTE = 'This is taking longer than expected. You can keep waiting or try again.';
+const SETUP_NOTE = "Game review has a setup problem on our side, so it can't start yet. Nothing is wrong with your game.";
+/** Sweep error codes that mean the review service itself is not set up, as opposed to one job having trouble. */
+const SETUP_CODES = new Set(['rpc_missing', 'schema_missing', 'permission_denied', 'worker_failed']);
 
 const SWITCHED_OFF_NOTE = "Game review is switched off right now, so this game couldn't be analyzed. Nothing is wrong with your game.";
 
@@ -37,6 +42,8 @@ export type PostGameReviewPromptProps = {
   reviewUnavailable?: boolean;
   /** `sweep_disabled`: the server's review is switched off, so retrying cannot help and is not offered. Anything else keeps Analyze again. */
   reviewUnavailableReason?: ReviewUnavailableReason | null;
+  /** Where the server job is (queued or running) and whether it has stalled; null before a job exists. */
+  reviewWait?: ReviewWaitState | null;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
   /** Re-run an analysis the server gave up on. Only offered while `reviewUnavailable`. */
   onRetryReview?: () => void;
@@ -55,11 +62,13 @@ function resolveAccuracyStatValues({
   accuracyModelPending,
   reviewUnavailable,
   decisionLedger,
+  reviewWait,
 }: {
   analysis: GameAnalysis;
   accuracyModelPending: boolean;
   reviewUnavailable: boolean;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
+  reviewWait?: ReviewWaitState | null;
 }): { accuracyText: string; gradeText: string; coverageText: string | null } {
   if (reviewUnavailable) {
     return {
@@ -82,12 +91,16 @@ function resolveAccuracyStatValues({
     || analysis.accuracyModel.coverageFraction !== 1
     || analysis.accuracyModel.accuracy === null) {
     const done = ledger?.scoredCount;
+    // "Queued" until a pass actually holds the job: saying "Analyzing 0 / 50" about a job nothing is working on is what made a stuck review look busy.
+    const queued = reviewWait?.stage === 'queued' && (done ?? 0) === 0;
     return {
-      accuracyText: 'Analyzing game…',
+      accuracyText: queued ? 'Queued…' : 'Analyzing game…',
       gradeText: '—',
-      coverageText: totalNonForced !== null && done !== undefined
-        ? `Analyzing ${done} / ${totalNonForced} decisions`
-        : 'Analyzing…',
+      coverageText: queued
+        ? 'Waiting for the analysis to start'
+        : totalNonForced !== null && done !== undefined
+          ? `Analyzing ${done} / ${totalNonForced} decisions`
+          : 'Analyzing…',
     };
   }
 
@@ -111,6 +124,7 @@ export function PostGameReviewPrompt({
   accuracyModelPending,
   reviewUnavailable = false,
   reviewUnavailableReason = null,
+  reviewWait = null,
   decisionLedger = null,
   onRetryReview: retryHandler,
   reviewRetryState = 'idle',
@@ -131,7 +145,11 @@ export function PostGameReviewPrompt({
     accuracyModelPending,
     reviewUnavailable,
     decisionLedger,
+    reviewWait,
   });
+  const stalled = !reviewUnavailable && reviewWait?.stalled === true;
+  const setupProblem = stalled && reviewWait?.sweepErrorCode != null && SETUP_CODES.has(reviewWait.sweepErrorCode);
+  const canRetry = (reviewUnavailable || stalled) && Boolean(onRetryReview);
 
   return (
     <GameOverlayPortal>
@@ -181,19 +199,24 @@ export function PostGameReviewPrompt({
 
             {coverageText ? <p className="pgr-coverage-note">{coverageText}</p> : null}
             {switchedOff ? <p className="pgr-coverage-note" role="status">{SWITCHED_OFF_NOTE}</p> : null}
+            {stalled ? (
+              <p className="pgr-coverage-note" role="status">
+                {setupProblem ? SETUP_NOTE : reviewRetryState === 'idle' ? STALLED_NOTE : RETRY_NOTE[reviewRetryState]}
+              </p>
+            ) : null}
             {reviewUnavailable && onRetryReview ? (
               <p className="pgr-coverage-note" role="status">{RETRY_NOTE[reviewRetryState]}</p>
             ) : null}
 
             <div className="dfd__actions">
-              {reviewUnavailable && onRetryReview ? (
+              {canRetry ? (
                 <button
                   type="button"
                   className="dfd__btn dfd__btn--primary"
                   onClick={onRetryReview}
                   disabled={reviewRetryState === 'retrying'}
                 >
-                  Analyze again
+                  {reviewUnavailable ? 'Analyze again' : 'Try again'}
                 </button>
               ) : null}
               <button

@@ -24,8 +24,28 @@ import { SupabaseCheckpointStore } from './supabaseCheckpointStore';
 import { ReviewSearchRunner } from './reviewSearchRunner';
 import { config } from '../config';
 import { isReviewSweepEnabled } from './reviewSweepFlag';
+import { jobStage, noteReviewSweepError, noteReviewSweepTick, probeReviewDatabase, getReviewSweepStatus } from './reviewSweepStatus';
 
 const log = childLogger('review-completion');
+
+/** What the owner has to do for each cause a sweep can fail on, in the log line that names it. */
+const OWNER_ACTION: Record<string, string> = {
+  rpc_missing: 'a database function is missing: apply supabase/migrations/2026-10-01_review_completion_worker_isolation.sql (and the 2026-09-23/24 review migrations) in the Supabase SQL editor',
+  schema_missing: 'a review table or column is missing: apply the supabase/migrations/2026-09-23_review_completion_jobs*.sql and 2026-10-01 migrations',
+  permission_denied: 'the service role cannot run the review functions: apply supabase/migrations/2026-09-24_review_completion_rpc_permissions.sql',
+  worker_failed: 'the review search worker thread cannot start: check the server build ran the review-engine build (npm run build in server/ does) and that server/workers/reviewSearchWorker.cjs is deployed',
+};
+
+/** A failure the sweep used to swallow at warn ("will retry") is recorded with its cause and logged at error with the owner's next step. */
+function recordSweepFailure(error: unknown, where: string, jobId?: string): void {
+  const classified = noteReviewSweepError(error, Date.now());
+  const action = OWNER_ACTION[classified.code];
+  if (action) {
+    log.error({ err: error, jobId, where, code: classified.code, detail: classified.detail }, `review sweep failing (${classified.code}): ${action}`);
+  } else {
+    log.warn({ err: error, jobId, where, code: classified.code }, 'review sweep failure — will retry');
+  }
+}
 
 /**
  * Production authority is Postgres via SupabaseCheckpointStore.
@@ -181,7 +201,15 @@ export async function retryReviewCompletionJob(input: {
   const now = input.now ?? Date.now();
   const job = await store.get(input.jobId);
   if (!job || job.userId !== input.userId) return { kind: 'not_found' };
-  if (job.status !== 'failed_fatal') return { kind: 'not_failed', job };
+  if (job.status !== 'failed_fatal') {
+    // A job still waiting (the card offers a retry after 90 s with no progress): nothing to re-run, but ask the sweep to look at it again now.
+    if (job.status !== 'complete' && isReviewSweepEnabled() && !isProcessClosing()) {
+      void trackProcessWork('review-kick', () => sweepReviewCompletionJobs()).catch((error) => {
+        log.warn({ err: error, jobId: job.jobId }, 'kick failed');
+      });
+    }
+    return { kind: 'not_failed', job };
+  }
   const sinceFailure = now - job.updatedAt;
   if (sinceFailure < REVIEW_RETRY_COOLDOWN_MS) {
     return { kind: 'cooldown', retryAfterMs: REVIEW_RETRY_COOLDOWN_MS - sinceFailure, job };
@@ -258,13 +286,20 @@ export function sweepReviewCompletionJobs(limit = 4): Promise<SweepResult> {
   }
   const run = (async () => {
     const total: SweepResult = { ran: 0, completed: 0, recovered: 0 };
-    do {
-      sweepRequestedAgain = false;
-      const round = await sweepOnce(limit);
-      total.ran += round.ran;
-      total.completed += round.completed;
-      total.recovered += round.recovered;
-    } while (sweepRequestedAgain && !isProcessClosing());
+    try {
+      do {
+        sweepRequestedAgain = false;
+        const round = await sweepOnce(limit);
+        total.ran += round.ran;
+        total.completed += round.completed;
+        total.recovered += round.recovered;
+      } while (sweepRequestedAgain && !isProcessClosing());
+    } catch (error) {
+      // Listing the claimable jobs failed (for example its database function is missing): record why, then let the caller see it.
+      recordSweepFailure(error, 'list');
+      throw error;
+    }
+    noteReviewSweepTick(Date.now(), { ran: total.ran, completed: total.completed });
     return total;
   })();
   sweepInFlight = run;
@@ -294,6 +329,7 @@ async function sweepOnce(limit: number): Promise<SweepResult> {
       && job.leaseExpiresAt <= listedAt;
     ran += 1;
     try {
+      noteReviewSweepTick(Date.now(), { ran: 0, completed: 0, jobId: job.jobId });
       const result = await runJobPass(job.jobId, `sweep-${process.pid}-${Date.now()}-${ran}`);
       if (hadForeignClaim && !result.claimLost) {
         recovered += 1;
@@ -301,7 +337,7 @@ async function sweepOnce(limit: number): Promise<SweepResult> {
       }
       if (jobAuthoritativeComplete(result.job)) completed += 1;
     } catch (error) {
-      log.warn({ err: error, jobId: job.jobId }, 'sweep pass failed — will retry');
+      recordSweepFailure(error, 'pass', job.jobId);
     }
   }
   return { ran, completed, recovered };
@@ -383,6 +419,16 @@ export function scheduleReviewCompletionSweep(): void {
   }
   log.info('review completion sweep ENABLED (REVIEW_SWEEP_ENABLED=true)');
   if (sweepTimer) return;
+  // Ask the database once, at boot, which review functions it has, so a missing migration is named in the log and on /health instead of surfacing as a job that never moves.
+  void probeReviewDatabase().then((probe) => {
+    if (probe.missing.length > 0) {
+      log.error({ missing: probe.missing }, `review sweep cannot work: ${OWNER_ACTION.rpc_missing}`);
+    } else if (!probe.ok) {
+      log.warn('review database probe failed (not a missing function); see /health reviewSweepStatus');
+    } else {
+      log.info('review database probe ok');
+    }
+  }).catch((error) => log.warn({ err: error }, 'review database probe errored'));
   onProcessStop(() => searchRunner?.abort('process shutting down'));
   sweepTimer = processInterval('review', () => {
     if (!shouldRunPeriodicSweep(Date.now())) return;
@@ -494,9 +540,18 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
     const forced = job.decisions.filter((d) => d.lifecycle === 'FORCED').length;
     const scored = job.decisions.filter((d) => d.lifecycle === 'SCORED').length;
     const complete = jobAuthoritativeComplete(job);
+    const now = Date.now();
+    const sweep = getReviewSweepStatus();
     res.status(200).json({
       jobId: job.jobId,
       status: job.status,
+      // queued (no pass holds it), running (a live lease) or the terminal states: the card says "Queued" and "Analyzing" truthfully from this.
+      stage: jobStage(job, now),
+      // How long since the job last changed; a queued job that keeps growing this is stuck, and `sweepError` says why when the sweep knows.
+      waitingMs: Math.max(0, now - (job.updatedAt ?? job.createdAt)),
+      sweepError: complete || sweep.lastErrorAt == null || sweep.lastErrorAt < job.createdAt
+        ? null
+        : { code: sweep.lastErrorCode, detail: sweep.lastErrorDetail },
       complete,
       // Terminal for the client: the job failed, or the sweep is switched off
       // so nothing will advance it. The client stops polling and says so.
