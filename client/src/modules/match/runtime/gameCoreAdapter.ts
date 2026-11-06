@@ -218,17 +218,14 @@ function handEndDetails(
   reason: BotHandEndReason | null;
 } {
   if (!after.handOver || before.handOver) return { winner: null, reason: null };
-  const beforeScores = { you: before.players.you.score, bot: before.players.bot.score };
-  const deltas = {
-    you: after.players.you.score - beforeScores.you,
-    bot: after.players.bot.score - beforeScores.bot,
-  };
-  const winner: BotPlayerId | null = deltas.you > deltas.bot ? 'you' : deltas.bot > deltas.you ? 'bot' : null;
   const reason: BotHandEndReason = forcedReason ??
     (after.players.you.hand.length === 0 || after.players.bot.hand.length === 0 ? 'domino' : 'blocked');
+  const winner = handWinnerFromHands(after);
   const loser = winner === 'you' ? 'bot' : 'you';
-  const loserPips = after.players[loser].hand.reduce((sum, tile) => sum + tile.low + tile.high, 0);
-  const pointsAwarded = winner
+  const loserPips = handPips(after.players[loser].hand);
+  // The same rules game-core applied when it ended the hand (resolveGoOut / resolveBlockedHand): no winner or no end bonus means no points.
+  const bonusApplies = winner !== null && after.config.endHandBonus === 'sumOpponentPenalties';
+  const pointsAwarded = bonusApplies
     ? reason === 'domino'
       ? computeGoOutBonusPoints(after.players[loser].hand, after.config)
       : computeHandPenalty(after.players[loser].hand, after.config)
@@ -241,9 +238,32 @@ function handEndDetails(
       reason,
       pointsAwarded,
       loserPips,
-      calcText: winner ? `round(${loserPips}/5) = ${pointsAwarded}` : 'tie — no hand bonus',
+      calcText: bonusApplies
+        ? `round(${loserPips}/5) = ${pointsAwarded}`
+        : winner
+          ? 'no hand bonus'
+          : 'tie — no hand bonus',
     },
   };
+}
+
+function handPips(hand: readonly Tile[]): number {
+  return hand.reduce((sum, tile) => sum + tile.low + tile.high, 0);
+}
+
+/**
+ * Who won the hand that just ended, from the rules rather than from how the scores moved: the player who emptied their hand, or on a blocked hand
+ * the lower pip count (a tie, or the noScore blocked rule, has no winner). Score movement cannot say: a go-out whose last play scored nothing
+ * against a hand of 1 or 2 pips moves no score at all, and neither does any non-scoring go-out when the end bonus is off.
+ */
+function handWinnerFromHands(after: CoreGameState): BotPlayerId | null {
+  const { you, bot } = after.players;
+  if (you.hand.length === 0) return 'you';
+  if (bot.hand.length === 0) return 'bot';
+  if (after.config.blockedHandRule === 'noScore') return null;
+  const youPips = handPips(you.hand);
+  const botPips = handPips(bot.hand);
+  return youPips === botPips ? null : youPips < botPips ? 'you' : 'bot';
 }
 
 export function applyCorePlay(

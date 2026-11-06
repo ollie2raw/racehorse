@@ -36,36 +36,11 @@ interface KnownDivergence {
 }
 
 /**
- * What the two sides are known to disagree on. None of these changes who wins a match or any score: the first three are in the
- * hand-end report the client builds for display, the fourth is a preview flag that the engine overrides inside the same move.
+ * What the two sides are known to disagree on. It changes no score and nobody's win: a preview flag that the engine overrides inside the same move.
+ * (Three more, all in the hand-end report the client builds for display, were recorded here until the report was changed to read the winner from
+ * the hands and the rules instead of from how the scores moved; they are asserted as matching now, and gameCoreAdapter.handEnd.test.ts pins each.)
  */
 const KNOWN: readonly KnownDivergence[] = [
-  {
-    kind: 'handEndedWinnerInferredFromScoreMovement',
-    reason:
-      'gameCoreAdapter.handEndDetails names the hand winner as whoever gained more score across the move. When a player goes out (or wins a ' +
-      'blocked hand on pips) and no score moves at all, the report says there is no winner. That happens when the final play scores 0 and ' +
-      'the bonus rounds to 0 (the loser holds 1 or 2 pips, round(x/5) = 0) under the default rules, and on every non-scoring go-out under ' +
-      "endHandBonus 'none'. The report is read by lessonV2 and the guided-match capture.",
-    variant: 'standard-7',
-    seed: 1,
-  },
-  {
-    kind: 'handEndedLoserPipsFromNullWinner',
-    reason:
-      "A consequence of the one above: with no winner named, handEndDetails measures the loser's pips on the wrong hand ('you' by default), " +
-      'so loserPips and the calcText are for the wrong player.',
-    variant: 'standard-7',
-    seed: 1,
-  },
-  {
-    kind: 'handEndedPointsIgnoresEndHandBonusNone',
-    reason:
-      "Under endHandBonus 'none' game-core awards no go-out bonus, but handEndDetails still computes pointsAwarded from the loser's hand " +
-      '(computeGoOutBonusPoints ignores the setting), so the report claims points that were never awarded. Only reachable through a rule override (Journey).',
-    variant: 'bonus-none',
-    seed: 3,
-  },
   {
     kind: 'previewTurnContinuesButEngineAutoPassed',
     reason:
@@ -137,12 +112,13 @@ describe('known differences (each reproduces from a seed; fix it, then delete it
     expect(reproduced.length).toBeGreaterThan(0);
   });
 
-  it('the default-rules case is a hand won by a player who held 1 or 2 pips, not only a rule override', () => {
-    const report = playDifferentialGame(1, DIFFERENTIAL_VARIANTS[0]);
-    const loserPips = report.divergences.find((d) => d.kind === 'handEndedLoserPipsFromNullWinner');
-    expect(loserPips).toBeDefined();
-    // The loser held 2 pips, so the go-out bonus round(2/5) is 0, and the going-out play scored nothing.
-    expect(loserPips!.core).toBeLessThan(3);
+  it.each([
+    ['standard-7', 1],
+    ['bonus-none', 3],
+  ])('the hand-end report now matches game-core on the games that used to diverge (%s seed %i)', (variant, seed) => {
+    const definition = DIFFERENTIAL_VARIANTS.find((v) => v.name === variant)!;
+    const report = playDifferentialGame(seed, definition);
+    expect(report.divergences.filter((d) => d.kind.startsWith('handEnded')).map(describeDivergence)).toEqual([]);
   });
 
   it('opening placement targets are geometry, not legality: any tile "fits" an empty board, while game-core lists only doubles and scoring openers', () => {
