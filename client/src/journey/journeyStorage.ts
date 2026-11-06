@@ -11,6 +11,7 @@ import {
 import { JOURNEY_CHAPTER_1_ID } from './journeyTypes';
 import { journeyLegacyKeySuffix } from './journeyStorageScope';
 import { clearPendingCompletions } from './journeyPendingCompletions';
+import { emitJourneyProgressSaved } from './journeyProgressEvents';
 import type {
   JourneyChapterProgress,
   JourneyNode,
@@ -217,6 +218,8 @@ export function saveJourneyProgress(progress: JourneyProgress): JourneyProgress 
     } catch {
       // Ignore quota / private mode errors during render paths.
     }
+    // The account sync (docs/progress-sync.md) listens; it only schedules a timer, so this is safe on render paths.
+    emitJourneyProgressSaved();
   }
   return next;
 }

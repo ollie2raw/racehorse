@@ -11,6 +11,7 @@ import './styles/responsive.css';
 import { useAuthSession } from './auth/useAuthSession';
 import { useReviewWriteOutboxFlush } from './modules/review/useReviewWriteOutboxFlush';
 import { useJourneyStorageScope } from './journey/useJourneyStorageScope';
+import { useJourneyProgressSync } from './journey/useJourneyProgressSync';
 import { useClearJourneyChallengeOutsideMatch } from './journey/useJourneyChallengeLifecycle';
 import { useAppSessionUi } from './auth/useAppSessionUi';
 import { isGuestUser } from './auth/guestSession';
@@ -137,6 +138,8 @@ export default function App() {
   } = useAuthSession();
   // Journey progress and attempts are local: keep them in the signed-in user's namespace (or guest's).
   useJourneyStorageScope(authUser?.id ?? null, authLoading);
+  // A signed-in player's Journey progress follows their account (no-op for guests and while the server has sync off).
+  useJourneyProgressSync(authUser, authLoading);
   // A Journey challenge is only valid while a match is being played; drop it however the player left.
   useClearJourneyChallengeOutsideMatch(appMode);
   // A finished post-game review that could not be saved yet is delivered on the next load / reconnect / return to the tab.
