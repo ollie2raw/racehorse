@@ -7,6 +7,7 @@ const log = childLogger('health');
 import { isGracefulShutdownInProgress } from '../gracefulShutdown';
 import { supabaseFetch } from '../../supabaseUtils';
 import { resolveReleaseVersion } from './releaseVersion';
+import { isReviewSweepEnabled } from '../../reviewCompletion/reviewSweepFlag';
 import {
   assessDailyPuzzleGenerationHealth,
   type DailyPuzzleGenerationHealthSnapshot,
@@ -125,6 +126,8 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
       release: resolveReleaseVersion(),
       nodeEnv: process.env.NODE_ENV ?? 'development',
       uptimeSeconds: Math.round(process.uptime()),
+      // Post-game review only runs while this is on; off shows players "Review unavailable".
+      reviewSweep: isReviewSweepEnabled(),
     });
   });
 

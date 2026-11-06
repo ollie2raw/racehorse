@@ -172,3 +172,20 @@ describe('GET /ready — dailyPuzzleGeneration is observed but not gating', () =
     expect(captureExceptionMock).not.toHaveBeenCalled();
   });
 });
+
+describe('GET /health — reviewSweep', () => {
+  afterEach(() => {
+    delete process.env.REVIEW_SWEEP_ENABLED;
+  });
+
+  // Post-game review runs only while the sweep is on, and the player sees "Review unavailable" when it is off. This lets anyone check the deployed state with one request.
+  it('says whether the review sweep is on, using the same rule as the sweep (exactly "true")', async () => {
+    const request = makeHarness();
+    delete process.env.REVIEW_SWEEP_ENABLED;
+    expect((await request('GET', '/health')).body.reviewSweep).toBe(false);
+    process.env.REVIEW_SWEEP_ENABLED = '1';
+    expect((await request('GET', '/health')).body.reviewSweep).toBe(false);
+    process.env.REVIEW_SWEEP_ENABLED = 'true';
+    expect((await request('GET', '/health')).body.reviewSweep).toBe(true);
+  });
+});

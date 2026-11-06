@@ -280,6 +280,7 @@ export type ModalOverlayViewModel = {
   postGameAnalysisPending: boolean;
   accuracyModelPending: boolean;
   reviewUnavailable: boolean;
+  reviewUnavailableReason: import('../../modules/review/reviewCompletionClient').ReviewUnavailableReason | null;
   retryReview: () => Promise<void>;
   reviewRetryState: 'idle' | 'retrying' | 'cooldown' | 'error';
   decisionLedger: PlayerDecisionLedgerSummary | null;

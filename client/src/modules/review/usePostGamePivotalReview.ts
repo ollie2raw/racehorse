@@ -56,6 +56,7 @@ import {
   pollServerReviewCompletion,
   REVIEW_POLL_INITIAL_MS,
   retryServerReviewCompletion,
+  type ReviewUnavailableReason,
 } from './reviewCompletionClient.ts';
 import { REVIEW_START_DELAY_MS, useReviewStartTrigger } from './useReviewStartTrigger.ts';
 import { sendReviewFunnelEvent, type ReviewFunnelEvent } from './reviewFunnelClient.ts';
@@ -332,6 +333,14 @@ export function usePostGamePivotalReview({
       if (cancelled) return;
       if (result) setServerCompletion(result);
       // Complete and unavailable are terminal: nothing more will change.
+      if (result?.unavailable && !result.complete) {
+        logger.warn('usePostGamePivotalReview', 'server review unavailable', {
+          reason: result.unavailableReason ?? 'unknown',
+          status: result.status,
+          scored: result.progress.scored,
+          total: result.progress.total,
+        });
+      }
       if (result?.complete || result?.unavailable) return;
       const progressKey = result ? `${result.progress.scored}:${result.progress.forced}:${result.status}` : '';
       delayMs = nextReviewPollDelayMs(delayMs, progressKey !== lastProgressKey);
@@ -453,6 +462,10 @@ export function usePostGamePivotalReview({
   const reviewUnavailable = reviewPersistenceEnabled
     && serverCompletion?.unavailable === true
     && serverCompletion.complete !== true;
+  // An older server sends no reason; treat that as a failure, which keeps Analyze again.
+  const reviewUnavailableReason: ReviewUnavailableReason | null = reviewUnavailable
+    ? (serverCompletion?.unavailableReason ?? 'failed')
+    : null;
   const retryReview = useCallback(async () => {
     if (!serverJobId || !accessToken || reviewRetryState === 'retrying') return;
     setReviewRetryState('retrying');
@@ -835,6 +848,7 @@ export function usePostGamePivotalReview({
     postGameAnalysisPending,
     accuracyModelPending,
     reviewUnavailable,
+    reviewUnavailableReason,
     retryReview,
     reviewRetryState,
     decisionLedger,
