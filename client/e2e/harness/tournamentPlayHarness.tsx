@@ -154,6 +154,18 @@ function bracketMatches(stage: string): TournamentMatch[] {
     m('sf1', 2, 1, 'u-me', 'u-long', { status: 'ready' }),
     m('sf2', 2, 2, bot(7), 'u-kai', { status: 'in_progress', bot_tier: 'elite' }),
   ];
+  if (stage === 'lobby') {
+    // The bracket just locked: every match is set up but unplayed, you open against Fritz.
+    return [
+      m('qf1', 1, 1, 'u-me', bot(2), { bot_tier: 'standard' }),
+      m('qf2', 1, 2, 'u-ana', 'u-long'),
+      m('qf3', 1, 3, bot(3), bot(7), { bot_tier: 'standard' }),
+      m('qf4', 1, 4, 'u-kai', bot(8), { bot_tier: 'standard' }),
+      m('sf1', 2, 1, null, null),
+      m('sf2', 2, 2, null, null),
+      m('f', 3, 1, null, null),
+    ];
+  }
   if (stage === 'sf') return [...qf, ...sfReady, m('f', 3, 1, null, null)];
   // final-fritz: Master Fritz beat the player in the Final.
   const sfDone = [
@@ -175,7 +187,7 @@ function Bracket() {
           identity={{ userId: 'u-me', username: 'me' }}
           tournamentId={T}
           bracket={view}
-          tournamentPhase={stage === 'sf' ? 'match_ready' : 'eliminated'}
+          tournamentPhase={stage === 'sf' ? 'match_ready' : stage === 'lobby' ? 'bracket_lobby' : 'eliminated'}
           assignedMatch={stage === 'sf' ? { matchId: 'sf1', tournamentId: T, round: 2, matchNumber: 1, opponentId: 'u-long', opponentUsername: LONG, roomCode: 'R', matchStatus: 'ready', scheduledStart: '', matchStartsAt: null, readyDeadlineAt: null } : null}
           onLoadBracket={noop}
           onBack={noop}
@@ -197,7 +209,7 @@ function Result() {
   const v = deriveResultView({ tournamentId: T, result, myTournaments: mine, upcoming, activeAssignedMatch: null });
   return (
     <div className="app">
-      <TournamentResultScreen champion={v.champion} yourPlacement="2nd" myOutcome={v.myOutcome} nextEventStart={v.nextEventStart} nextMatch={q.get('next') === '1' ? { matchId: 'x', round: 3 } : null} onJoinNextMatch={() => undefined} onNextTournament={() => undefined} />
+      <TournamentResultScreen champion={v.champion} yourPlacement="2nd" myOutcome={v.myOutcome} nextEventStart={v.nextEventStart} nextMatch={q.get('next') === '1' ? { matchId: 'x', round: 3 } : null} onJoinNextMatch={() => undefined} onNextTournament={() => undefined} onViewBracket={() => undefined} />
     </div>
   );
 }

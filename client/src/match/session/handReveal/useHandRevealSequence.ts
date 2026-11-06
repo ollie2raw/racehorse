@@ -57,11 +57,16 @@ export function useHandRevealSequence(
   const handRevealAutoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handRevealAutoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const handReadyRecoveryRef = useRef(false);
+  /** The hand number whose hand:ready this session has already sent from the reveal, so the recovery below never repeats it. */
+  const handReadySentRef = useRef<number | null>(null);
 
   const continueAfterHandReveal = useCallback(() => {
     const readyHandNumber = handReveal?.handNumber ?? state?.handNumber;
     if (socket && joinedRoom) {
+      handReadySentRef.current = readyHandNumber ?? null;
       emitHandReady(socket, joinedRoom, readyHandNumber).catch((error) => {
+        // Not sent after all: let the recovery below try again.
+        if (handReadySentRef.current === (readyHandNumber ?? null)) handReadySentRef.current = null;
         if (import.meta.env.DEV) {
           console.warn('[hand:ready] failed:', error instanceof Error ? error.message : error);
         }
@@ -74,13 +79,20 @@ export function useHandRevealSequence(
   // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   continueAfterHandRevealRef.current = continueAfterHandReveal;
 
+  // Recover a hand:ready that never went out. The player is ready when they have seen the hand end (the reveal below sends it when it is
+  // continued), so this applies only once the reveal for this hand has been armed, has opened and is gone again without a signal sent: a
+  // reconnect clears it, or the send failed. It must never run on the first render of a live hand end (state:update arrives before
+  // hand:ended, so there is no reveal yet): that signalled ready at once, the server dealt the next hand 2.5 s after the hand ended and
+  // Fritz opened it, all while the player was still looking at the previous hand's reveal.
   useEffect(() => {
     const needsReady =
       Boolean(state?.handOver) &&
       !state?.gameOver &&
       !handReveal &&
       !preGameDraw &&
-      handRevealShownRef.current !== state?.handNumber &&
+      handRevealShownRef.current === state?.handNumber &&
+      handRevealTimerRef.current === null &&
+      handReadySentRef.current !== state?.handNumber &&
       Boolean(joinedRoom) &&
       socket?.connected;
     if (!needsReady) {
@@ -92,8 +104,10 @@ export function useHandRevealSequence(
     if (import.meta.env.DEV) {
       logger.operational('hand:ready', 'recovering lost hand:ready signal after reconnect');
     }
+    handReadySentRef.current = state?.handNumber ?? null;
     emitHandReady(socket!, joinedRoom!, state?.handNumber).catch((error) => {
       handReadyRecoveryRef.current = false;
+      handReadySentRef.current = null;
       showToast('Could not signal hand ready. Reconnecting…', 2500);
       if (import.meta.env.DEV) {
         console.warn(
@@ -112,6 +126,7 @@ export function useHandRevealSequence(
     socket,
     showToast,
     handRevealShownRef,
+    handRevealTimerRef,
   ]);
 
   useEffect(() => {
@@ -177,6 +192,13 @@ export function useHandRevealSequence(
         : prev,
     );
   }, [handReveal, state, you, preGameDraw, setHandReveal]);
+
+  // A reveal is for the hand that just ended. If a later hand is already in play (a reconnect, a resync, the player readied from elsewhere),
+  // it must not stay on top of that hand: nothing is sent, the next hand is already dealt.
+  useEffect(() => {
+    if (!handReveal || !state || state.gameOver || state.handOver) return;
+    if (state.handNumber > handReveal.handNumber) setHandReveal(null);
+  }, [handReveal, state, setHandReveal]);
 
   useEffect(() => {
     if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);

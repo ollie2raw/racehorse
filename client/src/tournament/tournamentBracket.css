@@ -19,16 +19,16 @@
   max-width: 1440px;
   margin: 0 auto;
   width: 100%;
-  padding: 18px 32px 24px;
+  padding: 12px 32px 16px;
   box-sizing: border-box;
   overflow: hidden;
-  gap: 16px;
+  gap: 12px;
 }
 
 .tb-toolbar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
   gap: 20px;
   flex-shrink: 0;
 }
@@ -122,7 +122,7 @@
 
 .tb-title {
   font-family: var(--font-body);
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 900;
   letter-spacing: -0.03em;
   margin: 2px 0 0;
@@ -136,15 +136,21 @@
   line-height: 1.4;
 }
 
+/* The tree: rounds are columns, every column splits the same height into equal slots, so a later round's match sits on
+   the midpoint of the two matches that feed it, and the lines between rounds are drawn from the slots themselves. */
 .tb-bracket {
+  --tb-gap: 44px;
+  --tb-line: var(--border-light);
+  --tb-line-on: rgba(255, 255, 255, 0.55);
+  --tb-line-you: var(--tb-accent);
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 0.82fr);
+  column-gap: var(--tb-gap);
   align-items: stretch;
   overflow: auto;
-  padding: 8px 4px 12px;
+  padding: 2px 2px 8px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
@@ -152,7 +158,7 @@
 .tb-col {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -182,19 +188,93 @@
 .tb-col-matches {
   display: flex;
   flex-direction: column;
-  justify-content: space-around;
-  gap: 12px;
   flex: 1 1 auto;
   min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One slot per match: equal share of the column, the card centred in it. */
+.tb-mslot {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.tb-mslot > .tb-match,
+.tb-mslot > .tb-champion-card {
+  width: 100%;
+}
+
+/* Out of a match: a stub into the gap. Pairs share a vertical in the middle of the gap (the first match draws its
+   lower half, the second its upper half), and the next round's card takes a stub from that vertical. */
+.tb-col--r1 .tb-mslot::after,
+.tb-col--r2 .tb-mslot::after,
+.tb-col--r3 .tb-mslot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: calc(var(--tb-gap) / 2);
+  border-top: 2px solid var(--tb-line);
+  transform: translateY(-1px);
+}
+
+.tb-mslot--join-down::before,
+.tb-mslot--join-up::before {
+  content: '';
+  position: absolute;
+  left: calc(100% + var(--tb-gap) / 2 - 1px);
+  border-left: 2px solid var(--tb-line);
+}
+
+.tb-mslot--join-down::before {
+  top: 50%;
+  bottom: 0;
+}
+
+.tb-mslot--join-up::before {
+  top: 0;
+  bottom: 50%;
+}
+
+.tb-col--r2 .tb-match::before,
+.tb-col--r3 .tb-match::before,
+.tb-col--champion .tb-champion-card::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: calc(var(--tb-gap) / 2);
+  border-top: 2px solid var(--tb-line);
+  transform: translateY(-1px);
+}
+
+/* Decided paths are solid and bright; the viewer's own path is in the accent. */
+.tb-bracket .tb-mslot--decided::after,
+.tb-bracket .tb-mslot--decided::before,
+.tb-bracket .tb-mslot--fed > .tb-match::before,
+.tb-bracket .tb-mslot--fed > .tb-champion-card::before {
+  border-color: var(--tb-line-on);
+}
+
+.tb-bracket .tb-mslot--you::after,
+.tb-bracket .tb-mslot--you::before,
+.tb-bracket .tb-mslot--fed-you > .tb-match::before,
+.tb-bracket .tb-mslot--fed-you > .tb-champion-card::before {
+  border-color: var(--tb-line-you);
 }
 
 .tb-match {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 10px 12px 8px;
+  padding: 7px 10px 6px;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(10, 13, 20, 0.94);
   position: relative;
   transition:
@@ -202,19 +282,71 @@
     box-shadow 140ms ease;
 }
 
+.tb-match__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+  margin-bottom: 2px;
+}
+
 .tb-match__round {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-dim);
-  margin-bottom: 6px;
+}
+
+/* State in words, never colour alone. */
+.tb-badge {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-light);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.tb-badge--live,
+.tb-badge--ready {
+  border-color: var(--tb-accent);
+  color: var(--tb-accent);
+}
+
+.tb-badge--live::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  vertical-align: 1px;
+}
+
+.tb-badge--done {
+  color: var(--text-secondary);
+}
+
+.tb-badge--waiting {
+  border-style: dashed;
 }
 
 .tb-match.is-yours {
   border-color: rgba(245, 185, 55, 0.62);
   background: rgba(11, 14, 22, 0.96);
+  box-shadow: inset 3px 0 0 var(--tb-accent);
 }
 
 .tb-match.is-opponent-path {
@@ -226,8 +358,14 @@
   box-shadow: inset 0 0 0 1px rgba(245, 185, 55, 0.18);
 }
 
+.tb-match.is-yours.is-current {
+  box-shadow:
+    inset 3px 0 0 var(--tb-accent),
+    inset 0 0 0 1px rgba(245, 185, 55, 0.18);
+}
+
 .tb-match.is-completed {
-  opacity: 0.92;
+  opacity: 0.94;
 }
 
 .tb-match.is-pending {
@@ -243,13 +381,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 7px 0;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  padding: 4px 0;
 }
 
-.tb-slot:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+.tb-slot + .tb-slot {
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
 }
 
 .tb-slot__name {
@@ -273,6 +409,25 @@
   font-weight: 600;
 }
 
+.tb-slot__seed {
+  flex: 0 0 auto;
+  min-width: 1.2em;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+/* The player who did not advance: quieter, and the winner's "Won" chip is the word that says which is which. */
+.tb-slot--out {
+  opacity: 0.55;
+}
+
+.tb-slot--won .tb-slot__name {
+  font-weight: 800;
+}
+
 .tb-slot__score {
   font-family: var(--font-display);
   font-size: 14px;
@@ -291,21 +446,40 @@
   opacity: 0.45;
 }
 
+.tb-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .tb-col--champion {
   justify-content: flex-start;
 }
 
 .tb-champion-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
-  gap: 10px;
-  min-height: 120px;
-  border-radius: 14px;
-  border: 1px solid rgba(245, 185, 55, 0.42);
+  padding: 14px 12px;
+  gap: 8px;
+  min-height: 96px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 1px dashed var(--border-light);
   background: rgba(10, 13, 20, 0.96);
+}
+
+.tb-champion-card.is-decided {
+  border-style: solid;
+  border-color: rgba(245, 185, 55, 0.62);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -1536,15 +1710,6 @@
     padding-top: 0;
   }
 
-  .tb-toolbar:not(.tb-toolbar--waiting) {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .tb-head {
-    text-align: left;
-  }
-
   .tb-countdown-card {
     align-items: flex-start;
     text-align: left;
@@ -1554,8 +1719,9 @@
     font-size: 44px;
   }
 
+  /* Four columns all the way down to a phone (below, one round at a time): a narrower channel for the lines. */
   .tb-bracket {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    --tb-gap: 28px;
   }
 }
 
@@ -1583,7 +1749,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px 16px;
-  padding: 14px 16px;
+  padding: 10px 16px;
   border-radius: 16px;
   border: 1px solid rgba(245, 185, 55, 0.55);
   background: rgba(11, 14, 22, 0.97);
@@ -1593,15 +1759,18 @@
   border-color: rgba(255, 255, 255, 0.14);
 }
 
+/* Wide screens: the headline and the opponent share a line under the kicker (the tree needs the height). */
 .tb-path__meta {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: 2px 14px;
   min-width: 0;
   flex: 1 1 16em;
 }
 
 .tb-path__kicker {
+  flex: 1 0 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1634,6 +1803,9 @@
 }
 
 .tb-path__sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   font-weight: 600;
   color: rgba(226, 232, 240, 0.82);
@@ -1708,11 +1880,77 @@
   letter-spacing: 0.08em;
 }
 
-.tb-match__note {
-  margin-top: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  color: rgba(226, 232, 240, 0.78);
+/* Below a wide screen the toolbar stacks (back, then the title) and the title reads from the left; above it the toolbar
+   stays one row, so the bracket keeps the height. */
+@media (--below-wide) {
+  .tb-toolbar:not(.tb-toolbar--waiting) {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .tb-head {
+    text-align: left;
+  }
+}
+
+/* Narrow tree columns: the card header (tag, "Your match", state) must stay on one line. */
+@media (min-width: 769px) and (max-width: 1180px) {
+  .tb-match__top {
+    gap: 4px;
+  }
+
+  .tb-match__round {
+    letter-spacing: 0.1em;
+  }
+
+  .tb-match__round .tb-yours-chip {
+    margin-left: 5px;
+    padding-inline: 5px;
+    letter-spacing: 0.04em;
+  }
+
+  .tb-badge {
+    padding-inline: 5px;
+    letter-spacing: 0.06em;
+  }
+}
+
+/* Short desktop windows (a laptop with browser chrome): tighter cards so the whole tree still fits. */
+@media (min-width: 769px) and (max-height: 760px) {
+  .tb-shell {
+    padding-top: 8px;
+    gap: 8px;
+  }
+
+  .tb-col-head {
+    padding-bottom: 4px;
+  }
+
+  .tb-col-sub {
+    display: none;
+  }
+
+  .tb-mslot {
+    padding: 2px 0;
+  }
+
+  .tb-match {
+    padding: 5px 9px 4px;
+  }
+
+  .tb-match__top {
+    min-height: 16px;
+    margin-bottom: 0;
+  }
+
+  .tb-slot {
+    padding: 2px 0;
+  }
+
+  .tb-champion-card {
+    min-height: 72px;
+    padding: 8px;
+  }
 }
 
 .tb-champion-name {
@@ -1786,8 +2024,42 @@
     gap: 14px;
   }
 
+  /* One round at a time on a phone: no tree, so no lines, and the matches stack from the top at their own height. */
   .tb-col-matches {
     justify-content: flex-start;
+    gap: 10px;
+  }
+
+  .tb-mslot {
+    flex: 0 0 auto;
+    padding: 0;
+  }
+
+  .tb-mslot::before,
+  .tb-mslot::after,
+  .tb-match::before,
+  .tb-champion-card::before {
+    display: none;
+  }
+
+  .tb-match {
+    padding: 10px 12px 8px;
+  }
+
+  .tb-badge {
+    font-size: 11px;
+  }
+
+  .tb-slot {
+    padding: 7px 0;
+  }
+
+  .tb-slot__seed {
+    font-size: 12px;
+  }
+
+  .tb-champion-card {
+    min-height: 120px;
   }
 
   /* Legibility: nothing under 12px; names may wrap instead of truncating. */
@@ -1820,6 +2092,12 @@
   .tb-path {
     padding: 12px;
     gap: 10px;
+  }
+
+  .tb-path__meta {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
   }
 
   .tb-path__headline {

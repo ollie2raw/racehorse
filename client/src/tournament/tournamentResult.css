@@ -10,49 +10,36 @@
   font-family: var(--font-body);
 }
 
+/* The result starts under the nav and reads top-down. It is not centred in the page: a short block centred in a tall
+   viewport floats with empty bands above and below it. Long content (a short phone) scrolls inside the shell. */
 .tr-shell {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  max-width: 960px;
-  margin: 0 auto;
   width: 100%;
-  padding: 32px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: clamp(20px, 11vh, 110px) 32px 32px;
   box-sizing: border-box;
-  text-align: center;
   overflow: auto;
-  gap: 12px;
-  /* Not `justify-content: center`: with overflow, centering pushes the top (the kicker) out of reach under the nav on a
-     short landscape phone. Auto margins on the ends centre when there is room and scroll from the top when there is not. */
-  justify-content: flex-start;
 }
 
-.tr-shell > :first-child {
-  margin-top: auto;
-}
-
-.tr-shell > :last-child {
-  margin-bottom: auto;
-}
-
-.tr-card {
-  width: min(100%, 760px);
+.tr-layout {
+  width: 100%;
   display: grid;
-  gap: 18px;
-  padding: 28px 26px 26px;
-  border-radius: 24px;
-  border: 1px solid rgba(214, 179, 112, 0.24);
-  background: linear-gradient(180deg, rgba(13, 20, 33, 0.98), rgba(7, 12, 22, 0.98));
-  box-shadow:
-    0 28px 72px rgba(0, 0, 0, 0.44),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  align-items: start;
+  gap: 32px 56px;
 }
 
-.tr-card--loading,
-.tr-card--error {
-  justify-items: center;
+.tr-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
 }
 
 .tr-kicker {
@@ -60,7 +47,7 @@
   align-items: center;
   gap: 10px;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -71,102 +58,142 @@
   content: '';
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: currentColor;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tr-accent) 18%, transparent);
+}
+
+/* Loading and error keep a small matte panel. */
+.tr-card {
+  width: min(100%, 560px);
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  margin-top: clamp(0px, 6vh, 56px);
+  padding: 28px 24px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  text-align: center;
 }
 
 .tr-spinner {
   width: 28px;
   height: 28px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 2px solid rgba(245, 185, 55, 0.18);
   border-top-color: rgba(245, 185, 55, 0.92);
   animation: tr-spin 0.9s linear infinite;
 }
 
+/* Tight tracking made the letters touch; display type at this size wants a little air, not less. */
 .tr-champion-title {
   margin: 0;
   color: var(--text-primary);
   font-family: var(--font-display);
-  font-size: clamp(2.2rem, 4.8vw, 3.8rem);
-  font-weight: 900;
-  letter-spacing: -0.04em;
-  line-height: 0.92;
+  /* px, not rem: the app scales the root font size with the viewport, which made rem text small here. */
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.05;
   text-wrap: balance;
 }
 
 .tr-subcopy {
-  max-width: 580px;
-  margin: 0 auto;
-  color: rgba(232, 238, 246, 0.82);
-  font-size: 1rem;
-  line-height: 1.45;
+  max-width: 34em;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: clamp(16px, 1.4vw, 19px);
+  line-height: 1.5;
 }
 
+.tr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.tr-action {
+  min-height: 52px;
+}
+
+/* The result dossier: three records, one structure. Label, value and a reserved note line in every row, so the values
+   sit on the same lines whatever each one holds. Square corners and hairlines, as for any record (CLAUDE.md 3b). */
 .tr-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+  min-width: 0;
 }
 
 .tr-stat {
   display: grid;
-  gap: 8px;
-  min-height: 92px;
-  align-content: center;
-  padding: 15px 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.035);
+  grid-template-rows: auto minmax(38px, auto) 18px;
+  align-content: start;
+  gap: 6px;
+  min-height: 118px;
+  padding: 16px 20px;
+  border-radius: var(--radius-record);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-light);
+  background: var(--bg-card);
 }
 
-.tr-stat span {
-  color: rgba(201, 212, 226, 0.72);
+.tr-stat__label {
+  color: var(--text-secondary);
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
-.tr-stat strong {
-  color: rgba(247, 242, 235, 0.98);
+.tr-stat__value {
+  color: var(--text-primary);
   font-family: var(--font-display);
-  font-size: clamp(1.35rem, 2.2vw, 1.9rem);
+  font-size: clamp(26px, 2.6vw, 34px);
   font-weight: 800;
-  line-height: 0.95;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
-.tr-stat--gold strong {
-  color: color-mix(in srgb, var(--tier-elite) 88%, #fff);
-}
-
-.tr-stat--blue strong {
-  color: color-mix(in srgb, var(--tier-standard) 88%, #fff);
-}
-
-.tr-back {
-  min-height: 54px;
-  padding: 0 22px;
-  border-radius: 14px;
-  border: 1px solid rgba(214, 179, 112, 0.42);
-  background: linear-gradient(180deg, rgba(156, 111, 36, 0.9), rgba(94, 58, 20, 0.96));
-  color: #fff7e7;
-  cursor: pointer;
-  font-family: var(--font-display);
+.tr-stat__sub {
+  color: var(--text-secondary);
   font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tr-stat--gold {
+  border-left-color: var(--tier-elite);
+}
+
+.tr-stat--gold .tr-stat__value {
+  color: var(--tier-elite);
+}
+
+.tr-stat--blue {
+  border-left-color: var(--tier-standard);
+}
+
+.tr-stat--blue .tr-stat__value {
+  color: var(--tier-standard);
+}
+
+.tr-chip {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 10px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(231, 182, 74, 0.6);
+  color: rgba(247, 226, 181, 0.96);
+  font-family: var(--font-body);
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 240, 210, 0.24),
-    0 16px 34px rgba(79, 50, 18, 0.34);
-}
-
-.tr-back:hover {
-  transform: translateY(-1px);
+  line-height: 1.4;
 }
 
 @keyframes tr-spin {
@@ -174,61 +201,43 @@
   to { transform: rotate(360deg); }
 }
 
-@media (--phone) {
-  .tr-shell {
-    padding: 20px 12px;
+@media (--below-wide) {
+  .tr-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
   }
 
-  .tr-card {
-    padding: 22px 14px;
+  /* Side by side the records are compared across, so the value line is a fixed two-line slot: a longer value (a Fritz
+     champion with its chip) wraps inside it instead of pushing its note line below the others'. */
+  .tr-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tr-stat {
+    grid-template-rows: auto 66px 18px;
+  }
+}
+
+@media (--phone) {
+  .tr-shell {
+    padding: 16px 14px 20px;
   }
 
   .tr-stats {
     grid-template-columns: 1fr;
   }
-}
 
-/* Phase 3D */
-.tr-stat strong .tr-stat__sub {
-  display: block;
-  margin-top: 6px;
-  font-family: var(--font-body);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: none;
-  color: rgba(201, 212, 226, 0.85);
-}
+  .tr-stat {
+    min-height: 0;
+    padding: 12px 14px;
+  }
 
-.tr-stat strong .tr-chip {
-  display: inline-flex;
-  vertical-align: middle;
-  margin-left: 8px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(231, 182, 74, 0.6);
-  color: rgba(247, 226, 181, 0.96);
-  font-family: var(--font-body);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  line-height: 1.4;
-}
+  .tr-actions {
+    width: 100%;
+    flex-direction: column;
+  }
 
-.tr-stat strong {
-  overflow-wrap: anywhere;
-}
-
-.tr-join {
-  border-color: rgba(96, 165, 250, 0.7);
-  background: #2f6fdf;
-  color: #fff;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
-}
-
-.tr-back:disabled {
-  opacity: 0.7;
-  cursor: default;
-  transform: none;
+  .tr-action {
+    width: 100%;
+  }
 }
