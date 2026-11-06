@@ -58,27 +58,29 @@ One versioned saved game record per reviewed game, the format multiplayer and Da
 
 - **Daily Fritz**: already reviewable (#473 to #479); move onto the same reviewer and first-pass path so it behaves identically.
 - **Multiplayer (quick and private)**: records exist (3.9); same reviewer.
-- **Tournament**: rooms are deliberately never saved (`saveMultiplayerRecord` returns `tournament_room`), so there is nothing to review. Offering it means saving tournament games: a product and privacy decision (section 8).
+- **Tournament**: rooms are deliberately never saved today (`saveMultiplayerRecord` returns `tournament_room`), so there is nothing to review. Decided (section 8, decision 3): save them once the match is complete, in Phase 6.
 
-## 8. Decisions for the owner
+## 8. Decisions (2026-11-06, decided by delegation)
 
-1. **Turn `REVIEW_SWEEP_ENABLED=true` on Render now?** The worker-isolation fix (#320, event-loop watchdog) is merged, so the 10-01 outage cause is addressed; the risk is capacity on a free instance. Recommended: yes, watch `/ping` and the event-loop lag log for a day. Until then every Play vs Fritz review shows "switched off right now".
-2. **Allow a device-computed "Quick review" labelled non-authoritative?** Production forbids it today. Recommended: yes, as the player's private view (it is what makes instant review possible).
-3. **Should tournament games be saved for review?** Needs a retention and storage decision.
-4. **Retention**: how long to keep per-game review records (storage is free-tier bound).
-5. **Depth budget on the device**: cap per move so a low-end phone stays cool.
+The owner delegated these five; each is decided.
+
+1. **Sweep: ON now.** `REVIEW_SWEEP_ENABLED=true` on Render (worker isolation #320 and the event-loop watchdog are merged). Watch `/ping` latency and the event-loop lag log for a day; if `/ping` degrades the owner flips it back off. The kill switch stays, and Phase 0 makes either state visible (`/health`, the card copy).
+2. **Quick review: yes, always provisional.** A device-computed first pass is allowed, labelled "Quick review" everywhere it appears, never written to the authoritative record, never shown as the final accuracy. The server result replaces it when it arrives.
+3. **Tournament: yes, in Phase 6 only.** Save a tournament game for review once that MATCH is complete (never while the event is still live for that player's bracket opponents). It needs a server change: `saveMultiplayerRecord` must stop skipping `tournament_room`. Not in earlier phases.
+4. **Retention.** Keep every game record (compact). Keep full per-decision evaluations for the most recent 100 reviewed games per player; beyond that drop the evaluation payloads, not the game. Revisit if storage grows.
+5. **Device budget.** The quick pass uses a time budget, not the node budget (that one is for deterministic server and test runs): about 40 ms per decision by default and about 3 s of main-thread-equivalent work per game in total, run in a Web Worker, scaled down when the first decisions run slow. Measured with `measureReviewPositionCost.ts` (section 11); the numbers get recorded there as Phase 2 lands.
 
 ## 9. Phases (one PR each, with an acceptance test)
 
 | Phase | Change | Acceptance |
 |---|---|---|
 | 0 (this PR) | Failure is honest and checkable: the job route says why (`sweep_disabled` or `failed`), `/health` shows `reviewSweep`, the prompt stops offering a retry that cannot work, the server logs each job accepted while the sweep is off, the client logs the reason | Unit tests on the route, `/health` and the prompt; fail on the old code |
-| 1 | Turn the sweep on in production (owner step) and prove a full real game reviews end to end; add a timing log per job so the 8 to 97 s figure is tracked | After a real Play vs Fritz game, `/health` says `reviewSweep: true`, the job completes, and the log shows its duration |
-| 2 | Device first pass during play (web worker, tier 1 per captured decision, cached by `positionHash`) so Review opens at game over with every decision classified | Playwright plays a game to the end; Review opens within 1 s with all non-forced decisions classified and no review network call needed |
+| 1 | The sweep is ON (decision 1, set by the owner). Prove a full real game reviews end to end and add a timing log per job so the 8 to 97 s figure is tracked; watch `/ping` for a day | After a real Play vs Fritz game, `/health` says `reviewSweep: true`, the job completes, and the log shows its duration |
+| 2 | Device first pass during play (Web Worker, a time budget of about 40 ms per decision and about 3 s per game, scaled down when the first decisions run slow, cached by `positionHash`), labelled "Quick review" and never written to the authoritative record (decision 2), so Review opens at game over with every decision classified | Playwright plays a game to the end; Review opens within 1 s with all non-forced decisions classified, the "Quick review" label shown, and no review network call needed; a test that no quick result reaches the saved record |
 | 3 | Progressive upgrade: the server job (or deeper device tiers) replaces first-pass results in place; "Depth upgrading n / N"; a label never jumps by more than the second-opinion rule allows | Test: a late result changes a badge at most one step and never reorders the move list |
 | 4 | Review board parity: advantage graph, key moments, best-move arrows, step through; split into two or three PRs | Reachability e2e at desktop and phone; axe-clean; the graph's text equivalent present |
-| 5 | Keep it: save the record (signed-in), list it on the Games page, reopen any time | Reload and reopen from Games shows the same review |
-| 6 | Same reviewer for Daily Fritz and multiplayer; tournament per decision 3 | One review component, three entry points, one test each |
+| 5 | Keep it: save the record (signed-in), list it on the Games page, reopen any time; retention per decision 4 (full evaluations for the latest 100 reviewed games, the game itself kept) | Reload and reopen from Games shows the same review; the 101st game drops evaluation payloads but stays listed |
+| 6 | Same reviewer for Daily Fritz and multiplayer; tournament games saved for review once the match is complete (decision 3: `saveMultiplayerRecord` stops skipping `tournament_room`, never while the event is live for that player's opponents) | One review component, three entry points, one test each; a tournament game is not reviewable until its match is complete |
 
 ## 10. Risks
 
