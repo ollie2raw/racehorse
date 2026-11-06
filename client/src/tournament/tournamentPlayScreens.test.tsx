@@ -155,6 +155,110 @@ describe('bracket', () => {
   });
 });
 
+describe('bracket tree', () => {
+  const SF = [match('sf1', 2, 1, null, null), match('sf2', 2, 2, null, null)];
+  const FIN = match('f', 3, 1, null, null);
+  const tree = (qf: TournamentMatch[] = QF) => [...qf, ...SF, FIN];
+
+  it('each round is a named ordered list of matches, each match a named group', () => {
+    renderBracket(tree());
+    const qfList = screen.getByRole('list', { name: 'Quarterfinals' });
+    expect(within(qfList).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(screen.getByRole('list', { name: 'Semifinals' })).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(screen.getByRole('list', { name: 'Final' })).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(qfList).getByRole('group', { name: 'Quarterfinal, your match' })).toBeTruthy();
+    expect(within(qfList).getByRole('group', { name: 'Quarterfinal 2' })).toBeTruthy();
+  });
+
+  const badge = (name: string) => within(screen.getByRole('group', { name })).getByText(/Ready|Complete|Fritz advanced|Forfeit|Waiting|Upcoming|Live/).textContent;
+
+  it('every card says its state in words: how it ended, Complete, Waiting', () => {
+    renderBracket(tree(QF_DONE), { tournamentPhase: 'eliminated' });
+    expect(badge('Quarterfinal, your match')).toBe('Complete');
+    expect(badge('Quarterfinal 2')).toBe('Fritz advanced');
+    expect(badge('Quarterfinal 3')).toBe('Forfeit');
+    expect(badge('Semifinal 1')).toBe('Waiting');
+    expect(badge('Final')).toBe('Waiting');
+  });
+
+  it('while the player is still in, other matches\' results stay hidden: their cards say Upcoming, not how they ended', () => {
+    renderBracket(tree());
+    expect(badge('Quarterfinal, your match')).toBe('Ready');
+    expect(badge('Quarterfinal 2')).toBe('Upcoming');
+    expect(badge('Quarterfinal 3')).toBe('Upcoming');
+  });
+
+  it('a played match says Complete, a live one says Live', () => {
+    const played = match('qf1', 1, 1, ME, bot(2), { status: 'completed', winner_id: ME, outcomeKind: 'played', player1_score: 30, player2_score: 11 });
+    const live = match('qf2', 1, 2, 'ana', 'long', { status: 'in_progress' });
+    renderBracket([played, live, ...SF, FIN], { tournamentPhase: 'in_match' });
+    expect(within(screen.getByRole('group', { name: 'Quarterfinal, your match' })).getByText('Complete')).toBeTruthy();
+    expect(within(screen.getByRole('group', { name: 'Quarterfinal 2' })).getByText('Live')).toBeTruthy();
+  });
+
+  it('lights the line out of a decided match and not out of an undecided one', () => {
+    renderBracket(tree(QF_DONE), { tournamentPhase: 'eliminated' });
+    const slot = (name: string) => screen.getByRole('group', { name }).closest('li') as HTMLElement;
+    expect(slot('Quarterfinal, your match').className).toContain('tb-mslot--decided');
+    // The viewer lost that one: lit, but not in the viewer's colour.
+    expect(slot('Quarterfinal, your match').className).not.toContain('tb-mslot--you');
+    expect(slot('Quarterfinal 2').className).toContain('tb-mslot--decided');
+    expect(slot('Quarterfinal 3').className).toContain('tb-mslot--decided');
+    // Pairs share the join: first match draws the lower half, second the upper half.
+    expect(slot('Quarterfinal, your match').className).toContain('tb-mslot--join-down');
+    expect(slot('Quarterfinal 2').className).toContain('tb-mslot--join-up');
+    // Semifinal 1 is fed by QF1 + QF2, Semifinal 2 by QF3 (+ QF4): both have a decided feeder. The Final has none yet.
+    expect(slot('Semifinal 1').className).toContain('tb-mslot--fed');
+    expect(slot('Semifinal 2').className).toContain('tb-mslot--fed');
+    expect(slot('Final').className).not.toContain('tb-mslot--fed');
+  });
+
+  it('a result the reveal rule is hiding does not light its line', () => {
+    renderBracket(tree());
+    const slot = (name: string) => screen.getByRole('group', { name }).closest('li') as HTMLElement;
+    expect(slot('Quarterfinal 2').className).not.toContain('tb-mslot--decided');
+    expect(slot('Semifinal 1').className).not.toContain('tb-mslot--fed');
+  });
+
+  it('the viewer\'s own advance is the viewer-coloured line', () => {
+    const won = match('qf1', 1, 1, ME, bot(2), { status: 'completed', winner_id: ME, outcomeKind: 'played', player1_score: 30, player2_score: 11 });
+    renderBracket([won, QF[1], QF[2], ...SF, FIN], { tournamentPhase: 'bracket_lobby' });
+    const slot = (name: string) => screen.getByRole('group', { name }).closest('li') as HTMLElement;
+    expect(slot('Quarterfinal, your match').className).toContain('tb-mslot--you');
+    expect(slot('Quarterfinal 2').className).not.toContain('tb-mslot--you');
+    expect(slot('Semifinal 1').className).toContain('tb-mslot--fed-you');
+    expect(slot('Semifinal 2').className).not.toContain('tb-mslot--fed-you');
+  });
+
+  it('the player who did not advance is marked in words for a screen reader, and the winner by a Won chip', () => {
+    renderBracket(QF_DONE, { tournamentPhase: 'eliminated' });
+    const mine = screen.getByRole('group', { name: 'Quarterfinal, your match' });
+    const rows = mine.querySelectorAll('.tb-slot');
+    expect(rows[0].className).toContain('tb-slot--out');
+    expect(rows[0].textContent).toContain('did not advance');
+    expect(within(rows[0] as HTMLElement).queryByText('Won')).toBeNull();
+    expect(rows[1].className).toContain('tb-slot--won');
+    expect(within(rows[1] as HTMLElement).getByText('Won')).toBeTruthy();
+  });
+
+  it('shows a registration seed beside a human name, and none for Fritz or an unseeded player', () => {
+    const view = bracketView(QF);
+    renderBracket(QF, { bracket: { ...view, registrations: [{ ...reg(ME, 'me'), seed: 1 }, { ...reg('ana', 'ana'), seed: 4 }, reg('long', LONG)] } });
+    const seeds = [...document.querySelectorAll('.tb-slot__seed')].map((el) => el.textContent);
+    expect(seeds).toEqual(['Seed 1', 'Seed 4']);
+  });
+
+  it('the champion slot is filled and highlighted once the Final has a winner, and empty before', () => {
+    renderBracket(tree());
+    expect(document.querySelector('.tb-champion-card')?.className).not.toContain('is-decided');
+    cleanup();
+    const fin = match('f', 3, 1, 'ana', bot(7), { status: 'completed', winner_id: bot(7), bot_tier: 'master', outcomeKind: 'played', player1_score: 20, player2_score: 30 });
+    renderBracket([...QF_DONE, ...SF, fin], { tournamentPhase: 'eliminated' });
+    expect(document.querySelector('.tb-champion-card')?.className).toContain('is-decided');
+    expect(document.querySelector('.tb-champion-card')?.closest('.tb-mslot')?.className).toContain('tb-mslot--fed');
+  });
+});
+
 describe('result screen', () => {
   const my = (outcome: MyTournament['myLastMatch']): MyTournament[] => [{
     ...bracketView([]).tournament, status: 'completed', myRegistration: { status: 'eliminated', placement: 3, placementLabel: '3rd', seed: 2 }, myLastMatch: outcome,
@@ -200,6 +304,42 @@ describe('result screen', () => {
     act(() => { vi.setSystemTime(NOW + 9 * 3_600_000); });
     act(() => { mono += 60_000; vi.advanceTimersByTime(60_000); });
     expect(document.body.textContent).toContain('in 2h 13m');
+  });
+
+  it('the headline is the page heading, and the result actions are real buttons from the primitive', () => {
+    const props = renderResult({ onViewBracket: vi.fn() }, { matchId: 'sf', round: 2, won: false, outcomeKind: 'played', opponentId: bot(5), opponentBotTier: 'elite' });
+    expect(screen.getByRole('heading', { level: 1, name: 'Eliminated in the Semifinal' })).toBeTruthy();
+    const back = screen.getByRole('button', { name: 'Return to Tournament' });
+    // A tier variant of the Button primitive (matte, tokens), not a bespoke gradient button.
+    expect(back.className).toContain('rh-btn');
+    expect(back.className).toContain('rh-btn--tier-elite');
+    fireEvent.click(back);
+    expect(props.onNextTournament).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the finished bracket, and only when there is one to open', () => {
+    const props = renderResult({ onViewBracket: vi.fn() });
+    fireEvent.click(screen.getByRole('button', { name: 'View Bracket' }));
+    expect(props.onViewBracket).toHaveBeenCalledTimes(1);
+    cleanup();
+    renderResult();
+    expect(screen.queryByRole('button', { name: 'View Bracket' })).toBeNull();
+  });
+
+  it('with a match to join, Join is the main action and Return steps back', () => {
+    const assigned = { matchId: 'sf1', tournamentId: T, round: 2 as const, matchNumber: 1, roomCode: 'R', opponentId: null, opponentUsername: null, matchStatus: 'ready' as const, readyDeadlineAt: null };
+    renderResult({ onViewBracket: vi.fn() }, null, assigned as never);
+    expect(screen.getByRole('button', { name: 'Join Semifinal' }).className).toContain('rh-btn--tier-standard');
+    expect(screen.getByRole('button', { name: 'Return to Tournament' }).className).toContain('rh-btn--outline');
+  });
+
+  it('the three result records share one structure: label, value, note', () => {
+    renderResult();
+    const stats = [...document.querySelectorAll('.tr-stat')];
+    expect(stats).toHaveLength(3);
+    for (const stat of stats) {
+      expect([...stat.children].map((el) => el.className)).toEqual(['tr-stat__label', 'tr-stat__value', 'tr-stat__sub']);
+    }
   });
 
   it('a ready next match is offered, never joined', () => {
