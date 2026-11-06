@@ -23,6 +23,7 @@ import { getAuthenticatedUserId } from '../platform/auth/supabaseAuth';
 import { SupabaseCheckpointStore } from './supabaseCheckpointStore';
 import { ReviewSearchRunner } from './reviewSearchRunner';
 import { config } from '../config';
+import { isReviewSweepEnabled } from './reviewSweepFlag';
 
 const log = childLogger('review-completion');
 
@@ -372,15 +373,8 @@ export function notePeriodicSweep(now: number, ran: number): void {
   lastPeriodicSweepIdle = ran === 0;
 }
 
-/**
- * Kill switch (#318, kept by the worker-isolation fix). Off unless
- * REVIEW_SWEEP_ENABLED is exactly "true". Off means no periodic sweep and no
- * kick on enqueue; jobs are still accepted and stay queued until the sweep is
- * turned back on.
- */
-export function isReviewSweepEnabled(): boolean {
-  return process.env.REVIEW_SWEEP_ENABLED === 'true';
-}
+// The kill switch lives in reviewSweepFlag.ts so /health can report it; re-exported for existing importers.
+export { isReviewSweepEnabled };
 
 export function scheduleReviewCompletionSweep(): void {
   if (!isReviewSweepEnabled()) {
@@ -464,6 +458,10 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       });
       const forced = job.decisions.filter((d) => d.lifecycle === 'FORCED').length;
       const scored = job.decisions.filter((d) => d.lifecycle === 'SCORED').length;
+      // A player just finished a game and will be told "Review unavailable": make the cause findable in the logs, not only in the player's screen.
+      if (!isReviewSweepEnabled()) {
+        log.warn({ jobId: job.jobId, decisions: job.expectedDecisionIds.length }, 'review job accepted while the sweep is DISABLED (REVIEW_SWEEP_ENABLED is not "true"); the player will see Review unavailable');
+      }
       res.status(202).json({
         jobId: job.jobId,
         status: job.status,
@@ -503,6 +501,8 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
       // Terminal for the client: the job failed, or the sweep is switched off
       // so nothing will advance it. The client stops polling and says so.
       unavailable: !complete && (job.status === 'failed_fatal' || !isReviewSweepEnabled()),
+      // Why, so the client can say "switched off, nothing is wrong with your game" instead of "this job failed" and only offer Analyze again for the latter.
+      unavailableReason: complete ? null : job.status === 'failed_fatal' ? 'failed' : !isReviewSweepEnabled() ? 'sweep_disabled' : null,
       progress: {
         total: job.expectedDecisionIds.length,
         forced,

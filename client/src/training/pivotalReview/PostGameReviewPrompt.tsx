@@ -4,8 +4,11 @@ import {
   formatDecisionAccountingSummary,
   type PlayerDecisionLedgerSummary,
 } from '../../modules/review/reviewDecisionAccounting';
+import type { ReviewUnavailableReason } from '../../modules/review/reviewCompletionClient';
 import '../../styles/dossierRecord.css';
 import './postGameReviewPrompt.css';
+
+const SWITCHED_OFF_NOTE = "Game review is switched off right now, so this game couldn't be analyzed. Nothing is wrong with your game.";
 
 export type PostGameReviewAccent = 'gold' | 'blue';
 
@@ -32,6 +35,8 @@ export type PostGameReviewPromptProps = {
   accuracyModelPending: boolean;
   /** The server will not finish this review; show that instead of Analyzing. */
   reviewUnavailable?: boolean;
+  /** `sweep_disabled`: the server's review is switched off, so retrying cannot help and is not offered. Anything else keeps Analyze again. */
+  reviewUnavailableReason?: ReviewUnavailableReason | null;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
   /** Re-run an analysis the server gave up on. Only offered while `reviewUnavailable`. */
   onRetryReview?: () => void;
@@ -105,13 +110,18 @@ export function PostGameReviewPrompt({
   analysis,
   accuracyModelPending,
   reviewUnavailable = false,
+  reviewUnavailableReason = null,
   decisionLedger = null,
-  onRetryReview,
+  onRetryReview: retryHandler,
   reviewRetryState = 'idle',
   onReviewGame,
   onSkip,
 }: PostGameReviewPromptProps) {
   if (!open) return null;
+
+  const switchedOff = reviewUnavailable && reviewUnavailableReason === 'sweep_disabled';
+  // Retrying a review the server has switched off would only land back here.
+  const onRetryReview = switchedOff ? undefined : retryHandler;
 
   const margin = Math.abs(youScore - opponentScore);
   const marginTone = won === true ? 'is-win' : won === false ? 'is-loss' : '';
@@ -170,6 +180,7 @@ export function PostGameReviewPrompt({
             </dl>
 
             {coverageText ? <p className="pgr-coverage-note">{coverageText}</p> : null}
+            {switchedOff ? <p className="pgr-coverage-note" role="status">{SWITCHED_OFF_NOTE}</p> : null}
             {reviewUnavailable && onRetryReview ? (
               <p className="pgr-coverage-note" role="status">{RETRY_NOTE[reviewRetryState]}</p>
             ) : null}
