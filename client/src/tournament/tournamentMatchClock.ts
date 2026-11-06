@@ -146,6 +146,45 @@ export function useTournamentClockRecovery(params: {
   }, [active, current, deadlineAt]);
 }
 
+/** How long the clock may name the player while the match view does not, before the room state is requested. */
+export const TOURNAMENT_VIEW_DESYNC_GRACE_MS = 1_500;
+
+/**
+ * The clock and the match state are separate client stores. If the clock says it is the player's turn and the match view still says it is not
+ * (the state lagging or dropped), the hand stays dimmed until the deadline passes. Held for a short grace (a state update may be in flight),
+ * ask the existing state-recovery path once per deadline; the answer is the server's own state and moves. Never plays or passes anything.
+ */
+export function useTournamentViewDesyncRecovery(params: {
+  roomCode: string | null | undefined;
+  active: boolean;
+  /** Whether the match view (the hand, the board) believes it is the local player's turn. */
+  viewIsMyTurn: boolean;
+  /** The local player's seat id (the clock names seats). */
+  you: string;
+  requestState: (reason: string) => void;
+}): void {
+  const { roomCode, active, viewIsMyTurn, you } = params;
+  const requestRef = useRef(params.requestState);
+  useEffect(() => {
+    requestRef.current = params.requestState;
+  });
+  const current = useTournamentMatchClock(active ? roomCode : null);
+  const clock = current?.clock ?? null;
+  const clockNamesMe = clock?.kind === 'turn' && clock.seatId === you;
+  const deadlineAt = clockNamesMe ? clock.deadlineAt : null;
+  const askedForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!active || !deadlineAt || viewIsMyTurn) return;
+    if (askedForRef.current === deadlineAt) return;
+    const timer = setTimeout(() => {
+      askedForRef.current = deadlineAt;
+      requestRef.current('tournament_clock_view_desync');
+    }, TOURNAMENT_VIEW_DESYNC_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [active, deadlineAt, viewIsMyTurn]);
+}
+
 export function resetTournamentMatchClockForTests(): void {
   snapshot = null;
   emit();
