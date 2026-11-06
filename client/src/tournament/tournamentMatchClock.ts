@@ -6,6 +6,13 @@
  */
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { estimatedServerNowMs, observeTournamentPush } from './tournamentClock';
+import {
+  INITIAL_DESYNC_STATE,
+  reduceViewDesync,
+  TOURNAMENT_VIEW_DESYNC_GRACE_MS,
+  type DesyncEvent,
+  type DesyncState,
+} from './tournamentViewDesyncMachine';
 
 export type TournamentClockState =
   | {
@@ -146,13 +153,12 @@ export function useTournamentClockRecovery(params: {
   }, [active, current, deadlineAt]);
 }
 
-/** How long the clock may name the player while the match view does not, before the room state is requested. */
-export const TOURNAMENT_VIEW_DESYNC_GRACE_MS = 1_500;
+export { TOURNAMENT_VIEW_DESYNC_GRACE_MS };
 
 /**
  * The clock and the match state are separate client stores. If the clock says it is the player's turn and the match view still says it is not
- * (the state lagging or dropped), the hand stays dimmed until the deadline passes. Held for a short grace (a state update may be in flight),
- * ask the existing state-recovery path once per deadline; the answer is the server's own state and moves. Never plays or passes anything.
+ * (the state lagging or dropped), the hand stays dimmed until the deadline passes. The decision (held for a short grace, ask once per
+ * deadline) is tournamentViewDesyncMachine's; this runs its timer and asks the existing state-recovery path. Never plays or passes anything.
  */
 export function useTournamentViewDesyncRecovery(params: {
   roomCode: string | null | undefined;
@@ -172,17 +178,42 @@ export function useTournamentViewDesyncRecovery(params: {
   const clock = current?.clock ?? null;
   const clockNamesMe = clock?.kind === 'turn' && clock.seatId === you;
   const deadlineAt = clockNamesMe ? clock.deadlineAt : null;
-  const askedForRef = useRef<string | null>(null);
+
+  const machineRef = useRef<DesyncState>(INITIAL_DESYNC_STATE);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dispatchRef = useRef<(event: DesyncEvent) => void>(() => undefined);
+  const dispatch = (event: DesyncEvent) => {
+    const step = reduceViewDesync(machineRef.current, event);
+    machineRef.current = step.state;
+    for (const effect of step.effects) {
+      if (effect.type === 'cancelTimer') {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = null;
+      } else if (effect.type === 'armTimer') {
+        timerRef.current = setTimeout(() => {
+          timerRef.current = null;
+          dispatchRef.current({ type: 'timerFired', deadline: effect.deadline });
+        }, effect.delayMs);
+      } else {
+        requestRef.current(effect.reason);
+      }
+    }
+  };
+  useEffect(() => {
+    dispatchRef.current = dispatch;
+  });
 
   useEffect(() => {
-    if (!active || !deadlineAt || viewIsMyTurn) return;
-    if (askedForRef.current === deadlineAt) return;
-    const timer = setTimeout(() => {
-      askedForRef.current = deadlineAt;
-      requestRef.current('tournament_clock_view_desync');
-    }, TOURNAMENT_VIEW_DESYNC_GRACE_MS);
-    return () => clearTimeout(timer);
+    dispatchRef.current({ type: 'input', input: { active, clockNamesMeDeadline: deadlineAt, viewIsMyTurn } });
   }, [active, deadlineAt, viewIsMyTurn]);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = null;
+    },
+    [],
+  );
 }
 
 export function resetTournamentMatchClockForTests(): void {

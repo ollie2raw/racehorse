@@ -1,5 +1,5 @@
 {
-  "total": 3515915,
+  "total": 3522879,
   "chunks": {
     "ActivityFeedLobbyBridge": 34071,
     "analyzer": 96133,
@@ -19,12 +19,12 @@
     "GuidedMatchSourceEditor": 11234,
     "HistoricalGameReviewPortal": 25252,
     "HomeScreen": 41496,
-    "index": 579420,
+    "index": 586398,
     "LearnHome": 14968,
     "LearnHowToPlayRacehorse": 36075,
     "LegalScreen": 20615,
     "lesson-v2": 35525,
-    "LiveMatchScreen": 37835,
+    "LiveMatchScreen": 37821,
     "LiveNowScreen": 10045,
     "MatchFoundOverlay": 13932,
     "MatchmakingScreen": 23517,
