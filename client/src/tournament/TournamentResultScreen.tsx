@@ -1,3 +1,4 @@
+import { Button } from '../components/primitives';
 import type { TournamentPlayerDisplay } from './displayNames';
 import { tournamentStageShortLabel } from './displayNames';
 import type { MatchOutcomeCopy } from './tournamentOutcomeCopy';
@@ -22,19 +23,16 @@ export interface TournamentResultScreenProps {
   timeZone?: string;
   onRetry?: () => void;
   onNextTournament: () => void;
+  /** The finished bracket, every match and score. Omitted where there is no bracket to open. */
+  onViewBracket?: () => void;
 }
 
-/** "Today · 8:00 PM · in 2h 14m" — server time, never the device clock. */
-function NextEventValue({ startIso, timeZone }: { startIso: string; timeZone?: string }) {
-  const now = useTournamentNow(1000, true);
+/** "Today · 8:00 PM" and, while it is ahead, "in 2h 14m" — server time, never the device clock. */
+function useNextEvent(startIso: string | null | undefined, timeZone?: string): { when: string; countdown: string | null } | null {
+  const now = useTournamentNow(1000, Boolean(startIso));
+  if (!startIso) return null;
   const ms = Date.parse(startIso) - now;
-  const when = formatEventWhen(startIso, now, { timeZone });
-  return (
-    <>
-      {when}
-      {ms > 0 ? <span className="tr-stat__sub">in {formatCountdown(ms)}</span> : null}
-    </>
-  );
+  return { when: formatEventWhen(startIso, now, { timeZone }), countdown: ms > 0 ? `in ${formatCountdown(ms)}` : null };
 }
 
 export default function TournamentResultScreen(props: TournamentResultScreenProps) {
@@ -56,11 +54,12 @@ export default function TournamentResultScreen(props: TournamentResultScreenProp
           ? `You finished ${props.yourPlacement}.`
           : 'The bracket is complete.';
   const champion = props.champion;
+  const nextEvent = useNextEvent(props.nextEventStart, props.timeZone);
+  const canJoin = Boolean(props.nextMatch && props.onJoinNextMatch);
 
   return (
     <div className="tr-page">
       <div className="tr-shell">
-        <span className="tr-kicker">Tournament Complete</span>
         {props.isLoading ? (
           <div className="tr-card tr-card--loading" role="status" aria-live="polite">
             <div className="tr-spinner" aria-hidden />
@@ -71,45 +70,60 @@ export default function TournamentResultScreen(props: TournamentResultScreenProp
             <h1 className="tr-champion-title">Result unavailable</h1>
             <p className="tr-subcopy">{props.error}</p>
             {props.onRetry ? (
-              <button className="tr-back" onClick={props.onRetry}>Retry</button>
+              <Button variant="tier-elite" size="lg" className="tr-action" onClick={props.onRetry}>Retry</Button>
             ) : null}
           </div>
         ) : (
-          <div className="tr-card">
-            <h1 className="tr-champion-title">{resultTitle}</h1>
-            <p className="tr-subcopy">{resultCopy}</p>
+          <main className="tr-layout">
+            <section className="tr-hero" aria-labelledby="tr-result-title">
+              <span className="tr-kicker">Tournament Complete</span>
+              <h1 className="tr-champion-title" id="tr-result-title">{resultTitle}</h1>
+              <p className="tr-subcopy">{resultCopy}</p>
+              <div className="tr-actions">
+                {canJoin ? (
+                  <Button
+                    variant="tier-standard"
+                    size="lg"
+                    className="tr-action"
+                    disabled={props.joining}
+                    aria-busy={props.joining}
+                    onClick={() => props.onJoinNextMatch!(props.nextMatch!.matchId)}
+                  >
+                    {props.joining ? 'Joining…' : `Join ${tournamentStageShortLabel(props.nextMatch!.round)}`}
+                  </Button>
+                ) : null}
+                <Button variant={canJoin ? 'outline' : 'tier-elite'} size="lg" className="tr-action" onClick={props.onNextTournament}>
+                  Return to Tournament
+                </Button>
+                {props.onViewBracket ? (
+                  <Button variant="outline" size="lg" className="tr-action" onClick={props.onViewBracket}>
+                    View Bracket
+                  </Button>
+                ) : null}
+              </div>
+            </section>
+
             <div className="tr-stats" aria-label="Tournament result summary">
               <div className="tr-stat tr-stat--gold">
-                <span>Champion</span>
-                <strong>
+                <span className="tr-stat__label">Champion</span>
+                <strong className="tr-stat__value">
                   {champion?.label ?? 'TBD'}
                   {champion?.badgeLabel ? <span className="tr-chip">{champion.badgeLabel}</span> : null}
                 </strong>
+                <span className="tr-stat__sub" />
               </div>
               <div className={`tr-stat ${isChampion ? 'tr-stat--gold' : isRunnerUp ? 'tr-stat--blue' : ''}`.trim()}>
-                <span>Your Finish</span>
-                <strong>{props.yourPlacement ?? '—'}</strong>
+                <span className="tr-stat__label">Your Finish</span>
+                <strong className="tr-stat__value">{props.yourPlacement ?? '—'}</strong>
+                <span className="tr-stat__sub" />
               </div>
               <div className="tr-stat tr-stat--blue">
-                <span>Next Live Event</span>
-                <strong>
-                  {props.nextEventStart ? <NextEventValue startIso={props.nextEventStart} timeZone={props.timeZone} /> : 'Not scheduled yet'}
-                </strong>
+                <span className="tr-stat__label">Next Live Event</span>
+                <strong className="tr-stat__value">{nextEvent ? nextEvent.when : 'Not scheduled yet'}</strong>
+                <span className="tr-stat__sub">{nextEvent?.countdown ?? ''}</span>
               </div>
             </div>
-            {props.nextMatch && props.onJoinNextMatch ? (
-              <button
-                className="tr-back tr-join"
-                type="button"
-                disabled={props.joining}
-                aria-busy={props.joining}
-                onClick={() => props.onJoinNextMatch!(props.nextMatch!.matchId)}
-              >
-                {props.joining ? 'Joining…' : `Join ${tournamentStageShortLabel(props.nextMatch.round)}`}
-              </button>
-            ) : null}
-            <button className="tr-back" onClick={props.onNextTournament}>Return to Tournament</button>
-          </div>
+          </main>
         )}
       </div>
     </div>

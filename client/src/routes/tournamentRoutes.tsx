@@ -198,6 +198,7 @@ export function TournamentRoute({
             setActiveTournamentId(null);
             setTournamentResult(null);
           }}
+          onViewBracket={() => enterTournamentLobby(activeTournamentId)}
         />
         </ErrorBoundary>
       </Suspense>,
