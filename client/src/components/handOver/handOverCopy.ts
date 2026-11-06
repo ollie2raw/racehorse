@@ -70,9 +70,9 @@ export function buildRemainingTilesEvidenceNote(reveal: HandOverTileReveal): str
 }
 
 /**
- * The winner to *show* for a finished hand. Engine `winner` comes from the
- * score deltas, so going out against a hand whose pips round down to 0 comes
- * back as null — but the player who emptied their hand still won it.
+ * The winner to *show* for a finished hand. The engine's `winner` is read from
+ * the hands and the rules (gameCoreAdapter.handEndDetails); this still falls
+ * back to whoever emptied their hand when a reveal arrives without one.
  */
 export function resolveBotHandDisplayWinner(handReveal: {
   winner: 'you' | 'bot' | null;
