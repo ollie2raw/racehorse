@@ -41,6 +41,7 @@ const RULES: Array<{ name: string; token: RegExp; allowed: string[]; why: string
       'packages/review-engine/src/index.ts', // its export
       'server/src/reviewCompletion/reviewCompletionWorker.ts', // returned to the job's OWNER on the review read, nothing else
       'client/scripts/summarizeReviewedMoveQualityDifferential.mjs', // offline audit summary of exported rows; no server access
+      'packages/review-engine/src/devtools/measureMainThreadCosts.ts', // offline timing of the owner-only derivation and the poll payload (milliseconds and sizes only); persists, ranks and shares nothing
     ],
     why: 'it is owner-only: its played action is client-asserted',
   },

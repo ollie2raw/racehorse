@@ -35,11 +35,30 @@ export class ReviewSearchWorkerExited extends Error {
   }
 }
 
+/** What the worker thread measured about the decision it just ran (its own wall time, thread CPU when Node can tell, its heap against its cap). */
+export type ReviewWorkerMetrics = {
+  readonly wallMs: number;
+  readonly threadCpuMs: number | null;
+  readonly heapUsedMb: number;
+  readonly heapLimitMb: number;
+};
+
+/** The one-time CPU benchmark the worker runs on a fixed position (see reviewSearchWorker.cjs). */
+export type ReviewCpuBenchmark = {
+  readonly snapshotId: string;
+  readonly runs: number;
+  readonly medianMs: number;
+  readonly minMs: number;
+  readonly maxMs: number;
+  readonly totalMs: number;
+  readonly cpuMs: number | null;
+};
+
 type Pending = {
   readonly id: number;
   /** The worker serving this request; events from any other worker are stale. */
   readonly worker: Worker;
-  readonly resolve: (result: EvaluateResult) => void;
+  readonly resolve: (result: unknown) => void;
   readonly reject: (error: Error) => void;
   readonly timer: ReturnType<typeof setTimeout>;
 };
@@ -49,6 +68,13 @@ export class ReviewSearchRunner {
   private pending: Pending | null = null;
   private queue: Promise<unknown> = Promise.resolve();
   private nextId = 1;
+  /** What the worker measured about the most recent decision it finished (calls are serialized, so this is that decision's). */
+  lastMetrics: ReviewWorkerMetrics | null = null;
+  /** Workers that exited or errored since this runner was created, and how many of those were out-of-memory. */
+  workerRestarts = 0;
+  workerOomCount = 0;
+  /** How long the most recent worker thread took from spawn to its first JavaScript (cold start of the search thread), ms. */
+  workerOnlineMs: number | null = null;
   private readonly workerPath: string;
   private readonly timeoutMs: number;
   private readonly resourceLimits: ResourceLimits;
@@ -70,6 +96,13 @@ export class ReviewSearchRunner {
     return run;
   }
 
+  /** Run the fixed-position CPU benchmark in the worker thread (serialized with evaluations, so call it while no job is active). */
+  benchmark(runs = 20): Promise<ReviewCpuBenchmark> {
+    const run = this.queue.then(() => this.benchmarkNow(runs));
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
   /** Stop the position in flight (e.g. the lease was lost). */
   abort(reason = 'review search aborted'): void {
     this.failPending(new ReviewSearchWorkerExited(reason));
@@ -79,6 +112,20 @@ export class ReviewSearchRunner {
   async close(): Promise<void> {
     this.failPending(new ReviewSearchWorkerExited('review search runner closed'));
     await this.killWorker();
+  }
+
+  private benchmarkNow(runs: number): Promise<ReviewCpuBenchmark> {
+    const worker = this.ensureWorker();
+    const id = this.nextId++;
+    return new Promise<ReviewCpuBenchmark>((resolve, reject) => {
+      // Generous: 20 runs of a ~100-sample position even at 0.1 vCPU stay well inside this.
+      const timer = setTimeout(() => {
+        this.failPending(new ReviewPositionBudgetExceeded('review cpu benchmark exceeded its time limit'));
+        void this.killWorker();
+      }, 120_000);
+      this.pending = { id, worker, resolve: resolve as (value: unknown) => void, reject, timer };
+      worker.postMessage({ type: 'benchmark', id, runs });
+    });
   }
 
   private evaluateNow(snapshot: ReviewPositionSnapshotV2, options: EvaluateOptions): Promise<EvaluateResult> {
@@ -95,29 +142,35 @@ export class ReviewSearchRunner {
         ));
         void this.killWorker();
       }, this.timeoutMs);
-      this.pending = { id, worker, resolve, reject, timer };
+      this.pending = { id, worker, resolve: resolve as (value: unknown) => void, reject, timer };
       worker.postMessage({ id, snapshot, options: transferable });
     });
   }
 
   private ensureWorker(): Worker {
     if (this.worker) return this.worker;
+    const spawnedAt = performance.now();
     const worker = new Worker(this.workerPath, { resourceLimits: this.resourceLimits });
     worker.unref();
-    worker.on('message', (message: { id: number; ok: boolean; result?: EvaluateResult; error?: string }) => {
+    worker.once('online', () => { this.workerOnlineMs = Math.round(performance.now() - spawnedAt); });
+    worker.on('message', (message: { id: number; ok: boolean; result?: EvaluateResult; metrics?: ReviewWorkerMetrics; benchmark?: ReviewCpuBenchmark; error?: string }) => {
       const pending = this.pending;
       if (!pending || pending.id !== message.id) return;
       this.pending = null;
       clearTimeout(pending.timer);
-      if (message.ok) pending.resolve(message.result as EvaluateResult);
+      if (message.metrics) this.lastMetrics = message.metrics;
+      if (message.ok) pending.resolve(message.benchmark ?? message.result);
       else pending.reject(new Error(message.error ?? 'review search failed'));
     });
     worker.on('error', (error: Error) => {
+      if ((error as NodeJS.ErrnoException).code === 'ERR_WORKER_OUT_OF_MEMORY') this.workerOomCount += 1;
       log.warn({ err: error }, 'review search worker error');
       if (this.worker === worker) this.worker = null;
       this.failPending(new ReviewSearchWorkerExited(`review search worker error: ${error.message}`), worker);
     });
     worker.on('exit', (code) => {
+      // Every worker lifetime ends here (a timeout kill, a crash, an out-of-memory); a clean close at shutdown is the only expected one.
+      if (code !== 0) this.workerRestarts += 1;
       if (this.worker === worker) this.worker = null;
       // A worker terminated after a timeout exits later; it must not fail the
       // request a fresh worker is already serving.

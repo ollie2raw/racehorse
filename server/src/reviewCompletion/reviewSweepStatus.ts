@@ -7,6 +7,7 @@
  * functions the sweep needs it does not have.
  */
 import { supabaseFetch } from '../supabaseUtils';
+import { getReviewDecisionCost, readCpuThrottle, type CpuThrottle, type ReviewDecisionCostSnapshot } from './reviewDecisionCost';
 
 export type ReviewErrorCode =
   | 'rpc_missing'
@@ -69,14 +70,20 @@ export type ReviewSweepStatus = {
   readonly database: ReviewDatabaseProbe | null;
 };
 
+/** What /health reports: the sweep's own state plus what a decision costs here and whether the container is CPU-throttled. */
+export type ReviewSweepStatusView = ReviewSweepStatus & {
+  readonly decisionCost: ReviewDecisionCostSnapshot;
+  readonly cpuThrottle: CpuThrottle | null;
+};
+
 const empty = (): ReviewSweepStatus => ({
   ticks: 0, lastTickAt: null, lastRan: 0, lastJobId: null, lastErrorCode: null, lastErrorDetail: null, lastErrorAt: null, database: null,
 });
 
 let status: ReviewSweepStatus = empty();
 
-export function getReviewSweepStatus(): ReviewSweepStatus {
-  return status;
+export function getReviewSweepStatus(): ReviewSweepStatusView {
+  return { ...status, decisionCost: getReviewDecisionCost(), cpuThrottle: readCpuThrottle() };
 }
 
 export function resetReviewSweepStatusForTests(): void {

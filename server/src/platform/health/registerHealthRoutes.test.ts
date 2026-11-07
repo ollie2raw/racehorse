@@ -205,4 +205,17 @@ describe('GET /health — reviewSweep', () => {
     expect(JSON.stringify(body.reviewSweepStatus)).not.toContain('secret-ish-text');
     resetReviewSweepStatusForTests();
   });
+
+  // Slow reviews on the free instance: tell an expensive search from a CPU-starved container in one request (per-tier counts, CPU over wall time, cgroup throttle counters).
+  it('reports what a review decision costs here and whether the container is CPU-throttled', async () => {
+    const { noteReviewDecisionCost, resetReviewDecisionCostForTests } = await import('../../reviewCompletion/reviewDecisionCost');
+    resetReviewDecisionCostForTests();
+    noteReviewDecisionCost({ jobId: 'job-9', tier: 2, wallMs: 900, cpuMs: 90, incomplete: false });
+    const body = (await makeHarness()('GET', '/health')).body;
+    expect(body.reviewSweepStatus.decisionCost.sinceBoot).toMatchObject({ decisions: 1, byTier: { '2': 1 }, cpuToWallRatio: 0.1 });
+    expect(body.reviewSweepStatus.decisionCost.lastJob).toMatchObject({ jobId: 'job-9' });
+    // null off Linux or outside a container, an object of counters inside one
+    expect(body.reviewSweepStatus).toHaveProperty('cpuThrottle');
+    resetReviewDecisionCostForTests();
+  });
 });

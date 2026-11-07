@@ -13,6 +13,7 @@ import {
   REVIEW_COMPLETION_DECISION_CONCURRENCY,
   REVIEW_COMPLETION_HEARTBEAT_MS,
   REVIEW_COMPLETION_MAX_ATTEMPTS,
+  WALL_CLOCK_CEILING_DIAGNOSTIC,
   type CheckpointStore,
   type ReviewCompletionJobRecord,
   type RunCompletionPassOptions,
@@ -24,6 +25,14 @@ import { SupabaseCheckpointStore } from './supabaseCheckpointStore';
 import { ReviewSearchRunner } from './reviewSearchRunner';
 import { config } from '../config';
 import { isReviewSweepEnabled } from './reviewSweepFlag';
+import {
+  noteReviewCpuBenchmark,
+  noteReviewDecisionCost,
+  noteReviewJobClaimed,
+  noteReviewJobThrottle,
+  noteReviewWorkerHealth,
+  readCpuThrottle,
+} from './reviewDecisionCost';
 import { jobStage, noteReviewSweepError, noteReviewSweepTick, probeReviewDatabase, getReviewSweepStatus } from './reviewSweepStatus';
 
 const log = childLogger('review-completion');
@@ -255,8 +264,34 @@ function evaluatePositionOffThread(): EvaluatePosition {
   if (evaluatorOverride) return evaluatorOverride;
   searchRunner ??= new ReviewSearchRunner();
   const runner = searchRunner;
-  return (snapshot, options) => runner.evaluate(snapshot, options);
+  return async (snapshot, options) => {
+    // Per-decision cost, so /health can tell an expensive search from a CPU-starved instance (reviewDecisionCost.ts).
+    const startedAt = performance.now();
+    const cpuBefore = process.cpuUsage();
+    const result = await runner.evaluate(snapshot, options);
+    const wallMs = performance.now() - startedAt;
+    const cpu = process.cpuUsage(cpuBefore);
+    const cpuMs = (cpu.user + cpu.system) / 1000;
+    const metrics = runner.lastMetrics;
+    const incomplete = result.evaluation.search.complete === false;
+    const ceilingHit = result.evaluation.diagnostics.includes(WALL_CLOCK_CEILING_DIAGNOSTIC);
+    const tier = result.lifecycle === 'FORCED' ? 'forced' : (result.tier ?? 'none');
+    const samplesSolved = result.evaluation.search.hiddenStateSamples ?? null;
+    noteReviewDecisionCost({
+      jobId: currentPassJobId, tier, wallMs, cpuMs, threadCpuMs: metrics?.threadCpuMs ?? null, samplesSolved, incomplete, ceilingHit, attempt: currentPassAttempt,
+    });
+    noteReviewWorkerHealth({ heapUsedMb: metrics?.heapUsedMb, heapLimitMb: metrics?.heapLimitMb, restarts: runner.workerRestarts, oom: runner.workerOomCount, onlineMs: runner.workerOnlineMs });
+    log.info({
+      jobId: currentPassJobId, attempt: currentPassAttempt, tier, samplesSolved, wallMs: Math.round(wallMs), cpuMs: Math.round(cpuMs),
+      threadCpuMs: metrics?.threadCpuMs != null ? Math.round(metrics.threadCpuMs) : null, workerHeapMb: metrics?.heapUsedMb ?? null, incomplete, ceilingHit,
+    }, 'review decision evaluated');
+    return result;
+  };
 }
+
+/** The job whose pass is running, for attributing decision cost (one search worker, so at most one pass evaluates at a time). */
+let currentPassJobId: string | null = null;
+let currentPassAttempt: number | null = null;
 
 /** Test seam: replace the worker-thread evaluator (null restores it). */
 export function setReviewPositionEvaluatorForTests(next: EvaluatePosition | null): void {
@@ -352,6 +387,10 @@ async function sweepOnce(limit: number): Promise<SweepResult> {
 async function runJobPass(jobId: string, claimToken: string) {
   let heartbeat: ReturnType<typeof setInterval> | null = null;
   let leaseLost = false;
+  currentPassJobId = jobId;
+  currentPassAttempt = null;
+  const throttleBefore = readCpuThrottle();
+  const passStartedAt = performance.now();
   try {
     return await runReviewCompletionPass({
       store,
@@ -364,6 +403,8 @@ async function runJobPass(jobId: string, claimToken: string) {
       evaluatePosition: evaluatePositionOffThread(),
       shouldAbort: () => leaseLost,
       onClaimed: (claimed) => {
+        currentPassAttempt = claimed.attemptCount ?? null;
+        noteReviewJobClaimed(jobId, claimed.createdAt ?? null, currentPassAttempt);
         if (!store.renewLease) return;
         const generation = claimed.claimGeneration ?? 1;
         heartbeat = processInterval('review', () => {
@@ -384,6 +425,8 @@ async function runJobPass(jobId: string, claimToken: string) {
     });
   } finally {
     if (heartbeat) cancelProcessInterval(heartbeat);
+    // The container's CPU throttle counters across this pass: a throttled job says so on /health.
+    noteReviewJobThrottle(jobId, throttleBefore, readCpuThrottle(), performance.now() - passStartedAt);
   }
 }
 
@@ -430,6 +473,7 @@ export function scheduleReviewCompletionSweep(): void {
     }
   }).catch((error) => log.warn({ err: error }, 'review database probe errored'));
   onProcessStop(() => searchRunner?.abort('process shutting down'));
+  scheduleReviewCpuBenchmark();
   sweepTimer = processInterval('review', () => {
     if (!shouldRunPeriodicSweep(Date.now())) return;
     return sweepReviewCompletionJobs()
@@ -439,6 +483,29 @@ export function scheduleReviewCompletionSweep(): void {
       });
   }, REVIEW_COMPLETION_SWEEP_INTERVAL_MS);
   if (typeof sweepTimer.unref === 'function') sweepTimer.unref();
+}
+
+/** About 30 s after boot, once, while no job is active: the fixed-position CPU benchmark, in the worker thread (it cannot stall live sockets). */
+export const REVIEW_CPU_BENCHMARK_DELAY_MS = 30_000;
+const REVIEW_CPU_BENCHMARK_MAX_ATTEMPTS = 6;
+let benchmarkScheduled = false;
+
+function scheduleReviewCpuBenchmark(attempt = 1): void {
+  if (attempt === 1 && benchmarkScheduled) return;
+  benchmarkScheduled = true;
+  const timer = setTimeout(() => {
+    // A job is (or may be) running: wait for the next quiet moment instead of competing with it.
+    if (sweepInFlight) {
+      if (attempt < REVIEW_CPU_BENCHMARK_MAX_ATTEMPTS) scheduleReviewCpuBenchmark(attempt + 1);
+      return;
+    }
+    searchRunner ??= new ReviewSearchRunner();
+    void searchRunner.benchmark(20).then((result) => {
+      noteReviewCpuBenchmark({ ...result, ranAt: Date.now() });
+      log.info({ ...result }, 'review cpu benchmark');
+    }).catch((error) => log.warn({ err: error }, 'review cpu benchmark failed'));
+  }, REVIEW_CPU_BENCHMARK_DELAY_MS);
+  timer.unref?.();
 }
 
 /** Test seam: clear the periodic sweep timer and its idle state. */
