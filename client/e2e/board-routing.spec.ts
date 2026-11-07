@@ -24,10 +24,13 @@ function expectClearOfChrome(g: GeometryReport) {
 
 const LAPTOPS = [
   // viewport, container (1456x756 / 1384x674 / 1224x508), and the routes the
-  // limit resolves to there. Pre-fix every vertical arm was straight (V9 / V12 / V8).
-  { name: '1512x982', width: 1512, height: 982, longUp: 'arm0:V5H4:right', longUpMax: 'arm0:V5H7:right', minScaleLongUp: 0.44 /* pre-fix 0.30 */, minScaleMax: 0.44 /* pre-fix 0.25 */, minScaleBoth: 0.27 /* pre-fix 0.20 */ },
-  { name: '1440x900', width: 1440, height: 900, longUp: 'arm0:V5H4:right', longUpMax: 'arm0:V5H7:right', minScaleLongUp: 0.38 /* pre-fix 0.30 */, minScaleMax: 0.38 /* pre-fix 0.22 */, minScaleBoth: 0.24 /* pre-fix 0.20 */ },
-  { name: '1280x720', width: 1280, height: 720, longUp: 'arm0:V3H6:right', longUpMax: 'arm0:V3H9:right', minScaleLongUp: 0.38 /* pre-fix 0.20 */, minScaleMax: 0.38 /* pre-fix 0.22 (overflowed the container) */, minScaleBoth: 0.26 /* pre-fix 0.20 (overlapped HUD + rack) */ },
+  // limit resolves to there. Pre-fix every vertical arm was straight (V9 / V12 / V8). Desktop-class containers
+  // (>= 900 px wide) then run an arm 5-6 tiles before it turns (boardRouting.WIDE_*): it was V5 / V5 / V3, and a
+  // 1280x720 laptop turned after 3 tiles with a third of the board height unused. The scale floors below are the
+  // measured scales minus a little; they are lower than before because a longer arm makes the whole board taller.
+  { name: '1512x982', width: 1512, height: 982, longUp: 'arm0:V6H3:right', longUpMax: 'arm0:V6H6:right', minScaleLongUp: 0.4 /* was 0.44 */, minScaleMax: 0.4 /* was 0.44 */, minScaleBoth: 0.24 /* was 0.27 */ },
+  { name: '1440x900', width: 1440, height: 900, longUp: 'arm0:V6H3:right', longUpMax: 'arm0:V6H6:right', minScaleLongUp: 0.35 /* was 0.38 */, minScaleMax: 0.35 /* was 0.38 */, minScaleBoth: 0.21 /* was 0.24 */ },
+  { name: '1280x720', width: 1280, height: 720, longUp: 'arm0:V5H4:right', longUpMax: 'arm0:V5H7:right', minScaleLongUp: 0.29 /* was 0.38 at V3 */, minScaleMax: 0.29 /* was 0.38 at V3 */, minScaleBoth: 0.18 /* was 0.26 at V3 */ },
 ] as const;
 
 for (const vp of LAPTOPS) {
@@ -98,11 +101,13 @@ test.describe('short and medium chains stay straight (no overcorrection)', () =>
 test.describe('1280x720 calibration: arm length -> route', () => {
   test.use({ viewport: { width: 1280, height: 720 } });
   const arms = [
+    // Desktop-class container: a 508px board runs 5 tiles straight (it was 3: a third of the height unused).
     { tiles: 2, route: 'arm0:V2' },
     { tiles: 3, route: 'arm0:V3' },
-    { tiles: 4, route: 'arm0:V3H1:right' },
-    { tiles: 5, route: 'arm0:V3H2:right' },
-    { tiles: 8, route: 'arm0:V3H5:right' },
+    { tiles: 4, route: 'arm0:V4' },
+    { tiles: 5, route: 'arm0:V5' },
+    { tiles: 6, route: 'arm0:V5H1:right' },
+    { tiles: 8, route: 'arm0:V5H3:right' },
   ];
   for (const a of arms) {
     test(`${a.tiles}-tile arm`, async ({ page }) => {
@@ -118,18 +123,46 @@ test.describe('1280x720 calibration: arm length -> route', () => {
     expect(routes(await measureBoard(page))).toEqual(['arm0:V3', 'arm1:V3']);
     await openRoutingHarness(page, 'custom=1&up=8&down=8');
     const g = await measureBoard(page);
-    expect(routes(g)).toEqual(['arm0:V3H5:right', 'arm1:V3H5:right']);
+    expect(routes(g)).toEqual(['arm0:V5H3:right', 'arm1:V5H3:right']);
     expectClearOfChrome(g);
+  });
+});
+
+// The owner's report (Nov 7): a vertical arm turned after about 3 tiles on a short desktop window (~1288x676, a board
+// container of about 464px) while a third of the board height sat unused. The arm must run 5+ tiles before it turns,
+// and with both arms long nothing may leave the board area.
+test.describe('a short desktop window runs a vertical arm 5+ tiles before it turns', () => {
+  test.use({ viewport: { width: 1288, height: 676 } });
+
+  test('one long arm', async ({ page }) => {
+    await openRoutingHarness(page, 'custom=1&up=9');
+    const g = await measureBoard(page);
+    expect(g.arms[0].verticalTiles).toBeGreaterThanOrEqual(5);
+    expect(g.arms[0].verticalTiles).toBeLessThanOrEqual(6);
+    expectClearOfChrome(g);
+    expect(g.intersectsExclusion).toEqual([]);
+  });
+
+  test('long arms above and below stay inside the container at a readable scale', async ({ page }) => {
+    await openRoutingHarness(page, 'custom=1&up=8&down=8');
+    const g = await measureBoard(page);
+    expect(g.arms.every((a) => a.verticalTiles >= 5)).toBe(true);
+    expectClearOfChrome(g);
+    expect(g.intersectsExclusion).toEqual([]);
+    // 0.16 is the wide-container camera floor (13.4px tile edge): the board shrinks to stay whole, it never runs off screen.
+    expect(g.cameraScale).toBeGreaterThanOrEqual(0.16);
+    expect(g.boardBox!.top).toBeGreaterThanOrEqual(g.container.top);
+    expect(g.boardBox!.bottom).toBeLessThanOrEqual(g.container.top + g.container.height);
   });
 });
 
 test.describe('doubles never become the corner (real browser)', () => {
   test.use({ viewport: { width: 1280, height: 720 } });
-  // At 1280x720 an ordinary tile would turn at arm index 3.
+  // At 1280x720 an ordinary tile now turns at arm index 5 (it was 3 before desktop-class routing, boardRouting.WIDE_*).
   const cases = [
-    { name: 'double exactly at the turn: laid across the arm, turn waits two tiles', query: 'custom=1&up=9&upDouble=3', route: 'arm0:V5H4:right' },
-    { name: 'double just before the threshold defers the same way', query: 'custom=1&up=9&upDouble=2', route: 'arm0:V4H5:right' },
-    { name: 'no double: turns at the threshold', query: 'custom=1&up=9', route: 'arm0:V3H6:right' },
+    { name: 'double exactly at the turn: laid across the arm, turn waits two tiles', query: 'custom=1&up=9&upDouble=5', route: 'arm0:V7H2:right' },
+    { name: 'double just before the threshold defers the same way', query: 'custom=1&up=9&upDouble=4', route: 'arm0:V6H3:right' },
+    { name: 'no double: turns at the threshold', query: 'custom=1&up=9', route: 'arm0:V5H4:right' },
   ];
   for (const c of cases) {
     test(c.name, async ({ page }) => {
@@ -165,7 +198,7 @@ test.describe('routing is stable', () => {
   test('a small resize does not re-route; a large one does, and coming back restores it exactly', async ({ page }) => {
     await openRoutingHarness(page, 'fixture=longUpMax');
     const start = await measureBoard(page);
-    expect(routes(start)).toEqual(['arm0:V5H7:right']);
+    expect(routes(start)).toEqual(['arm0:V6H6:right']);
 
     await page.setViewportSize({ width: 1512, height: 990 });
     await waitForStableCamera(page);
@@ -174,7 +207,7 @@ test.describe('routing is stable', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await waitForStableCamera(page);
     const small = await measureBoard(page);
-    expect(routes(small)).toEqual(['arm0:V3H9:right']);
+    expect(routes(small)).toEqual(['arm0:V5H7:right']);
     expectClearOfChrome(small);
 
     await page.setViewportSize({ width: 1512, height: 982 });
@@ -219,8 +252,9 @@ test.describe('zoom, pan and home do not fight the routing', () => {
   test('the fit scale is a safety net, not the fix: the routed board is much larger than the straight one was', async ({ page }) => {
     await openRoutingHarness(page, 'fixture=longUpMax');
     const g = await measureBoard(page);
-    // Pre-fix at this viewport: scale 0.25 with the arm running 585px of the 756px container.
-    expect(g.cameraScale).toBeGreaterThan(0.25 * 1.7);
+    // Pre-fix at this viewport: scale 0.25 with the arm running 585px of the 756px container. (1.7x before the
+    // arm was allowed 6 tiles instead of 5; the longer arm costs a little scale and gains a straighter board.)
+    expect(g.cameraScale).toBeGreaterThan(0.25 * 1.6);
     expect(g.boardBox!.height).toBeLessThan(g.container.height * 0.7);
   });
 });

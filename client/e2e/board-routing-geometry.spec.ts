@@ -15,6 +15,8 @@ const DESKTOP = [
   { name: '1512x982', width: 1512, height: 982 },
   { name: '1440x900', width: 1440, height: 900 },
   { name: '1280x720', width: 1280, height: 720 },
+  { name: '1366x768', width: 1366, height: 768 },
+  { name: '1024x768', width: 1024, height: 768 },
 ] as const;
 // The harness collapses the board container below ~800px wide (it lacks the
 // standard-live-board shell classes), so narrower phones are covered by the

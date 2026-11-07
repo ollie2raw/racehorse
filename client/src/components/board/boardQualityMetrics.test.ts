@@ -34,8 +34,9 @@ describe('boardQualityMetrics: the model matches the browser', () => {
   // 0.17 / 0.14 before Pass 1a (bend after 1 tile + exact drop-zone bounds), then 0.30 / 0.26 with the
   // camera clear of overlays by tiles only, and 0.25 / 0.21 once drop zones are kept clear too.
   const measuredInBrowser: Array<[string, number]> = [
-    ['desktop-1512x982', 0.29],
-    ['laptop-1280x720', 0.28],
+    // Desktop-class containers (>= 900 px wide) run vertical arms longer (boardRouting.WIDE_*): 0.29 / 0.28 before.
+    ['desktop-1512x982', 0.25],
+    ['laptop-1280x720', 0.19],
     ['phone-932x430', 0.25],
     ['phone-844x390', 0.21],
     // the installed app: same screen with `.rh-native`, whose compact HUD and hand dock give the board 46-47 px more height

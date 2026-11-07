@@ -23,6 +23,7 @@ import { useBoardCameraSpring } from './board/useBoardCameraSpring';
 import { useTileFlight } from './board/useTileFlight';
 import { useBoardWorldFrame } from './board/useBoardWorldFrame';
 import { useBoardContainerHeight } from './board/useBoardContainerHeight';
+import { resolveMinCameraScale } from './board/boardRouting';
 import { useBoardPointerControls } from './board/useBoardPointerControls';
 import { useShortBoardViewport } from './board/useShortBoardViewport';
 
@@ -109,7 +110,6 @@ function BoardComponent(
   // A phone held sideways gives the board ~240px of height: let the fit zoom
   // out further there so a crowded board still fits whole (no dragging).
   const shortViewport = useShortBoardViewport();
-  const minCameraScale = containFullBoard ? 0.08 : shortViewport && !staticView ? 0.14 : 0.22;
   useRenderProfiler('Board');
   if (profileDailyFritz) {
     recordDailyFritzBoardMetric('boardRenderCount', 1);
@@ -125,7 +125,8 @@ function BoardComponent(
 
   // Measured here (not in the camera hook) so routing sees the container in the
   // first committed render: the layout is computed before the camera runs.
-  const { containerRef, containerHeight } = useBoardContainerHeight(!staticView);
+  const { containerRef, containerHeight, wideContainer } = useBoardContainerHeight(!staticView);
+  const minCameraScale = resolveMinCameraScale({ containFullBoard, staticView, shortViewport, wideContainer });
 
   const { boardTileCount, layout, placementZones, glowLayout, resetSignature } = useBoardRenderLayout({
     board,
@@ -139,6 +140,7 @@ function BoardComponent(
     profileDailyFritz,
     cameraScale: camera.scale,
     containerHeight,
+    wideContainer,
   });
 
   const motionAllowed = useMotionAllowed();
