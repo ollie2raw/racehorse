@@ -5,16 +5,17 @@ import { Board } from './Board.tsx';
 import { FIXTURES } from './board/boardRoutingFixtures.ts';
 
 let containerHeight = 756;
+let containerWidth = 1456;
 
 function mockContainer() {
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
     () =>
       ({
-        width: 1456,
+        width: containerWidth,
         height: containerHeight,
         top: 0,
         left: 0,
-        right: 1456,
+        right: containerWidth,
         bottom: containerHeight,
         x: 0,
         y: 0,
@@ -66,6 +67,7 @@ const renderBoard = (props: { staticView?: boolean } = {}) =>
 
 beforeEach(() => {
   containerHeight = 756;
+  containerWidth = 1456;
   mockContainer();
   mockShortViewport(false);
 });
@@ -80,10 +82,28 @@ describe('Board routing integration', () => {
     const { container } = renderBoard();
     const xs = armXs(tileXs(container), 0);
     expect(xs).toHaveLength(9);
-    // 756px container -> reach limit 13.6 units: five tiles straight (same x), then the run moves right.
+    // A wide 756px container (desktop-class) -> reach limit 14.4 units: six tiles straight (same x), then the run moves right.
+    expect(new Set(xs.slice(0, 6)).size).toBe(1);
+    expect(xs[6]).toBeGreaterThan(xs[5]);
+    expect(xs[8]).toBeGreaterThan(xs[6]);
+  });
+
+  it('a laptop-height wide container (508px) runs five tiles before turning, not three', () => {
+    containerHeight = 508;
+    const { container } = renderBoard();
+    const xs = armXs(tileXs(container), 0);
     expect(new Set(xs.slice(0, 5)).size).toBe(1);
     expect(xs[5]).toBeGreaterThan(xs[4]);
-    expect(xs[8]).toBeGreaterThan(xs[5]);
+  });
+
+  it('a narrow container keeps the original rule (a portrait phone or tablet is not desktop-class)', () => {
+    containerWidth = 700;
+    containerHeight = 508;
+    const { container } = renderBoard();
+    const xs = armXs(tileXs(container), 0);
+    // 508px at the original comfort size: three tiles straight, then it turns.
+    expect(new Set(xs.slice(0, 3)).size).toBe(1);
+    expect(xs[3]).toBeGreaterThan(xs[2]);
   });
 
   it('keeps the same arm straight while the container is unmeasured', () => {

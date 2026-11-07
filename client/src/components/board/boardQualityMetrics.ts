@@ -25,7 +25,7 @@ import { calculateBoardFitScale, computeBoardLayout, type BoardLayout, type Boar
 import { clearScaleForReserved, type ReservedRect } from './boardCameraReserve';
 import { cameraOf, createCameraSpring, isCameraSettled, stepCameraSpring, type CameraTarget } from './cameraSpring';
 import { advanceWorldOrigin, boundsCenter, type WorldOrigin } from './boardWorldFrame';
-import { resolveVerticalArmExtent } from './boardRouting';
+import { isWideBoardContainer, resolveMinCameraScale, resolveVerticalArmExtent } from './boardRouting';
 import { SHORT_BOARD_EXACT_BOUNDS_MARGIN_UNITS, SHORT_BOARD_MAX_VERTICAL_ARM_TILES } from './useBoardRenderLayout';
 
 /** The product's readability floor: the smallest a tile's short edge may be on screen (decided 2026-10-26). */
@@ -94,13 +94,18 @@ export function layoutOptionsFor(profile: ViewportProfile): BoardLayoutOptions {
       exactBoundsMarginUnits: SHORT_BOARD_EXACT_BOUNDS_MARGIN_UNITS,
     };
   }
-  const maxVerticalArmExtent = resolveVerticalArmExtent(profile.containerHeight);
+  const maxVerticalArmExtent = resolveVerticalArmExtent(profile.containerHeight, isWideBoardContainer(profile.containerWidth));
   return maxVerticalArmExtent === undefined ? {} : { maxVerticalArmExtent };
 }
 
 /** Mirrors Board.tsx: `containFullBoard ? 0.08 : shortViewport && !staticView ? 0.14 : 0.22`. */
 export function cameraFloorFor(profile: ViewportProfile): number {
-  return profile.phoneLandscape ? 0.14 : 0.22;
+  return resolveMinCameraScale({
+    containFullBoard: false,
+    staticView: false,
+    shortViewport: profile.phoneLandscape,
+    wideContainer: isWideBoardContainer(profile.containerWidth),
+  });
 }
 
 export interface CameraFit {

@@ -6,20 +6,26 @@
 // it runs after the layout it needs, so it cannot feed routing. Board.tsx owns
 // the ref and hands it to both.
 import { useLayoutEffect, useRef, useState } from 'react';
-import { bucketContainerHeight } from './boardRouting';
+import { bucketContainerHeight, isWideBoardContainer } from './boardRouting';
 
 export function useBoardContainerHeight(enabled: boolean) {
   const containerRef = useRef<HTMLDivElement>(null);
   // Bucketed (boardRouting.HEIGHT_BUCKET_PX): re-renders only when the routing
   // answer could change, not on every ResizeObserver tick.
   const [bucketedHeight, setBucketedHeight] = useState(0);
+  // Whether the container is desktop-class wide (boardRouting.WIDE_CONTAINER_MIN_WIDTH_PX): a boolean, so a
+  // width change only re-renders when it crosses that one threshold.
+  const [wideContainer, setWideContainer] = useState(false);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!enabled || !container) return undefined;
     const measure = () => {
-      const next = bucketContainerHeight(container.getBoundingClientRect().height);
+      const rect = container.getBoundingClientRect();
+      const next = bucketContainerHeight(rect.height);
+      const wide = isWideBoardContainer(rect.width);
       setBucketedHeight((prev) => (prev === next ? prev : next));
+      setWideContainer((prev) => (prev === wide ? prev : wide));
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return undefined;
@@ -28,5 +34,5 @@ export function useBoardContainerHeight(enabled: boolean) {
     return () => observer.disconnect();
   }, [enabled]);
 
-  return { containerRef, containerHeight: enabled ? bucketedHeight : 0 };
+  return { containerRef, containerHeight: enabled ? bucketedHeight : 0, wideContainer: enabled && wideContainer };
 }

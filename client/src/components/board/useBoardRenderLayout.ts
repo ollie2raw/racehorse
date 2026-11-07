@@ -43,6 +43,8 @@ export interface UseBoardRenderLayoutParams {
   cameraScale: number;
   /** Bucketed board-container height in px (0/omitted until measured); drives viewport-aware arm routing. */
   containerHeight?: number;
+  /** The board container is desktop-class wide: vertical arms may run longer (boardRouting.WIDE_*). */
+  wideContainer?: boolean;
 }
 
 export interface UseBoardRenderLayoutResult {
@@ -69,6 +71,7 @@ export function useBoardRenderLayout({
   profileDailyFritz,
   cameraScale,
   containerHeight = 0,
+  wideContainer = false,
 }: UseBoardRenderLayoutParams): UseBoardRenderLayoutResult {
   // Static views (lessons, diagrams, review snapshots) keep their authored
   // straight-arm geometry; every live board bends — by tile count on a short
@@ -82,9 +85,9 @@ export function useBoardRenderLayout({
         exactBoundsMarginUnits: SHORT_BOARD_EXACT_BOUNDS_MARGIN_UNITS,
       };
     }
-    const maxVerticalArmExtent = resolveVerticalArmExtent(containerHeight);
+    const maxVerticalArmExtent = resolveVerticalArmExtent(containerHeight, wideContainer);
     return maxVerticalArmExtent === undefined ? {} : { maxVerticalArmExtent };
-  }, [shortViewport, staticView, containerHeight]);
+  }, [shortViewport, staticView, containerHeight, wideContainer]);
   const boardTileCount = board
     ? board.mainLine.length +
       board.hubDoubles.reduce(
