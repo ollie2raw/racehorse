@@ -112,4 +112,18 @@ describe('Play vs Fritz end card', () => {
     screen.getByRole('button', { name: 'Home' }).click();
     expect(props.onHome).toHaveBeenCalledTimes(1);
   });
+
+  it('carries the stage-aware states: Queued, then a stalled review with Try again', () => {
+    const ledger = { scoredCount: 0, estimateCount: 0, forcedCount: 0, unavailableCount: 0, pendingCount: 50, totalDecisions: 50, entries: [] };
+    card({ decisionLedger: ledger, reviewWait: { stage: 'queued', stalled: false, sweepErrorCode: null }, onRetryReview: vi.fn() });
+    expect(screen.getByText(/^Queued/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Review game' }) as HTMLButtonElement).disabled).toBe(false);
+    cleanup();
+    const stalled = card({ decisionLedger: ledger, reviewWait: { stage: 'queued', stalled: true, sweepErrorCode: null }, onRetryReview: vi.fn() });
+    expect(screen.getAllByText(/taking longer than expected/i).length).toBeGreaterThan(0);
+    screen.getByRole('button', { name: 'Try again' }).click();
+    expect(stalled.onRetryReview).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Review game' }).className).toContain('dfd__btn--primary');
+  });
 });

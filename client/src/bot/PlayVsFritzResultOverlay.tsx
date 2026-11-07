@@ -46,7 +46,7 @@ function ReviewPanel({ review, onRetryReview }: { review: PostGameReviewView; on
         ) : null}
       </div>
       <p className="pvr-review__status" role="status">{review.statusText}</p>
-      {review.status === 'running' && review.progress ? (
+      {(review.status === 'running' || review.status === 'stalled') && review.progress ? (
         <div
           className="pvr-review__track"
           role="progressbar"
@@ -61,7 +61,7 @@ function ReviewPanel({ review, onRetryReview }: { review: PostGameReviewView; on
       {review.note ? <p className="pvr-review__note" role="status">{review.note}</p> : null}
       {review.canRetry && onRetryReview ? (
         <button type="button" className="dfd__btn pvr-review__retry" onClick={onRetryReview} disabled={review.retrying}>
-          Analyze again
+          {review.retryLabel}
         </button>
       ) : null}
     </section>

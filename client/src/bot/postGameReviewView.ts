@@ -1,8 +1,11 @@
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
 import type { PlayerDecisionLedgerSummary } from '../modules/review/reviewDecisionAccounting';
-import type { ReviewUnavailableReason } from '../modules/review/reviewCompletionClient';
+import type { ReviewUnavailableReason, ReviewWaitState } from '../modules/review/reviewCompletionClient';
 import {
   RETRY_NOTE,
+  SETUP_CODES,
+  SETUP_NOTE,
+  STALLED_NOTE,
   SWITCHED_OFF_NOTE,
   resolveAccuracyStatValues,
   type ReviewRetryUiState,
@@ -12,23 +15,29 @@ import {
  * What the Play vs Fritz result card shows about the review.
  *
  * - `preparing`: the game is over but the position record is not built yet; the review cannot open.
- * - `running`: the review opens now (the board fills in as decisions finish); accuracy is not final.
+ * - `queued`: the job exists but no pass holds it yet; the review opens, nothing is being analyzed.
+ * - `running`: a pass holds the job; the board fills in as decisions finish; accuracy is not final.
+ * - `stalled`: nothing has moved for a while (taking longer than expected, or the service has a setup problem); a retry is offered.
  * - `ready`: accuracy and grade are final.
  * - `unavailable`: the server will not finish it; the board still opens on what is known.
  */
 export type PostGameReviewView = {
-  status: 'preparing' | 'running' | 'ready' | 'unavailable';
+  status: 'preparing' | 'queued' | 'running' | 'stalled' | 'ready' | 'unavailable';
   canOpen: boolean;
   /** One short line under the review heading. */
   statusText: string;
   accuracyText: string | null;
   gradeText: string | null;
   progress: { done: number; total: number } | null;
-  /** Explains an unavailable review. */
+  /** Explains a stalled or unavailable review. */
   note: string | null;
   canRetry: boolean;
+  /** 'Analyze again' once the server gave up, 'Try again' while it merely stalled. */
+  retryLabel: 'Analyze again' | 'Try again';
   retrying: boolean;
 };
+
+const NO_RETRY = { canRetry: false, retryLabel: 'Try again' as const, retrying: false };
 
 export function buildPostGameReviewView(input: {
   eligible: boolean;
@@ -37,6 +46,7 @@ export function buildPostGameReviewView(input: {
   accuracyModelPending: boolean;
   reviewUnavailable: boolean;
   reviewUnavailableReason: ReviewUnavailableReason | null;
+  reviewWait?: ReviewWaitState | null;
   decisionLedger: PlayerDecisionLedgerSummary | null;
   retryAvailable: boolean;
   retryState: ReviewRetryUiState;
@@ -52,8 +62,7 @@ export function buildPostGameReviewView(input: {
       gradeText: null,
       progress: null,
       note: null,
-      canRetry: false,
-      retrying: false,
+      ...NO_RETRY,
     };
   }
 
@@ -62,6 +71,7 @@ export function buildPostGameReviewView(input: {
     accuracyModelPending: input.accuracyModelPending,
     reviewUnavailable: input.reviewUnavailable,
     decisionLedger: input.decisionLedger,
+    reviewWait: input.reviewWait,
   });
 
   if (input.reviewUnavailable) {
@@ -76,6 +86,7 @@ export function buildPostGameReviewView(input: {
       note: switchedOff ? SWITCHED_OFF_NOTE : RETRY_NOTE[input.retryState],
       // Retrying a review the server has switched off would only land back here.
       canRetry: input.retryAvailable && !switchedOff,
+      retryLabel: 'Analyze again',
       retrying: input.retryState === 'retrying',
     };
   }
@@ -89,8 +100,38 @@ export function buildPostGameReviewView(input: {
       gradeText: resolved.gradeText,
       progress: null,
       note: null,
-      canRetry: false,
-      retrying: false,
+      ...NO_RETRY,
+    };
+  }
+
+  const wait = input.reviewWait ?? null;
+  if (wait?.stalled === true) {
+    const setupProblem = wait.sweepErrorCode != null && SETUP_CODES.has(wait.sweepErrorCode);
+    return {
+      status: 'stalled',
+      canOpen: true,
+      statusText: setupProblem ? 'Analysis cannot start right now' : 'Analysis is taking longer than expected',
+      accuracyText: null,
+      gradeText: null,
+      progress: resolved.progress,
+      note: setupProblem ? SETUP_NOTE : input.retryState === 'idle' ? STALLED_NOTE : RETRY_NOTE[input.retryState],
+      canRetry: input.retryAvailable,
+      retryLabel: 'Try again',
+      retrying: input.retryState === 'retrying',
+    };
+  }
+
+  const done = resolved.progress?.done ?? 0;
+  if (wait?.stage === 'queued' && done === 0) {
+    return {
+      status: 'queued',
+      canOpen: true,
+      statusText: 'Queued: waiting for the analysis to start',
+      accuracyText: null,
+      gradeText: null,
+      progress: null,
+      note: null,
+      ...NO_RETRY,
     };
   }
 
@@ -104,7 +145,6 @@ export function buildPostGameReviewView(input: {
     gradeText: null,
     progress: resolved.progress,
     note: null,
-    canRetry: false,
-    retrying: false,
+    ...NO_RETRY,
   };
 }

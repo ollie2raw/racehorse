@@ -57,6 +57,9 @@ import {
   REVIEW_POLL_INITIAL_MS,
   retryServerReviewCompletion,
   type ReviewUnavailableReason,
+  type ReviewWaitState,
+  isReviewStalled,
+  REVIEW_POLL_STALLED_MS,
 } from './reviewCompletionClient.ts';
 import { REVIEW_START_DELAY_MS, useReviewStartTrigger } from './useReviewStartTrigger.ts';
 import { sendReviewFunnelEvent, type ReviewFunnelEvent } from './reviewFunnelClient.ts';
@@ -150,6 +153,8 @@ export function usePostGamePivotalReview({
   // "Analyze again": bumping the nonce restarts the poll loop after the server re-runs a failed job.
   const [pollNonce, setPollNonce] = useState(0);
   const [reviewRetryState, setReviewRetryState] = useState<ReviewRetryState>('idle');
+  // True once the job has shown no progress for REVIEW_STALL_MS: the card says it is taking longer than expected and offers a retry.
+  const [reviewStalled, setReviewStalled] = useState(false);
   const enqueueKeyRef = useRef<string | null>(null);
   const loggedCaptureFailureIdsRef = useRef(new Set<string>());
   const { started: reviewStartRequested, requestStart: requestReviewStart } = useReviewStartTrigger({
@@ -324,6 +329,7 @@ export function usePostGamePivotalReview({
     let timer: ReturnType<typeof setTimeout> | undefined;
     let delayMs = REVIEW_POLL_INITIAL_MS;
     let lastProgressKey = '';
+    let lastProgressAt = Date.now();
     const poll = async () => {
       const result = await pollServerReviewCompletion({
         apiBase: resolveGameServerUrl(),
@@ -343,7 +349,19 @@ export function usePostGamePivotalReview({
       }
       if (result?.complete || result?.unavailable) return;
       const progressKey = result ? `${result.progress.scored}:${result.progress.forced}:${result.status}` : '';
-      delayMs = nextReviewPollDelayMs(delayMs, progressKey !== lastProgressKey);
+      const progressed = progressKey !== lastProgressKey;
+      if (progressed) lastProgressAt = Date.now();
+      const stalled = isReviewStalled(Date.now(), lastProgressAt);
+      if (stalled) {
+        logger.warn('usePostGamePivotalReview', 'server review has not progressed', {
+          stage: result?.stage ?? 'unknown',
+          sweepError: result?.sweepError?.code ?? null,
+          scored: result?.progress.scored,
+          total: result?.progress.total,
+        });
+      }
+      setReviewStalled(stalled);
+      delayMs = stalled ? REVIEW_POLL_STALLED_MS : nextReviewPollDelayMs(delayMs, progressed);
       lastProgressKey = progressKey;
       timer = setTimeout(() => { void poll(); }, delayMs);
     };
@@ -465,6 +483,13 @@ export function usePostGamePivotalReview({
   // An older server sends no reason; treat that as a failure, which keeps Analyze again.
   const reviewUnavailableReason: ReviewUnavailableReason | null = reviewUnavailable
     ? (serverCompletion?.unavailableReason ?? 'failed')
+    : null;
+  const reviewWait: ReviewWaitState | null = reviewPersistenceEnabled && serverJobId && !reviewUnavailable
+    ? {
+      stage: serverCompletion?.stage === 'queued' || serverCompletion?.stage === 'running' ? serverCompletion.stage : null,
+      stalled: reviewStalled,
+      sweepErrorCode: serverCompletion?.sweepError?.code ?? null,
+    }
     : null;
   const retryReview = useCallback(async () => {
     if (!serverJobId || !accessToken || reviewRetryState === 'retrying') return;
@@ -849,6 +874,7 @@ export function usePostGamePivotalReview({
     accuracyModelPending,
     reviewUnavailable,
     reviewUnavailableReason,
+    reviewWait,
     retryReview,
     reviewRetryState,
     decisionLedger,

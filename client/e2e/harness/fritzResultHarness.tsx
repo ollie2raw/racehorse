@@ -1,7 +1,7 @@
 /**
  * E2E-only harness. Vite serves it from e2e/harness; it is not part of the app build. It mounts the real Play vs Fritz
  * result card with fixture review states so it can be measured at phone and desktop sizes without playing a match.
- * Views: ?view=preparing|running|ready|unavailable|plain  (&rating=1 adds a confirmed rating line, &lost=1 a defeat).
+ * Views: ?view=preparing|queued|running|stalled|ready|unavailable|plain  (&rating=1 adds a confirmed rating line, &lost=1 a defeat).
  */
 import '../../src/styles/tokens.css';
 import '../../src/styles/rh-mobile-chrome.css';
@@ -53,6 +53,7 @@ const base: PostGameReviewView = {
   progress: null,
   note: null,
   canRetry: false,
+  retryLabel: 'Try again',
   retrying: false,
 };
 
@@ -68,6 +69,19 @@ const REVIEWS: Record<string, PostGameReviewView | null> = {
     gradeText: null,
     note: "We couldn't finish analyzing this game. You can run the analysis again.",
     canRetry: true,
+    retryLabel: 'Analyze again',
+  },
+  queued: { ...base, status: 'queued', statusText: 'Queued: waiting for the analysis to start', accuracyText: null, gradeText: null },
+  stalled: {
+    ...base,
+    status: 'stalled',
+    statusText: 'Analysis is taking longer than expected',
+    accuracyText: null,
+    gradeText: null,
+    progress: { done: 0, total: 50 },
+    note: 'This is taking longer than expected. You can keep waiting or try again.',
+    canRetry: true,
+    retryLabel: 'Try again',
   },
   plain: null,
 };

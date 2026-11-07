@@ -94,6 +94,20 @@ for (const viewport of VIEWPORTS) {
       await expectReachableAndTall(page, ['Analyze again', 'Review game', 'Rematch', 'Change setup', 'Home']);
     });
 
+    test('says Queued before the analysis starts, and offers Try again once it stalls', async ({ page }) => {
+      await open(page, 'view=queued');
+      const card = page.getByRole('dialog', { name: 'Play vs Fritz result' });
+      await expect(card.getByText(/^Queued/)).toBeVisible();
+      await expect(card.getByRole('progressbar')).toHaveCount(0);
+      await expect(card.getByRole('button', { name: 'Review game', exact: true })).toBeEnabled();
+
+      await open(page, 'view=stalled');
+      await expect(card.getByText(/taking longer than expected/i).first()).toBeVisible();
+      await expect(card.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
+      await expect(card.getByRole('button', { name: 'Review game', exact: true })).toHaveClass(/dfd__btn--primary/);
+      await expectReachableAndTall(page, ['Try again', 'Review game', 'Rematch', 'Change setup', 'Home']);
+    });
+
     test('a game with no review leaves Rematch as the main action', async ({ page }) => {
       await open(page, 'view=plain');
       const card = page.getByRole('dialog', { name: 'Play vs Fritz result' });

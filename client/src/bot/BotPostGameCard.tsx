@@ -7,7 +7,7 @@ import type { GhostCompletionResult } from '../ghost/api';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
 import type { AppMode } from '../appRouteTypes';
 import type { PlayerDecisionLedgerSummary } from '../modules/review/reviewDecisionAccounting';
-import type { ReviewUnavailableReason } from '../modules/review/reviewCompletionClient';
+import type { ReviewUnavailableReason, ReviewWaitState } from '../modules/review/reviewCompletionClient';
 import type { ReviewRetryUiState } from '../training/pivotalReview/PostGameReviewPrompt';
 
 export interface BotPostGameCardProps {
@@ -28,6 +28,7 @@ export interface BotPostGameCardProps {
   accuracyModelPending: boolean;
   reviewUnavailable?: boolean;
   reviewUnavailableReason?: ReviewUnavailableReason | null;
+  reviewWait?: ReviewWaitState | null;
   decisionLedger?: PlayerDecisionLedgerSummary | null;
   reviewRetryState?: ReviewRetryUiState;
 
@@ -58,6 +59,7 @@ export const BotPostGameCard: React.FC<BotPostGameCardProps> = ({
   accuracyModelPending,
   reviewUnavailable = false,
   reviewUnavailableReason = null,
+  reviewWait = null,
   decisionLedger = null,
   reviewRetryState = 'idle',
   onRematch,
@@ -79,6 +81,7 @@ export const BotPostGameCard: React.FC<BotPostGameCardProps> = ({
         accuracyModelPending,
         reviewUnavailable,
         reviewUnavailableReason,
+        reviewWait,
         decisionLedger,
         retryAvailable: Boolean(onRetryReview),
         retryState: reviewRetryState,

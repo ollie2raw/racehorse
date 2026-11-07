@@ -109,3 +109,78 @@ describe('buildPostGameReviewView', () => {
     expect(view.canRetry).toBe(false);
   });
 });
+
+describe('buildPostGameReviewView: the server job stage (#496) reaches the card', () => {
+  const ledger0 = { scoredCount: 0, estimateCount: 0, forcedCount: 4, unavailableCount: 0, pendingCount: 46, totalDecisions: 50, entries: [] };
+  const running = { stage: 'running' as const, stalled: false, sweepErrorCode: null };
+
+  it('says Queued, not Analyzing 0 of N, while no pass holds the job; the review still opens', () => {
+    const view = buildPostGameReviewView({
+      ...base,
+      accuracyModelPending: true,
+      decisionLedger: ledger0,
+      reviewWait: { stage: 'queued', stalled: false, sweepErrorCode: null },
+    })!;
+    expect(view.status).toBe('queued');
+    expect(view.canOpen).toBe(true);
+    expect(view.statusText).toMatch(/^Queued/);
+    expect(view.progress).toBeNull();
+  });
+
+  it('says Analyzing once a pass holds the job, and also once decisions have completed even if the stage still says queued', () => {
+    expect(buildPostGameReviewView({ ...base, accuracyModelPending: true, decisionLedger: ledger0, reviewWait: running })!.status).toBe('running');
+    const progressed = buildPostGameReviewView({
+      ...base,
+      accuracyModelPending: true,
+      decisionLedger: { ...ledger0, scoredCount: 5, pendingCount: 41 },
+      reviewWait: { stage: 'queued', stalled: false, sweepErrorCode: null },
+    })!;
+    expect(progressed.status).toBe('running');
+    expect(progressed.statusText).toBe('Analyzing 5 of 46 moves');
+  });
+
+  it('after a stall says it is taking longer and offers Try again (not Analyze again)', () => {
+    const view = buildPostGameReviewView({
+      ...base,
+      accuracyModelPending: true,
+      decisionLedger: ledger0,
+      reviewWait: { stage: 'queued', stalled: true, sweepErrorCode: null },
+    })!;
+    expect(view.status).toBe('stalled');
+    expect(view.canRetry).toBe(true);
+    expect(view.retryLabel).toBe('Try again');
+    expect(view.note).toMatch(/taking longer than expected/);
+    expect(view.canOpen).toBe(true);
+  });
+
+  it('says the service has a setup problem, not that the game is wrong, when the server reports one', () => {
+    const view = buildPostGameReviewView({
+      ...base,
+      accuracyModelPending: true,
+      decisionLedger: ledger0,
+      reviewWait: { stage: 'queued', stalled: true, sweepErrorCode: 'rpc_missing' },
+    })!;
+    expect(view.status).toBe('stalled');
+    expect(view.note).toMatch(/setup problem/);
+    expect(view.note).toMatch(/Nothing is wrong with your game/);
+  });
+
+  it('shows the restart state on a stalled retry, and no retry without a handler', () => {
+    const wait = { stage: 'queued' as const, stalled: true, sweepErrorCode: null };
+    const retrying = buildPostGameReviewView({ ...base, accuracyModelPending: true, decisionLedger: ledger0, reviewWait: wait, retryState: 'retrying' })!;
+    expect(retrying.retrying).toBe(true);
+    expect(retrying.note).toMatch(/Restarting/);
+    const none = buildPostGameReviewView({ ...base, accuracyModelPending: true, decisionLedger: ledger0, reviewWait: wait, retryAvailable: false })!;
+    expect(none.canRetry).toBe(false);
+  });
+
+  it('a finished review is never shown as stalled', () => {
+    const view = buildPostGameReviewView({
+      ...base,
+      analysis: analysis({ accuracyModel: completeModel }),
+      decisionLedger: { scoredCount: 30, estimateCount: 0, forcedCount: 4, unavailableCount: 0, pendingCount: 0, totalDecisions: 34, entries: [] },
+      reviewWait: { stage: 'running', stalled: true, sweepErrorCode: null },
+    })!;
+    expect(view.status).toBe('ready');
+  });
+});
