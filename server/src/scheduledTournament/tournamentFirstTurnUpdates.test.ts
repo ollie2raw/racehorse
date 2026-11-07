@@ -255,6 +255,24 @@ beforeEach(() => {
 });
 afterEach(() => { db.beforeMatchRead = async () => undefined; liveSockets.clear(); liveRooms.clear(); restart(); });
 
+// The deal, the pre-game draw and Fritz's thinking delay all come from Math.random, so an unseeded run plays a different position every time. About 2% of
+// deals leave the human with no opening tile (the opening must be a double or a scoring tile, so they are told to draw), which made the "has a legal play"
+// assertions fail now and then on CI. Every test now starts from the same seeded stream, and the draw case has its own test below.
+const DEAL_SEED = 1;
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let randomSpy: ReturnType<typeof vi.spyOn>;
+beforeEach(() => { randomSpy = vi.spyOn(Math, 'random').mockImplementation(mulberry32(DEAL_SEED)); });
+afterEach(() => { randomSpy.mockRestore(); });
+
 /** The human attaches with a socket that is a member of the room, so broadcasts reach it. */
 async function attachLive(userId: string, matchId: string) {
   const { socket, handlers } = makeSocket(userId);
@@ -275,7 +293,10 @@ async function attachLive(userId: string, matchId: string) {
 const updatesTo = (socket: any): Array<Record<string, any>> =>
   socket.emit.mock.calls.filter((call: unknown[]) => call[0] === 'state:update').map((call: unknown[]) => call[1] as Record<string, any>);
 
-async function until(condition: () => boolean, ms = 8_000) {
+// Fritz's search and thinking delay run for real, and CI is about four times slower than a laptop.
+const FRITZ_TEST_TIMEOUT_MS = 60_000;
+
+async function until(condition: () => boolean, ms = 30_000) {
   const end = Date.now() + ms;
   while (!condition()) {
     if (Date.now() > end) throw new Error('condition not met in time');
@@ -294,6 +315,25 @@ describe('the human\'s first turn in a tournament match against Fritz', () => {
     expect(ack).toMatchObject({ ok: true, you: humanSeat });
     expect(ack.state.playerIds[ack.state.currentPlayerIndex]).toBe(humanSeat);
     expect(ack.legalMoves.some((m: { type: string }) => m.type === 'play')).toBe(true);
+    expect(ack.tournamentClock).toMatchObject({ kind: 'turn', seatId: humanSeat });
+  });
+
+  it('human opens with no opening tile (no double, no scoring tile): the ack says draw, with no plays, and the clock still names the human', async () => {
+    // Seed 5 deals this human a hand with no double and no tile whose sum scores, so the opening rule leaves only a draw. This is the rule working,
+    // not a missing move: the client has to show the draw, not a hand of dimmed tiles with nothing to tap.
+    randomSpy.mockImplementation(mulberry32(5));
+    seedMatch(P1_STARTS, U1, BOT_B);
+    await dispatchTournamentMatch(liveIo, P1_STARTS);
+    const roomCode = db.matches.get(P1_STARTS)!.room_code;
+
+    const { ack } = await attachLive(U1, P1_STARTS);
+
+    const humanSeat = getRoomRoster(roomCode).find((p) => p.userId === U1)!.id;
+    expect(ack).toMatchObject({ ok: true, you: humanSeat });
+    expect(ack.state.playerIds[ack.state.currentPlayerIndex]).toBe(humanSeat);
+    expect(ack.state.board).toBeNull();
+    expect(ack.legalMoves).toEqual([]);
+    expect(ack.canDraw).toBe(true);
     expect(ack.tournamentClock).toMatchObject({ kind: 'turn', seatId: humanSeat });
   });
 
@@ -402,9 +442,9 @@ describe('the human\'s first turn in a tournament match against Fritz', () => {
       liveSockets.clear();
       liveRooms.clear();
     }
-  }, 30_000);
+  }, FRITZ_TEST_TIMEOUT_MS);
 
-  it('Fritz opens: once it has moved, the update the human is sent carries moves for that turn', async () => {
+  it('Fritz opens: once it has moved, the update the human is sent carries moves for that turn', { timeout: FRITZ_TEST_TIMEOUT_MS }, async () => {
     seedMatch(P2_STARTS, U1, BOT_B);
     await dispatchTournamentMatch(liveIo, P2_STARTS);
     const roomCode = db.matches.get(P2_STARTS)!.room_code;
