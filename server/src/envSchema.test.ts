@@ -173,6 +173,7 @@ describe('the registry', () => {
     'AUTHENTICATED_USER_ID_TTL_MS', // a constant in supabaseAuth.ts that is named in a comment
     'FRITZ_POLICY_VERSION', // a game-core constant named in a string
     'TRUSTED_PROXY', // trustedProxy.ts's export, named in a comment
+    'ERR_WORKER_OUT_OF_MEMORY', // the Node.js error code reviewSearchRunner.ts compares a worker error against to count out-of-memory kills
   ]);
   const literalsInEnvFiles = new Map<string, string>();
   for (const file of walk(SRC)) {

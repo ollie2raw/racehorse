@@ -28,6 +28,7 @@ import { isReviewSweepEnabled } from './reviewSweepFlag';
 import {
   noteReviewCpuBenchmark,
   noteReviewDecisionCost,
+  noteReviewJobClaimed,
   noteReviewJobThrottle,
   noteReviewWorkerHealth,
   readCpuThrottle,
@@ -279,7 +280,7 @@ function evaluatePositionOffThread(): EvaluatePosition {
     noteReviewDecisionCost({
       jobId: currentPassJobId, tier, wallMs, cpuMs, threadCpuMs: metrics?.threadCpuMs ?? null, samplesSolved, incomplete, ceilingHit, attempt: currentPassAttempt,
     });
-    noteReviewWorkerHealth({ heapUsedMb: metrics?.heapUsedMb, heapLimitMb: metrics?.heapLimitMb, restarts: runner.workerRestarts, oom: runner.workerOomCount });
+    noteReviewWorkerHealth({ heapUsedMb: metrics?.heapUsedMb, heapLimitMb: metrics?.heapLimitMb, restarts: runner.workerRestarts, oom: runner.workerOomCount, onlineMs: runner.workerOnlineMs });
     log.info({
       jobId: currentPassJobId, attempt: currentPassAttempt, tier, samplesSolved, wallMs: Math.round(wallMs), cpuMs: Math.round(cpuMs),
       threadCpuMs: metrics?.threadCpuMs != null ? Math.round(metrics.threadCpuMs) : null, workerHeapMb: metrics?.heapUsedMb ?? null, incomplete, ceilingHit,
@@ -403,6 +404,7 @@ async function runJobPass(jobId: string, claimToken: string) {
       shouldAbort: () => leaseLost,
       onClaimed: (claimed) => {
         currentPassAttempt = claimed.attemptCount ?? null;
+        noteReviewJobClaimed(jobId, claimed.createdAt ?? null, currentPassAttempt);
         if (!store.renewLease) return;
         const generation = claimed.claimGeneration ?? 1;
         heartbeat = processInterval('review', () => {

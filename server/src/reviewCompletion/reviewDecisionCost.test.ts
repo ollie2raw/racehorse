@@ -3,6 +3,7 @@ import {
   getReviewDecisionCost,
   noteReviewCpuBenchmark,
   noteReviewDecisionCost,
+  noteReviewJobClaimed,
   noteReviewJobThrottle,
   noteReviewWorkerHealth,
   readCpuThrottle,
@@ -22,7 +23,8 @@ describe('review decision cost', () => {
     expect(cost.sinceBoot).toMatchObject({ decisions: 0, byTier: {}, meanWallMs: 0, maxWallMs: 0, cpuToWallRatio: null, threadCpuToWallRatio: null, meanSamplesSolved: null, incomplete: 0, ceilingHits: 0 });
     expect(cost.lastJob).toBeNull();
     expect(cost.benchmark).toBeNull();
-    expect(cost.memory).toMatchObject({ rssMb: 0, workerHeapUsedMb: null, workerRestarts: 0, workerOomCount: 0 });
+    expect(cost.memory).toMatchObject({ rssMb: 0, workerHeapUsedMb: null, workerRestarts: 0, workerOomCount: 0, workerOnlineMs: null });
+    expect(cost.bootAt).toBeLessThanOrEqual(Date.now());
   });
 
   it('counts decisions by the tier they settled at, with mean and max wall time, solved samples, incomplete and ceiling-hit counts', () => {
@@ -79,9 +81,9 @@ describe('review decision cost', () => {
   });
 
   it('reports memory: process rss, the worker heap against its cap, and worker restarts and out-of-memory kills', () => {
-    noteReviewWorkerHealth({ heapUsedMb: 120, heapLimitMb: 256, restarts: 2, oom: 1 });
+    noteReviewWorkerHealth({ heapUsedMb: 120, heapLimitMb: 256, restarts: 2, oom: 1, onlineMs: 350 });
     const { memory } = getReviewDecisionCost(300 * 1048576);
-    expect(memory).toEqual({ rssMb: 300, workerHeapUsedMb: 120, workerHeapLimitMb: 256, workerRestarts: 2, workerOomCount: 1 });
+    expect(memory).toEqual({ rssMb: 300, workerHeapUsedMb: 120, workerHeapLimitMb: 256, workerRestarts: 2, workerOomCount: 1, workerOnlineMs: 350 });
     // a later report without heap numbers keeps the last heap reading
     noteReviewWorkerHealth({ restarts: 3, oom: 1 });
     expect(getReviewDecisionCost(0).memory).toMatchObject({ workerHeapUsedMb: 120, workerRestarts: 3 });
@@ -95,8 +97,44 @@ describe('review decision cost', () => {
   it('never carries anything but counts, times and a job id', () => {
     noteReviewDecisionCost(sample());
     expect(Object.keys(getReviewDecisionCost(0).lastJob ?? {}).sort()).toEqual(
-      ['attempt', 'byTier', 'ceilingHits', 'cpuToWallRatio', 'decisions', 'incomplete', 'jobId', 'maxWallMs', 'meanSamplesSolved', 'meanWallMs', 'threadCpuToWallRatio', 'throttle'],
+      ['attempt', 'byTier', 'ceilingHits', 'cpuToWallRatio', 'decisions', 'incomplete', 'jobId', 'maxWallMs', 'meanSamplesSolved', 'meanWallMs', 'threadCpuToWallRatio', 'throttle', 'timeline'],
     );
+  });
+});
+
+describe('job timeline (one real game answers: time to the first decision, then the rate, opening to endgame)', () => {
+  it('records when the job was enqueued and claimed, and each decision\'s wall time and finish offset from the claim', () => {
+    noteReviewJobClaimed('j1', 1_000, 1, 4_000);
+    noteReviewDecisionCost(sample({ jobId: 'j1', tier: 1, wallMs: 1500, samplesSolved: 100 }), 5_500);
+    noteReviewDecisionCost(sample({ jobId: 'j1', tier: 2, wallMs: 9000, samplesSolved: 2500 }), 14_500);
+    noteReviewDecisionCost(sample({ jobId: 'j1', tier: 'forced', wallMs: 2, samplesSolved: null }), 14_502);
+    const { timeline } = getReviewDecisionCost(0).lastJob!;
+    expect(timeline.enqueuedAt).toBe(1_000);
+    expect(timeline.claimedAt).toBe(4_000);
+    expect(timeline.enqueueToClaimMs).toBe(3_000);
+    expect(timeline.claimToFirstDecisionMs).toBe(1_500);
+    expect(timeline.decisions).toEqual([
+      { order: 1, tier: 1, wallMs: 1500, samplesSolved: 100, endedAtMs: 1_500 },
+      { order: 2, tier: 2, wallMs: 9000, samplesSolved: 2500, endedAtMs: 10_500 },
+      { order: 3, tier: 'forced', wallMs: 2, samplesSolved: null, endedAtMs: 10_502 },
+    ]);
+  });
+
+  it('a new claim replaces the previous job\'s timeline', () => {
+    noteReviewJobClaimed('j1', 0, 1, 1_000);
+    noteReviewDecisionCost(sample({ jobId: 'j1' }), 1_100);
+    noteReviewJobClaimed('j2', 5_000, 1, 6_000);
+    const { lastJob } = getReviewDecisionCost(0);
+    expect(lastJob?.jobId).toBe('j2');
+    expect(lastJob?.timeline.decisions).toEqual([]);
+    expect(lastJob?.timeline.claimToFirstDecisionMs).toBeNull();
+  });
+
+  it('keeps at most 200 decisions in a timeline, so /health stays small', () => {
+    noteReviewJobClaimed('j1', 0, 1, 0);
+    for (let i = 0; i < 250; i += 1) noteReviewDecisionCost(sample({ jobId: 'j1' }), i);
+    expect(getReviewDecisionCost(0).lastJob?.timeline.decisions).toHaveLength(200);
+    expect(getReviewDecisionCost(0).lastJob?.decisions).toBe(250);
   });
 });
 

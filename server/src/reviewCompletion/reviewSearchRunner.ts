@@ -73,6 +73,8 @@ export class ReviewSearchRunner {
   /** Workers that exited or errored since this runner was created, and how many of those were out-of-memory. */
   workerRestarts = 0;
   workerOomCount = 0;
+  /** How long the most recent worker thread took from spawn to its first JavaScript (cold start of the search thread), ms. */
+  workerOnlineMs: number | null = null;
   private readonly workerPath: string;
   private readonly timeoutMs: number;
   private readonly resourceLimits: ResourceLimits;
@@ -147,8 +149,10 @@ export class ReviewSearchRunner {
 
   private ensureWorker(): Worker {
     if (this.worker) return this.worker;
+    const spawnedAt = performance.now();
     const worker = new Worker(this.workerPath, { resourceLimits: this.resourceLimits });
     worker.unref();
+    worker.once('online', () => { this.workerOnlineMs = Math.round(performance.now() - spawnedAt); });
     worker.on('message', (message: { id: number; ok: boolean; result?: EvaluateResult; metrics?: ReviewWorkerMetrics; benchmark?: ReviewCpuBenchmark; error?: string }) => {
       const pending = this.pending;
       if (!pending || pending.id !== message.id) return;

@@ -57,6 +57,8 @@ export type ReviewWorkerHealth = {
   readonly workerHeapLimitMb: number | null;
   readonly workerRestarts: number;
   readonly workerOomCount: number;
+  /** How long the most recent worker thread took to come online (spawn to its first JavaScript), ms. */
+  readonly workerOnlineMs: number | null;
 };
 
 export type ReviewCpuBenchmarkResult = {
@@ -70,11 +72,36 @@ export type ReviewCpuBenchmarkResult = {
   readonly ranAt: number;
 };
 
+/** One decision's place in a job's timeline: when it finished relative to the job being claimed, and what it cost. */
+export type ReviewTimelineEntry = {
+  readonly order: number;
+  readonly tier: number | 'forced' | 'none';
+  readonly wallMs: number;
+  readonly samplesSolved: number | null;
+  /** Milliseconds from the claim to the end of this decision. */
+  readonly endedAtMs: number;
+};
+
+/** A job's timeline, so one real game answers "how long until the first decision, then how fast, and how does it change from opening to endgame". */
+export type ReviewJobTimeline = {
+  /** When the job row was created (the enqueue request), epoch ms. */
+  readonly enqueuedAt: number | null;
+  /** When this pass claimed it, epoch ms. */
+  readonly claimedAt: number | null;
+  /** Enqueue to claim: waiting for a sweep tick or the instance to wake. */
+  readonly enqueueToClaimMs: number | null;
+  /** Claim to the end of the first decision: worker start-up, module load and the first search. */
+  readonly claimToFirstDecisionMs: number | null;
+  readonly decisions: readonly ReviewTimelineEntry[];
+};
+
 export type ReviewDecisionCostSnapshot = {
+  /** When this process started (epoch ms): a job enqueued soon after this means the instance had just woken. */
+  readonly bootAt: number;
   /** Every decision since this process started. */
   readonly sinceBoot: ReviewCostHistogram;
   /** The most recent job that evaluated any decision. */
-  readonly lastJob: (ReviewCostHistogram & { readonly jobId: string | null; readonly attempt: number | null; readonly throttle: ReviewJobThrottle | null }) | null;
+  readonly lastJob: (ReviewCostHistogram & { readonly jobId: string | null; readonly attempt: number | null; readonly throttle: ReviewJobThrottle | null; readonly timeline: ReviewJobTimeline }) | null;
   readonly memory: ReviewWorkerHealth;
   /** The one-time CPU benchmark (a fixed position at 100 sampled hands, run in the worker thread about 30 s after boot); null until it has run. */
   readonly benchmark: ReviewCpuBenchmarkResult | null;
@@ -136,31 +163,52 @@ const histogram = (acc: Accumulator): ReviewCostHistogram => ({
 });
 
 let sinceBoot = newAccumulator();
-let lastJob: { jobId: string | null; attempt: number | null; acc: Accumulator; throttle: ReviewJobThrottle | null } | null = null;
-let workerHealth = { heapUsedMb: null as number | null, heapLimitMb: null as number | null, restarts: 0, oom: 0 };
+const MAX_TIMELINE_ENTRIES = 200;
+type JobState = { jobId: string | null; attempt: number | null; acc: Accumulator; throttle: ReviewJobThrottle | null; enqueuedAt: number | null; claimedAt: number | null; entries: ReviewTimelineEntry[] };
+const newJobState = (jobId: string | null, attempt: number | null): JobState => ({ jobId, attempt, acc: newAccumulator(), throttle: null, enqueuedAt: null, claimedAt: null, entries: [] });
+const bootAt = Date.now() - Math.round(process.uptime() * 1000);
+let lastJob: JobState | null = null;
+let workerHealth = { heapUsedMb: null as number | null, heapLimitMb: null as number | null, restarts: 0, oom: 0, onlineMs: null as number | null };
 let benchmark: ReviewCpuBenchmarkResult | null = null;
 
-export function noteReviewDecisionCost(sample: ReviewDecisionCostSample): void {
+export function noteReviewDecisionCost(sample: ReviewDecisionCostSample, now: number = Date.now()): void {
   add(sinceBoot, sample);
-  if (!lastJob || lastJob.jobId !== sample.jobId) lastJob = { jobId: sample.jobId, attempt: sample.attempt, acc: newAccumulator(), throttle: null };
+  if (!lastJob || lastJob.jobId !== sample.jobId) lastJob = newJobState(sample.jobId, sample.attempt);
   add(lastJob.acc, sample);
+  if (lastJob.entries.length < MAX_TIMELINE_ENTRIES) {
+    lastJob.entries.push({
+      order: lastJob.entries.length + 1,
+      tier: sample.tier,
+      wallMs: Math.round(sample.wallMs),
+      samplesSolved: sample.samplesSolved,
+      endedAtMs: lastJob.claimedAt != null ? Math.max(0, now - lastJob.claimedAt) : 0,
+    });
+  }
+}
+
+/** A pass has claimed the job: starts its timeline (and the previous job's is replaced). */
+export function noteReviewJobClaimed(jobId: string, enqueuedAt: number | null, attempt: number | null, now: number = Date.now()): void {
+  lastJob = newJobState(jobId, attempt);
+  lastJob.enqueuedAt = enqueuedAt;
+  lastJob.claimedAt = now;
 }
 
 /** The container's CPU throttle counters before and after one job's pass, so a job that was throttled says so. */
 export function noteReviewJobThrottle(jobId: string, before: CpuThrottle | null, after: CpuThrottle | null, jobWallMs: number): void {
-  if (!lastJob || lastJob.jobId !== jobId) lastJob = { jobId, attempt: null, acc: newAccumulator(), throttle: null };
+  if (!lastJob || lastJob.jobId !== jobId) lastJob = newJobState(jobId, null);
   const diff = (a: number | null | undefined, b: number | null | undefined) => (a != null && b != null ? b - a : null);
   lastJob.throttle = before && after
     ? { nrThrottledDelta: diff(before.nrThrottled, after.nrThrottled), throttledMsDelta: diff(before.throttledMs, after.throttledMs), jobWallMs: Math.round(jobWallMs) }
     : null;
 }
 
-export function noteReviewWorkerHealth(health: { heapUsedMb?: number | null; heapLimitMb?: number | null; restarts: number; oom: number }): void {
+export function noteReviewWorkerHealth(health: { heapUsedMb?: number | null; heapLimitMb?: number | null; restarts: number; oom: number; onlineMs?: number | null }): void {
   workerHealth = {
     heapUsedMb: health.heapUsedMb ?? workerHealth.heapUsedMb,
     heapLimitMb: health.heapLimitMb ?? workerHealth.heapLimitMb,
     restarts: health.restarts,
     oom: health.oom,
+    onlineMs: health.onlineMs ?? workerHealth.onlineMs,
   };
 }
 
@@ -170,14 +218,30 @@ export function noteReviewCpuBenchmark(result: ReviewCpuBenchmarkResult): void {
 
 export function getReviewDecisionCost(rssBytes: number = process.memoryUsage().rss): ReviewDecisionCostSnapshot {
   return {
+    bootAt,
     sinceBoot: histogram(sinceBoot),
-    lastJob: lastJob ? { jobId: lastJob.jobId, attempt: lastJob.attempt, ...histogram(lastJob.acc), throttle: lastJob.throttle } : null,
+    lastJob: lastJob
+      ? {
+          jobId: lastJob.jobId,
+          attempt: lastJob.attempt,
+          ...histogram(lastJob.acc),
+          throttle: lastJob.throttle,
+          timeline: {
+            enqueuedAt: lastJob.enqueuedAt,
+            claimedAt: lastJob.claimedAt,
+            enqueueToClaimMs: lastJob.enqueuedAt != null && lastJob.claimedAt != null ? Math.max(0, lastJob.claimedAt - lastJob.enqueuedAt) : null,
+            claimToFirstDecisionMs: lastJob.entries[0] ? lastJob.entries[0].endedAtMs : null,
+            decisions: lastJob.entries,
+          },
+        }
+      : null,
     memory: {
       rssMb: Math.round(rssBytes / 1048576),
       workerHeapUsedMb: workerHealth.heapUsedMb,
       workerHeapLimitMb: workerHealth.heapLimitMb,
       workerRestarts: workerHealth.restarts,
       workerOomCount: workerHealth.oom,
+      workerOnlineMs: workerHealth.onlineMs,
     },
     benchmark,
   };
@@ -186,7 +250,7 @@ export function getReviewDecisionCost(rssBytes: number = process.memoryUsage().r
 export function resetReviewDecisionCostForTests(): void {
   sinceBoot = newAccumulator();
   lastJob = null;
-  workerHealth = { heapUsedMb: null, heapLimitMb: null, restarts: 0, oom: 0 };
+  workerHealth = { heapUsedMb: null, heapLimitMb: null, restarts: 0, oom: 0, onlineMs: null };
   benchmark = null;
 }
 
