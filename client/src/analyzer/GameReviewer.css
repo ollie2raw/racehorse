@@ -512,6 +512,13 @@
   background: rgba(var(--tier-rookie-rgb), 0.1);
 }
 
+/* Quick: the device's provisional first pass, until the server's full verdict replaces it. Dim and outlined so it reads as not final. */
+.gr-move-row-badge.is-quick {
+  color: rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: transparent;
+}
+
 .gr-coaching {
   flex: 0 1 auto;
   max-height: 45%;

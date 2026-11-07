@@ -102,11 +102,15 @@ export function resolveAccuracyStatValues({
     || analysis.accuracyModel.accuracy === null) {
     const done = ledger?.scoredCount;
     // "Queued" until a pass actually holds the job: saying "Analyzing 0 / 50" about a job nothing is working on is what made a stuck review look busy.
-    const queued = reviewWait?.stage === 'queued' && (done ?? 0) === 0;
+    // A quick (device) review is ready: the player can already read the whole game, and the server's full analysis is upgrading it.
+    const quickReady = (ledger?.quickReadyCount ?? 0) > 0;
+    const queued = !quickReady && reviewWait?.stage === 'queued' && (done ?? 0) === 0;
     return {
-      accuracyText: queued ? 'Queued…' : 'Analyzing game…',
+      accuracyText: quickReady ? 'Quick review ready' : queued ? 'Queued…' : 'Analyzing game…',
       gradeText: '—',
-      coverageText: queued
+      coverageText: quickReady
+        ? `Upgrading to full analysis · ${done ?? 0} of ${totalNonForced ?? '?'}`
+        : queued
         ? 'Waiting for the analysis to start'
         : totalNonForced !== null && done !== undefined
           ? `Analyzing ${done} / ${totalNonForced} decisions`

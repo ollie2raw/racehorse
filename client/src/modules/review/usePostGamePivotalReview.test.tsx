@@ -11,6 +11,7 @@ import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import type { ReviewBatchState } from './useReviewWorkerBatch.ts';
 import { logger } from '../../utils/logger.ts';
 import { LEGACY_ANALYSIS_DISCLOSURE } from '../../analyzer/moveAnalyzer.ts';
+import { COMPLETION_REVIEW_DISPATCH_BUDGET, QUICK_REVIEW_DISPATCH_BUDGET } from './reviewEngineConfig.ts';
 import { usePostGamePivotalReview, type UsePostGamePivotalReviewParams } from './usePostGamePivotalReview.ts';
 
 const analyzeMoveLogDeferred = vi.fn();
@@ -60,6 +61,11 @@ const useReviewWorkerBatchMock = vi.fn<(...args: unknown[]) => ReviewBatchState 
 vi.mock('./useReviewWorkerBatch.ts', () => ({
   useReviewWorkerBatch: (...args: unknown[]) => useReviewWorkerBatchMock(...args),
 }));
+
+/** The local completion batch (the device's authoritative-looking pass) and the provisional quick batch are separate calls of the same hook. */
+const batchCallsWith = (budget: unknown) => useReviewWorkerBatchMock.mock.calls.filter((call) => call[1] === budget);
+const lastCompletionBatchSnapshots = () => batchCallsWith(COMPLETION_REVIEW_DISPATCH_BUDGET).at(-1)?.[0];
+const lastQuickBatchSnapshots = () => batchCallsWith(QUICK_REVIEW_DISPATCH_BUDGET).at(-1)?.[0];
 
 const NOT_DONE_BATCH: ReviewBatchState & { cancel: () => void } = {
   resultsByDecisionId: new Map(),
@@ -218,7 +224,7 @@ describe('usePostGamePivotalReview — durable Play vs Fritz authority', () => {
     expect(request.authHeader).toBe('Bearer session-token');
     expect(request.snapshots.map((item) => item.identifiers.decisionId)).toEqual(['fresh-you-1']);
     expect(request.expectedDecisionIds).toEqual(['fresh-you-1']);
-    expect(useReviewWorkerBatchMock.mock.calls.at(-1)?.[0]).toEqual([]);
+    expect(lastCompletionBatchSnapshots()).toEqual([]);
     unmount();
   });
 
@@ -242,11 +248,11 @@ describe('usePostGamePivotalReview — durable Play vs Fritz authority', () => {
     try {
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });
       expect(enqueueServerReviewCompletionMock).toHaveBeenCalledTimes(1);
-      expect(useReviewWorkerBatchMock.mock.calls.at(-1)?.[0]).toEqual([]);
+      expect(lastCompletionBatchSnapshots()).toEqual([]);
       await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });
       expect(enqueueServerReviewCompletionMock).toHaveBeenCalledTimes(2);
-      expect(useReviewWorkerBatchMock.mock.calls.at(-1)?.[0]).toEqual([]);
+      expect(lastCompletionBatchSnapshots()).toEqual([]);
       expect(result.current.postGameAnalysis?.accuracyModel).toBeUndefined();
     } finally {
       unmount();
@@ -287,10 +293,63 @@ describe('usePostGamePivotalReview — durable Play vs Fritz authority', () => {
     expect(result.current.reviewWorkerBatch.pendingDecisionIds.has('fresh-2')).toBe(true);
     expect(result.current.reviewWorkerBatch.done).toBe(false);
     expect(result.current.accuracyModelPending).toBe(true);
-    expect(useReviewWorkerBatchMock.mock.calls.at(-1)?.[0]).toEqual([]);
+    expect(lastCompletionBatchSnapshots()).toEqual([]);
     expect(postGameReviewWriteMock).not.toHaveBeenCalled();
     act(() => result.current.openReviewGameFromPrompt());
     await waitFor(() => expect(result.current.analyzerOpen).toBe(true));
+  });
+});
+
+describe('usePostGamePivotalReview — quick review on the device', () => {
+  it('judges every decision on the device while the server job runs, shows those verdicts as quick, and lets the server\'s verdicts win', async () => {
+    const recorder = makeRecorderWithSnapshots([reviewSnapshotForDecision('fresh-1'), reviewSnapshotForDecision('fresh-2')]);
+    analyzeMoveLogDeferred.mockResolvedValueOnce({ analyzedMoves: [], hands: [] } as never);
+    enqueueServerReviewCompletionMock.mockResolvedValueOnce({
+      jobId: 'durable-quick-job', status: 'pending',
+      progress: { total: 2, forced: 0, scored: 0, remaining: 2 },
+    });
+    const serverEvaluation = {
+      ...scorableEvaluation('fresh-1', 1, EXACT),
+      evaluationProvenance: { phase: 'completion', lifecycle: 'SCORED', positionHash: 'position-1' },
+    } as ReviewEvaluationV1;
+    pollServerReviewCompletionMock.mockResolvedValueOnce({
+      complete: false,
+      status: 'pending',
+      progress: { total: 2, forced: 0, scored: 1, remaining: 1 },
+      decisions: [
+        { decisionId: 'fresh-1', lifecycle: 'SCORED', positionHash: 'position-1' },
+        { decisionId: 'fresh-2', lifecycle: 'PENDING', positionHash: 'position-2' },
+      ],
+      evaluations: [serverEvaluation],
+    });
+    const quickBatch: ReviewBatchState & { cancel: () => void } = {
+      resultsByDecisionId: new Map([
+        ['fresh-1', scorableEvaluation('fresh-1', 3, HEURISTIC)],
+        ['fresh-2', scorableEvaluation('fresh-2', 2, HEURISTIC)],
+      ]),
+      errorsByDecisionId: new Map(),
+      pendingDecisionIds: new Set(),
+      done: true,
+      cancel: vi.fn(),
+    };
+    useReviewWorkerBatchMock.mockImplementation((_snapshots, budget) => (budget === QUICK_REVIEW_DISPATCH_BUDGET ? quickBatch : NOT_DONE_BATCH));
+
+    const { result } = render({ reviewPersistenceEnabled: true, accessToken: 'session-token', reviewSnapshotRecorder: recorder });
+
+    // The quick batch gets the frozen snapshots; the local completion batch stays off in production.
+    await waitFor(() => expect(lastQuickBatchSnapshots()).toHaveLength(2));
+    expect(lastCompletionBatchSnapshots()).toEqual([]);
+
+    // Until the server's poll lands both verdicts are quick; then fresh-1 is the server's (not quick) and fresh-2 stays the device's provisional verdict.
+    await waitFor(() => expect(result.current.reviewWorkerBatch.resultsByDecisionId.get('fresh-1')).toBe(serverEvaluation));
+    const batch = result.current.reviewWorkerBatch as typeof result.current.reviewWorkerBatch & { quickDecisionIds?: ReadonlySet<string> };
+    expect(batch.resultsByDecisionId.size).toBe(2);
+    expect([...(batch.quickDecisionIds ?? [])]).toEqual(['fresh-2']);
+    expect(batch.pendingDecisionIds.size).toBe(0);
+    // Quick never finishes the review or reaches the saved record: `done` is the server's alone.
+    expect(batch.done).toBe(false);
+    expect(result.current.accuracyModelPending).toBe(true);
+    expect(postGameReviewWriteMock).not.toHaveBeenCalled();
   });
 });
 

@@ -16,13 +16,14 @@ import {
  *
  * - `preparing`: the game is over but the position record is not built yet; the review cannot open.
  * - `queued`: the job exists but no pass holds it yet; the review opens, nothing is being analyzed.
+ * - `quick`: the device's provisional quick review is ready and readable; the server's full analysis is upgrading it. Accuracy is not final.
  * - `running`: a pass holds the job; the board fills in as decisions finish; accuracy is not final.
  * - `stalled`: nothing has moved for a while (taking longer than expected, or the service has a setup problem); a retry is offered.
  * - `ready`: accuracy and grade are final.
  * - `unavailable`: the server will not finish it; the board still opens on what is known.
  */
 export type PostGameReviewView = {
-  status: 'preparing' | 'queued' | 'running' | 'stalled' | 'ready' | 'unavailable';
+  status: 'preparing' | 'queued' | 'quick' | 'running' | 'stalled' | 'ready' | 'unavailable';
   canOpen: boolean;
   /** One short line under the review heading. */
   statusText: string;
@@ -105,12 +106,15 @@ export function buildPostGameReviewView(input: {
   }
 
   const wait = input.reviewWait ?? null;
+  const quickReady = (input.decisionLedger?.quickReadyCount ?? 0) > 0;
   if (wait?.stalled === true) {
     const setupProblem = wait.sweepErrorCode != null && SETUP_CODES.has(wait.sweepErrorCode);
     return {
       status: 'stalled',
       canOpen: true,
-      statusText: setupProblem ? 'Analysis cannot start right now' : 'Analysis is taking longer than expected',
+      statusText: quickReady
+        ? 'Quick review ready · full analysis is taking longer than expected'
+        : setupProblem ? 'Analysis cannot start right now' : 'Analysis is taking longer than expected',
       accuracyText: null,
       gradeText: null,
       progress: resolved.progress,
@@ -122,6 +126,20 @@ export function buildPostGameReviewView(input: {
   }
 
   const done = resolved.progress?.done ?? 0;
+  if (quickReady) {
+    return {
+      status: 'quick',
+      canOpen: true,
+      statusText: resolved.progress
+        ? `Quick review ready · upgrading to full analysis (${resolved.progress.done} of ${resolved.progress.total})`
+        : 'Quick review ready · upgrading to full analysis',
+      accuracyText: null,
+      gradeText: null,
+      progress: resolved.progress,
+      note: null,
+      ...NO_RETRY,
+    };
+  }
   if (wait?.stage === 'queued' && done === 0) {
     return {
       status: 'queued',

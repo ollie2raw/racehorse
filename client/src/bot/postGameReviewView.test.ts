@@ -184,3 +184,54 @@ describe('buildPostGameReviewView: the server job stage (#496) reaches the card'
     expect(view.status).toBe('ready');
   });
 });
+
+describe('buildPostGameReviewView: the device quick review reaches the card', () => {
+  const quickLedger = { scoredCount: 5, estimateCount: 0, forcedCount: 4, unavailableCount: 0, pendingCount: 41, totalDecisions: 50, entries: [], quickReadyCount: 41 };
+
+  it('says the quick review is ready and how far the full analysis has upgraded it, instead of Queued or Analyzing; the review opens and accuracy stays hidden', () => {
+    const view = buildPostGameReviewView({
+      ...base,
+      accuracyModelPending: true,
+      decisionLedger: quickLedger,
+      reviewWait: { stage: 'queued', stalled: false, sweepErrorCode: null },
+    })!;
+    expect(view.status).toBe('quick');
+    expect(view.canOpen).toBe(true);
+    expect(view.statusText).toBe('Quick review ready · upgrading to full analysis (5 of 46)');
+    expect(view.progress).toEqual({ done: 5, total: 46 });
+    expect(view.accuracyText).toBeNull();
+    expect(view.gradeText).toBeNull();
+  });
+
+  it('is not a quick review once nothing is waiting on the server: a finished review is ready', () => {
+    const view = buildPostGameReviewView({
+      ...base,
+      analysis: analysis({ accuracyModel: completeModel }),
+      decisionLedger: { scoredCount: 46, estimateCount: 0, forcedCount: 4, unavailableCount: 0, pendingCount: 0, totalDecisions: 50, entries: [] },
+    })!;
+    expect(view.status).toBe('ready');
+  });
+
+  it('keeps the quick review readable when the full analysis stalls, and still offers Try again', () => {
+    const view = buildPostGameReviewView({
+      ...base,
+      accuracyModelPending: true,
+      decisionLedger: quickLedger,
+      reviewWait: { stage: 'running', stalled: true, sweepErrorCode: null },
+    })!;
+    expect(view.status).toBe('stalled');
+    expect(view.canOpen).toBe(true);
+    expect(view.statusText).toBe('Quick review ready · full analysis is taking longer than expected');
+    expect(view.canRetry).toBe(true);
+  });
+
+  it('without a quick review nothing changes: Queued stays Queued', () => {
+    const view = buildPostGameReviewView({
+      ...base,
+      accuracyModelPending: true,
+      decisionLedger: { ...quickLedger, quickReadyCount: undefined, scoredCount: 0, pendingCount: 46 },
+      reviewWait: { stage: 'queued', stalled: false, sweepErrorCode: null },
+    })!;
+    expect(view.status).toBe('queued');
+  });
+});

@@ -40,6 +40,25 @@ export const COMPLETION_REVIEW_DISPATCH_BUDGET: ReviewDispatchBudget = {
   maxWallClockMs: 120_000,
 };
 
+/**
+ * Quick-review budget (tier-1 of SEARCH_ESCALATION_TIERS, with a tighter per-decision wall clock): the device's first pass, so a review is readable at
+ * game over while the server's deeper job (tier 2+) upgrades it. Provisional: never persisted as the authoritative record
+ * (docs/postgame-review-plan.md, decision 2). Same local-definition rule as above.
+ */
+export const QUICK_REVIEW_DISPATCH_BUDGET: ReviewDispatchBudget = {
+  maxNodes: 200_000,
+  maxHiddenStateSamples: 100,
+  maxPlyDepth: 2,
+  seed: 'racehorse-review-quick-1',
+  maxWallClockMs: 400,
+};
+
+/** Off-switch for the device quick pass (build-time): VITE_QUICK_REVIEW=0 restores "wait for the server". */
+export const QUICK_REVIEW_ENABLED = import.meta.env?.VITE_QUICK_REVIEW !== '0';
+
+/** Quick review runs in at most this many workers, so a phone is not saturated for the first seconds after a game. */
+export const QUICK_REVIEW_MAX_WORKERS = 4;
+
 export const COMPLETION_REVIEW_COVERAGE_THRESHOLD = 0.02;
 
 /**

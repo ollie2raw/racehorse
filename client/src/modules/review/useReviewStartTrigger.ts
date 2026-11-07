@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 
-/** Seconds on the post-game screen before a review job is requested anyway. */
-export const REVIEW_START_DELAY_MS = 5_000;
+/**
+ * How long on the post-game screen before the server's review job is requested anyway: none. The device's quick review already makes the game
+ * readable at once, and the server's deeper analysis is the upgrade, so it starts at game over (docs/postgame-review-plan.md, phases 2 and 3).
+ */
+export const REVIEW_START_DELAY_MS = 0;
 
 /**
- * On-demand review start. Reviews cost server CPU (8-97 s per game measured),
- * and a result is only shown while the post-game screen is open, so a job
- * requested for a player who leaves straight away is pure waste. The job is
- * requested when the player opens a review, or after `delayMs` on the
- * post-game screen, whichever comes first. Resets when `active` goes false
- * (the next game).
+ * Review start. Reviews cost server CPU (8-97 s per game measured), so a
+ * delay is supported (`delayMs`): the job is requested when the player opens
+ * a review, or after `delayMs` on the post-game screen, whichever comes
+ * first. The default delay is now zero (see REVIEW_START_DELAY_MS). Resets
+ * when `active` goes false (the next game).
  */
 export function useReviewStartTrigger({ active, delayMs }: { active: boolean; delayMs: number }) {
   const [started, setStarted] = useState(false);

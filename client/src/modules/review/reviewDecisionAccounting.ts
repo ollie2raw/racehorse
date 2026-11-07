@@ -31,6 +31,11 @@ export type PlayerDecisionLedgerSummary = {
   readonly pendingCount: number;
   readonly totalDecisions: number;
   readonly entries: readonly PlayerDecisionLedgerEntry[];
+  /**
+   * Non-forced decisions the device's provisional quick review has already judged while the server's authoritative verdict is still pending.
+   * They are counted as pending above (scored means the server's verdict); this is how the card says "quick review ready, upgrading".
+   */
+  readonly quickReadyCount?: number;
 };
 
 function isForcedFromEvaluation(evaluation: ReviewEvaluationV1): boolean {
@@ -55,6 +60,8 @@ export function buildPlayerDecisionLedger(args: {
   readonly errorsByDecisionId: ReadonlyMap<string, unknown>;
   readonly pendingDecisionIds: ReadonlySet<string>;
   readonly batchDone: boolean;
+  /** Decisions the quick review has judged that the authoritative results above do not have yet. */
+  readonly quickDecisionIds?: ReadonlySet<string>;
 }): PlayerDecisionLedgerSummary {
   const {
     analyzedMoves,
@@ -63,6 +70,7 @@ export function buildPlayerDecisionLedger(args: {
     errorsByDecisionId,
     pendingDecisionIds,
     batchDone,
+    quickDecisionIds,
   } = args;
 
   const entries: PlayerDecisionLedgerEntry[] = analyzedMoves.map((move, idx) => {
@@ -110,7 +118,12 @@ export function buildPlayerDecisionLedger(args: {
     };
   });
 
-  return summarizeLedger(entries);
+  const summary = summarizeLedger(entries);
+  if (!quickDecisionIds || quickDecisionIds.size === 0) return summary;
+  const quickReadyCount = entries.filter(
+    (entry) => entry.status === 'pending' && entry.decisionId != null && quickDecisionIds.has(entry.decisionId),
+  ).length;
+  return quickReadyCount > 0 ? { ...summary, quickReadyCount } : summary;
 }
 
 export function summarizeLedger(entries: readonly PlayerDecisionLedgerEntry[]): PlayerDecisionLedgerSummary {

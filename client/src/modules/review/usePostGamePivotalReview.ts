@@ -29,14 +29,18 @@ import type { BotMatchState } from '../match/runtime/botEngine.ts';
 import type { FritzTier } from '../fritz/fritzConfig.ts';
 import type { ReviewSnapshotRecorder } from './ReviewSnapshotRecorder.ts';
 import { saveReviewSnapshots } from './reviewSnapshotStorage.ts';
-import { useReviewWorkerBatch } from './useReviewWorkerBatch.ts';
+import { useReviewWorkerBatch, type ReviewWorkerBatchView } from './useReviewWorkerBatch.ts';
 import { buildDecisionIdByMoveNumber, correlateSnapshotsToMoveLog } from './correlateSnapshotsToMoveLog.ts';
 import { logReviewWorkerBatchDiagnostics } from './logReviewWorkerBatchDiagnostics.ts';
 import {
   DEFAULT_REVIEW_COVERAGE_THRESHOLD,
   COMPLETION_REVIEW_DISPATCH_BUDGET,
+  QUICK_REVIEW_DISPATCH_BUDGET,
+  QUICK_REVIEW_MAX_WORKERS,
+  QUICK_REVIEW_ENABLED,
   defaultReviewWorkerPoolSize,
 } from './reviewEngineConfig.ts';
+import { mergeQuickReviewResults } from './mergeQuickReviewResults.ts';
 import {
   createReviewCoachingFactsStore,
   type ReviewCoachingFactsStore,
@@ -386,17 +390,41 @@ export function usePostGamePivotalReview({
       .filter((decision) => decision.lifecycle !== 'SCORED' && decision.lifecycle !== 'FORCED')
       .map((decision) => decision.decisionId),
   ), [serverCompletion]);
-  const reviewWorkerBatch = useMemo<ReturnType<typeof useReviewWorkerBatch>>(
-    () => reviewPersistenceEnabled
-      ? {
-          resultsByDecisionId: serverEvaluationsByDecisionId,
-          errorsByDecisionId: new Map(),
-          pendingDecisionIds: serverPendingIds,
-          done: serverCompletion?.complete === true,
-          cancel: () => {},
-        }
-      : localReviewWorkerBatch,
-    [reviewPersistenceEnabled, serverEvaluationsByDecisionId, serverPendingIds, serverCompletion?.complete, localReviewWorkerBatch],
+  // Quick review: while the server's authoritative job runs, the device judges every decision with a cheap tier-1 pass in a small worker pool, so the
+  // review is readable at game over and fills in as the server's verdicts replace these. Provisional by construction: see mergeQuickReviewResults.
+  const quickReviewBatch = useReviewWorkerBatch(
+    reviewPersistenceEnabled && QUICK_REVIEW_ENABLED ? reviewWorkerSnapshots : [],
+    QUICK_REVIEW_DISPATCH_BUDGET,
+    DEFAULT_REVIEW_COVERAGE_THRESHOLD,
+    undefined,
+    Math.min(defaultReviewWorkerPoolSize(), QUICK_REVIEW_MAX_WORKERS),
+  );
+  const allReviewDecisionIds = useMemo(
+    () => reviewWorkerSnapshots.map((snapshot) => snapshot.identifiers.decisionId),
+    [reviewWorkerSnapshots],
+  );
+  const reviewWorkerBatch = useMemo<ReviewWorkerBatchView>(
+    () => {
+      if (!reviewPersistenceEnabled) return localReviewWorkerBatch;
+      const serverComplete = serverCompletion?.complete === true;
+      const merged = mergeQuickReviewResults({
+        allDecisionIds: allReviewDecisionIds,
+        serverResults: serverEvaluationsByDecisionId,
+        serverPendingIds,
+        serverComplete,
+        quickResults: quickReviewBatch.resultsByDecisionId,
+      });
+      return {
+        resultsByDecisionId: merged.resultsByDecisionId,
+        errorsByDecisionId: new Map(),
+        // `done` stays the server's alone: it gates the accuracy model and the saved record, which must never see a quick verdict.
+        pendingDecisionIds: merged.quickDecisionIds.size > 0 ? merged.pendingDecisionIds : serverPendingIds,
+        done: serverComplete,
+        cancel: () => {},
+        quickDecisionIds: merged.quickDecisionIds,
+      };
+    },
+    [reviewPersistenceEnabled, serverEvaluationsByDecisionId, serverPendingIds, serverCompletion?.complete, localReviewWorkerBatch, quickReviewBatch.resultsByDecisionId, allReviewDecisionIds],
   );
 
   // Computed once here (this hook already holds both reviewWorkerSnapshots
@@ -812,10 +840,13 @@ export function usePostGamePivotalReview({
 
   const decisionLedger = useMemo(() => {
     if (!exposedPostGameAnalysis?.analyzedMoves) return null;
+    // The ledger counts authoritative verdicts only: in production that is the server's results, never the merged display set that includes quick ones.
     const results =
       finalizedResultsByDecisionId.size > 0
         ? finalizedResultsByDecisionId
-        : reviewWorkerBatch.resultsByDecisionId;
+        : reviewPersistenceEnabled
+          ? serverEvaluationsByDecisionId
+          : reviewWorkerBatch.resultsByDecisionId;
     return buildPlayerDecisionLedger({
       analyzedMoves: exposedPostGameAnalysis.analyzedMoves,
       decisionIdByMoveNumber,
@@ -823,6 +854,7 @@ export function usePostGamePivotalReview({
       errorsByDecisionId: reviewWorkerBatch.errorsByDecisionId,
       pendingDecisionIds: reviewWorkerBatch.pendingDecisionIds,
       batchDone: reviewWorkerBatch.done && accuracyModel !== undefined,
+      quickDecisionIds: reviewWorkerBatch.quickDecisionIds,
     });
   }, [
     exposedPostGameAnalysis,
@@ -830,6 +862,8 @@ export function usePostGamePivotalReview({
     reviewWorkerBatch,
     finalizedResultsByDecisionId,
     accuracyModel,
+    reviewPersistenceEnabled,
+    serverEvaluationsByDecisionId,
   ]);
 
   const exposedReviewWorkerBatch = useMemo(() => {

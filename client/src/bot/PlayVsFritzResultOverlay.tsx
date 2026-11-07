@@ -46,7 +46,7 @@ function ReviewPanel({ review, onRetryReview }: { review: PostGameReviewView; on
         ) : null}
       </div>
       <p className="pvr-review__status" role="status">{review.statusText}</p>
-      {(review.status === 'running' || review.status === 'stalled') && review.progress ? (
+      {(review.status === 'running' || review.status === 'quick' || review.status === 'stalled') && review.progress ? (
         <div
           className="pvr-review__track"
           role="progressbar"

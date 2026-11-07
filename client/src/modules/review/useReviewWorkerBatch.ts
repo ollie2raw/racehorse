@@ -12,6 +12,12 @@ export type ReviewBatchState = {
   readonly done: boolean;
 };
 
+/** What the reviewer reads: the batch state plus, in production, which decisions currently show the device's provisional quick verdict. */
+export type ReviewWorkerBatchView = ReviewBatchState & {
+  readonly cancel: () => void;
+  readonly quickDecisionIds?: ReadonlySet<string>;
+};
+
 const EMPTY_STATE: ReviewBatchState = {
   resultsByDecisionId: new Map(),
   errorsByDecisionId: new Map(),

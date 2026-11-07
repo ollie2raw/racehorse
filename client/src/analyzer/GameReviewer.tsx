@@ -9,6 +9,9 @@ import {
 } from './moveAnalyzer';
 import { sameTileTuple } from '../game/moveLogger';
 import type { ReviewBatchState } from '../modules/review/useReviewWorkerBatch';
+
+/** The batch the reviewer reads; in production it may also say which decisions currently show the device's provisional quick verdict. */
+type ReviewerBatch = ReviewBatchState & { readonly quickDecisionIds?: ReadonlySet<string> };
 import type { ReviewCoachingFactsStore } from '../modules/review/reviewCoachingFactsStore';
 import type { ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { heuristicClassificationToDisplay } from './heuristicClassificationToDisplay';
@@ -35,7 +38,7 @@ interface GameReviewerProps {
   open: boolean;
   onClose: () => void;
   analysis: GameAnalysis | null;
-  reviewWorkerBatch?: ReviewBatchState;
+  reviewWorkerBatch?: ReviewerBatch;
   decisionIdByMoveNumber?: ReadonlyMap<number, string>;
   /**
    * Review-instance store for canonical coaching facts. Owned by the post-game
@@ -72,10 +75,11 @@ interface GameReviewerProps {
 
 const COACHING_RATINGS: MoveRating[] = ['Blunder', 'Mistake', 'Inaccuracy'];
 
-const BADGE_TEXT: Record<'heuristic' | 'unclear' | 'search', string> = {
+const BADGE_TEXT: Record<'heuristic' | 'unclear' | 'search' | 'quick', string> = {
   heuristic: 'Est.',
   unclear: 'Unclear',
   search: 'Search',
+  quick: 'Quick',
 };
 
 function ratingClass(rating: MoveRating): string {
@@ -342,6 +346,8 @@ export default function GameReviewer({
     : undefined;
 
   const evidence = analysis?.evidence ?? LEGACY_ANALYSIS_DISCLOSURE;
+  // While any shown verdict is the device's provisional quick one (and the server has not finished), say so instead of the legacy disclosure.
+  const quickReviewActive = Boolean(reviewWorkerBatch && !reviewWorkerBatch.done && (reviewWorkerBatch.quickDecisionIds?.size ?? 0) > 0);
 
   const handContext = useMemo(
     () => (current ? buildReviewDecisionHandContext(current) : null),
@@ -377,17 +383,25 @@ export default function GameReviewer({
                 <span className="dfd__eyebrow">Analysis record</span>
                 <h3 className="dfd__headline gr-title">{title}</h3>
                 <span className="gr-evidence-label">
-                  {evidence.displayLabel} · {evidence.confidence} confidence
+                  {quickReviewActive ? 'Quick review · provisional' : `${evidence.displayLabel} · ${evidence.confidence} confidence`}
                 </span>
                 {reviewWorkerBatch && !reviewWorkerBatch.done ? (
                   <p className="gr-progress-note" role="status">
-                    {`Analyzing ${
-                      reviewWorkerBatch.resultsByDecisionId.size
-                    } / ${
-                      reviewWorkerBatch.resultsByDecisionId.size
-                        + reviewWorkerBatch.errorsByDecisionId.size
-                        + reviewWorkerBatch.pendingDecisionIds.size
-                    } decisions`}
+                    {quickReviewActive
+                      ? `Quick review · upgrading to full analysis (${
+                        reviewWorkerBatch.resultsByDecisionId.size - (reviewWorkerBatch.quickDecisionIds?.size ?? 0)
+                      } of ${
+                        reviewWorkerBatch.resultsByDecisionId.size
+                          + reviewWorkerBatch.errorsByDecisionId.size
+                          + reviewWorkerBatch.pendingDecisionIds.size
+                      })`
+                      : `Analyzing ${
+                        reviewWorkerBatch.resultsByDecisionId.size
+                      } / ${
+                        reviewWorkerBatch.resultsByDecisionId.size
+                          + reviewWorkerBatch.errorsByDecisionId.size
+                          + reviewWorkerBatch.pendingDecisionIds.size
+                      } decisions`}
                   </p>
                 ) : null}
                 {analysis?.reviewPersistenceError ? <p role="alert">{analysis.reviewPersistenceError}</p> : null}
@@ -614,7 +628,9 @@ export default function GameReviewer({
                   : unavailable
                     ? 'unavailable'
                     : (display?.ratingClass ?? ratingClass(move.rating));
-                const badge = isAnalyzing || unavailable ? null : (display?.badge ?? searchTier);
+                // A row still showing the device's provisional quick verdict says so; the server's verdict replaces it (and the badge) when it lands.
+                const isQuick = Boolean(decisionId && reviewWorkerBatch?.quickDecisionIds?.has(decisionId));
+                const badge = isAnalyzing || unavailable ? null : isQuick ? 'quick' as const : (display?.badge ?? searchTier);
                 const decisionIndex = idx + 1;
                 return (
                   <button
