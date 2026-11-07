@@ -188,4 +188,21 @@ describe('GET /health — reviewSweep', () => {
     process.env.REVIEW_SWEEP_ENABLED = 'true';
     expect((await request('GET', '/health')).body.reviewSweep).toBe(true);
   });
+
+  // A review stuck at "0 / N" with the sweep on: this is where the cause shows (last tick, last error as a code, and any database functions the sweep is missing).
+  it('reports what the sweep is doing and why it is failing, without raw error text', async () => {
+    const { noteReviewSweepError, noteReviewSweepTick, resetReviewSweepStatusForTests } = await import('../../reviewCompletion/reviewSweepStatus');
+    resetReviewSweepStatusForTests();
+    noteReviewSweepTick(1_700_000_000_000, { ran: 1, completed: 0, jobId: 'job-9' });
+    noteReviewSweepError(new Error('Supabase request failed: 404 {"code":"PGRST202","message":"Could not find the function public.claim_review_completion_job_v2 secret-ish-text"}'), 1_700_000_001_000);
+    const body = (await makeHarness()('GET', '/health')).body;
+    expect(body.reviewSweepStatus).toMatchObject({
+      lastTickAt: 1_700_000_000_000,
+      lastJobId: 'job-9',
+      lastErrorCode: 'rpc_missing',
+      lastErrorDetail: 'claim_review_completion_job_v2',
+    });
+    expect(JSON.stringify(body.reviewSweepStatus)).not.toContain('secret-ish-text');
+    resetReviewSweepStatusForTests();
+  });
 });
