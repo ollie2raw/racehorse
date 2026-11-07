@@ -32,6 +32,46 @@ import type { BoardLayout, BoardLayoutBend, BoardLayoutTile } from './boardLayou
 
 /** Smallest comfortable on-screen size of one layout unit (a domino is 2 x 1 units). */
 export const COMFORT_UNIT_PX = 21;
+/**
+ * A board container at least this wide (css px) is desktop-class: width is plentiful, so only height decides how
+ * long a straight vertical arm may run. Narrower containers (phones, portrait tablets) keep COMFORT_UNIT_PX.
+ */
+export const WIDE_CONTAINER_MIN_WIDTH_PX = 900;
+/**
+ * Desktop-class comfort: the on-screen size of one layout unit when BOTH vertical arms are at their limit, which
+ * is the worst case (a board with one short arm renders larger). Lower than COMFORT_UNIT_PX on purpose: with 21 a
+ * 1280x720 window turned an arm after 3 tiles and left a third of the board height unused; 14 lets an arm run
+ * 5-6 tiles before it turns, and the camera still fits the whole board.
+ */
+export const WIDE_COMFORT_UNIT_PX = 14;
+/**
+ * The camera never scales a live board below this on a wide container (0.22 elsewhere, 0.14 on a short phone):
+ * 0.16 x 84 = 13.4 px tile edge. The longer arms mean a late board with both arms at their limit needs a smaller
+ * scale than 0.22 to stay whole; a lower floor shrinks those few boards instead of letting them run off screen.
+ */
+export const WIDE_MIN_CAMERA_SCALE = 0.16;
+
+export interface CameraFloorInput {
+  containFullBoard: boolean;
+  staticView: boolean;
+  /** Phone held sideways (useShortBoardViewport). */
+  shortViewport: boolean;
+  wideContainer: boolean;
+}
+
+/** The lowest scale the live camera may fit a board at (Board.tsx and the quality model share this). */
+export function resolveMinCameraScale({ containFullBoard, staticView, shortViewport, wideContainer }: CameraFloorInput): number {
+  if (containFullBoard) return 0.08;
+  if (shortViewport && !staticView) return 0.14;
+  if (wideContainer && !staticView) return WIDE_MIN_CAMERA_SCALE;
+  return 0.22;
+}
+/** Longest straight reach on a wide board: six ordinary tiles. Beyond that an arm turns however tall the board is. */
+export const WIDE_MAX_ARM_EXTENT_UNITS = 14.4;
+
+export function isWideBoardContainer(containerWidthPx: number): boolean {
+  return Number.isFinite(containerWidthPx) && containerWidthPx >= WIDE_CONTAINER_MIN_WIDTH_PX;
+}
 /** Share of the container height the camera fits a tall layout into (matches useBoardCamera). */
 export const CAMERA_FILL = 0.92;
 /** Vertical padding boardLayout.ts adds above and below the tiles. */
@@ -52,14 +92,17 @@ export function bucketContainerHeight(heightPx: number): number {
 /**
  * Maximum reach (layout units from the hub centre) of a vertical arm for a
  * container of this (bucketed) height, or undefined when the container has not
- * been measured yet (arms stay straight until it is — never guessed).
+ * been measured yet (arms stay straight until it is — never guessed). `wideContainer` selects the desktop-class
+ * rule (lower comfort, capped at six tiles); omitted, the original rule applies unchanged.
  */
-export function resolveVerticalArmExtent(containerHeightPx: number): number | undefined {
+export function resolveVerticalArmExtent(containerHeightPx: number, wideContainer = false): number | undefined {
   const height = bucketContainerHeight(containerHeightPx);
   if (height <= 0) return undefined;
-  const tallestComfortableLayout = (height * CAMERA_FILL) / COMFORT_UNIT_PX;
+  const comfortUnitPx = wideContainer ? WIDE_COMFORT_UNIT_PX : COMFORT_UNIT_PX;
+  const tallestComfortableLayout = (height * CAMERA_FILL) / comfortUnitPx;
   const reach = (tallestComfortableLayout - 2 * LAYOUT_PAD_UNITS) / 2;
-  return Math.max(MIN_ARM_EXTENT_UNITS, reach);
+  const limited = wideContainer ? Math.min(WIDE_MAX_ARM_EXTENT_UNITS, reach) : reach;
+  return Math.max(MIN_ARM_EXTENT_UNITS, limited);
 }
 
 // ─── Turn direction and conflict resolution ──────────────────

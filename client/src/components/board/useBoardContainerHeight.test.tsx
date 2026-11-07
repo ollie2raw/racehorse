@@ -5,11 +5,12 @@ import { HEIGHT_BUCKET_PX } from './boardRouting';
 import { useBoardContainerHeight } from './useBoardContainerHeight';
 
 let measured = 756;
+let measuredWidth = 1456;
 let notify: (() => void) | null = null;
 
 function Probe({ enabled = true }: { enabled?: boolean }) {
-  const { containerRef, containerHeight } = useBoardContainerHeight(enabled);
-  return <div ref={containerRef} data-testid="probe" data-height={containerHeight} />;
+  const { containerRef, containerHeight, wideContainer } = useBoardContainerHeight(enabled);
+  return <div ref={containerRef} data-testid="probe" data-height={containerHeight} data-wide={String(wideContainer)} />;
 }
 
 const heightOf = (el: HTMLElement) => Number(el.getAttribute('data-height'));
@@ -67,5 +68,26 @@ describe('useBoardContainerHeight', () => {
     measured = 0;
     const { getByTestId } = render(<Probe />);
     expect(heightOf(getByTestId('probe'))).toBe(0);
+  });
+
+  it('reports whether the container is desktop-class wide, and follows it across the threshold', () => {
+    const wideOf = (el: HTMLElement) => el.getAttribute('data-wide');
+    vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(
+      () => ({ width: measuredWidth, height: measured, top: 0, left: 0, right: measuredWidth, bottom: measured, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect,
+    );
+    measuredWidth = 1456;
+    const { getByTestId } = render(<Probe />);
+    expect(wideOf(getByTestId('probe'))).toBe('true');
+    act(() => {
+      measuredWidth = 700;
+      notify?.();
+    });
+    expect(wideOf(getByTestId('probe'))).toBe('false');
+  });
+
+  it('is never wide when disabled', () => {
+    measuredWidth = 1456;
+    const { getByTestId } = render(<Probe enabled={false} />);
+    expect(getByTestId('probe').getAttribute('data-wide')).toBe('false');
   });
 });
