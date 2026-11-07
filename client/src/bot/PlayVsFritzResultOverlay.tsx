@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
+import type { PostGameReviewView } from './postGameReviewView';
 import '../styles/dossierRecord.css';
+import './playVsFritzResult.css';
 
 export type PlayVsFritzResultOverlayProps = {
   won: boolean;
   opponentLabel: string;
-  dealSize: number;
   youScore: number;
   botScore: number;
+  /** A confirmed rating change, when there is one. Nothing is shown for a pending or missing update. */
   ratingSlot?: ReactNode;
   onRematch: () => void;
   onChangeSetup: () => void;
@@ -19,19 +21,56 @@ export type PlayVsFritzResultOverlayProps = {
     onClick: () => void;
     variant: 'primary' | 'secondary';
   }>;
-  /** Shown below stats while deferred post-game analysis runs. */
-  statusNote?: ReactNode;
-  /** Re-open post-game review prompt after dismissal or reviewer close. */
-  showReviewGame?: boolean;
+  /** The review for this game; null when the game has none (Journey trial, ineligible). */
+  review?: PostGameReviewView | null;
   onReviewGame?: () => void;
+  onRetryReview?: () => void;
   /** Shown to a guest: this game is saved to the guest session, and an account keeps it. */
   savePrompt?: { text: string; actionLabel: string; onAction: () => void };
 };
 
+function ReviewPanel({ review, onRetryReview }: { review: PostGameReviewView; onRetryReview?: () => void }) {
+  const percent = review.progress && review.progress.total > 0
+    ? Math.min(100, Math.round((review.progress.done / review.progress.total) * 100))
+    : 0;
+
+  return (
+    <section className="pvr-review" aria-label="Game review">
+      <div className="pvr-review__head">
+        <span className="pvr-review__label">Game review</span>
+        {review.status === 'ready' && review.accuracyText ? (
+          <span className="pvr-review__result">
+            {review.accuracyText}
+            {review.gradeText && review.gradeText !== '—' ? <span className="pvr-review__grade">{review.gradeText}</span> : null}
+          </span>
+        ) : null}
+      </div>
+      <p className="pvr-review__status" role="status">{review.statusText}</p>
+      {(review.status === 'running' || review.status === 'stalled') && review.progress ? (
+        <div
+          className="pvr-review__track"
+          role="progressbar"
+          aria-label="Analysis progress"
+          aria-valuemin={0}
+          aria-valuemax={review.progress.total}
+          aria-valuenow={review.progress.done}
+        >
+          <span className="pvr-review__fill" style={{ width: `${percent}%` }} />
+        </div>
+      ) : null}
+      {review.note ? <p className="pvr-review__note" role="status">{review.note}</p> : null}
+      {review.canRetry && onRetryReview ? (
+        <button type="button" className="dfd__btn pvr-review__retry" onClick={onRetryReview} disabled={review.retrying}>
+          {review.retryLabel}
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
 export function PlayVsFritzResultOverlay({
   won,
   opponentLabel,
-  dealSize,
   youScore,
   botScore,
   ratingSlot,
@@ -40,78 +79,29 @@ export function PlayVsFritzResultOverlay({
   onHome,
   showHome = false,
   customActions,
-  statusNote,
-  showReviewGame = false,
+  review = null,
   onReviewGame,
+  onRetryReview,
   savePrompt,
 }: PlayVsFritzResultOverlayProps) {
-  const margin = Math.abs(youScore - botScore);
-  const marginTone = won ? 'is-win' : 'is-loss';
-
   return (
     <GameOverlayPortal>
       <div className="game-over-overlay df-result-overlay" role="dialog" aria-label="Play vs Fritz result">
-        <div className="dfd" onClick={(event) => event.stopPropagation()}>
-          <div className="dfd__body">
+        <div className="dfd pvr-card" onClick={(event) => event.stopPropagation()}>
+          <div className="dfd__body pvr-body">
             <header>
               <span className="dfd__eyebrow">Play vs Fritz</span>
               <h2 className="dfd__headline">{won ? 'Victory' : 'Defeat'}</h2>
               <p className="dfd__sub">
                 {won
-                  ? `You beat ${opponentLabel} in ${dealSize}-tile play.`
-                  : `${opponentLabel} took the match in ${dealSize}-tile play.`}
+                  ? `You beat ${opponentLabel}, ${youScore}–${botScore}.`
+                  : `${opponentLabel} won, ${botScore}–${youScore}.`}
               </p>
             </header>
 
-            <dl className="dfd__stats" aria-label="Match summary">
-              <div className="dfd__stat">
-                <dt>Final score</dt>
-                <dd className={marginTone}>
-                  {youScore}-{botScore}
-                </dd>
-              </div>
-              <div className="dfd__stat">
-                <dt>Margin</dt>
-                <dd className={marginTone}>
-                  {won ? '+' : '-'}
-                  {margin}
-                </dd>
-              </div>
-              <div className="dfd__stat">
-                <dt>Deal</dt>
-                <dd>{dealSize}-Tile</dd>
-              </div>
-              <div className="dfd__stat">
-                <dt>Result</dt>
-                <dd className={won ? 'is-accent' : 'is-loss'}>{won ? 'Win' : 'Loss'}</dd>
-              </div>
-            </dl>
+            {review ? <ReviewPanel review={review} onRetryReview={onRetryReview} /> : null}
 
-            <div className="dfd__standings" aria-label="Final standings">
-              <div className="dfd__standing">
-                <span>
-                  You
-                  {won ? <span className="dfd__tag">Winner</span> : null}
-                </span>
-                <span className={`dfd__standing-score${won ? ' is-win' : ' is-loss'}`}>{youScore}</span>
-              </div>
-              <div className="dfd__standing">
-                <span>
-                  {opponentLabel}
-                  {!won ? <span className="dfd__tag">Winner</span> : null}
-                </span>
-                <span className={`dfd__standing-score${!won ? ' is-win' : ' is-loss'}`}>{botScore}</span>
-              </div>
-            </div>
-
-            {ratingSlot ? (
-              <div className="dfd__meta">
-                <span className="dfd__meta-label">Rating</span>
-                {ratingSlot}
-              </div>
-            ) : null}
-
-            {statusNote ? <p className="dfd__note">{statusNote}</p> : null}
+            {ratingSlot ? <div className="pvr-rating">{ratingSlot}</div> : null}
 
             {savePrompt ? (
               <>
@@ -120,12 +110,6 @@ export function PlayVsFritzResultOverlay({
                   {savePrompt.actionLabel} ↗
                 </button>
               </>
-            ) : null}
-
-            {showReviewGame && onReviewGame ? (
-              <button type="button" className="dfd__link" onClick={onReviewGame}>
-                Review game ↗
-              </button>
             ) : null}
 
             <div className="dfd__actions">
@@ -155,15 +139,29 @@ export function PlayVsFritzResultOverlay({
                 </>
               ) : (
                 <>
-                  <button type="button" className="dfd__btn dfd__btn--primary" onClick={onRematch}>
+                  {review && onReviewGame ? (
+                    <button
+                      type="button"
+                      className="dfd__btn dfd__btn--primary pvr-action"
+                      onClick={onReviewGame}
+                      disabled={!review.canOpen}
+                    >
+                      Review game
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={`dfd__btn pvr-action${review && onReviewGame ? '' : ' dfd__btn--primary'}`}
+                    onClick={onRematch}
+                  >
                     Rematch
                   </button>
-                  <div className="dfd__row">
-                    <button type="button" className="dfd__btn" onClick={onChangeSetup}>
-                      Change Setup
+                  <div className="pvr-quiet-row">
+                    <button type="button" className="pvr-quiet" onClick={onChangeSetup}>
+                      Change setup
                     </button>
                     {showHome && onHome ? (
-                      <button type="button" className="dfd__btn" onClick={onHome}>
+                      <button type="button" className="pvr-quiet" onClick={onHome}>
                         Home
                       </button>
                     ) : null}

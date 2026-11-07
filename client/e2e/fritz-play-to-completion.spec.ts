@@ -134,18 +134,20 @@ test('Play vs Fritz runs to the review prompt and opens Game Reviewer', async ({
   const result = page.getByRole('dialog', { name: 'Play vs Fritz result' });
   await expect(result).toBeVisible();
   await expect(result.locator('.dfd__headline')).toHaveText(/^(Victory|Defeat)$/);
-  await expect(result.getByText('Final Score')).toBeVisible();
-  await expect(result.locator('[aria-label="Final standings"]')).toBeVisible();
-  await expect(result.getByRole('button', { name: /Rematch/i })).toBeVisible();
+  // One card: the score once (under the headline), the review inside it, Rematch next to it. No separate review prompt.
+  await expect(result.locator('.dfd__sub')).toHaveText(/\d+–\d+\./);
+  await expect(result.locator('.dfd__stats')).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Post-game review' })).toHaveCount(0);
+  await expect(result.getByRole('button', { name: 'Rematch', exact: true })).toBeVisible();
 
   // FEATURE_COMPLETENESS_AUDIT §5.8: the live post-game path should expose
   // the oracle-backed accuracy state before the player opens the reviewer.
-  const reviewPrompt = page.getByRole('dialog', { name: 'Post-game review' });
-  await expect(reviewPrompt).toBeVisible({ timeout: 120_000 });
-  await expect(reviewPrompt.getByText('Accuracy', { exact: true })).toBeVisible();
-  await expect(reviewPrompt.getByText('Grade', { exact: true })).toBeVisible();
-  await expect(reviewPrompt.locator('.dfd__stat').filter({ hasText: 'Accuracy' })).toHaveText(/Accuracy|%|Partial/);
-  await reviewPrompt.getByRole('button', { name: 'Review Game' }).click();
+  const reviewPanel = result.getByRole('region', { name: 'Game review' });
+  await expect(reviewPanel).toBeVisible({ timeout: 120_000 });
+  await expect(reviewPanel.getByRole('status').first()).toHaveText(/Analyzing|Preparing|complete|\d+(\.\d+)?%|switched off|could not finish/i);
+  const openReview = result.getByRole('button', { name: 'Review game', exact: true });
+  await expect(openReview).toBeEnabled({ timeout: 120_000 });
+  await openReview.click();
   await expect(page.getByRole('dialog', { name: 'Game reviewer' })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('heading', { name: 'Game Review' })).toBeVisible();
 

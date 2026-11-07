@@ -99,9 +99,12 @@ test('ordinary production player: authoritative Fritz deal, complete review, his
     drawCounts.set(key, (drawCounts.get(key) ?? 0) + 1);
   }
   expect([...drawCounts.values()].some((count) => count > 1), 'completed game contains a genuine multi-draw turn').toBe(true);
-  const prompt = page.getByRole('dialog', { name: 'Post-game review' });
-  await expect(prompt).toBeVisible({ timeout: 180_000 });
-  await prompt.getByRole('button', { name: 'Review Game' }).click();
+  // Play vs Fritz carries its review inside the result card.
+  const result = page.getByRole('dialog', { name: 'Play vs Fritz result' });
+  await expect(result).toBeVisible({ timeout: 180_000 });
+  const openReview = result.getByRole('button', { name: 'Review game', exact: true });
+  await expect(openReview).toBeEnabled({ timeout: 180_000 });
+  await openReview.click();
   const reviewer = page.getByRole('dialog', { name: 'Game reviewer' });
   await expect(reviewer).toBeVisible();
   await expect(reviewer.locator('.gr-evidence-label')).toContainText(/Review Engine analysis/i, { timeout: 180_000 });
