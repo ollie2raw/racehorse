@@ -106,6 +106,28 @@ export async function retryServerReviewCompletion(input: {
  */
 export type ReviewUnavailableReason = 'sweep_disabled' | 'failed';
 
+/** Where the server says the job is: `queued` = no pass holds it yet, `running` = a pass holds a live lease. Absent on an older server. */
+export type ReviewJobStage = 'queued' | 'running';
+
+/** What the card needs to say "Queued" or "Analyzing" truthfully and to offer a retry when nothing moves. */
+export type ReviewWaitState = {
+  readonly stage: ReviewJobStage | null;
+  /** No progress for REVIEW_STALL_MS: the review is taking longer than expected. */
+  readonly stalled: boolean;
+  /** The server's last sweep error as a short code (for example `rpc_missing`), when it has one for this job. */
+  readonly sweepErrorCode: string | null;
+};
+
+/** After this long without a decision completing, the card says the review is taking longer than expected and offers a retry. */
+export const REVIEW_STALL_MS = 90_000;
+
+export function isReviewStalled(now: number, lastProgressAt: number): boolean {
+  return now - lastProgressAt >= REVIEW_STALL_MS;
+}
+
+/** A stalled job is polled slowly: it is waiting on the server, not about to change, and every poll reads the job row. */
+export const REVIEW_POLL_STALLED_MS = 15_000;
+
 export const REVIEW_POLL_INITIAL_MS = 3_000;
 export const REVIEW_POLL_MAX_MS = 5_000;
 
@@ -125,6 +147,9 @@ export async function pollServerReviewCompletion(input: {
   readonly unavailable?: boolean;
   /** Why: `sweep_disabled` = the server's review is switched off (retrying cannot help), `failed` = this job failed (retrying can). Absent on an older server. */
   readonly unavailableReason?: ReviewUnavailableReason | null;
+  /** queued / running, from the server (absent on an older one). */
+  readonly stage?: ReviewJobStage | 'complete' | 'failed' | null;
+  readonly sweepError?: { readonly code: string | null; readonly detail?: string | null } | null;
   readonly progress: EnqueueReviewCompletionResponse['progress'];
   readonly evaluations?: ReviewEvaluationV1[];
   readonly decisions: readonly { decisionId: string; lifecycle: string; positionHash: string }[];
@@ -142,6 +167,8 @@ export async function pollServerReviewCompletion(input: {
       status: string;
       unavailable?: boolean;
       unavailableReason?: ReviewUnavailableReason | null;
+      stage?: ReviewJobStage | 'complete' | 'failed' | null;
+      sweepError?: { code: string | null; detail?: string | null } | null;
       progress: EnqueueReviewCompletionResponse['progress'];
       evaluations?: ReviewEvaluationV1[];
       decisions: { decisionId: string; lifecycle: string; positionHash: string }[];

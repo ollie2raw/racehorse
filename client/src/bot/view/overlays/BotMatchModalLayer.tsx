@@ -70,6 +70,7 @@ export function BotMatchModalLayer({ modals, match }: BotMatchModalLayerProps) {
         accuracyModelPending={modals.accuracyModelPending}
         reviewUnavailable={modals.reviewUnavailable}
         reviewUnavailableReason={modals.reviewUnavailableReason}
+        reviewWait={modals.reviewWait}
         decisionLedger={modals.decisionLedger}
         onRetryReview={modals.retryReview}
         reviewRetryState={modals.reviewRetryState}
