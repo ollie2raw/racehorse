@@ -1,5 +1,5 @@
 {
-  "total": 3524459,
+  "total": 3525825,
   "chunks": {
     "ActivityFeedLobbyBridge": 34071,
     "analyzer": 96133,
@@ -8,7 +8,7 @@
     "bot-guided": 113248,
     "bot-hand-lifecycle": 52778,
     "bot-heuristics": 24269,
-    "BotMatchScreen": 257303,
+    "BotMatchScreen": 258505,
     "DailyFritzLeaderboardRoute": 20213,
     "DailyFritzScreen": 55822,
     "FriendsScreenLobbyBridge": 20629,
@@ -30,7 +30,7 @@
     "MatchmakingScreen": 23517,
     "MultiplayerModeController": 12273,
     "NoBrainerLabScreen": 18616,
-    "pivotal-review": 26061,
+    "pivotal-review": 26225,
     "PlayVsFritz": 13999,
     "privateMatchLobby": 10135,
     "PrivateMatchLobbyScreen": 32386,
