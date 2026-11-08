@@ -15,6 +15,7 @@ import { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
 import { countCombinations } from './combinations';
 import { decideSearchConvergence } from './evaluationConvergence';
 import { computeSecondOpinion } from './secondOpinion';
+import { evaluateBoundedExact, type BoundedExactOptions } from './boundedExactSearch';
 
 /**
  * Search escalation ladder. After tier 4, progressive chunks continue until
@@ -168,6 +169,12 @@ export function adaptiveEvaluateReviewPosition(
     readonly progressiveSampleOffset?: number;
     /** Skip the search for a forced position (default true); false only for comparisons. */
     readonly forcedFastPath?: boolean;
+    /**
+     * Bounded exact path (boundedExactSearch.ts). Absent = off, and then nothing below differs from before. Present, it replaces the exact-enumeration branch's
+     * C(n,k) draws with a without-replacement visit of the distinct hands (3 plies unless `plyDepth` says otherwise). The server passes it only when
+     * REVIEW_BOUNDED_EXACT_ENABLED is "true".
+     */
+    readonly boundedExact?: BoundedExactOptions;
   },
 ): AdaptiveEvaluateResult {
   const evaluate = options?.evaluate ?? evaluateReviewPosition;
@@ -263,7 +270,10 @@ export function adaptiveEvaluateReviewPosition(
       seed: 'racehorse-review-exact-enum',
       maxWallClockMs: 1_800_000,
     };
-    const raw = evaluate(snapshot, exactBudget, coverageThreshold);
+    const bounded = options?.boundedExact ? evaluateBoundedExact(snapshot, options.boundedExact) : null;
+    const raw = bounded ?? evaluate(snapshot, exactBudget, coverageThreshold);
+    // The reason string is a label for the soak tools only (nothing outside review-engine's devtools reads it).
+    const exactReason = bounded?.boundedSearch ? `bounded-${bounded.boundedSearch.stopReason}` : 'exact-complete';
     if (isForcedDecision(raw.candidates)) {
       return {
         evaluation: withProvenance(raw, {
@@ -279,7 +289,7 @@ export function adaptiveEvaluateReviewPosition(
         evidencePolicy: evidence.policy,
         feasible: true,
         estimatedStateSpace,
-        convergenceReason: 'exact-complete',
+        convergenceReason: exactReason,
       };
     }
     if (isEngineScored(raw)) {
@@ -297,7 +307,7 @@ export function adaptiveEvaluateReviewPosition(
         evidencePolicy: evidence.policy,
         feasible: true,
         estimatedStateSpace,
-        convergenceReason: 'exact-complete',
+        convergenceReason: exactReason,
       };
     }
   }

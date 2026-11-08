@@ -15,7 +15,12 @@ export {
 export const REVIEW_POSITION_SNAPSHOT_VERSION = 2 as const;
 export const REVIEW_EVALUATION_VERSION = 1 as const;
 export const REVIEW_STATE_DIGEST_VERSION = 1 as const;
-export const REVIEW_ENGINE_CONTRACT_VERSION = 'review-engine-v1' as const;
+/**
+ * v2 (2026-11-07): the evaluation gains the optional `boundedSearch` field (additive; v1 evaluations simply lack it). The version is part of the canonical snapshot
+ * serialization (canonicalizeReviewPositionSemantics), so snapshots captured from this version on hash to a different position hash than the same position under v1;
+ * a stored snapshot or evaluation keeps the version it was captured with. See docs/review-bounded-path-prereport-2026-11-07.md for what persists or compares it.
+ */
+export const REVIEW_ENGINE_CONTRACT_VERSION = 'review-engine-v2' as const;
 
 export type ReviewGameMode = 'play-vs-fritz' | 'multiplayer' | 'daily-fritz' | 'fixture';
 
@@ -273,6 +278,25 @@ export type ReviewEvaluationV1 = {
    * heuristic estimates without this field.
    */
   readonly evaluationProvenance?: ReviewEvaluationProvenance;
+  /**
+   * Additive (review-engine-v2). Present only when the bounded exact path produced this evaluation (flag REVIEW_BOUNDED_EXACT_ENABLED); absent on every other evaluation,
+   * including all v1 ones. `search.depth` carries the plies searched below each hidden hand (0 for a locked yard, searched to the hand's end).
+   *   partial        true when a cap, the node budget or the wall-clock ceiling ended the run before the verdict was resolved or the enumeration finished. The loss and the
+   *                  candidate values are then the best-so-far estimate over `handsVisited` of `totalHands` distinct hands.
+   *   lossInterval   95% interval of the played move's loss (best minus played), finite-population corrected; [loss, loss] when every hand was visited. An unbounded side is
+   *                  reported as 1,000,000. Presentation may show a severity badge for a PARTIAL result only when this interval lies inside one grade band.
+   *   orderSeed      the seed of the visiting order (a permutation of the distinct hands keyed by the decision id).
+   */
+  readonly boundedSearch?: {
+    readonly stopReason: 'complete' | 'resolved' | 'cap' | 'time' | 'node-cap' | 'wall-clock';
+    readonly partial: boolean;
+    readonly handsVisited: number;
+    readonly totalHands: number;
+    readonly plyDepth: number;
+    readonly orderSeed: string;
+    readonly lossInterval: readonly [number, number];
+    readonly confidence: number;
+  };
 };
 
 /**

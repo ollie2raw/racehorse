@@ -68,7 +68,14 @@ export type SamplePass = {
 };
 
 /** One pass at the cap; null when the position has no feasible hidden allocation (the solver returns null too). */
-export function runSamplePass(snapshot: ReviewPositionSnapshotV2, seed: string, cap: number, maxPips = 6): SamplePass | null {
+export function runSamplePass(
+  snapshot: ReviewPositionSnapshotV2,
+  seed: string,
+  cap: number,
+  maxPips = 6,
+  /** Ply depth of the walk (default: the ladder's 2). With a depth other than 2 the proportional node budget is lifted, so every one of the `cap` samples is solved. */
+  plyDepth: number = MAX_PLY_DEPTH,
+): SamplePass | null {
   const { actorId, opponentId } = snapshot.identifiers;
   const { scores } = snapshot.preAction;
   const rootDiff = scores.actor - scores.opponent;
@@ -76,12 +83,12 @@ export function runSamplePass(snapshot: ReviewPositionSnapshotV2, seed: string, 
   if (eligibleForOpponent.length < snapshot.preAction.opponentTileCount) return null;
 
   const config: Config = { ...resolveReviewConfig(snapshot, maxPips), deadTileCount: snapshot.preAction.boneyard.deadCount };
-  const nodeBudget: NodeBudget = { count: 0, max: cap * NODES_PER_SAMPLE };
+  const nodeBudget: NodeBudget = { count: 0, max: plyDepth === MAX_PLY_DEPTH ? cap * NODES_PER_SAMPLE : Number.MAX_SAFE_INTEGER };
   const walkConfig: GameTreeWalkConfig = {
     shouldStop: undefined,
     actorId,
     opponentId,
-    isCutoff: (state, depth) => state.handOver || state.gameOver || depth >= MAX_PLY_DEPTH,
+    isCutoff: (state, depth) => state.handOver || state.gameOver || depth >= plyDepth,
     leafValue: (state) => state.players[actorId].score - state.players[opponentId].score,
   } as GameTreeWalkConfig;
 

@@ -1,6 +1,6 @@
 import { isForcedDecision } from '@racehorse/game-core/review';
 import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
-import { LOSS_BAND_BOUNDARIES, type CalibratedLossBandBoundaries } from '@racehorse/review-engine';
+import { LOSS_BAND_BOUNDARIES, severityBadgeAllowed, type CalibratedLossBandBoundaries } from '@racehorse/review-engine';
 
 /**
  * D5 (docs/scoping/game-review-oracle-upgrade-2026-09-13.md, Phase D): the
@@ -65,7 +65,8 @@ export function presentedLabelForEvaluation(
 
 /**
  * Spec section 4a: labels only apply to scorable decisions -- a forced
- * (action-level) or heuristic-only decision gets no loss-band label.
+ * (action-level) or heuristic-only decision gets no loss-band label. Nor does
+ * a partial bounded-search result whose loss interval spans two bands.
  */
 export function lossBandLabelForEvaluation(
   evaluation: ReviewEvaluationV1,
@@ -74,5 +75,7 @@ export function lossBandLabelForEvaluation(
   const forced = isForcedDecision(evaluation.candidates);
   const heuristicOnly = evaluation.evidence.source === 'heuristic';
   if (forced || heuristicOnly) return null;
+  // A PARTIAL bounded result (a cap ended the search early) states a severity only when its 95% loss interval lies inside one band; otherwise no badge.
+  if (!severityBadgeAllowed(evaluation, boundaries)) return null;
   return lossBandLabel(evaluation.loss.expectedPointDifferential, boundaries);
 }

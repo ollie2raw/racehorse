@@ -7,7 +7,7 @@ export function evaluation(moveNumber: number, loss: number): ReviewEvaluationV1
   const best = { action: { kind: 'play', tile: { low: 5, high: 6 }, position: 'right' }, value: { expectedPointDifferential: loss, winProbability: null }, immediatePoints: 5, principalVariation: [] } as const;
   return {
     evaluationVersion: 1, snapshotId: `decision-${moveNumber}`, rulesVersion: 1,
-    reviewEngineVersion: 'review-engine-v1',
+    reviewEngineVersion: 'review-engine-v2',
     evidence: { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' },
     played, best, candidates: [played, best],
     loss: { expectedPointDifferential: loss, winProbability: null },

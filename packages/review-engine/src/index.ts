@@ -143,3 +143,12 @@ export type {
   ReviewCaptureManifest,
 } from './reviewCaptureSchema';
 export * from './secondOpinion';
+export {
+  evaluateBoundedExact,
+  intervalInsideOneBand,
+  severityBadgeAllowed,
+  BOUNDED_EXACT_DEFAULTS,
+  BOUNDED_EXACT_PLY_DEPTH,
+  BOUNDED_LOCKED_YARD_NODE_CAP,
+  type BoundedExactOptions,
+} from './boundedExactSearch';

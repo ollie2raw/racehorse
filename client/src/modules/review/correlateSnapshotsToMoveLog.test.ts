@@ -31,7 +31,7 @@ function makeSnapshot(
     snapshotVersion: 2,
     rulesVersion: 1,
     commandVersion: 1,
-    reviewEngineVersion: 'review-engine-v1',
+    reviewEngineVersion: 'review-engine-v2',
     stateDigestVersion: 1,
     identifiers: {
       sessionId: 'pvf-session-1',
