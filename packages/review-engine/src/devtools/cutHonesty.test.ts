@@ -167,6 +167,12 @@ describe('a locked-yard exact result that was cut before every allocation was so
     expect(off.search.coverage).toBe(1);
     expect(JSON.stringify(cutLockedYard(50_000_000, true))).toBe(JSON.stringify(off));
   });
+
+  it('a forced locked-yard decision (one legal action) has no verdict to mislead and is left alone even when cut', () => {
+    const cutResult = cutLockedYard(50);
+    const forced = { ...cutResult, candidates: [cutResult.candidates[0]!] };
+    expect(markCutEvaluation(forced, undefined, 'wall-clock', 0)).toBe(forced);
+  });
 });
 
 describe('a sampled verdict cut by the wall-clock ceiling', () => {

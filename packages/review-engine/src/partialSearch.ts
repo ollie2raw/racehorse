@@ -9,6 +9,7 @@
  * Everything here is pure. It is reached only when the caller asked for it (`cutHonesty`, set by the server when REVIEW_CUT_HONESTY_ENABLED is "true"); a default call is untouched.
  */
 import type { ReviewEvaluationV1 } from '@racehorse/game-core/review';
+import { isForcedDecision } from '@racehorse/game-core/review';
 import { intervalInsideOneBand } from './gradeBands';
 import type { PairedSampleStats } from './solveMidgameDeterminization';
 
@@ -72,6 +73,8 @@ export function buildPartialSearch(
 function markCutExact(evaluation: ReviewEvaluationV1, reason: PartialSearchField['reason']): ReviewEvaluationV1 {
   const { complete, coverage, hiddenStateSamples } = evaluation.search;
   if (evaluation.boundedSearch || complete !== false || coverage >= 1) return evaluation;
+  // A forced decision (one legal action) has no verdict to mislead: nothing to mark.
+  if (isForcedDecision(evaluation.candidates)) return evaluation;
   return {
     ...evaluation,
     partialSearch: {
