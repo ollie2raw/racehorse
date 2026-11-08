@@ -77,6 +77,7 @@ export const ENV_SPECS: readonly EnvSpec[] = [
   runtime('COMMAND_MATCH_ID_REQUIRED', 'Requires a match id on game commands.', { kind: 'flagTrue' }),
   runtime('REVIEW_SWEEP_ENABLED', 'The review sweep job. The kill switch from the 2026-09 outages.', { kind: 'flagTrue' }),
   runtime('REVIEW_BOUNDED_EXACT_ENABLED', 'The bounded exact review path (default off). On: review decisions with 8,000 or fewer hidden hands visit each distinct hand once in a seeded random order, stop when the verdict is settled, and a capped answer carries partial=true and an interval; off: decisions are evaluated exactly as before. See docs/review-bounded-path-prereport-2026-11-07.md.', { kind: 'flagTrue' }),
+  runtime('REVIEW_CUT_HONESTY_ENABLED', 'Honest labelling of a review verdict cut short by the wall-clock ceiling or a node budget (default off). On: such a sampled result carries partialSearch (partial = true and a 95% loss interval), shows a severity badge or Best only when the interval lies inside one grade band (otherwise confidence low and no badge), and a run cut before its halfway sample is no longer accepted as stability-converged.', { kind: 'flagTrue' }),
   runtime('LIVE_SESSION_LOG_ENTRIES', 'Incremental live-session log writes. Needs the persist_room_live_session migration.', { kind: 'flagTrue' }),
   runtime('ENABLE_REQUEST_PUZZLE_GENERATION', 'Allows puzzle generation on request.', { kind: 'flagBool' }),
   runtime('ENABLE_STARTUP_FRITZ_WARMUP', 'Warms the Daily Fritz engine on boot.', { kind: 'flagTruthy' }),

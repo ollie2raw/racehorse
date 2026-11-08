@@ -152,3 +152,13 @@ export {
   BOUNDED_LOCKED_YARD_NODE_CAP,
   type BoundedExactOptions,
 } from './boundedExactSearch';
+export {
+  buildPartialSearch,
+  markCutEvaluation,
+  pairedLossInterval,
+  PARTIAL_INTERVAL_CONFIDENCE,
+  PARTIAL_INTERVAL_Z,
+  UNBOUNDED_LOSS,
+  type PartialSearchField,
+} from './partialSearch';
+export type { PairedSampleStats } from './solveMidgameDeterminization';

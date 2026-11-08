@@ -11,6 +11,7 @@ import {
 import type { ReviewAction, ReviewCandidateEvaluationV1, ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/game-core/review';
 import { REVIEW_EVALUATION_VERSION } from '@racehorse/game-core/review';
 import { LOSS_BAND_BOUNDARIES } from './accuracyModelCalibration';
+import { intervalInsideOneBand } from './gradeBands';
 import { WALL_CLOCK_CEILING_DIAGNOSTIC } from './evaluateReviewPosition';
 import { resolveHiddenPoolEligibility } from './hiddenPoolEligibility';
 import { resolveReviewConfig } from './reviewRuleset';
@@ -442,27 +443,23 @@ export function runBounded(source: HandSource, options: BoundedRunOptions): Boun
 
 // ---- presentation rule -----------------------------------------------------------------------------------------------------
 
-/** True when both ends of an interval fall in the same grade band (Best / Inaccuracy / Mistake / Blunder; a band edge belongs to the better band, as lossBandLabel does). */
-export function intervalInsideOneBand(
-  interval: readonly [number, number],
-  boundaries: { readonly bestTolerance: number; readonly inaccuracyToMistake: number; readonly mistakeToBlunder: number } = LOSS_BAND_BOUNDARIES,
-): boolean {
-  const band = (value: number) => (value <= boundaries.bestTolerance ? 0 : value <= boundaries.inaccuracyToMistake ? 1 : value <= boundaries.mistakeToBlunder ? 2 : 3);
-  return band(interval[0]) === band(interval[1]);
-}
+// The band check moved to gradeBands.ts so the cut-result rule (partialSearch.ts) can share it without a cycle; still exported from here.
+export { intervalInsideOneBand };
 
 /**
- * Whether a severity badge may be shown for this evaluation: always, except for a PARTIAL bounded result whose loss interval spans more than one grade band (the
- * verdict is then an estimate the review cannot yet place in a band, so it states none). Every other evaluation, including a bounded one that resolved or finished,
- * is unaffected.
+ * Whether a severity badge may be shown for this evaluation: always, except for a PARTIAL result whose loss interval spans more than one grade band (the verdict is then an
+ * estimate the review cannot yet place in a band, so it states none). "Partial" is a bounded exact result cut by a cap (`boundedSearch`, #502) or a sampled result cut by the
+ * wall-clock ceiling or a node budget (`partialSearch`, REVIEW_CUT_HONESTY_ENABLED). Every other evaluation, including a bounded one that resolved or finished, is unaffected.
  */
 export function severityBadgeAllowed(
-  evaluation: Pick<ReviewEvaluationV1, 'boundedSearch'>,
+  evaluation: Pick<ReviewEvaluationV1, 'boundedSearch' | 'partialSearch'>,
   boundaries?: Parameters<typeof intervalInsideOneBand>[1],
 ): boolean {
   const bounded = evaluation.boundedSearch;
-  if (!bounded || !bounded.partial) return true;
-  return intervalInsideOneBand(bounded.lossInterval, boundaries);
+  if (bounded?.partial && !intervalInsideOneBand(bounded.lossInterval, boundaries)) return false;
+  const cut = evaluation.partialSearch;
+  if (cut?.partial && !intervalInsideOneBand(cut.lossInterval, boundaries)) return false;
+  return true;
 }
 
 // ---- the evaluation ---------------------------------------------------------------------------------------------------------
