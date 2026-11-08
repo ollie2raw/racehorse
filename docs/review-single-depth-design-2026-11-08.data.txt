@@ -1,0 +1,438 @@
+====================================================================================================
+ITEMS 1 AND 2: reconciliation and production self-agreement (boundedReconcile.ts)
+====================================================================================================
+501 exact-path midgame decisions (tuning 308, held-out 193)
+
+## How the shipping bounded path ends a decision
+
+| set | decisions | (a) ran to full enumeration (complete) | (b) stopped early by the sequential rule (resolved) | (c) hit a cap (partial) | hands visited, mean share of the distinct hands |
+|---|---|---|---|---|---|
+| all | 501 | 122 (24.4%) | 379 (75.6%) | 0 (0.0%) | 40% |
+| held-out | 193 | 57 (29.5%) | 136 (70.5%) | 0 (0.0%) | 46% |
+| tuning | 308 | 65 (21.1%) | 243 (78.9%) | 0 (0.0%) | 37% |
+
+By number of distinct hands C(n,k) (stop reasons of the seed-1 run):
+
+| C | decisions | complete | resolved | mean share of hands visited |
+|---|---|---|---|---|
+| 1 to 20 | 112 | 112 | 0 | 100% |
+| 21 to 164 | 126 | 10 | 116 | 47% |
+| 165 to 999 | 111 | 0 | 111 | 18% |
+| 1000 to 2999 | 28 | 0 | 28 | 12% |
+| 3000 to 4999 | 117 | 0 | 117 | 6% |
+| 5000 to 8000 | 7 | 0 | 7 | 4% |
+
+Locked yards (19 decisions, exhaustive to the hand's end, 1,000,000-node cap): complete 18, cap 1, other 0.
+
+## Agreement of the shipping bounded path with the full enumeration of the same decision (same seed: a deterministic reference)
+
+Non-Best = the REFERENCE grade is not Best. Bootstrap 95% intervals.
+
+| set | decisions / non-Best | top move, all | grade, all | top move, non-Best | grade, non-Best | kappa, non-Best |
+|---|---|---|---|---|---|---|
+| all: bounded seed 1 vs full enumeration seed 1 | 501 / 121 | 98.6% [97.4, 99.6] | 97.8% [96.4, 99.0] | 97.5% [94.2, 100.0] | 95.0% [90.9, 98.3] | 0.90 |
+| all: bounded seed 2 vs full enumeration seed 2 | 501 / 115 | 98.2% [96.8, 99.2] | 98.4% [97.2, 99.4] | 98.3% [95.7, 100.0] | 93.9% [89.6, 98.3] | 0.88 |
+| held-out: bounded seed 1 vs full enumeration seed 1 | 193 / 47 | 99.5% [98.4, 100.0] | 96.9% [94.3, 99.0] | 100.0% [100.0, 100.0] | 95.7% [89.4, 100.0] | 0.92 |
+| held-out: bounded seed 2 vs full enumeration seed 2 | 193 / 46 | 97.9% [95.9, 99.5] | 98.4% [96.4, 100.0] | 100.0% [100.0, 100.0] | 93.5% [84.8, 100.0] | 0.88 |
+| tuning: bounded seed 1 vs full enumeration seed 1 | 308 / 74 | 98.1% [96.4, 99.4] | 98.4% [96.8, 99.7] | 95.9% [90.5, 100.0] | 94.6% [89.2, 98.6] | 0.89 |
+| tuning: bounded seed 2 vs full enumeration seed 2 | 308 / 69 | 98.4% [96.8, 99.7] | 98.4% [96.8, 99.7] | 97.1% [92.8, 100.0] | 94.2% [88.4, 98.6] | 0.87 |
+
+## The same bounded path against a full enumeration with ANOTHER seed (different boneyard orders): the figures of #502
+
+| set | decisions / non-Best (by the reference) | top move, all | grade, all | top move, non-Best | grade, non-Best | kappa, non-Best |
+|---|---|---|---|---|---|---|
+| all: bounded seed 1 vs full enumeration seed 2 | 501 / 115 | 96.6% [95.0, 98.0] | 95.8% [93.8, 97.4] | 94.8% [90.4, 98.3] | 90.4% [84.3, 95.7] | 0.81 |
+| all: bounded seed 2 vs full enumeration seed 1 | 501 / 121 | 95.8% [94.0, 97.4] | 94.8% [92.6, 96.6] | 90.9% [86.0, 95.9] | 81.0% [73.6, 87.6] | 0.65 |
+| all: full enumeration seed 1 vs full enumeration seed 2 (the floor) | 501 / 115 | 97.6% [96.2, 98.8] | 96.0% [94.2, 97.6] | 97.4% [93.9, 100.0] | 90.4% [84.3, 95.7] | 0.81 |
+
+## Production today (C draws with replacement, 3 plies): the same decision, two seeds
+
+Non-Best is defined by seed 1 (the first run); the second set of rows defines it as "either run non-Best".
+
+| set | decisions / non-Best | top move, all | grade, all | top move, non-Best | grade, non-Best | kappa, non-Best |
+|---|---|---|---|---|---|---|
+| all: production seed 2 vs seed 1 | 501 / 117 | 96.2% [94.4, 97.8] | 93.8% [91.6, 95.8] | 92.3% [87.2, 96.6] | 82.9% [75.2, 88.9] | 0.67 |
+| held-out: production seed 2 vs seed 1 | 193 / 44 | 96.9% [94.3, 99.0] | 93.3% [89.6, 96.4] | 97.7% [93.2, 100.0] | 84.1% [72.7, 95.5] | 0.71 |
+| tuning: production seed 2 vs seed 1 | 308 / 73 | 95.8% [93.5, 97.7] | 94.2% [91.2, 96.8] | 89.0% [80.8, 95.9] | 82.2% [72.6, 90.4] | 0.64 |
+
+Either-run non-Best (128 decisions): top move 86.7% [80.5, 92.2], grade 75.8% [68.0, 82.8].
+
+For comparison, the same self-agreement of the other methods (non-Best by the first run):
+
+| set | decisions / non-Best | top move, all | grade, all | top move, non-Best | grade, non-Best | kappa, non-Best |
+|---|---|---|---|---|---|---|
+| all: bounded seed 2 vs seed 1 | 501 / 124 | 95.8% [94.0, 97.4] | 94.6% [92.6, 96.4] | 87.1% [81.5, 92.7] | 79.8% [72.6, 86.3] | 0.64 |
+| all: full enumeration seed 2 vs seed 1 | 501 / 121 | 97.6% [96.2, 98.8] | 96.0% [94.2, 97.6] | 92.6% [87.6, 96.7] | 86.0% [79.3, 91.7] | 0.74 |
+
+====================================================================================================
+WHOLE GAME, shipping path, flag off, laptop
+====================================================================================================
+## A. Shipping path today (REVIEW_BOUNDED_EXACT_ENABLED off), laptop
+
+1212 decisions over 10 games (emulated machine slowdown: 1x)
+
+**Whole-game laptop time through this path (sum of the decisions of one game):**
+
+| unit | n | mean | p90 | p99 | min | max |
+|---|---|---|---|---|---|---|
+| game, both seats (all decisions) | 10 | 51.9 s | 109.3 s | 109.3 s | 11.4 s | 109.3 s |
+| one seat of a game (what a review covers: one player's decisions) | 20 | 26.0 s | 52.7 s | 76.8 s | 2.6 s | 76.8 s |
+
+(p90 and p99 of 10 games or 20 seat-games are the second-largest and the largest value: read them as "worst games", not as stable percentiles.)
+
+**Per decision, laptop ms, by kind:**
+
+| kind | decisions | share of the time | mean | median | p90 | p99 | max |
+|---|---|---|---|---|---|---|---|
+| forced | 372 | 0% | 0.2 | 0.1 | 0 | 1 | 6 |
+| locked yard | 19 | 5% | 1276.6 | 2.5 | 1014 | 23084 | 23084 |
+| exact path | 501 | 76% | 784.3 | 71.8 | 2117 | 8199 | 39944 |
+| ladder | 320 | 20% | 318.4 | 54.7 | 613 | 4483 | 11963 |
+| all | 1212 | 100% | 428.3 | 18.4 | 872 | 6231 | 39944 |
+
+**Projection of those whole-game times onto a slower machine (linear in CPU speed; the factors are the measured production ratio and a guess for phones):**
+
+| unit | laptop | phone x2 (guess) | phone x5 (guess) | Render free instance x45 (measured ratio) |
+|---|---|---|---|---|
+| game, mean | 51.9 s | 103.8 s | 259.6 s | 2336.2 s |
+| game, p90 | 109.3 s | 218.7 s | 546.7 s | 4920.7 s |
+| one seat, mean | 26.0 s | 51.9 s | 129.8 s | 1168.1 s |
+| one seat, p90 | 52.7 s | 105.4 s | 263.5 s | 2371.4 s |
+
+**Outcome mix:**
+
+- lifecycle: SCORED 840 (69.3%), FORCED 372 (30.7%), FAILED_RETRYABLE 0 (0.0%), FAILED_FATAL 0 (0.0%)
+- tier reached: tier 1 176 (14.5%), tier 2 139 (11.5%), tier 3 5 (0.4%), tier 4 0 (0.0%) (ladder decisions); exact-branch 501 (41.3%); locked yard 19 (1.6%); forced 372 (30.7%)
+- the wall-clock ceiling fired: 0 (0.0%); search incomplete (`search.complete === false`): 2 (0.2%); failed (retryable) at the end of the pass: 0 (0.0%)
+- would exceed the 180 s worker kill on this machine (laptop ms x 1 > 180,000): 0 (0.0%)
+- evidence shown: exact 29 (2.4%), search 821 (67.7%), heuristic 362 (29.9%); confidence: high 29 (2.4%), medium 821 (67.7%), low 362 (29.9%)
+
+**Decisions cut by a ceiling or incomplete (2): what the player-facing record says**
+
+| tier | lifecycle | samples solved | complete | ceiling | evidence / confidence | grade | second opinion | ms (laptop) |
+|---|---|---|---|---|---|---|---|---|
+| 1 | FORCED | 8 | false | false | exact / high | best | - | 5 |
+| 1 | FORCED | 6 | false | false | exact / high | best | - | 6 |
+
+Of these 2: shipped as SCORED search evidence (a badge is drawn from the loss, nothing in the record the client reads marks it as cut): 0; fell back to the heuristic (no badge): 0; still retryable: 0.
+Samples solved in the SCORED ones: .
+
+====================================================================================================
+WHOLE GAME, shipping path, flag on, laptop
+====================================================================================================
+## B. Shipping path with the bounded flag on, laptop
+
+1212 decisions over 10 games (emulated machine slowdown: 1x)
+
+**Whole-game laptop time through this path (sum of the decisions of one game):**
+
+| unit | n | mean | p90 | p99 | min | max |
+|---|---|---|---|---|---|---|
+| game, both seats (all decisions) | 10 | 12.6 s | 26.9 s | 26.9 s | 3.8 s | 26.9 s |
+| one seat of a game (what a review covers: one player's decisions) | 20 | 6.3 s | 12.0 s | 23.9 s | 1.6 s | 23.9 s |
+
+(p90 and p99 of 10 games or 20 seat-games are the second-largest and the largest value: read them as "worst games", not as stable percentiles.)
+
+**Per decision, laptop ms, by kind:**
+
+| kind | decisions | share of the time | mean | median | p90 | p99 | max |
+|---|---|---|---|---|---|---|---|
+| forced | 372 | 0% | 0.2 | 0.1 | 0 | 1 | 6 |
+| locked yard | 19 | 3% | 188.7 | 2.2 | 988 | 2449 | 2449 |
+| exact path | 501 | 17% | 42.5 | 14.3 | 83 | 476 | 2092 |
+| ladder | 320 | 80% | 314.9 | 58.4 | 558 | 4040 | 11834 |
+| all | 1212 | 100% | 103.7 | 11.4 | 193 | 1350 | 11834 |
+
+**Projection of those whole-game times onto a slower machine (linear in CPU speed; the factors are the measured production ratio and a guess for phones):**
+
+| unit | laptop | phone x2 (guess) | phone x5 (guess) | Render free instance x45 (measured ratio) |
+|---|---|---|---|---|
+| game, mean | 12.6 s | 25.1 s | 62.8 s | 565.6 s |
+| game, p90 | 26.9 s | 53.8 s | 134.5 s | 1210.3 s |
+| one seat, mean | 6.3 s | 12.6 s | 31.4 s | 282.8 s |
+| one seat, p90 | 12.0 s | 23.9 s | 59.8 s | 538.4 s |
+
+**Outcome mix:**
+
+- lifecycle: SCORED 840 (69.3%), FORCED 372 (30.7%), FAILED_RETRYABLE 0 (0.0%), FAILED_FATAL 0 (0.0%)
+- tier reached: tier 1 176 (14.5%), tier 2 139 (11.5%), tier 3 5 (0.4%), tier 4 0 (0.0%) (ladder decisions); exact-branch 501 (41.3%); locked yard 19 (1.6%); forced 372 (30.7%)
+- the wall-clock ceiling fired: 0 (0.0%); search incomplete (`search.complete === false`): 3 (0.2%); failed (retryable) at the end of the pass: 0 (0.0%)
+- would exceed the 180 s worker kill on this machine (laptop ms x 1 > 180,000): 0 (0.0%)
+- evidence shown: exact 28 (2.3%), search 822 (67.8%), heuristic 362 (29.9%); confidence: high 28 (2.3%), medium 822 (67.8%), low 362 (29.9%)
+- bounded path: 520 decisions; complete 140, resolved 379, cap 0, node-cap 1, wall-clock 0
+
+**Decisions cut by a ceiling or incomplete (3): what the player-facing record says**
+
+| tier | lifecycle | samples solved | complete | ceiling | evidence / confidence | grade | second opinion | ms (laptop) |
+|---|---|---|---|---|---|---|---|---|
+| 1 | FORCED | 8 | false | false | exact / high | best | - | 5 |
+| 1 | FORCED | 6 | false | false | exact / high | best | - | 6 |
+| 1 | SCORED | 2 | false | false | search / medium | best | - | 2449 |
+
+Of these 3: shipped as SCORED search evidence (a badge is drawn from the loss, nothing in the record the client reads marks it as cut): 1; fell back to the heuristic (no badge): 0; still retryable: 0.
+Samples solved in the SCORED ones: 2.
+
+====================================================================================================
+WHOLE GAME, emulated Render (ceilings / 45), flag off
+====================================================================================================
+## C. Emulated Render free instance (every wall-clock ceiling divided by 45), flag off
+
+1212 decisions over 10 games (emulated machine slowdown: 45x)
+
+**Whole-game laptop time through this path (sum of the decisions of one game):**
+
+| unit | n | mean | p90 | p99 | min | max |
+|---|---|---|---|---|---|---|
+| game, both seats (all decisions) | 10 | 48.2 s | 91.1 s | 91.1 s | 10.9 s | 91.1 s |
+| one seat of a game (what a review covers: one player's decisions) | 20 | 24.1 s | 51.6 s | 60.1 s | 2.5 s | 60.1 s |
+
+(p90 and p99 of 10 games or 20 seat-games are the second-largest and the largest value: read them as "worst games", not as stable percentiles.)
+
+**Per decision, laptop ms, by kind:**
+
+| kind | decisions | share of the time | mean | median | p90 | p99 | max |
+|---|---|---|---|---|---|---|---|
+| forced | 372 | 0% | 0.1 | 0.1 | 0 | 1 | 5 |
+| locked yard | 19 | 5% | 1205.5 | 2.3 | 1001 | 21757 | 21757 |
+| exact path | 501 | 79% | 759.6 | 72.6 | 2067 | 8140 | 37726 |
+| ladder | 320 | 16% | 246.8 | 53.1 | 543 | 2762 | 6967 |
+| all | 1212 | 100% | 398.1 | 18.0 | 794 | 5761 | 37726 |
+
+**Projection of those whole-game times onto a slower machine (linear in CPU speed; the factors are the measured production ratio and a guess for phones):**
+
+| unit | laptop | phone x2 (guess) | phone x5 (guess) | Render free instance x45 (measured ratio) |
+|---|---|---|---|---|
+| game, mean | 48.2 s | 96.5 s | 241.2 s | 2171.1 s |
+| game, p90 | 91.1 s | 182.2 s | 455.4 s | 4098.7 s |
+| one seat, mean | 24.1 s | 48.2 s | 120.6 s | 1085.6 s |
+| one seat, p90 | 51.6 s | 103.2 s | 258.0 s | 2322.0 s |
+
+**Outcome mix:**
+
+- lifecycle: SCORED 840 (69.3%), FORCED 372 (30.7%), FAILED_RETRYABLE 0 (0.0%), FAILED_FATAL 0 (0.0%)
+- tier reached: tier 1 178 (14.7%), tier 2 137 (11.3%), tier 3 5 (0.4%), tier 4 0 (0.0%) (ladder decisions); exact-branch 501 (41.3%); locked yard 19 (1.6%); forced 372 (30.7%)
+- the wall-clock ceiling fired: 22 (1.8%); search incomplete (`search.complete === false`): 24 (2.0%); failed (retryable) at the end of the pass: 0 (0.0%)
+- would exceed the 180 s worker kill on this machine (laptop ms x 45 > 180,000): 24 (2.0%)
+- evidence shown: exact 29 (2.4%), search 821 (67.7%), heuristic 362 (29.9%); confidence: high 29 (2.4%), medium 821 (67.7%), low 362 (29.9%)
+
+**Decisions cut by a ceiling or incomplete (24): what the player-facing record says**
+
+| tier | lifecycle | samples solved | complete | ceiling | evidence / confidence | grade | second opinion | ms (laptop) |
+|---|---|---|---|---|---|---|---|---|
+| 2 | SCORED | 602 | false | true | search / medium | best | best:confirmed | 2797 |
+| 2 | SCORED | 984 | false | true | search / medium | mistake | error:confirmed | 2733 |
+| 1 | FORCED | 8 | false | false | exact / high | best | - | 5 |
+| 1 | SCORED | 51 | false | true | search / medium | mistake | error:unconfirmed | 53 |
+| 1 | SCORED | 59 | false | true | search / medium | mistake | error:confirmed | 123 |
+| 1 | FORCED | 6 | false | false | exact / high | best | - | 5 |
+| 1 | SCORED | 84 | false | true | search / medium | mistake | error:confirmed | 52 |
+| 1 | SCORED | 94 | false | true | search / medium | mistake | error:confirmed | 50 |
+| 1 | SCORED | 44 | false | true | search / medium | mistake | error:unconfirmed | 61 |
+| 1 | SCORED | 34 | false | true | search / medium | best | best:unconfirmed | 79 |
+| 1 | SCORED | 89 | false | true | search / medium | best | best:unconfirmed | 67 |
+| 1 | SCORED | 81 | false | true | search / medium | best | best:confirmed | 77 |
+| 1 | SCORED | 98 | false | true | search / medium | best | best:unconfirmed | 68 |
+| 1 | SCORED | 88 | false | true | search / medium | best | best:confirmed | 64 |
+| 1 | SCORED | 92 | false | true | search / medium | best | best:confirmed | 66 |
+| 1 | SCORED | 79 | false | true | search / medium | best | best:confirmed | 73 |
+| 1 | SCORED | 93 | false | true | search / medium | best | best:confirmed | 66 |
+| 1 | SCORED | 88 | false | true | search / medium | best | best:confirmed | 62 |
+| 1 | SCORED | 54 | false | true | search / medium | mistake | error:confirmed | 296 |
+| 1 | SCORED | 97 | false | true | search / medium | best | best:confirmed | 74 |
+| 2 | SCORED | 1805 | false | true | search / medium | best | best:confirmed | 2762 |
+| 2 | SCORED | 1114 | false | true | search / medium | best | best:confirmed | 2764 |
+| 2 | SCORED | 1636 | false | true | search / medium | best | best:confirmed | 2752 |
+| 1 | SCORED | 38 | false | true | search / medium | inaccuracy | error:confirmed | 52 |
+
+Of these 24: shipped as SCORED search evidence (a badge is drawn from the loss, nothing in the record the client reads marks it as cut): 22; fell back to the heuristic (no badge): 0; still retryable: 0.
+Samples solved in the SCORED ones: 34, 38, 44, 51, 54, 59, 79, 81, 84, 88, 88, 89, 92, 93, 94, 97, 98, 602, 984, 1114, 1636, 1805.
+
+**Verdict of the machine-with-a-ceiling run against the unscaled laptop run of the same decision:**
+
+| set | decisions | grade differs | top move differs | badge differs, non-Best on the laptop |
+|---|---|---|---|---|
+| all non-forced decisions | 840 | 0.0% [0.0, 0.0] | 0.0% [0.0, 0.0] | 0.0% [0.0, 0.0] (of 220) |
+| decisions cut by a ceiling or incomplete | 22 | 0.0% [0.0, 0.0] | 0.0% [0.0, 0.0] | 0.0% [0.0, 0.0] (of 8) |
+| decisions not cut | 818 | 0.0% [0.0, 0.0] | 0.0% [0.0, 0.0] | 0.0% [0.0, 0.0] (of 212) |
+
+====================================================================================================
+WHOLE GAME, emulated Render (ceilings / 45), flag on
+====================================================================================================
+## D. Emulated Render free instance (every wall-clock ceiling divided by 45), bounded flag on
+
+1212 decisions over 10 games (emulated machine slowdown: 45x)
+
+**Whole-game laptop time through this path (sum of the decisions of one game):**
+
+| unit | n | mean | p90 | p99 | min | max |
+|---|---|---|---|---|---|---|
+| game, both seats (all decisions) | 10 | 10.4 s | 16.5 s | 16.5 s | 3.8 s | 16.5 s |
+| one seat of a game (what a review covers: one player's decisions) | 20 | 5.2 s | 11.1 s | 12.7 s | 1.7 s | 12.7 s |
+
+(p90 and p99 of 10 games or 20 seat-games are the second-largest and the largest value: read them as "worst games", not as stable percentiles.)
+
+**Per decision, laptop ms, by kind:**
+
+| kind | decisions | share of the time | mean | median | p90 | p99 | max |
+|---|---|---|---|---|---|---|---|
+| forced | 372 | 0% | 0.2 | 0.1 | 0 | 1 | 5 |
+| locked yard | 19 | 3% | 190.2 | 2.2 | 994 | 2466 | 2466 |
+| exact path | 501 | 20% | 41.1 | 13.6 | 81 | 467 | 1886 |
+| ladder | 320 | 77% | 248.6 | 52.8 | 541 | 2759 | 6835 |
+| all | 1212 | 100% | 85.7 | 11.3 | 190 | 1137 | 6835 |
+
+**Projection of those whole-game times onto a slower machine (linear in CPU speed; the factors are the measured production ratio and a guess for phones):**
+
+| unit | laptop | phone x2 (guess) | phone x5 (guess) | Render free instance x45 (measured ratio) |
+|---|---|---|---|---|
+| game, mean | 10.4 s | 20.8 s | 51.9 s | 467.3 s |
+| game, p90 | 16.5 s | 33.0 s | 82.4 s | 741.8 s |
+| one seat, mean | 5.2 s | 10.4 s | 26.0 s | 233.6 s |
+| one seat, p90 | 11.1 s | 22.2 s | 55.5 s | 499.6 s |
+
+**Outcome mix:**
+
+- lifecycle: SCORED 840 (69.3%), FORCED 372 (30.7%), FAILED_RETRYABLE 0 (0.0%), FAILED_FATAL 0 (0.0%)
+- tier reached: tier 1 177 (14.6%), tier 2 138 (11.4%), tier 3 5 (0.4%), tier 4 0 (0.0%) (ladder decisions); exact-branch 501 (41.3%); locked yard 19 (1.6%); forced 372 (30.7%)
+- the wall-clock ceiling fired: 20 (1.7%); search incomplete (`search.complete === false`): 23 (1.9%); failed (retryable) at the end of the pass: 0 (0.0%)
+- would exceed the 180 s worker kill on this machine (laptop ms x 45 > 180,000): 1 (0.1%)
+- evidence shown: exact 28 (2.3%), search 822 (67.8%), heuristic 362 (29.9%); confidence: high 28 (2.3%), medium 822 (67.8%), low 362 (29.9%)
+- bounded path: 520 decisions; complete 140, resolved 379, cap 0, node-cap 1, wall-clock 0
+
+**Decisions cut by a ceiling or incomplete (23): what the player-facing record says**
+
+| tier | lifecycle | samples solved | complete | ceiling | evidence / confidence | grade | second opinion | ms (laptop) |
+|---|---|---|---|---|---|---|---|---|
+| 2 | SCORED | 602 | false | true | search / medium | best | best:confirmed | 2795 |
+| 2 | SCORED | 981 | false | true | search / medium | mistake | error:confirmed | 2732 |
+| 1 | FORCED | 8 | false | false | exact / high | best | - | 5 |
+| 1 | SCORED | 52 | false | true | search / medium | mistake | error:unconfirmed | 53 |
+| 1 | FORCED | 6 | false | false | exact / high | best | - | 5 |
+| 1 | SCORED | 81 | false | true | search / medium | mistake | error:confirmed | 60 |
+| 1 | SCORED | 93 | false | true | search / medium | mistake | error:confirmed | 50 |
+| 1 | SCORED | 43 | false | true | search / medium | mistake | error:unconfirmed | 61 |
+| 1 | SCORED | 35 | false | true | search / medium | best | best:unconfirmed | 78 |
+| 1 | SCORED | 91 | false | true | search / medium | best | best:unconfirmed | 66 |
+| 1 | SCORED | 84 | false | true | search / medium | best | best:confirmed | 78 |
+| 1 | SCORED | 98 | false | true | search / medium | best | best:unconfirmed | 68 |
+| 1 | SCORED | 90 | false | true | search / medium | best | best:confirmed | 65 |
+| 1 | SCORED | 92 | false | true | search / medium | best | best:confirmed | 67 |
+| 1 | SCORED | 74 | false | true | search / medium | best | best:confirmed | 75 |
+| 1 | SCORED | 90 | false | true | search / medium | best | best:confirmed | 66 |
+| 1 | SCORED | 88 | false | true | search / medium | best | best:confirmed | 61 |
+| 1 | SCORED | 98 | false | true | search / medium | best | best:confirmed | 74 |
+| 2 | SCORED | 1908 | false | true | search / medium | best | best:confirmed | 2757 |
+| 2 | SCORED | 1206 | false | true | search / medium | best | best:confirmed | 2760 |
+| 2 | SCORED | 1702 | false | true | search / medium | best | best:confirmed | 2759 |
+| 1 | SCORED | 39 | false | true | search / medium | best | error:confirmed | 52 |
+| 1 | SCORED | 2 | false | false | search / medium | best | - | 2466 |
+
+Of these 23: shipped as SCORED search evidence (a badge is drawn from the loss, nothing in the record the client reads marks it as cut): 21; fell back to the heuristic (no badge): 0; still retryable: 0.
+Samples solved in the SCORED ones: 2, 35, 39, 43, 52, 74, 81, 84, 88, 90, 90, 91, 92, 93, 98, 98, 602, 981, 1206, 1702, 1908.
+
+**Verdict of the machine-with-a-ceiling run against the unscaled laptop run of the same decision:**
+
+| set | decisions | grade differs | top move differs | badge differs, non-Best on the laptop |
+|---|---|---|---|---|
+| all non-forced decisions | 840 | 0.1% [0.0, 0.4] | 0.0% [0.0, 0.0] | 0.4% [0.0, 1.3] (of 224) |
+| decisions cut by a ceiling or incomplete | 21 | 4.8% [0.0, 14.3] | 0.0% [0.0, 0.0] | 16.7% [0.0, 50.0] (of 6) |
+| decisions not cut | 819 | 0.0% [0.0, 0.0] | 0.0% [0.0, 0.0] | 0.0% [0.0, 0.0] (of 218) |
+
+====================================================================================================
+SINGLE-DEPTH PROTOTYPE (singleDepthSummary.ts)
+====================================================================================================
+821 decisions with tiles to draw (exact path 501, ladder 320); resumable-statistics check (stats of units 0..99 + 100..399 equal units 0..399, exactly): 821 of 821
+
+## 1. Fixed-N units at 3 plies: repeatability and agreement with the reference, by N
+
+Self = the same decision run twice with different seed keys. Reference = pooled 2 x 1,000 units (exact path) / pooled 2 x 2,500 3-ply samples (ladder). Non-Best is defined by the second run in "self" and by the reference in "vs reference".
+
+| path | N | decisions / non-Best (self) | self: top move, all | self: grade, all | self: top move, non-Best | self: grade, non-Best | vs reference: decisions / non-Best | top move, all | grade, all | top move, non-Best | grade, non-Best | kappa, non-Best |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| exact | 100 | 501 / 126 | 94.2% [92.2, 96.2] | 94.0% [91.8, 96.0] | 87.3% [81.0, 92.9] | 78.6% [71.4, 85.7] | 1002 / 238 | 96.1% [94.9, 97.3] | 95.4% [94.1, 96.7] | 93.7% [90.3, 96.6] | 85.7% [81.1, 89.9] | 0.72 |
+| exact | 200 | 501 / 124 | 96.6% [95.0, 98.2] | 94.8% [92.8, 96.6] | 91.1% [85.5, 96.0] | 81.5% [74.2, 87.9] | 1002 / 238 | 96.9% [95.8, 97.9] | 96.2% [95.0, 97.4] | 95.0% [92.0, 97.5] | 89.1% [84.9, 92.9] | 0.78 |
+| exact | 400 | 501 / 123 | 97.8% [96.4, 99.0] | 97.0% [95.4, 98.4] | 96.7% [93.5, 99.2] | 88.6% [82.9, 94.3] | 1002 / 238 | 98.1% [97.2, 98.9] | 97.7% [96.8, 98.6] | 97.5% [95.4, 99.2] | 92.9% [89.5, 95.8] | 0.86 |
+| ladder | 100 | 320 / 97 | 95.6% [93.1, 97.8] | 94.7% [91.9, 96.9] | 94.8% [89.7, 99.0] | 86.6% [79.4, 92.8] | 640 / 184 | 96.9% [95.5, 98.1] | 96.7% [95.3, 98.1] | 96.2% [92.9, 98.9] | 94.0% [90.8, 97.3] | 0.86 |
+| ladder | 200 | 320 / 92 | 95.9% [93.8, 97.8] | 96.9% [94.7, 98.8] | 94.6% [90.2, 98.9] | 94.6% [89.1, 98.9] | 640 / 184 | 97.3% [96.1, 98.6] | 97.5% [96.3, 98.6] | 96.2% [92.9, 98.9] | 95.1% [91.8, 97.8] | 0.89 |
+| ladder | 400 | 320 / 89 | 95.3% [92.8, 97.5] | 98.1% [96.6, 99.4] | 96.6% [92.1, 100.0] | 95.5% [91.0, 98.9] | 640 / 184 | 97.7% [96.4, 98.8] | 98.4% [97.5, 99.4] | 96.7% [94.0, 98.9] | 95.1% [91.8, 97.8] | 0.89 |
+| all | 100 | 821 / 223 | 94.8% [93.2, 96.3] | 94.3% [92.7, 95.7] | 90.6% [86.5, 94.2] | 82.1% [77.1, 87.0] | 1642 / 422 | 96.4% [95.4, 97.3] | 95.9% [94.9, 96.8] | 94.8% [92.4, 96.7] | 89.3% [86.3, 92.2] | 0.78 |
+| all | 200 | 821 / 216 | 96.3% [95.0, 97.6] | 95.6% [94.2, 97.0] | 92.6% [88.9, 95.8] | 87.0% [81.9, 91.2] | 1642 / 422 | 97.1% [96.3, 97.9] | 96.7% [95.9, 97.6] | 95.5% [93.4, 97.4] | 91.7% [89.1, 94.1] | 0.83 |
+| all | 400 | 821 / 212 | 96.8% [95.6, 98.1] | 97.4% [96.3, 98.4] | 96.7% [94.3, 99.1] | 91.5% [87.7, 95.3] | 1642 / 422 | 97.9% [97.2, 98.6] | 98.0% [97.3, 98.7] | 97.2% [95.5, 98.8] | 93.8% [91.2, 96.0] | 0.87 |
+
+## 2. The methods that exist today against the same reference (exact path, 3 plies)
+
+Reference = pooled 2 x 1,000 units drawn over hands AND boneyard orders. Non-Best by the reference. Each method has two runs (seeds 1, 2); both are counted.
+
+| method | runs / non-Best | top move, all | grade, all | top move, non-Best | grade, non-Best | kappa, non-Best |
+|---|---|---|---|---|---|---|
+| production today (C draws with replacement) | 1002 / 238 | 95.8% [94.5, 97.0] | 94.8% [93.4, 96.2] | 91.6% [87.8, 95.0] | 84.5% [79.8, 89.1] | 0.70 |
+| bounded path (shipping, tuned) | 1002 / 238 | 96.1% [94.8, 97.3] | 96.6% [95.4, 97.7] | 92.9% [89.5, 96.2] | 89.1% [84.9, 92.9] | 0.78 |
+| full enumeration of the distinct hands | 1002 / 238 | 97.5% [96.5, 98.4] | 97.1% [96.0, 98.1] | 94.1% [91.2, 97.1] | 90.3% [86.6, 93.7] | 0.81 |
+| fixed N = 100 units, 3 plies | 1002 / 238 | 96.1% [94.9, 97.3] | 95.4% [94.1, 96.7] | 93.7% [90.3, 96.6] | 85.7% [81.1, 89.9] | 0.72 |
+| fixed N = 200 units, 3 plies | 1002 / 238 | 96.9% [95.8, 97.9] | 96.2% [95.0, 97.4] | 95.0% [92.0, 97.5] | 89.1% [84.9, 92.9] | 0.78 |
+| fixed N = 400 units, 3 plies | 1002 / 238 | 98.1% [97.2, 98.9] | 97.7% [96.8, 98.6] | 97.5% [95.4, 99.2] | 92.9% [89.5, 95.8] | 0.86 |
+
+## 3. Cost per decision of the fixed-N units (laptop ms, one run, cold)
+
+| path | N | decisions | mean | median | p90 | p99 | max |
+|---|---|---|---|---|---|---|---|
+| exact | 100 | 501 | 49.6 | 19.6 | 128 | 406 | 1219 |
+| exact | 200 | 501 | 98.7 | 39.0 | 248 | 791 | 2400 |
+| exact | 400 | 501 | 197.0 | 76.9 | 485 | 1577 | 4812 |
+| ladder | 100 | 320 | 91.6 | 39.6 | 153 | 925 | 4204 |
+| ladder | 200 | 320 | 182.4 | 78.4 | 308 | 1871 | 8312 |
+| ladder | 400 | 320 | 362.8 | 153.8 | 610 | 3712 | 16652 |
+| all | 100 | 821 | 65.9 | 27.9 | 132 | 524 | 4204 |
+| all | 200 | 821 | 131.3 | 55.3 | 260 | 1078 | 8312 |
+| all | 400 | 821 | 261.6 | 109.2 | 523 | 2191 | 16652 |
+
+## 4. Whole-game laptop time: the shipping paths against fixed-N units
+
+| path | unit | mean | p90 | p99 | min | max | x2 (phone, guess) | x5 (phone, guess) | x45 (Render free, measured ratio) |
+|---|---|---|---|---|---|---|---|---|---|
+| shipping today (flag off) | game (10) | 51.9 s | 109.3 s | 109.3 s | 11.4 s | 109.3 s | 103.8 s | 259.6 s | 2336.2 s |
+| shipping today (flag off) | one seat (20) | 26.0 s | 52.7 s | 76.8 s | 2.6 s | 76.8 s | 51.9 s | 129.8 s | 1168.1 s |
+| shipping with the bounded flag on | game (10) | 12.6 s | 26.9 s | 26.9 s | 3.8 s | 26.9 s | 25.1 s | 62.8 s | 565.6 s |
+| shipping with the bounded flag on | one seat (20) | 6.3 s | 12.0 s | 23.9 s | 1.6 s | 23.9 s | 12.6 s | 31.4 s | 282.8 s |
+| fixed N = 100 units, 3 plies (everything with tiles to draw; forced and locked yards as shipped) | game (10) | 5.8 s | 10.3 s | 10.3 s | 1.5 s | 10.3 s | 11.6 s | 28.9 s | 260.0 s |
+| fixed N = 100 units, 3 plies (everything with tiles to draw; forced and locked yards as shipped) | one seat (20) | 2.9 s | 5.9 s | 8.2 s | 0.7 s | 8.2 s | 5.8 s | 14.4 s | 130.0 s |
+| fixed N = 200 | game (10) | 11.1 s | 20.2 s | 20.2 s | 2.9 s | 20.2 s | 22.3 s | 55.7 s | 501.6 s |
+| fixed N = 200 | one seat (20) | 5.6 s | 11.8 s | 16.1 s | 1.3 s | 16.1 s | 11.1 s | 27.9 s | 250.8 s |
+| fixed N = 400 (= 100 now, extended to 400 later: the extension is a merge, so the total is the N = 400 cost) | game (10) | 21.8 s | 40.1 s | 40.1 s | 5.8 s | 40.1 s | 43.7 s | 109.2 s | 983.0 s |
+| fixed N = 400 (= 100 now, extended to 400 later: the extension is a merge, so the total is the N = 400 cost) | one seat (20) | 10.9 s | 23.5 s | 32.0 s | 2.6 s | 32.0 s | 21.8 s | 54.6 s | 491.5 s |
+
+(p90 and p99 of 10 games or 20 seat-games are the second-largest and the largest value.)
+
+## 5. Server verification: recompute k random decisions after submission
+
+Cost of recomputing ONE decision at N units, laptop ms, and on the free Render instance (x45):
+
+| recompute | mean | p90 | p99 (one unlucky decision) | max | mean on Render x45 | p99 on Render x45 |
+|---|---|---|---|---|---|---|
+| a decision at N = 100 | 65.9 ms | 132 ms | 524 ms | 4204 ms | 3.0 s | 23.6 s |
+| a decision at N = 200 | 131.3 ms | 260 ms | 1078 ms | 8312 ms | 5.9 s | 48.5 s |
+| a decision at N = 400 | 261.6 ms | 523 ms | 2191 ms | 16652 ms | 11.8 s | 98.6 s |
+
+If the verifier picks only among decisions whose N = 100 cost is at most 100 ms on the laptop (699 of 821, 85%): mean 28.8 ms at N = 100, 114.7 ms at N = 400; x45: 1.3 s and 5.2 s.
+
+====================================================================================================
+QUALITY OF A VERDICT CUT BY A CEILING (cutVerdictQuality.ts)
+====================================================================================================
+320 ladder decisions; 2 plies (the ladder's depth); reference = pooled 2 x 1000 independent samples, node budget lifted
+
+| stream | samples kept | decisions / non-Best | top move, all | grade, all | top move, non-Best | grade, non-Best | kappa, non-Best | mean abs loss error, non-Best |
+|---|---|---|---|---|---|---|---|---|
+| tier 1 (a ceiling hit keeps a prefix of 100) | 8 | 320 / 92 | 89.1% [85.3, 92.5] | 85.3% [81.3, 89.1] | 84.8% [77.2, 91.3] | 68.5% [58.7, 77.2] | 0.29 | 0.372 |
+| tier 1 (a ceiling hit keeps a prefix of 100) | 16 | 320 / 92 | 91.3% [88.1, 94.4] | 91.6% [88.4, 94.4] | 90.2% [83.7, 95.7] | 84.8% [77.2, 91.3] | 0.66 | 0.274 |
+| tier 1 (a ceiling hit keeps a prefix of 100) | 32 | 320 / 92 | 93.1% [90.3, 95.9] | 94.1% [91.3, 96.6] | 90.2% [83.7, 95.7] | 88.0% [81.5, 94.6] | 0.72 | 0.191 |
+| tier 1 (a ceiling hit keeps a prefix of 100) | 45 | 320 / 92 | 93.1% [90.3, 95.9] | 93.8% [90.9, 96.3] | 92.4% [87.0, 97.8] | 87.0% [80.4, 93.5] | 0.69 | 0.166 |
+| tier 1 (a ceiling hit keeps a prefix of 100) | 64 | 320 / 92 | 94.1% [91.6, 96.6] | 94.4% [91.9, 96.9] | 92.4% [87.0, 96.7] | 88.0% [81.5, 94.6] | 0.72 | 0.149 |
+| tier 1 (a ceiling hit keeps a prefix of 100) | 98 | 320 / 92 | 95.0% [92.5, 97.2] | 94.1% [91.3, 96.6] | 93.5% [88.0, 97.8] | 89.1% [82.6, 94.6] | 0.74 | 0.128 |
+| tier 1 (a ceiling hit keeps a prefix of 100) | 100 | 320 / 92 | 95.3% [92.8, 97.5] | 94.4% [91.9, 96.9] | 94.6% [89.1, 98.9] | 90.2% [83.7, 95.7] | 0.77 | 0.124 |
+| tier 2 (a ceiling hit keeps a prefix of 2,500) | 100 | 320 / 92 | 93.8% [90.9, 96.3] | 95.9% [93.8, 97.8] | 93.5% [88.0, 97.8] | 92.4% [85.9, 97.8] | 0.82 | 0.112 |
+| tier 2 (a ceiling hit keeps a prefix of 2,500) | 300 | 320 / 92 | 96.6% [94.4, 98.4] | 96.6% [94.4, 98.4] | 97.8% [94.6, 100.0] | 94.6% [89.1, 98.9] | 0.87 | 0.078 |
+| tier 2 (a ceiling hit keeps a prefix of 2,500) | 600 | 320 / 92 | 97.2% [95.3, 98.8] | 97.2% [95.3, 98.8] | 98.9% [96.7, 100.0] | 95.7% [91.3, 98.9] | 0.90 | 0.051 |
+| tier 2 (a ceiling hit keeps a prefix of 2,500) | 1000 | 320 / 92 | 97.2% [95.3, 98.8] | 97.5% [95.6, 99.1] | 97.8% [94.6, 100.0] | 95.7% [91.3, 98.9] | 0.90 | 0.041 |
+| tier 2 (a ceiling hit keeps a prefix of 2,500) | 1800 | 320 / 92 | 98.1% [96.6, 99.4] | 97.8% [95.9, 99.4] | 98.9% [96.7, 100.0] | 96.7% [92.4, 100.0] | 0.92 | 0.036 |
+| tier 2 (a ceiling hit keeps a prefix of 2,500) | 2500 | 320 / 92 | 98.4% [96.9, 99.7] | 98.1% [96.6, 99.4] | 97.8% [94.6, 100.0] | 96.7% [92.4, 100.0] | 0.92 | 0.035 |
+

@@ -75,6 +75,8 @@ export function runSamplePass(
   maxPips = 6,
   /** Ply depth of the walk (default: the ladder's 2). With a depth other than 2 the proportional node budget is lifted, so every one of the `cap` samples is solved. */
   plyDepth: number = MAX_PLY_DEPTH,
+  /** true lifts the proportional node budget even at the ladder's 2 plies (a reference pass that must not be truncated). */
+  unlimitedNodes = false,
 ): SamplePass | null {
   const { actorId, opponentId } = snapshot.identifiers;
   const { scores } = snapshot.preAction;
@@ -83,7 +85,7 @@ export function runSamplePass(
   if (eligibleForOpponent.length < snapshot.preAction.opponentTileCount) return null;
 
   const config: Config = { ...resolveReviewConfig(snapshot, maxPips), deadTileCount: snapshot.preAction.boneyard.deadCount };
-  const nodeBudget: NodeBudget = { count: 0, max: plyDepth === MAX_PLY_DEPTH ? cap * NODES_PER_SAMPLE : Number.MAX_SAFE_INTEGER };
+  const nodeBudget: NodeBudget = { count: 0, max: plyDepth === MAX_PLY_DEPTH && !unlimitedNodes ? cap * NODES_PER_SAMPLE : Number.MAX_SAFE_INTEGER };
   const walkConfig: GameTreeWalkConfig = {
     shouldStop: undefined,
     actorId,
