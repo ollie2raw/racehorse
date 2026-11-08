@@ -106,3 +106,25 @@ describe('lossBandLabelForEvaluation -- scorable decisions only, per spec sectio
     expect(lossBandLabelForEvaluation(decision(20, EXACT), boundaries)).toBe('Blunder');
   });
 });
+
+describe('lossBandLabelForEvaluation -- partial bounded-search results', () => {
+  const SEARCH: ReviewEvaluationV1['evidence'] = { source: 'search', confidence: 'medium', displayLabel: 'Review Engine search' };
+  const bounded = (partial: boolean, lossInterval: readonly [number, number]): ReviewEvaluationV1['boundedSearch'] => ({
+    stopReason: partial ? 'cap' : 'resolved', partial, handsVisited: 12, totalHands: 300, plyDepth: 3, orderSeed: 'bounded-exact-v1:x', lossInterval, confidence: 0.95,
+  });
+
+  it('shows the badge of a partial result whose interval lies inside one band', () => {
+    expect(lossBandLabelForEvaluation({ ...decision(1.5, SEARCH), boundedSearch: bounded(true, [1.0, 2.5]) })).toBe('Mistake');
+    expect(lossBandLabelForEvaluation({ ...decision(0.05, SEARCH), boundedSearch: bounded(true, [0, 0.1]) })).toBe('Best');
+  });
+
+  it('shows no badge for a partial result whose interval spans two bands', () => {
+    expect(lossBandLabelForEvaluation({ ...decision(0.5, SEARCH), boundedSearch: bounded(true, [0.2, 1.4]) })).toBeNull();
+    expect(lossBandLabelForEvaluation({ ...decision(0.05, SEARCH), boundedSearch: bounded(true, [0, 1_000_000]) })).toBeNull();
+  });
+
+  it('never holds back a result that finished or resolved, or one without the bounded field', () => {
+    expect(lossBandLabelForEvaluation({ ...decision(0.5, SEARCH), boundedSearch: bounded(false, [0.2, 1.4]) })).toBe('Inaccuracy');
+    expect(lossBandLabelForEvaluation(decision(0.5, SEARCH))).toBe('Inaccuracy');
+  });
+});

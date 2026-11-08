@@ -1,0 +1,18 @@
+501 exact-path midgame decisions; production bounded path (tuned defaults, live search, order keyed by decision id) against the full 3-ply enumeration
+
+| set | decisions / non-Best | top-move all | grade all | top-move non-Best | grade non-Best | kappa non-Best | ms mean / median / p99 / max | hands visited (mean share of all) | stop reasons |
+|---|---|---|---|---|---|---|---|---|---|
+| all | 501 / 118 | 96.2% [94.4, 97.8] | 95.8% [94.0, 97.4] | 92.4% [87.3, 96.6] | 89.0% [83.1, 94.1] | 0.79 | 32 / 6 / 452 / 1822 | 87.3 (40%) | resolved 379, complete 122 |
+| heldout | 193 / 47 | 96.9% [94.3, 99.0] | 94.3% [90.7, 97.4] | 95.7% [89.4, 100.0] | 85.1% [74.5, 93.6] | 0.75 | 20 / 4 / 305 / 874 | 76.2 (46%) | resolved 136, complete 57 |
+| tuning | 308 / 71 | 95.8% [93.5, 97.7] | 96.8% [94.8, 98.7] | 90.1% [83.1, 95.8] | 91.5% [84.5, 97.2] | 0.82 | 39 / 7 / 571 / 1822 | 94.3 (37%) | resolved 243, complete 65 |
+
+**Against the complete enumeration under the SAME boneyard realization (the fair truth for this code), and the boneyard-order noise floor (that complete enumeration against the recording's):**
+
+| set | decisions / non-Best (by the fair truth) | top-move all | grade all | top-move non-Best | grade non-Best | kappa non-Best | complete enumeration ms mean / p99 / max | floor: complete(this seed) vs recording, grade non-Best |
+|---|---|---|---|---|---|---|---|---|
+| all | 501 / 121 | 98.6% [97.4, 99.6] | 97.8% [96.4, 99.0] | 97.5% [94.2, 100.0] | 95.0% [90.9, 98.3] | 0.90 | 691 / 7184 / 31924 | 87.3% [81.4, 93.2] (top 93.2% [89.0, 97.5]) |
+| heldout | 193 / 47 | 99.5% [98.4, 100.0] | 96.9% [94.3, 99.0] | 100.0% [100.0, 100.0] | 95.7% [89.4, 100.0] | 0.92 | 412 / 6450 / 9890 | 78.7% [68.1, 89.4] (top 95.7% [89.4, 100.0]) |
+| tuning | 308 / 74 | 98.1% [96.4, 99.4] | 98.4% [96.8, 99.7] | 95.9% [90.5, 100.0] | 94.6% [89.2, 98.6] | 0.89 | 865 / 7822 / 31924 | 93.0% [87.3, 98.6] (top 91.5% [84.5, 97.2]) |
+
+Production today (the branch it replaces; ms recorded in the same run): mean 810, median 70, p99 8053, max 36732.
+Partial results: 0 of 501.

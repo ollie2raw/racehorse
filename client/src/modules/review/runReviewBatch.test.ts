@@ -21,7 +21,7 @@ function makeSnapshot(decisionId: string): ReviewPositionSnapshotV2 {
     snapshotVersion: 2,
     rulesVersion: 1,
     commandVersion: 1,
-    reviewEngineVersion: 'review-engine-v1',
+    reviewEngineVersion: 'review-engine-v2',
     stateDigestVersion: 1,
     identifiers: {
       sessionId: 'session-1',
@@ -68,7 +68,7 @@ function fakeEvaluation(decisionId: string): ReviewEvaluationV1 {
     evaluationVersion: 1,
     snapshotId: decisionId,
     rulesVersion: 1,
-    reviewEngineVersion: 'review-engine-v1',
+    reviewEngineVersion: 'review-engine-v2',
     evidence: { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' },
     played: candidate,
     best: candidate,
