@@ -10,8 +10,10 @@ import {
   solveMidgameDeterminization,
   type MidgameConvergence,
   type MidgameDeterminizationResult,
+  type PairedSampleStats,
 } from './solveMidgameDeterminization';
 import { decideSearchConvergence } from './evaluationConvergence';
+import { markCutEvaluation } from './partialSearch';
 
 /**
  * B0 (game-review-oracle-upgrade-2026-09-13.md): fixed compute budget for a
@@ -241,6 +243,14 @@ export function evaluateReviewPosition(
   budget: ReviewDispatchBudget,
   coverageThreshold: number,
   now: () => number = () => performance.now(),
+  options?: {
+    /**
+     * Honest labelling of a sampled verdict that was cut short (partialSearch.ts; the server sets it when REVIEW_CUT_HONESTY_ENABLED is "true"). Absent or false: this function
+     * returns exactly what it always did. True: a cut `search` result gains `partialSearch` (partial = true and a 95% loss interval), confidence 'low' when that interval
+     * spans grade bands, and a run cut before its halfway sample is no longer accepted as "stability-converged" (see decideSearchConvergence, requireCheckpoint).
+     */
+    readonly cutHonesty?: boolean;
+  },
 ): ReviewEvaluationV1 {
   const startedAt = now();
   const ceiling = budget.maxWallClockMs ?? DEFAULT_REVIEW_WALL_CLOCK_CEILING_MS;
@@ -250,21 +260,30 @@ export function evaluateReviewPosition(
     exceeded ||= now() - startedAt > ceiling;
     return exceeded;
   };
-  const result = evaluateWithinDeadline(snapshot, budget, coverageThreshold, shouldStop);
-  if (!shouldStop()) return result;
+  const capture: CutCapture | undefined = options?.cutHonesty ? {} : undefined;
+  const result = evaluateWithinDeadline(snapshot, budget, coverageThreshold, shouldStop, capture);
+  if (!shouldStop()) {
+    // A node budget can also end the sampler early (search.complete false without the ceiling): same honesty, reason 'budget'.
+    return capture ? markCutEvaluation(result, capture.stats, 'budget', capture.requested ?? 0) : result;
+  }
   // Preserve candidates/ranking; mark incomplete instead of claiming completion.
-  return {
+  const cut = {
     ...result,
     search: { ...result.search, complete: false },
     diagnostics: [...result.diagnostics, WALL_CLOCK_CEILING_DIAGNOSTIC],
   };
+  return capture ? markCutEvaluation(cut, capture.stats, 'wall-clock', capture.requested ?? 0) : cut;
 }
+
+/** What the sampled search leaves behind for the cut-result rule (only filled when the caller asked for it). */
+type CutCapture = { stats?: PairedSampleStats; requested?: number };
 
 function evaluateWithinDeadline(
   snapshot: ReviewPositionSnapshotV2,
   budget: ReviewDispatchBudget,
   coverageThreshold: number,
   shouldStop: () => boolean,
+  capture?: CutCapture,
 ): ReviewEvaluationV1 {
   if (snapshot.preAction.boneyard.drawableCount === 0) {
     // Nested exact solver must not apply a second independent ceiling —
@@ -287,12 +306,18 @@ function evaluateWithinDeadline(
     budget.maxPlyDepth,
     6,
     shouldStop,
+    capture !== undefined,
   );
+  if (capture && midgame) {
+    capture.stats = midgame.pairedStats;
+    capture.requested = budget.maxHiddenStateSamples;
+  }
   if (midgame === null) {
     return withHeuristicFallbackReason(solveHeuristicOpening(snapshot), 'globally-infeasible');
   }
   const convergenceGate = decideSearchConvergence(midgame, {
     coverageDiagnosticThreshold: coverageThreshold,
+    ...(capture ? { requireCheckpoint: true } : {}),
   });
   if (convergenceGate.accepted) {
     const adapted = adaptMidgameDeterminizationResult(snapshot, midgame, budget.maxPlyDepth);

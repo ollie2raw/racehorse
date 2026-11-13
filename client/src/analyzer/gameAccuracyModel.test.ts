@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ReviewCandidateEvaluationV1, ReviewEvaluationV1 } from '@racehorse/game-core/review';
 import { LOSS_BAND_BOUNDARIES } from '@racehorse/review-engine';
 import { lossBandLabel, lossBandLabelForEvaluation } from './gameAccuracyModel';
+import { assertPresentationConsistency, buildReviewPresentationRecord, presentationLabel } from './reviewPresentationRecord';
 
 const EXACT: ReviewEvaluationV1['evidence'] = { source: 'exact', confidence: 'high', displayLabel: 'Exact analysis' };
 const HEURISTIC: ReviewEvaluationV1['evidence'] = { source: 'heuristic', confidence: 'low', displayLabel: 'Heuristic estimate' };
@@ -126,5 +127,37 @@ describe('lossBandLabelForEvaluation -- partial bounded-search results', () => {
   it('never holds back a result that finished or resolved, or one without the bounded field', () => {
     expect(lossBandLabelForEvaluation({ ...decision(0.5, SEARCH), boundedSearch: bounded(false, [0.2, 1.4]) })).toBe('Inaccuracy');
     expect(lossBandLabelForEvaluation(decision(0.5, SEARCH))).toBe('Inaccuracy');
+  });
+});
+
+describe('lossBandLabelForEvaluation -- sampled results cut short by the ceiling or a node budget (partialSearch)', () => {
+  const SEARCH: ReviewEvaluationV1['evidence'] = { source: 'search', confidence: 'medium', displayLabel: 'Review Engine search' };
+  const cut = (lossInterval: readonly [number, number]): ReviewEvaluationV1['partialSearch'] => ({
+    partial: true, reason: 'wall-clock', samplesSolved: 45, samplesRequested: 100, lossInterval, confidence: 0.95,
+  });
+
+  it('shows no badge, not even Best, for a cut result whose interval spans two bands', () => {
+    expect(lossBandLabelForEvaluation({ ...decision(1.0, SEARCH), partialSearch: cut([0.4, 1.6]) })).toBeNull();
+    expect(lossBandLabelForEvaluation({ ...decision(0.0, SEARCH), partialSearch: cut([0, 0.62]) })).toBeNull();
+    expect(lossBandLabelForEvaluation({ ...decision(0.05, SEARCH), partialSearch: cut([0, 1_000_000]) })).toBeNull();
+  });
+
+  it('keeps the badge of a cut result whose interval lies inside one band', () => {
+    expect(lossBandLabelForEvaluation({ ...decision(1.5, SEARCH), partialSearch: cut([1.0, 2.5]) })).toBe('Mistake');
+    expect(lossBandLabelForEvaluation({ ...decision(0.0, SEARCH), partialSearch: cut([0, 0]) })).toBe('Best');
+  });
+
+  it('never holds back a result without the field (every result from before the flag, and every uncut one)', () => {
+    expect(lossBandLabelForEvaluation(decision(1.0, SEARCH))).toBe('Mistake');
+    expect(lossBandLabelForEvaluation(decision(0.0, SEARCH))).toBe('Best');
+  });
+
+  it('presents a cut result with no badge as qualitative: no loss figure and no severity word, and the presentation checks hold', () => {
+    const evaluation = { ...decision(1.0, SEARCH), partialSearch: cut([0.4, 1.6]) };
+    const record = buildReviewPresentationRecord(evaluation, null);
+    expect(record.classification).toEqual({ kind: 'forced' });
+    expect(record.lossVsPrimary).toBeNull();
+    expect(assertPresentationConsistency(record, 'Best move.')).toEqual([]);
+    expect(presentationLabel(record) ?? '').not.toMatch(/Mistake|Blunder|Inaccuracy/);
   });
 });

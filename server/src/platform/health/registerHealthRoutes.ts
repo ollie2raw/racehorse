@@ -9,6 +9,7 @@ import { supabaseFetch } from '../../supabaseUtils';
 import { resolveReleaseVersion } from './releaseVersion';
 import { isReviewSweepEnabled } from '../../reviewCompletion/reviewSweepFlag';
 import { isReviewBoundedExactEnabled } from '../../reviewCompletion/reviewBoundedExactFlag';
+import { isReviewCutHonestyEnabled } from '../../reviewCompletion/reviewCutHonestyFlag';
 import { getReviewSweepStatus } from '../../reviewCompletion/reviewSweepStatus';
 import {
   assessDailyPuzzleGenerationHealth,
@@ -132,6 +133,8 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
       reviewSweep: isReviewSweepEnabled(),
       // The bounded exact review path (REVIEW_BOUNDED_EXACT_ENABLED); off by default.
       reviewBoundedExact: isReviewBoundedExactEnabled(),
+      // Honest labelling of a review verdict cut short (REVIEW_CUT_HONESTY_ENABLED); off by default.
+      reviewCutHonesty: isReviewCutHonestyEnabled(),
       // Last tick, last claimed job, last error as a short code, and which database functions the review sweep is missing (empty when none): one request to see why a review is stuck.
       reviewSweepStatus: getReviewSweepStatus(),
     });

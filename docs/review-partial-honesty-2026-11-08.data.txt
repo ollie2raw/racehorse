@@ -1,0 +1,59 @@
+# 40x slowdown emulation, recorded corpus (10 games, 1,212 decisions, bot play), cutHonesty on, every wall-clock ceiling divided by 40
+# npx tsx packages/review-engine/src/devtools/cutHonestyEmulation.ts out.jsonl 0 1 40 ; npx tsx packages/review-engine/src/devtools/cutHonestySummary.ts out.md out.jsonl
+
+Decisions: 1212, with a badge today: 840, games: 10.
+
+| measure | count | share |
+|---|---:|---:|
+| decisions cut short (partialSearch present) | 26 | 2.1% of all, 2.9% of those with a badge |
+|   cut by the wall-clock ceiling | 25 | |
+|   cut by a node budget | 1 | |
+| **badges that disappear with the rule** (today a badge, then none) | 1 | **0.1%** of badged decisions, 4.2% of the cut ones |
+| badges that change in any way | 1 | 0.1% |
+| results dropped to confidence low | 1 | 0.1% |
+| cut before the halfway sample, accepted as partial-interval (was "stability-converged" with no test) | 8 | |
+| cut verdicts that still ship with a badge today, nothing marking them as cut | 24 | 100% of the cut ones |
+
+Badge transitions (today -> with the rule), badged decisions only:
+
+| transition | decisions |
+|---|---:|
+| Best -> Best | 546 |
+| Mistake -> Mistake | 116 |
+| Good -> Good | 104 |
+| Inaccuracy -> Inaccuracy | 65 |
+| Blunder -> Blunder | 8 |
+| Inaccuracy -> no badge | 1 |
+
+Cut decisions by their badge today:
+
+| badge today | cut | lose the badge |
+|---|---:|---:|
+| Best | 12 | 0 |
+| Good | 3 | 0 |
+| Inaccuracy | 4 | 1 |
+| Mistake | 5 | 0 |
+| Blunder | 0 | 0 |
+
+First 5 examples of a lost badge:
+
+| decision | tier | hands solved of requested | reason | loss | 95% interval | today -> with the rule |
+|---|---|---|---|---:|---|---|
+| demo-strong-policy-1:2#86 | 1 | 36 of 100 | wall-clock | 0.53 | [0.00, 1.73] | Inaccuracy -> no badge |
+
+# breakdown of the cut decisions (python over the emulation rows)
+cut 26
+by source Counter({'search': 24, 'exact': 2})
+by tier Counter({'1': 20, '2': 6})
+by reason Counter({'wall-clock': 25, 'budget': 1})
+convergence Counter({'eval-convergence:stability-converged': 14, 'eval-convergence:partial-interval': 8, None: 2, 'eval-convergence:coverage-diagnostic': 2})
+hands solved (search cuts): [33, 36, 46, 48, 49, 54, 56, 64, 76, 80, 81, 84, 87, 87, 92, 93, 94, 578, 866, 1106, 1477, 1593, 1770, 4297]
+requested Counter({100: 17, 2500: 6, 5005: 1})
+unbounded interval 2 Counter({'exact': 2})
+interval widths (finite): [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.36, 0.57, 0.96, 1.05, 1.59, 1.73, 2.12]
+conf low [('demo-strong-policy-1#86', 'search')]
+cut but no badge today [('demo-ordinary-pvf-1#104', 'exact', None, None), ('demo-ordinary-pvf-1#40', 'exact', None, None)]
+cut badged, badge unchanged: 23
+partial-interval: 8 samples [33, 36, 46, 48, 49, 578, 866, 1106] badge kept 7
+ceiling flagged rows: 25 incomplete rows: 26
+ceiling rows w/o partial: Counter()
