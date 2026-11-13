@@ -297,6 +297,24 @@ export type ReviewEvaluationV1 = {
     readonly lossInterval: readonly [number, number];
     readonly confidence: number;
   };
+  /**
+   * Additive and optional, like `boundedSearch` (no contract version bump: see docs/review-partial-honesty-2026-11-08.md). Present only when the SAMPLED search (the
+   * hidden-hand sampler) was cut short, by the wall-clock ceiling or by a node budget, and the flag REVIEW_CUT_HONESTY_ENABLED is on; absent on every other evaluation.
+   *   partial          always true here (a result that ran to its sample budget carries no such field).
+   *   reason           'wall-clock' when the ceiling stopped the run, 'budget' when a node budget did.
+   *   samplesSolved    hidden hands actually solved before the cut; `samplesRequested` what the tier asked for.
+   *   lossInterval     95% interval of the played move's TRUE loss (the best alternative's mean advantage over the played move, never below 0), from the paired per-hand
+   *                    differences the search accumulated. An unbounded side is reported as 1,000,000. Presentation shows a severity badge (or "Best") for the result only
+   *                    when this interval lies inside one grade band; otherwise the result carries evidence.confidence 'low' and no badge.
+   */
+  readonly partialSearch?: {
+    readonly partial: true;
+    readonly reason: 'wall-clock' | 'budget';
+    readonly samplesSolved: number;
+    readonly samplesRequested: number;
+    readonly lossInterval: readonly [number, number];
+    readonly confidence: number;
+  };
 };
 
 /**

@@ -26,6 +26,7 @@ import { ReviewSearchRunner } from './reviewSearchRunner';
 import { config } from '../config';
 import { isReviewSweepEnabled } from './reviewSweepFlag';
 import { withBoundedExactOption } from './reviewBoundedExactFlag';
+import { withCutHonestyOption } from './reviewCutHonestyFlag';
 import {
   noteReviewCpuBenchmark,
   noteReviewDecisionCost,
@@ -269,8 +270,8 @@ function evaluatePositionOffThread(): EvaluatePosition {
     // Per-decision cost, so /health can tell an expensive search from a CPU-starved instance (reviewDecisionCost.ts).
     const startedAt = performance.now();
     const cpuBefore = process.cpuUsage();
-    // REVIEW_BOUNDED_EXACT_ENABLED off (the default) leaves the options untouched, so the worker evaluates exactly as before.
-    const result = await runner.evaluate(snapshot, withBoundedExactOption(options));
+    // REVIEW_BOUNDED_EXACT_ENABLED and REVIEW_CUT_HONESTY_ENABLED off (the defaults) leave the options untouched, so the worker evaluates exactly as before.
+    const result = await runner.evaluate(snapshot, withCutHonestyOption(withBoundedExactOption(options)));
     const wallMs = performance.now() - startedAt;
     const cpu = process.cpuUsage(cpuBefore);
     const cpuMs = (cpu.user + cpu.system) / 1000;
@@ -286,6 +287,7 @@ function evaluatePositionOffThread(): EvaluatePosition {
     log.info({
       jobId: currentPassJobId, attempt: currentPassAttempt, tier, samplesSolved, wallMs: Math.round(wallMs), cpuMs: Math.round(cpuMs),
       threadCpuMs: metrics?.threadCpuMs != null ? Math.round(metrics.threadCpuMs) : null, workerHeapMb: metrics?.heapUsedMb ?? null, incomplete, ceilingHit,
+      ...(result.evaluation.partialSearch ? { partialReason: result.evaluation.partialSearch.reason, partialSamples: result.evaluation.partialSearch.samplesSolved, partialInterval: result.evaluation.partialSearch.lossInterval.map((v) => Math.round(v * 100) / 100) } : {}),
       ...(result.evaluation.boundedSearch ? { boundedStop: result.evaluation.boundedSearch.stopReason, boundedHands: result.evaluation.boundedSearch.handsVisited } : {}),
     }, 'review decision evaluated');
     return result;

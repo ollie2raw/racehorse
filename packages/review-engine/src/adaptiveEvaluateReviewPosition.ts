@@ -175,9 +175,19 @@ export function adaptiveEvaluateReviewPosition(
      * REVIEW_BOUNDED_EXACT_ENABLED is "true".
      */
     readonly boundedExact?: BoundedExactOptions;
+    /**
+     * Honest labelling of a sampled verdict cut short by the wall-clock ceiling or a node budget (partialSearch.ts). Absent or false = off, and then nothing differs from
+     * before. On, every search call here forwards `{ cutHonesty: true }` to the evaluator, so a cut result carries `partialSearch` and a badge only when its loss interval
+     * lies inside one grade band. The server passes it only when REVIEW_CUT_HONESTY_ENABLED is "true".
+     */
+    readonly cutHonesty?: boolean;
   },
 ): AdaptiveEvaluateResult {
-  const evaluate = options?.evaluate ?? evaluateReviewPosition;
+  const baseEvaluate = options?.evaluate ?? evaluateReviewPosition;
+  // An evaluator that ignores the fifth argument (a test double) simply behaves as before.
+  const evaluate: typeof evaluateReviewPosition = options?.cutHonesty
+    ? (snapshotArg, budgetArg, thresholdArg, nowArg) => baseEvaluate(snapshotArg, budgetArg, thresholdArg, nowArg, { cutHonesty: true })
+    : baseEvaluate;
   const coverageThreshold = options?.coverageThreshold ?? ADAPTIVE_COVERAGE_THRESHOLD;
   const phase = options?.phase ?? 'completion';
   const startTier = options?.startTier ?? 1;

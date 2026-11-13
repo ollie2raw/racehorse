@@ -24,6 +24,21 @@ export type MidgameConvergence = {
   readonly feasibleStateEstimate: number;
 };
 
+/**
+ * Paired per-hand statistics, kept only when the caller asks for them (`trackPairedStats`): for every legal action `a` (in `snapshot.legalActions` order), the running sum
+ * and sum of squares of `value(a) - value(played)` over the hidden hands solved so far. That is exactly what a confidence interval for the played move's loss needs, and the
+ * per-action totals the sampler always keeps cannot give one (they hold no variance). `checkpointRecorded` is false when the run was cut before the halfway sample, so the
+ * stability comparison in `convergence` never ran and holds its defaults rather than a real test.
+ */
+export type PairedSampleStats = {
+  readonly samples: number;
+  /** Index of the played action in `snapshot.legalActions`, or -1 when it is not among them (nothing is accumulated then). */
+  readonly playedIndex: number;
+  readonly sum: readonly number[];
+  readonly sumSquares: readonly number[];
+  readonly checkpointRecorded: boolean;
+};
+
 export type MidgameDeterminizationResult = {
   readonly candidates: readonly ReviewCandidateEvaluationV1[];
   readonly best: ReviewCandidateEvaluationV1;
@@ -32,6 +47,8 @@ export type MidgameDeterminizationResult = {
   readonly coverage: number;
   readonly complete: boolean;
   readonly convergence: MidgameConvergence;
+  /** Present only when the caller passed `trackPairedStats`; absent otherwise, so a default call returns exactly what it always did. */
+  readonly pairedStats?: PairedSampleStats;
 };
 
 // Local, small duplicates of B2's identically-shaped helpers rather than a
@@ -196,6 +213,7 @@ export function solveMidgameDeterminization(
   maxPlyDepth: number,
   maxPips = 6,
   shouldStop?: () => boolean,
+  trackPairedStats = false,
 ): MidgameDeterminizationResult | null {
   const { actorId, opponentId } = snapshot.identifiers;
   const { opponentTileCount, scores, board } = snapshot.preAction;
@@ -223,6 +241,10 @@ export function solveMidgameDeterminization(
   };
 
   const totals = snapshot.legalActions.map(() => 0);
+  const pairedSum = snapshot.legalActions.map(() => 0);
+  const pairedSumSquares = snapshot.legalActions.map(() => 0);
+  const actualKey = canonicalActionKey(snapshot.actualAction);
+  const playedIndex = trackPairedStats ? snapshot.legalActions.findIndex((a) => canonicalActionKey(a) === actualKey) : -1;
   const distinctOpponentHands = new Set<string>();
   const halfway = Math.floor(budget.maxHiddenStateSamples / 2);
   let checkpointTotals: number[] | null = null;
@@ -271,6 +293,14 @@ export function solveMidgameDeterminization(
     perActionDiffs.forEach((diff, index) => {
       totals[index] += diff;
     });
+    if (playedIndex >= 0) {
+      const playedDiff = perActionDiffs[playedIndex]!;
+      perActionDiffs.forEach((diff, index) => {
+        const delta = diff - playedDiff;
+        pairedSum[index] += delta;
+        pairedSumSquares[index] += delta * delta;
+      });
+    }
     solvedSamples += 1;
 
     if (halfway > 0 && solvedSamples === halfway) {
@@ -328,5 +358,16 @@ export function solveMidgameDeterminization(
     coverage,
     complete,
     convergence,
+    ...(trackPairedStats
+      ? {
+          pairedStats: {
+            samples: solvedSamples,
+            playedIndex,
+            sum: pairedSum,
+            sumSquares: pairedSumSquares,
+            checkpointRecorded: checkpointTotals !== null,
+          },
+        }
+      : {}),
   };
 }

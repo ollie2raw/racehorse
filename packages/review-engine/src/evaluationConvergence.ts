@@ -20,6 +20,7 @@ export type ConvergenceAcceptReason =
   | 'stability-converged'
   | 'exhaustive-coverage'
   | 'coverage-diagnostic'
+  | 'partial-interval'
   | 'not-converged';
 
 export type ConvergenceDecision = {
@@ -39,6 +40,13 @@ export function decideSearchConvergence(
     readonly coverageDiagnosticThreshold?: number;
     readonly stabilityEpsilon?: number;
     readonly minSamples?: number;
+    /**
+     * Close the vacuous window (REVIEW_CUT_HONESTY_ENABLED). A run cut before its halfway sample never ran the stability comparison: `convergence` then holds its defaults
+     * (sameTopAction true, deltas 0), which used to pass the stability test as soon as 32 hands were solved ("stability-converged" with no test behind it; the 4 production
+     * ceiling hits solved 45). With this set, such a run is not accepted as stability-converged: it is accepted as 'partial-interval' (the loss interval of partialSearch.ts is
+     * then the evidence). Needs `midgame.pairedStats` (the sampler's `trackPairedStats`); without it nothing changes. Default off: identical behaviour.
+     */
+    readonly requireCheckpoint?: boolean;
   },
 ): ConvergenceDecision {
   const coverageThreshold = options?.coverageDiagnosticThreshold ?? COVERAGE_DIAGNOSTIC_THRESHOLD;
@@ -51,6 +59,20 @@ export function decideSearchConvergence(
       accepted: true,
       reason: 'exhaustive-coverage',
       detail: `enumerated coverage=${midgame.coverage}`,
+    };
+  }
+
+  if (
+    options?.requireCheckpoint
+    && midgame.pairedStats
+    && !midgame.pairedStats.checkpointRecorded
+    && !midgame.complete
+    && midgame.hiddenStateSamples >= minSamples
+  ) {
+    return {
+      accepted: true,
+      reason: 'partial-interval',
+      detail: `cut before the halfway checkpoint at samples=${midgame.hiddenStateSamples}: no stability test ran, accepted as partial with an interval`,
     };
   }
 

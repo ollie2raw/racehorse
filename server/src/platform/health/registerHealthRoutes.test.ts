@@ -200,6 +200,17 @@ describe('GET /health — reviewSweep', () => {
     delete process.env.REVIEW_BOUNDED_EXACT_ENABLED;
   });
 
+  it('says whether honest labelling of cut review verdicts is on (off by default; exactly "true" turns it on)', async () => {
+    const request = makeHarness();
+    delete process.env.REVIEW_CUT_HONESTY_ENABLED;
+    expect((await request('GET', '/health')).body.reviewCutHonesty).toBe(false);
+    process.env.REVIEW_CUT_HONESTY_ENABLED = '1';
+    expect((await request('GET', '/health')).body.reviewCutHonesty).toBe(false);
+    process.env.REVIEW_CUT_HONESTY_ENABLED = 'true';
+    expect((await request('GET', '/health')).body.reviewCutHonesty).toBe(true);
+    delete process.env.REVIEW_CUT_HONESTY_ENABLED;
+  });
+
   // A review stuck at "0 / N" with the sweep on: this is where the cause shows (last tick, last error as a code, and any database functions the sweep is missing).
   it('reports what the sweep is doing and why it is failing, without raw error text', async () => {
     const { noteReviewSweepError, noteReviewSweepTick, resetReviewSweepStatusForTests } = await import('../../reviewCompletion/reviewSweepStatus');
