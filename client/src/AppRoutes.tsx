@@ -38,6 +38,7 @@ import { MultiplayerRoute } from './routes/multiplayerRoute';
 import { LegalRoute } from './routes/legalRoutes';
 import { isLegalMode } from './legal/legalModes';
 import DailyFritzHealthAdminScreen from './admin/DailyFritzHealthAdminScreen';
+import { useScreenPrefetch } from './routes/screenPrefetch';
 import { AppPresentation } from './presentation/AppPresentation';
 import { resolveSurfacePresentation } from './presentation/surfacePresentation';
 
@@ -54,6 +55,7 @@ function AppRoutesContent({
 }: AppRoutesProps) {
   const { fallbackConnectionHost } = shell;
   const { appMode, setAppMode } = navigation;
+  useScreenPrefetch(appMode);
   React.useEffect(() => {
     const resolved = resolveSpectatorGatedMode(appMode, spectatorModeEnabled);
     if (resolved !== appMode) setAppMode(resolved);

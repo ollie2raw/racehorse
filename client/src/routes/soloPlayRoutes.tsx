@@ -26,13 +26,12 @@ import {
   recordJourneyMatchOutcome,
 } from '../journey/journeyMatchOutcome';
 
-const SinglePlayerHubScreen = React.lazy(() => import('../screens/SinglePlayerHubScreen'));
+import { BotMatchScreen, PlayVsFritz, SinglePlayerHubScreen } from './screenPrefetch';
+
 const PuzzleRushScreen = React.lazy(() => import('../puzzleRush/PuzzleRushScreen'));
 const RacehorseJourneyScreen = React.lazy(() => import('../journey/RacehorseJourneyScreen'));
 const JourneyComingSoonScreen = React.lazy(() => import('../screens/JourneyComingSoonScreen'));
 const NoBrainerLabScreen = React.lazy(() => import('../practice/NoBrainerLabScreen'));
-const BotMatchScreen = React.lazy(() => import('../bot/BotMatchScreen'));
-const PlayVsFritz = React.lazy(() => import('../bot/PlayVsFritz'));
 const GhostSetupScreen = React.lazy(() => import('../ghost/GhostSetupScreen'));
 const RacehorseHomeScreen = React.lazy(() => import('../screens/HomeScreen'));
 const LearnHome = React.lazy(() => import('../learn/LearnHome'));

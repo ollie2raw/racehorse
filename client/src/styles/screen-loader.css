@@ -171,3 +171,11 @@
     display: none;
   }
 }
+
+/* Over the screen being left while the next one's chunk is still loading (see routing/screenTransition.tsx). */
+.rh-screen-transition-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: var(--bg-obsidian);
+}

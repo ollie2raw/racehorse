@@ -5,6 +5,7 @@ import type { AppMode } from "../types";
 import { GlobalNav } from "../components";
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from "./pvfTierPreference";
 import { useDeferredAsset } from "../ui/useDeferredAsset";
+import { prefetchScreen } from "../routes/screenPrefetch";
 import "./PlayVsFritz.css";
 
 /* ---- High-Fidelity Home Icons ---- */
@@ -402,6 +403,7 @@ export default function PlayVsFritz({
 
             <button
               className="pvf-start-btn"
+              onPointerDown={() => prefetchScreen("botMatch")}
               onClick={() => {
                 writeStoredPvfFritzTier(difficulty);
                 onStart({ difficulty, dealSize });
