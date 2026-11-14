@@ -1,0 +1,133 @@
+mp-phone-lat290.json mode=mp profile=phone cpu=4 net=phone outcome={"reason":"result","steps":506,"hands":11} 
+
+== host-cold
+ load: reactReady 563 firstTapAt 14291 TTFB 8 FCP 588 LCP 1232 (H1.pvf-title ) DCL 201 load 202 CLS 0.2543; requests 250, before FCP 39; TBT 120; long tasks [{"at":861,"ms":170}]; lastLongEnd<firstTap 14476
+   before FCP by type {"css":{"n":9,"encKB":84,"decKB":536,"transferKB":19},"js":{"n":26,"encKB":468,"decKB":1644,"transferKB":15},"font":{"n":2,"encKB":46,"decKB":46,"transferKB":0},"image":{"n":1,"encKB":2,"decKB":2,"transferKB":0},"other":{"n":1,"encKB":0,"decKB":0,"transferKB":0}}
+   total by type {"css":{"n":13,"encKB":99,"decKB":608,"transferKB":32},"js":{"n":226,"encKB":2779,"decKB":8967,"transferKB":63},"font":{"n":2,"encKB":46,"decKB":46,"transferKB":0},"image":{"n":3,"encKB":20,"decKB":20,"transferKB":19},"other":{"n":5,"encKB":0,"decKB":0,"transferKB":0},"audio":{"n":1,"encKB":11,"decKB":11,"transferKB":12}}
+   biggest js [{"n":"index-GaDHDjq4.js","encKB":155,"decKB":573},{"n":"bot-engine-rsadmHBa.js","encKB":63,"decKB":223},{"n":"vendor-supabase-BOBBjAUx.js","encKB":49,"decKB":206},{"n":"game-reviewer-CK-bzBq5.js","encKB":44,"decKB":135},{"n":"bot-guided-C5Gw7Zzr.js","encKB":32,"decKB":111},{"n":"analyzer-B7MCY4ev.js","encKB":30,"decKB":104}]; main 0-3s {"taskMs":525,"scriptMs":144,"layoutMs":163,"styleMs":55}
+ tap "mp: Private" -> first frame 235 ms | net 0 main 209 resid 26 commits 2 long [{"at":-11,"ms":196}] layout 1 style 4 script 184
+     reqs freesound_community-thwump-85836-BSZf6p1T.mp3(11.3KB @180+164) PrivateMatchLobbyScreen-DaG0NGKO.js(8.3KB @205+165) statsApi-DOEHoCxx.js(2.7KB @206+0) api-Bu_67uVt.js(0.5KB @207+0) socialApi-BhswcJmr.js(1.2KB @207+0) PrivateMatchLobbyScreen-CHGz3KpP.css(4.3KB @207+160) RacehorseHomeArt-Dcvfw8pH.css(3.9KB @208+0)
+ tap "mp: Create lobby tab" -> first frame 11 ms | net 0 main 3 resid 8 commits 0 long [] layout 0 style 0 script 1
+ tap "mp: Create lobby -> room code" -> first frame 132 ms | net 124 main 113 resid 0 commits 3 long [{"at":17,"ms":114}] layout 73 style 9 script 3
+ tap "mp: Start Match -> match screen (host)" -> first frame 698 ms | net 301 main 89 resid 309 commits 7 long [{"at":652,"ms":62}] layout 16 style 21 script 28
+     reqs GameOverModal-ejL2GkHB.js(9.6KB @314+181) LiveMatchScreen-CnicJYTZ.js(13.5KB @314+185) GameOverModal-n9zbKZpj.css(5.1KB @315+173) MatchLiveLayout-DS-EYB8D.js(1.2KB @315+166) moderationTypes-DJx9Ym8q.js(0.2KB @315+160) moderationApi-CRDfOvHa.js(0.3KB @315+161) useTournamentNow-CNn6ciE_.js(0.4KB @315+316) LiveMatchScreen-CNmp-vJ_.css(1.8KB @316+316) …+1
+ enter+predraw: tap→first playable 5251 ms; tap→draw pickable 652 ms
+         0 ms from tap |   -652 from match screen | tap Start
+       698 ms from tap |     47 from match screen | match screen first frame
+       652 ms from tap |      0 from match screen | draw tiles visible
+       652 ms from tap |      0 from match screen | draw tiles pickable (first interactive)
+      1954 ms from tap |   1302 from match screen | "you/Fritz go first" shown
+      5251 ms from tap |   4599 from match screen | draw board gone
+      5251 ms from tap |   4599 from match screen | hand on screen
+      5251 ms from tap |   4599 from match screen | first playable tile
+    seg tap Start → draw pickable: 652 ms = net 301 + main 60 + residual 291; long [{"at":652,"ms":62}]; commits 7; anims rh-screen-loader-scan,rh-screen-loader-in; imgs 1; calls ws game:start 10→311ms
+    board mount (first 1.5 s): {"commits":6,"taskMs":294,"scriptMs":47,"layoutMs":19,"styleMs":55,"longTasks":[{"at":0,"ms":62}]}, gbcr total 18217
+ hand ends (12): last tile → next hand first playable ms: 7430, 6297, 7065, 6281, 7313, 6317, 7266, 6275, 7837, 6325, 9537, 6305
+    hand 1: total 7430 ms (botOpened true); net 891 main 1007 resid 5532; long tasks []
+       last tile → hand-over modal      1422 ms | net 0 main 327 resid 1095 long 0 
+       modal/reveal → closed            3974 ms | net 20 main 386 resid 3568 long 0 | ws hand:ready 3954→4845ms
+       closed → next hand dealt          889 ms | net 871 main 56 resid 0 long 0 | ws hand:ready -20→871ms
+       dealt → first playable           1145 ms | net 0 main 237 resid 908 long 0 
+    hand 2: total 6297 ms (botOpened false); net 922 main 760 resid 4615; long tasks []
+       last tile → hand-over modal      1399 ms | net 7 main 170 resid 1223 long 0 | ws game:action -334→7ms
+       modal/reveal → closed            3994 ms | net 12 main 417 resid 3565 long 0 | ws hand:ready 3982→4897ms
+       closed → next hand dealt          904 ms | net 903 main 173 resid 0 long 0 | ws hand:ready -12→903ms
+    hand 3: total 7065 ms (botOpened true); net 928 main 1196 resid 4941; long tasks []
+       last tile → hand-over modal      1399 ms | net 0 main 378 resid 1021 long 0 
+       modal shown → reveal               22 ms | net 0 main 6 resid 16 long 0 
+       modal/reveal → closed            3974 ms | net 11 main 549 resid 3414 long 0 | ws hand:ready 3962→4890ms
+       closed → next hand dealt          916 ms | net 916 main 79 resid 0 long 0 | ws hand:ready -11→917ms
+       dealt → first playable            755 ms | net 0 main 185 resid 569 long 0 | ws hand:ready -928→0ms
+ game end: last tile → result 1472 ms: net 475 main 902 resid 94; long [{"at":26,"ms":73},{"at":1391,"ms":78}]; calls ws game:action 29→105ms; ws game:action 1072→1611ms; after result: 
+ placement n=102 p50 54.5 p75 69 p95 121.2 p99 362.1 max 366.3 (>100ms 9, >300ms 2); zoneAppear {"n":109,"p50":25.2,"p95":45.9,"max":57.2}; draw {"n":34,"p50":605.3,"p95":2167.1,"max":2239.8}; INP {"n":365,"p75":96,"p98":184,"max":280}; long tasks {"n":112,"over100":14}
+    slow 366 ms @133s commits 12 long [] near hand end []
+    slow 362 ms @54s commits 5 long [] near hand end []
+    slow 153 ms @178s commits 7 long [60]  [{"d":75,"block":22,"scripts":["event-listener:index-GaDHDjq4.js:61","user-callback:game-reviewer-CK-bzBq5.js:9"]}]
+    slow 130 ms @155s commits 6 long [59]  [{"d":76,"block":24,"scripts":["event-listener:index-GaDHDjq4.js:60","user-callback:game-reviewer-CK-bzBq5.js:12"]}]
+    slow 126 ms @154s commits 5 long []  [{"d":74,"block":12,"scripts":["event-listener:index-GaDHDjq4.js:48","user-callback:game-reviewer-CK-bzBq5.js:12"]}]
+    slow 121 ms @200s commits 7 long []  [{"d":56,"block":2,"scripts":["event-listener:index-GaDHDjq4.js:47"]}]
+
+== guest-cold
+ load: reactReady 557 firstTapAt 1492 TTFB 3 FCP 580 LCP 1164 (H1.pvf-title ) DCL 196 load 196 CLS 0.3872; requests 250, before FCP 39; TBT 103; long tasks [{"at":856,"ms":107},{"at":2242,"ms":96}]; lastLongEnd<firstTap 963
+   before FCP by type {"css":{"n":9,"encKB":84,"decKB":536,"transferKB":19},"js":{"n":26,"encKB":468,"decKB":1644,"transferKB":15},"font":{"n":2,"encKB":46,"decKB":46,"transferKB":0},"image":{"n":1,"encKB":2,"decKB":2,"transferKB":0},"other":{"n":1,"encKB":0,"decKB":0,"transferKB":0}}
+   total by type {"css":{"n":13,"encKB":99,"decKB":608,"transferKB":32},"js":{"n":226,"encKB":2779,"decKB":8967,"transferKB":63},"font":{"n":2,"encKB":46,"decKB":46,"transferKB":0},"image":{"n":3,"encKB":20,"decKB":20,"transferKB":19},"other":{"n":5,"encKB":0,"decKB":0,"transferKB":0},"audio":{"n":1,"encKB":11,"decKB":11,"transferKB":12}}
+   biggest js [{"n":"index-GaDHDjq4.js","encKB":155,"decKB":573},{"n":"bot-engine-rsadmHBa.js","encKB":63,"decKB":223},{"n":"vendor-supabase-BOBBjAUx.js","encKB":49,"decKB":206},{"n":"game-reviewer-CK-bzBq5.js","encKB":44,"decKB":135},{"n":"bot-guided-C5Gw7Zzr.js","encKB":32,"decKB":111},{"n":"analyzer-B7MCY4ev.js","encKB":30,"decKB":104}]; main 0-3s {"taskMs":744,"scriptMs":195,"layoutMs":191,"styleMs":84}
+ tap "mp: Private" -> first frame 47 ms | net 0 main 19 resid 27 commits 2 long [] layout 1 style 3 script 9
+     reqs freesound_community-thwump-85836-BSZf6p1T.mp3(11.3KB @4+171) PrivateMatchLobbyScreen-DaG0NGKO.js(8.3KB @14+166) statsApi-DOEHoCxx.js(2.7KB @15+0) api-Bu_67uVt.js(0.5KB @15+0) socialApi-BhswcJmr.js(1.2KB @16+0) PrivateMatchLobbyScreen-CHGz3KpP.css(4.3KB @16+163) RacehorseHomeArt-Dcvfw8pH.css(3.9KB @16+0)
+ tap "mp: Join lobby tab" -> first frame 44 ms | net 0 main 25 resid 19 commits 1 long [] layout 4 style 5 script 5
+ tap "mp: Join -> in room" -> first frame 115 ms | net 105 main 99 resid 0 commits 4 long [{"at":19,"ms":96}] layout 48 style 10 script 12
+ enter+predraw: tap→first playable null ms; tap→draw pickable null ms
+           ms from tap |      0 from match screen | match screen first frame
+           ms from tap |      0 from match screen | draw tiles visible
+           ms from tap |      0 from match screen | draw tiles pickable (first interactive)
+           ms from tap |   4545 from match screen | draw board gone
+           ms from tap |   4545 from match screen | hand on screen
+           ms from tap |   5246 from match screen | first playable tile
+    seg hand on screen → first playable: 700 ms = net 0 + main 222 + residual 479; long []; commits 16; anims rh-turn-handoff,rh-number-change,rh-scrubber-pulse,fly-tile-to-hand,rh-tile-land; imgs 0; calls 
+    board mount (first 1.5 s): {"commits":5,"taskMs":207,"scriptMs":34,"layoutMs":3,"styleMs":33,"longTasks":[]}, gbcr total 17806
+ hand ends (12): last tile → next hand first playable ms: 6280, 7030, 6306, 7178, 6424, 7273, 6275, 8343, 6301, 8010, 6312, 7339
+    hand 1: total 6280 ms (botOpened false); net 303 main 803 resid 5174; long tasks []
+       last tile → hand-over modal      1410 ms | net 0 main 321 resid 1089 long 0 
+       modal shown → reveal               22 ms | net 0 main 10 resid 13 long 0 
+       modal/reveal → closed            3951 ms | net 16 main 413 resid 3521 long 0 | ws hand:ready 3934→4237ms
+       closed → next hand dealt          897 ms | net 287 main 59 resid 551 long 0 | ws hand:ready -16→287ms
+    hand 2: total 7030 ms (botOpened true); net 308 main 1043 resid 5679; long tasks []
+       last tile → hand-over modal      1393 ms | net 0 main 178 resid 1215 long 0 
+       modal shown → reveal               37 ms | net 0 main 11 resid 26 long 0 
+       modal/reveal → closed            3958 ms | net 13 main 610 resid 3335 long 0 | ws hand:ready 3945→4253ms
+       closed → next hand dealt          900 ms | net 295 main 51 resid 553 long 0 | ws hand:ready -13→295ms
+       dealt → first playable            743 ms | net 0 main 193 resid 550 long 0 
+    hand 3: total 6306 ms (botOpened false); net 313 main 968 resid 5025; long tasks []
+       last tile → hand-over modal      1393 ms | net 0 main 382 resid 1010 long 0 
+       modal/reveal → closed            4001 ms | net 19 main 499 resid 3484 long 0 | ws hand:ready 3982→4295ms
+       closed → next hand dealt          913 ms | net 294 main 88 resid 531 long 0 | ws hand:ready -19→294ms
+ game end: last tile → result 8 ms: net 0 main 3 resid 4; long []; calls ; after result: 
+ placement n=93 p50 57.4 p75 70 p95 102.7 p99 374.9 max 374.9 (>100ms 5, >300ms 1); zoneAppear {"n":104,"p50":23.4,"p95":47.9,"max":58.3}; draw {"n":20,"p50":1116.6,"p95":2392.1,"max":2392.1}; INP {"n":362,"p75":104,"p98":168,"max":216}; long tasks {"n":103,"over100":8}
+    slow 375 ms @91s commits 8 long [] near hand end []
+    slow 157 ms @193s commits 5 long []  [{"d":51,"block":0,"scripts":["event-listener:index-GaDHDjq4.js:26","user-callback:game-reviewer-CK-bzBq5.js:9"]}]
+    slow 109 ms @182s commits 3 long [78]  [{"d":89,"block":37,"scripts":["event-listener:index-GaDHDjq4.js:68"]}]
+    slow 107 ms @163s commits 2 long [84]  [{"d":99,"block":49,"scripts":["event-listener:index-GaDHDjq4.js:72","user-callback:game-reviewer-CK-bzBq5.js:12"]}]
+    slow 103 ms @103s commits 6 long []  []
+    slow 94 ms @242s commits 5 long []  []
+
+== host-warm
+ load: reactReady 570 firstTapAt 13533 TTFB 41 FCP 752 LCP 752 (DIV.rh-nav-wordmark uppercase text-white ) DCL 199 load 199 CLS 0.0106; requests 61, before FCP 40; TBT 0; long tasks [{"at":569,"ms":165}]; lastLongEnd<firstTap 734
+   before FCP by type {"css":{"n":9,"encKB":84,"decKB":536,"transferKB":0},"js":{"n":26,"encKB":468,"decKB":1644,"transferKB":0},"font":{"n":2,"encKB":46,"decKB":46,"transferKB":0},"image":{"n":1,"encKB":2,"decKB":2,"transferKB":0},"other":{"n":2,"encKB":0,"decKB":0,"transferKB":0}}
+   total by type {"css":{"n":13,"encKB":99,"decKB":608,"transferKB":0},"js":{"n":36,"encKB":506,"decKB":1759,"transferKB":0},"font":{"n":2,"encKB":46,"decKB":46,"transferKB":0},"image":{"n":4,"encKB":25,"decKB":25,"transferKB":11},"other":{"n":5,"encKB":0,"decKB":0,"transferKB":0},"audio":{"n":1,"encKB":11,"decKB":11,"transferKB":0}}
+   biggest js [{"n":"index-GaDHDjq4.js","encKB":155,"decKB":573},{"n":"bot-engine-rsadmHBa.js","encKB":63,"decKB":223},{"n":"vendor-supabase-BOBBjAUx.js","encKB":49,"decKB":206},{"n":"game-reviewer-CK-bzBq5.js","encKB":44,"decKB":135},{"n":"bot-guided-C5Gw7Zzr.js","encKB":32,"decKB":111},{"n":"analyzer-B7MCY4ev.js","encKB":30,"decKB":104}]; main 0-3s {"taskMs":505,"scriptMs":137,"layoutMs":159,"styleMs":46}
+ tap "mp: Private" -> first frame 62 ms | net 0 main 31 resid 31 commits 2 long [] layout 0 style 2 script 17
+     reqs freesound_community-thwump-85836-BSZf6p1T.mp3(11.3KB @12+1) PrivateMatchLobbyScreen-DaG0NGKO.js(8.3KB @28+0) statsApi-DOEHoCxx.js(2.7KB @29+0) api-Bu_67uVt.js(0.5KB @29+0) socialApi-BhswcJmr.js(1.2KB @30+0) PrivateMatchLobbyScreen-CHGz3KpP.css(4.3KB @34+1) RacehorseHomeArt-Dcvfw8pH.css(3.9KB @35+0)
+ tap "mp: Create lobby tab" -> first frame 11 ms | net 0 main 2 resid 8 commits 0 long [] layout 0 style 0 script 1
+ tap "mp: Create lobby -> room code" -> first frame 81 ms | net 75 main 68 resid 0 commits 1 long [{"at":16,"ms":73}] layout 18 style 9 script 9
+ tap "mp: Start Match -> match screen (host)" -> first frame 665 ms | net 298 main 100 resid 267 commits 8 long [] layout 10 style 14 script 28
+     reqs LiveMatchScreen-CnicJYTZ.js(13.5KB @314+1) GameOverModal-n9zbKZpj.css(5.1KB @315+2) GameOverModal-ejL2GkHB.js(9.6KB @315+1) MatchLiveLayout-DS-EYB8D.js(1.2KB @315+3) moderationTypes-DJx9Ym8q.js(0.2KB @315+4) moderationApi-CRDfOvHa.js(0.3KB @316+4) useTournamentNow-CNn6ciE_.js(0.4KB @316+4) LiveMatchScreen-CNmp-vJ_.css(1.8KB @316+3) …+3
+ enter+predraw: tap→first playable null ms; tap→draw pickable 633 ms
+         0 ms from tap |   -632 from match screen | tap Start
+       665 ms from tap |     33 from match screen | match screen first frame
+       633 ms from tap |      0 from match screen | draw tiles visible
+       633 ms from tap |      0 from match screen | draw tiles pickable (first interactive)
+      5227 ms from tap |   4594 from match screen | draw board gone
+      5227 ms from tap |   4594 from match screen | hand on screen
+    seg tap Start → draw pickable: 633 ms = net 298 + main 75 + residual 259; long []; commits 8; anims rh-screen-loader-scan,rh-screen-loader-in; imgs 3; calls ws game:start 11→309ms
+    board mount (first 1.5 s): {"commits":4,"taskMs":237,"scriptMs":30,"layoutMs":16,"styleMs":48,"longTasks":[{"at":59,"ms":57}]}, gbcr total 32
+ placement n=0 p50 null p75 null p95 null p99 null max 0 (>100ms 0, >300ms 0); zoneAppear {"n":0,"p50":null,"p95":null,"max":0}; draw {"n":0,"p50":null,"p95":null,"max":0}; INP {"n":6,"p75":48,"p98":72,"max":72}; long tasks {"n":3,"over100":1}
+
+== guest-warm
+ load: reactReady 575 firstTapAt 1231 TTFB 4 FCP 700 LCP 700 (DIV.rh-nav-wordmark uppercase text-white ) DCL 201 load 204 CLS 0.0106; requests 61, before FCP 39; TBT 16; long tasks [{"at":575,"ms":96},{"at":1813,"ms":56},{"at":5618,"ms":60}]; lastLongEnd<firstTap 671
+   before FCP by type {"css":{"n":9,"encKB":84,"decKB":536,"transferKB":0},"js":{"n":26,"encKB":468,"decKB":1644,"transferKB":0},"font":{"n":2,"encKB":46,"decKB":46,"transferKB":0},"image":{"n":1,"encKB":2,"decKB":2,"transferKB":0},"other":{"n":1,"encKB":0,"decKB":0,"transferKB":0}}
+   total by type {"css":{"n":13,"encKB":99,"decKB":608,"transferKB":0},"js":{"n":36,"encKB":506,"decKB":1759,"transferKB":0},"font":{"n":2,"encKB":46,"decKB":46,"transferKB":0},"image":{"n":4,"encKB":25,"decKB":25,"transferKB":11},"other":{"n":5,"encKB":0,"decKB":0,"transferKB":0},"audio":{"n":1,"encKB":11,"decKB":11,"transferKB":0}}
+   biggest js [{"n":"index-GaDHDjq4.js","encKB":155,"decKB":573},{"n":"bot-engine-rsadmHBa.js","encKB":63,"decKB":223},{"n":"vendor-supabase-BOBBjAUx.js","encKB":49,"decKB":206},{"n":"game-reviewer-CK-bzBq5.js","encKB":44,"decKB":135},{"n":"bot-guided-C5Gw7Zzr.js","encKB":32,"decKB":111},{"n":"analyzer-B7MCY4ev.js","encKB":30,"decKB":104}]; main 0-3s {"taskMs":694,"scriptMs":193,"layoutMs":127,"styleMs":81}
+ tap "mp: Private" -> first frame 47 ms | net 0 main 16 resid 31 commits 2 long [] layout 0 style 2 script 9
+     reqs freesound_community-thwump-85836-BSZf6p1T.mp3(11.3KB @4+1) PrivateMatchLobbyScreen-DaG0NGKO.js(8.3KB @14+0) statsApi-DOEHoCxx.js(2.7KB @14+0) api-Bu_67uVt.js(0.5KB @14+0) socialApi-BhswcJmr.js(1.2KB @15+0) PrivateMatchLobbyScreen-CHGz3KpP.css(4.3KB @15+0) RacehorseHomeArt-Dcvfw8pH.css(3.9KB @16+0)
+ tap "mp: Join lobby tab" -> first frame 44 ms | net 0 main 30 resid 14 commits 1 long [] layout 3 style 5 script 7
+ tap "mp: Join -> in room" -> first frame 65 ms | net 57 main 34 resid 0 commits 1 long [{"at":17,"ms":56}] layout 9 style 5 script 2
+ enter+predraw: tap→first playable null ms; tap→draw pickable null ms
+           ms from tap |      0 from match screen | match screen first frame
+           ms from tap |      0 from match screen | draw tiles visible
+           ms from tap |      0 from match screen | draw tiles pickable (first interactive)
+           ms from tap |   1279 from match screen | "you/Fritz go first" shown
+           ms from tap |   4567 from match screen | draw board gone
+           ms from tap |   4567 from match screen | hand on screen
+           ms from tap |   4567 from match screen | first playable tile
+    board mount (first 1.5 s): {"commits":4,"taskMs":210,"scriptMs":23,"layoutMs":13,"styleMs":43,"longTasks":[{"at":19,"ms":60}]}, gbcr total 32
+ placement n=0 p50 null p75 null p95 null p99 null max 0 (>100ms 0, >300ms 0); zoneAppear {"n":0,"p50":null,"p95":null,"max":0}; draw {"n":0,"p50":null,"p95":null,"max":0}; INP {"n":4,"p75":64,"p98":64,"max":64}; long tasks {"n":3,"over100":0}

@@ -1,0 +1,14 @@
+desktop:
+  first tap: Single Player     565 ms
+  first tap: Play vs Fritz     337 ms
+  visit 2: Single Player       11 ms
+  visit 2: Play vs Fritz       13 ms
+  visit 3: Single Player       11 ms
+  visit 3: Play vs Fritz       13 ms
+phone:
+  first tap: Single Player     481 ms
+  first tap: Play vs Fritz     414 ms
+  visit 2: Single Player       47 ms
+  visit 2: Play vs Fritz       49 ms
+  visit 3: Single Player       48 ms
+  visit 3: Play vs Fritz       48 ms

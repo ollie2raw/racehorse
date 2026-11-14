@@ -1,0 +1,228 @@
+{
+ "file": "load-desktop-cold.json",
+ "mode": "load",
+ "profile": "desktop",
+ "cpu": 1,
+ "net": "none",
+ "sessions": [
+  {
+   "label": "load-cold",
+   "load": {
+    "reactReadyMs": null,
+    "firstTapAtMs": 1952,
+    "navTTFBms": 18,
+    "fcp": 408,
+    "fp": 268,
+    "lcp": 680,
+    "lcpEl": "DIV.home-card-art home-card-art--fritz",
+    "lcpUrl": "newHOMEdailyfritz-BStEWwo1.webp",
+    "domContentLoaded": 219,
+    "loadEvent": 380,
+    "htmlTransferKB": 1.7,
+    "cls": 0.0005,
+    "requestsTotal": 49,
+    "beforeFirstPaint": {
+     "n": 42,
+     "byType": {
+      "css": {
+       "n": 8,
+       "encKB": 71,
+       "decKB": 454,
+       "transferKB": 73
+      },
+      "js": {
+       "n": 31,
+       "encKB": 473,
+       "decKB": 1659,
+       "transferKB": 482
+      },
+      "image": {
+       "n": 3,
+       "encKB": 96,
+       "decKB": 96,
+       "transferKB": 97
+      }
+     }
+    },
+    "total": {
+     "css": {
+      "n": 9,
+      "encKB": 73,
+      "decKB": 465,
+      "transferKB": 75
+     },
+     "js": {
+      "n": 34,
+      "encKB": 478,
+      "decKB": 1671,
+      "transferKB": 488
+     },
+     "image": {
+      "n": 4,
+      "encKB": 97,
+      "decKB": 97,
+      "transferKB": 98
+     },
+     "other": {
+      "n": 1,
+      "encKB": 0,
+      "decKB": 0,
+      "transferKB": 0
+     },
+     "audio": {
+      "n": 1,
+      "encKB": 11,
+      "decKB": 11,
+      "transferKB": 12
+     }
+    },
+    "longTasks": [
+     {
+      "at": 1951,
+      "ms": 258
+     }
+    ],
+    "totalBlockingMs": 208,
+    "mainThreadFirst3s": {
+     "taskMs": 655,
+     "scriptMs": 357,
+     "layoutMs": 105,
+     "styleMs": 28
+    },
+    "biggestJs": [
+     {
+      "n": "index-GaDHDjq4.js",
+      "encKB": 155,
+      "decKB": 573
+     },
+     {
+      "n": "bot-engine-rsadmHBa.js",
+      "encKB": 63,
+      "decKB": 223
+     },
+     {
+      "n": "vendor-supabase-BOBBjAUx.js",
+      "encKB": 49,
+      "decKB": 206
+     },
+     {
+      "n": "game-reviewer-CK-bzBq5.js",
+      "encKB": 44,
+      "decKB": 135
+     },
+     {
+      "n": "bot-guided-C5Gw7Zzr.js",
+      "encKB": 32,
+      "decKB": 111
+     },
+     {
+      "n": "analyzer-B7MCY4ev.js",
+      "encKB": 30,
+      "decKB": 104
+     }
+    ],
+    "lastLongTaskEndBeforeFirstTap": 2209
+   },
+   "menuTaps": [
+    {
+     "label": "first tap: Single Player",
+     "ok": true,
+     "tapToFirstFrameMs": 597,
+     "requests": [
+      {
+       "n": "/assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+       "it": "fetch",
+       "at": 245,
+       "ms": 12,
+       "kb": 11.3
+      },
+      {
+       "n": "/assets/SinglePlayerHubScreen-DGIQwRSA.js",
+       "it": "script",
+       "at": 251,
+       "ms": 6,
+       "kb": 3.6
+      },
+      {
+       "n": "/assets/noBrainerLabProgress-3iA67lTT.js",
+       "it": "script",
+       "at": 251,
+       "ms": 6,
+       "kb": 0.9
+      },
+      {
+       "n": "/assets/useDeferredAsset-DekbqL6b.js",
+       "it": "script",
+       "at": 252,
+       "ms": 12,
+       "kb": 0.5
+      },
+      {
+       "n": "/assets/SinglePlayerHubScreen-DDxm4LNK.css",
+       "it": "link",
+       "at": 252,
+       "ms": 5,
+       "kb": 2.1
+      }
+     ],
+     "totalMs": 597,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 343,
+     "residualAnimationOrTimerMs": 254,
+     "longTasks": [
+      {
+       "at": -1,
+       "ms": 258
+      }
+     ],
+     "commits": 4,
+     "taskMs": 343,
+     "scriptMs": 234,
+     "layoutMs": 42,
+     "styleMs": 7,
+     "calls": []
+    }
+   ],
+   "pointMarks": [],
+   "guestWaits": [],
+   "handEnds": [],
+   "placement": {
+    "n": 0,
+    "p50": null,
+    "p75": null,
+    "p95": null,
+    "p99": null,
+    "max": 0,
+    "over50": 0,
+    "over100": 0,
+    "over300": 0,
+    "note": "placement tap (tile or zone pointerdown) -> frame where the board tile count rose (frame start; real paint about one frame later)",
+    "slowest": []
+   },
+   "zoneAppear": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "max": 0
+   },
+   "draw": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "max": 0
+   },
+   "inp": {
+    "n": 1,
+    "p75": 320,
+    "p98": 320,
+    "max": 320
+   },
+   "longTasksTotal": {
+    "n": 1,
+    "over100": 1
+   },
+   "errors": 0,
+   "failedRequests": 0
+  }
+ ]
+}

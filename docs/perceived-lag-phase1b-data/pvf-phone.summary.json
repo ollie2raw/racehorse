@@ -1,0 +1,1760 @@
+{
+ "file": "pvf-phone.json",
+ "mode": "pvf",
+ "profile": "phone",
+ "cpu": 4,
+ "net": "phone",
+ "outcome": {
+  "reason": "result",
+  "steps": 734,
+  "hands": 7
+ },
+ "sessions": [
+  {
+   "label": "pvf-cold",
+   "load": {
+    "reactReadyMs": 1785,
+    "firstTapAtMs": 3254,
+    "navTTFBms": 28,
+    "fcp": 1252,
+    "fp": 816,
+    "lcp": 1848,
+    "lcpEl": "H1.text-[34px] font-black leading-[0.95] tr",
+    "lcpUrl": "",
+    "domContentLoaded": 994,
+    "loadEvent": 1614,
+    "htmlTransferKB": 1.7,
+    "cls": 0.2974,
+    "requestsTotal": 75,
+    "beforeFirstPaint": {
+     "n": 22,
+     "byType": {
+      "css": {
+       "n": 4,
+       "encKB": 63,
+       "decKB": 423,
+       "transferKB": 64
+      },
+      "js": {
+       "n": 17,
+       "encKB": 449,
+       "decKB": 1584,
+       "transferKB": 454
+      },
+      "image": {
+       "n": 1,
+       "encKB": 2,
+       "decKB": 2,
+       "transferKB": 3
+      }
+     }
+    },
+    "total": {
+     "css": {
+      "n": 15,
+      "encKB": 102,
+      "decKB": 622,
+      "transferKB": 107
+     },
+     "js": {
+      "n": 50,
+      "encKB": 578,
+      "decKB": 2017,
+      "transferKB": 593
+     },
+     "image": {
+      "n": 8,
+      "encKB": 65,
+      "decKB": 65,
+      "transferKB": 67
+     },
+     "other": {
+      "n": 1,
+      "encKB": 0,
+      "decKB": 0,
+      "transferKB": 0
+     },
+     "audio": {
+      "n": 1,
+      "encKB": 11,
+      "decKB": 11,
+      "transferKB": 12
+     }
+    },
+    "longTasks": [
+     {
+      "at": 666,
+      "ms": 148
+     },
+     {
+      "at": 900,
+      "ms": 94
+     },
+     {
+      "at": 996,
+      "ms": 87
+     },
+     {
+      "at": 3243,
+      "ms": 268
+     },
+     {
+      "at": 4252,
+      "ms": 143
+     }
+    ],
+    "totalBlockingMs": 311,
+    "mainThreadFirst3s": {
+     "taskMs": 832,
+     "scriptMs": 312,
+     "layoutMs": 188,
+     "styleMs": 75
+    },
+    "biggestJs": [
+     {
+      "n": "index-GaDHDjq4.js",
+      "encKB": 155,
+      "decKB": 573
+     },
+     {
+      "n": "BotMatchScreen-CjYv1Ruz.js",
+      "encKB": 68,
+      "decKB": 252
+     },
+     {
+      "n": "bot-engine-rsadmHBa.js",
+      "encKB": 63,
+      "decKB": 223
+     },
+     {
+      "n": "vendor-supabase-BOBBjAUx.js",
+      "encKB": 49,
+      "decKB": 206
+     },
+     {
+      "n": "game-reviewer-CK-bzBq5.js",
+      "encKB": 44,
+      "decKB": 135
+     },
+     {
+      "n": "bot-guided-C5Gw7Zzr.js",
+      "encKB": 32,
+      "decKB": 111
+     }
+    ],
+    "lastLongTaskEndBeforeFirstTap": 3511
+   },
+   "menuTaps": [
+    {
+     "label": "home: Single Player",
+     "ok": true,
+     "tapToFirstFrameMs": 597,
+     "requests": [
+      {
+       "n": "/assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+       "it": "fetch",
+       "at": 251,
+       "ms": 166,
+       "kb": 11.3
+      },
+      {
+       "n": "/assets/SinglePlayerHubScreen-DGIQwRSA.js",
+       "it": "script",
+       "at": 272,
+       "ms": 159,
+       "kb": 3.6
+      },
+      {
+       "n": "/assets/noBrainerLabProgress-3iA67lTT.js",
+       "it": "script",
+       "at": 272,
+       "ms": 154,
+       "kb": 0.9
+      },
+      {
+       "n": "/assets/useDeferredAsset-DekbqL6b.js",
+       "it": "script",
+       "at": 273,
+       "ms": 155,
+       "kb": 0.5
+      },
+      {
+       "n": "/assets/SinglePlayerHubScreen-DDxm4LNK.css",
+       "it": "link",
+       "at": 273,
+       "ms": 157,
+       "kb": 2.1
+      },
+      {
+       "n": "/assets/fritzwave1-DQcQ2h8e.js",
+       "it": "script",
+       "at": 581,
+       "ms": 156,
+       "kb": 0.1
+      },
+      {
+       "n": "/assets/fritzghost2-DSgK1eeT.js",
+       "it": "script",
+       "at": 582,
+       "ms": 157,
+       "kb": 0.1
+      },
+      {
+       "n": "/assets/fritzjourney-ClcZMnQv.js",
+       "it": "script",
+       "at": 582,
+       "ms": 158,
+       "kb": 0.1
+      }
+     ],
+     "totalMs": 597,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 337,
+     "residualAnimationOrTimerMs": 260,
+     "longTasks": [
+      {
+       "at": -11,
+       "ms": 268
+      }
+     ],
+     "commits": 4,
+     "taskMs": 337,
+     "scriptMs": 280,
+     "layoutMs": 4,
+     "styleMs": 7,
+     "calls": []
+    },
+    {
+     "label": "hub: Play vs Fritz",
+     "ok": true,
+     "tapToFirstFrameMs": 465,
+     "requests": [
+      {
+       "n": "/assets/PlayVsFritz-Bv-9gMgM.js",
+       "it": "script",
+       "at": 17,
+       "ms": 160,
+       "kb": 3.8
+      },
+      {
+       "n": "/assets/PlayVsFritz-D77wsGnb.css",
+       "it": "link",
+       "at": 17,
+       "ms": 161,
+       "kb": 4.1
+      },
+      {
+       "n": "/rookieICON.webp",
+       "it": "img",
+       "at": 186,
+       "ms": 157,
+       "kb": 2.2
+      },
+      {
+       "n": "/GOATicon.webp",
+       "it": "img",
+       "at": 186,
+       "ms": 160,
+       "kb": 5
+      }
+     ],
+     "totalMs": 465,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 191,
+     "residualAnimationOrTimerMs": 274,
+     "longTasks": [
+      {
+       "at": 332,
+       "ms": 143
+      }
+     ],
+     "commits": 4,
+     "taskMs": 191,
+     "scriptMs": 22,
+     "layoutMs": 130,
+     "styleMs": 18,
+     "calls": []
+    },
+    {
+     "label": "tier: Rookie",
+     "ok": true,
+     "tapToFirstFrameMs": 28
+    },
+    {
+     "label": "start: Start Match -> match screen",
+     "ok": true,
+     "tapToFirstFrameMs": 595,
+     "requests": [
+      {
+       "n": "/assets/GameOverModal-ejL2GkHB.js",
+       "it": "script",
+       "at": 12,
+       "ms": 183,
+       "kb": 9.6
+      },
+      {
+       "n": "/assets/BotMatchScreen-CjYv1Ruz.js",
+       "it": "script",
+       "at": 12,
+       "ms": 232,
+       "kb": 67.6
+      },
+      {
+       "n": "/assets/GameOverModal-n9zbKZpj.css",
+       "it": "link",
+       "at": 12,
+       "ms": 174,
+       "kb": 5.1
+      },
+      {
+       "n": "/assets/leaveGameModal-BGFea7Oj.css",
+       "it": "link",
+       "at": 13,
+       "ms": 160,
+       "kb": 0.8
+      },
+      {
+       "n": "/assets/MatchLiveLayout-DS-EYB8D.js",
+       "it": "script",
+       "at": 13,
+       "ms": 165,
+       "kb": 1.2
+      },
+      {
+       "n": "/assets/vendor-confetti-D_RVyC63.js",
+       "it": "script",
+       "at": 13,
+       "ms": 171,
+       "kb": 4.1
+      },
+      {
+       "n": "/assets/telemetry-D8IY6aPN.js",
+       "it": "script",
+       "at": 13,
+       "ms": 327,
+       "kb": 2.4
+      },
+      {
+       "n": "/assets/DailyFritzFinalResultOverlay-DZJVt1dC.js",
+       "it": "script",
+       "at": 13,
+       "ms": 339,
+       "kb": 2.7
+      },
+      {
+       "n": "/assets/siteUrl-CAfAH0GL.js",
+       "it": "script",
+       "at": 14,
+       "ms": 385,
+       "kb": 0.1
+      },
+      {
+       "n": "/assets/DailyFritzFinalResultOverlay-BCqsU20S.css",
+       "it": "link",
+       "at": 14,
+       "ms": 316,
+       "kb": 1.8
+      },
+      {
+       "n": "/assets/format-DDUXg80R.js",
+       "it": "script",
+       "at": 14,
+       "ms": 471,
+       "kb": 0.4
+      },
+      {
+       "n": "/assets/bot-review-capture-CDJtQuSl.js",
+       "it": "script",
+       "at": 14,
+       "ms": 474,
+       "kb": 2.3
+      },
+      {
+       "n": "/assets/useGameSpeedPreference-CDi6Qbbn.js",
+       "it": "script",
+       "at": 15,
+       "ms": 479,
+       "kb": 0.4
+      },
+      {
+       "n": "/assets/usePostGamePivotalReview-Bgld7BcT.js",
+       "it": "script",
+       "at": 15,
+       "ms": 493,
+       "kb": 4.7
+      },
+      {
+       "n": "/assets/BotMatchScreen-Ch8-f4Ya.css",
+       "it": "link",
+       "at": 15,
+       "ms": 320,
+       "kb": 6.4
+      },
+      {
+       "n": "/assets/learn-BeGcR_X4.css",
+       "it": "link",
+       "at": 16,
+       "ms": 336,
+       "kb": 11.5
+      },
+      {
+       "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+       "it": "img",
+       "at": 558,
+       "ms": 160,
+       "kb": 5.1
+      }
+     ],
+     "totalMs": 595,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 143,
+     "residualAnimationOrTimerMs": 452,
+     "longTasks": [],
+     "commits": 5,
+     "taskMs": 143,
+     "scriptMs": 75,
+     "layoutMs": 7,
+     "styleMs": 35,
+     "calls": []
+    }
+   ],
+   "pointMarks": [
+    {
+     "label": "end of play",
+     "atMs": 275294
+    }
+   ],
+   "guestWaits": [],
+   "enterAndPreDraw": {
+    "timeline": [
+     {
+      "step": "tap Start",
+      "atMsFromTap": 0,
+      "atMsFromMatchScreen": -592
+     },
+     {
+      "step": "match screen first frame",
+      "atMsFromTap": 595,
+      "atMsFromMatchScreen": 3
+     },
+     {
+      "step": "draw tiles visible",
+      "atMsFromTap": 592,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "draw tiles pickable (first interactive)",
+      "atMsFromTap": 592,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "player picks",
+      "atMsFromTap": 8649,
+      "atMsFromMatchScreen": 8057
+     },
+     {
+      "step": "\"you/Fritz go first\" shown",
+      "atMsFromTap": 9712,
+      "atMsFromMatchScreen": 9120
+     },
+     {
+      "step": "draw board gone",
+      "atMsFromTap": 12716,
+      "atMsFromMatchScreen": 12124
+     },
+     {
+      "step": "hand on screen",
+      "atMsFromTap": 12716,
+      "atMsFromMatchScreen": 12124
+     },
+     {
+      "step": "first playable tile",
+      "atMsFromTap": 12716,
+      "atMsFromMatchScreen": 12124
+     }
+    ],
+    "segments": [
+     {
+      "name": "tap Start → draw pickable",
+      "totalMs": 592,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 142,
+      "residualAnimationOrTimerMs": 450,
+      "longTasks": [],
+      "commits": 5,
+      "taskMs": 142,
+      "scriptMs": 75,
+      "layoutMs": 7,
+      "styleMs": 35,
+      "calls": [],
+      "anims": [
+       "rh-screen-loader-scan",
+       "rh-screen-loader-in"
+      ],
+      "requests": [
+       {
+        "n": "/assets/BotMatchScreen-CjYv1Ruz.js",
+        "it": "script",
+        "at": 12,
+        "ms": 232,
+        "kb": 67.6
+       },
+       {
+        "n": "/assets/GameOverModal-n9zbKZpj.css",
+        "it": "link",
+        "at": 12,
+        "ms": 174,
+        "kb": 5.1
+       },
+       {
+        "n": "/assets/leaveGameModal-BGFea7Oj.css",
+        "it": "link",
+        "at": 13,
+        "ms": 160,
+        "kb": 0.8
+       },
+       {
+        "n": "/assets/DailyFritzFinalResultOverlay-BCqsU20S.css",
+        "it": "link",
+        "at": 14,
+        "ms": 316,
+        "kb": 1.8
+       },
+       {
+        "n": "/assets/BotMatchScreen-Ch8-f4Ya.css",
+        "it": "link",
+        "at": 15,
+        "ms": 320,
+        "kb": 6.4
+       },
+       {
+        "n": "/assets/learn-BeGcR_X4.css",
+        "it": "link",
+        "at": 16,
+        "ms": 336,
+        "kb": 11.5
+       },
+       {
+        "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+        "it": "img",
+        "at": 558,
+        "ms": 160,
+        "kb": 5.1
+       }
+      ],
+      "imgs": 1
+     },
+     {
+      "name": "pickable → player picks",
+      "totalMs": 8057,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 218,
+      "residualAnimationOrTimerMs": 7839,
+      "longTasks": [],
+      "commits": 3,
+      "taskMs": 218,
+      "scriptMs": 81,
+      "layoutMs": 0,
+      "styleMs": 6,
+      "calls": [],
+      "anims": [
+       "match-hud-enter",
+       "match-board-enter",
+       "match-deck-enter"
+      ],
+      "requests": [
+       {
+        "n": "/brand_logo.png",
+        "it": "img",
+        "at": 127,
+        "ms": 167,
+        "kb": 13
+       }
+      ],
+      "imgs": 1
+     },
+     {
+      "name": "pick → hand on screen",
+      "totalMs": 4068,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 253,
+      "residualAnimationOrTimerMs": 3815,
+      "longTasks": [
+       {
+        "at": 4013,
+        "ms": 53
+       }
+      ],
+      "commits": 5,
+      "taskMs": 253,
+      "scriptMs": 83,
+      "layoutMs": 5,
+      "styleMs": 28,
+      "calls": [],
+      "anims": [],
+      "requests": [],
+      "imgs": 0
+     }
+    ],
+    "tapToFirstPlayableMs": 12716,
+    "nonInteractiveWaitMs": 592
+   },
+   "boardMount": {
+    "first1500ms": {
+     "commits": 3,
+     "taskMs": 96,
+     "scriptMs": 29,
+     "layoutMs": 0,
+     "styleMs": 4,
+     "longTasks": []
+    },
+    "gbcrTotal": 12399
+   },
+   "handEnds": [
+    {
+     "n": 1,
+     "lastTileToFirstPlayableMs": 10109,
+     "total": {
+      "totalMs": 10109,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 925,
+      "residualAnimationOrTimerMs": 9184,
+      "longTasks": [],
+      "commits": 17,
+      "taskMs": 925,
+      "scriptMs": 165,
+      "layoutMs": 55,
+      "styleMs": 87,
+      "calls": []
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 2027,
+       "net": 0,
+       "main": 228,
+       "residual": 1798,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 13,
+       "net": 0,
+       "main": 7,
+       "residual": 7,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 5011,
+       "net": 0,
+       "main": 326,
+       "residual": 4685,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 3058,
+       "net": 0,
+       "main": 364,
+       "residual": 2694,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 2,
+     "lastTileToFirstPlayableMs": 7031,
+     "total": {
+      "totalMs": 7031,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 716,
+      "residualAnimationOrTimerMs": 6315,
+      "longTasks": [],
+      "commits": 28,
+      "taskMs": 716,
+      "scriptMs": 92,
+      "layoutMs": 45,
+      "styleMs": 223,
+      "calls": []
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 2006,
+       "net": 0,
+       "main": 382,
+       "residual": 1624,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 6,
+       "net": 0,
+       "main": 3,
+       "residual": 3,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 5019,
+       "net": 0,
+       "main": 332,
+       "residual": 4687,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 3,
+     "lastTileToFirstPlayableMs": 10510,
+     "total": {
+      "totalMs": 10510,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 1013,
+      "residualAnimationOrTimerMs": 9497,
+      "longTasks": [],
+      "commits": 56,
+      "taskMs": 1013,
+      "scriptMs": 182,
+      "layoutMs": 46,
+      "styleMs": 115,
+      "calls": []
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 2011,
+       "net": 0,
+       "main": 216,
+       "residual": 1795,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 16,
+       "net": 0,
+       "main": 8,
+       "residual": 9,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 5026,
+       "net": 0,
+       "main": 363,
+       "residual": 4664,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 3458,
+       "net": 0,
+       "main": 427,
+       "residual": 3030,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 4,
+     "lastTileToFirstPlayableMs": 7042,
+     "total": {
+      "totalMs": 7042,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 422,
+      "residualAnimationOrTimerMs": 6620,
+      "longTasks": [],
+      "commits": 27,
+      "taskMs": 422,
+      "scriptMs": 89,
+      "layoutMs": 35,
+      "styleMs": 31,
+      "calls": []
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 2014,
+       "net": 0,
+       "main": 132,
+       "residual": 1882,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 26,
+       "net": 0,
+       "main": 10,
+       "residual": 16,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 5002,
+       "net": 0,
+       "main": 280,
+       "residual": 4722,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 5,
+     "lastTileToFirstPlayableMs": 13236,
+     "total": {
+      "totalMs": 13236,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 1350,
+      "residualAnimationOrTimerMs": 11887,
+      "longTasks": [],
+      "commits": 68,
+      "taskMs": 1350,
+      "scriptMs": 220,
+      "layoutMs": 58,
+      "styleMs": 227,
+      "calls": []
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 2004,
+       "net": 0,
+       "main": 176,
+       "residual": 1828,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 5,
+       "net": 0,
+       "main": 1,
+       "residual": 3,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 5029,
+       "net": 0,
+       "main": 365,
+       "residual": 4663,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 6199,
+       "net": 0,
+       "main": 807,
+       "residual": 5392,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 6,
+     "lastTileToFirstPlayableMs": 7051,
+     "total": {
+      "totalMs": 7051,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 760,
+      "residualAnimationOrTimerMs": 6291,
+      "longTasks": [],
+      "commits": 27,
+      "taskMs": 760,
+      "scriptMs": 116,
+      "layoutMs": 44,
+      "styleMs": 224,
+      "calls": []
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 2022,
+       "net": 0,
+       "main": 447,
+       "residual": 1575,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 7,
+       "net": 0,
+       "main": 3,
+       "residual": 4,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 5022,
+       "net": 0,
+       "main": 310,
+       "residual": 4712,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 7,
+     "lastTileToFirstPlayableMs": 10513,
+     "total": {
+      "totalMs": 10513,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 1714,
+      "residualAnimationOrTimerMs": 8800,
+      "longTasks": [],
+      "commits": 56,
+      "taskMs": 1714,
+      "scriptMs": 255,
+      "layoutMs": 128,
+      "styleMs": 364,
+      "calls": []
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 2017,
+       "net": 0,
+       "main": 521,
+       "residual": 1496,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 5033,
+       "net": 0,
+       "main": 655,
+       "residual": 4378,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 3463,
+       "net": 0,
+       "main": 537,
+       "residual": 2926,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    }
+   ],
+   "gameEnd": {
+    "lastTileToResultMs": 17,
+    "totalMs": 17,
+    "networkInFlightMs": 0,
+    "mainThreadBusyMs": 12,
+    "residualAnimationOrTimerMs": 4,
+    "longTasks": [],
+    "commits": 2,
+    "taskMs": 12,
+    "scriptMs": 4,
+    "layoutMs": 2,
+    "styleMs": 3,
+    "calls": [],
+    "afterResultCalls": []
+   },
+   "placement": {
+    "n": 60,
+    "p50": 34.6,
+    "p75": 40.3,
+    "p95": 59.6,
+    "p99": 71,
+    "max": 71,
+    "over50": 4,
+    "over100": 0,
+    "over300": 0,
+    "note": "placement tap (tile or zone pointerdown) -> frame where the board tile count rose (frame start; real paint about one frame later)",
+    "slowest": [
+     {
+      "ms": 71,
+      "atSec": 233,
+      "longTasks": [
+       67
+      ],
+      "loaf": [
+       {
+        "d": 72,
+        "block": 20,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:57"
+        ]
+       }
+      ],
+      "commits": 1
+     },
+     {
+      "ms": 61,
+      "atSec": 193,
+      "longTasks": [
+       51
+      ],
+      "loaf": [
+       {
+        "d": 58,
+        "block": 8,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:46",
+         "user-callback:game-reviewer-CK-bzBq5.js:5"
+        ]
+       }
+      ],
+      "commits": 2
+     },
+     {
+      "ms": 60,
+      "atSec": 274,
+      "longTasks": [
+       58
+      ],
+      "loaf": [
+       {
+        "d": 61,
+        "block": 10,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:52"
+        ]
+       }
+      ],
+      "commits": 1
+     },
+     {
+      "ms": 55,
+      "atSec": 17,
+      "longTasks": [
+       51
+      ],
+      "loaf": [
+       {
+        "d": 58,
+        "block": 2,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:47"
+        ]
+       }
+      ],
+      "commits": 1
+     },
+     {
+      "ms": 49,
+      "atSec": 183,
+      "longTasks": [],
+      "loaf": [],
+      "commits": 1
+     },
+     {
+      "ms": 46,
+      "atSec": 100,
+      "longTasks": [],
+      "loaf": [],
+      "commits": 1
+     }
+    ]
+   },
+   "zoneAppear": {
+    "n": 70,
+    "p50": 18.1,
+    "p95": 26.8,
+    "max": 43.2
+   },
+   "draw": {
+    "n": 13,
+    "p50": 229.7,
+    "p95": 267.7,
+    "max": 267.7
+   },
+   "inp": {
+    "n": 809,
+    "p75": 64,
+    "p98": 104,
+    "max": 360
+   },
+   "longTasksTotal": {
+    "n": 10,
+    "over100": 3
+   },
+   "errors": 0,
+   "failedRequests": 0
+  },
+  {
+   "label": "pvf-warm",
+   "load": {
+    "reactReadyMs": 869,
+    "firstTapAtMs": 2041,
+    "navTTFBms": 33,
+    "fcp": 948,
+    "fp": 360,
+    "lcp": 948,
+    "lcpEl": "H1.text-[34px] font-black leading-[0.95] tr",
+    "lcpUrl": "",
+    "domContentLoaded": 462,
+    "loadEvent": 462,
+    "htmlTransferKB": 1.7,
+    "cls": 0.013,
+    "requestsTotal": 80,
+    "beforeFirstPaint": {
+     "n": 43,
+     "byType": {
+      "css": {
+       "n": 8,
+       "encKB": 71,
+       "decKB": 454,
+       "transferKB": 0
+      },
+      "js": {
+       "n": 31,
+       "encKB": 473,
+       "decKB": 1659,
+       "transferKB": 0
+      },
+      "image": {
+       "n": 3,
+       "encKB": 39,
+       "decKB": 39,
+       "transferKB": 0
+      },
+      "other": {
+       "n": 1,
+       "encKB": 0,
+       "decKB": 0,
+       "transferKB": 0
+      }
+     }
+    },
+    "total": {
+     "css": {
+      "n": 15,
+      "encKB": 102,
+      "decKB": 622,
+      "transferKB": 0
+     },
+     "js": {
+      "n": 50,
+      "encKB": 578,
+      "decKB": 2017,
+      "transferKB": 0
+     },
+     "image": {
+      "n": 13,
+      "encKB": 354,
+      "decKB": 354,
+      "transferKB": 296
+     },
+     "other": {
+      "n": 1,
+      "encKB": 0,
+      "decKB": 0,
+      "transferKB": 0
+     },
+     "audio": {
+      "n": 1,
+      "encKB": 11,
+      "decKB": 11,
+      "transferKB": 0
+     }
+    },
+    "longTasks": [
+     {
+      "at": 246,
+      "ms": 113
+     },
+     {
+      "at": 397,
+      "ms": 65
+     },
+     {
+      "at": 465,
+      "ms": 91
+     },
+     {
+      "at": 868,
+      "ms": 67
+     },
+     {
+      "at": 2772,
+      "ms": 137
+     }
+    ],
+    "totalBlockingMs": 87,
+    "mainThreadFirst3s": {
+     "taskMs": 1005,
+     "scriptMs": 325,
+     "layoutMs": 325,
+     "styleMs": 69
+    },
+    "biggestJs": [
+     {
+      "n": "index-GaDHDjq4.js",
+      "encKB": 155,
+      "decKB": 573
+     },
+     {
+      "n": "BotMatchScreen-CjYv1Ruz.js",
+      "encKB": 68,
+      "decKB": 252
+     },
+     {
+      "n": "bot-engine-rsadmHBa.js",
+      "encKB": 63,
+      "decKB": 223
+     },
+     {
+      "n": "vendor-supabase-BOBBjAUx.js",
+      "encKB": 49,
+      "decKB": 206
+     },
+     {
+      "n": "game-reviewer-CK-bzBq5.js",
+      "encKB": 44,
+      "decKB": 135
+     },
+     {
+      "n": "bot-guided-C5Gw7Zzr.js",
+      "encKB": 32,
+      "decKB": 111
+     }
+    ],
+    "lastLongTaskEndBeforeFirstTap": 935
+   },
+   "menuTaps": [
+    {
+     "label": "home: Single Player",
+     "ok": true,
+     "tapToFirstFrameMs": 347,
+     "requests": [
+      {
+       "n": "/assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+       "it": "fetch",
+       "at": 9,
+       "ms": 8,
+       "kb": 11.3
+      },
+      {
+       "n": "/assets/SinglePlayerHubScreen-DGIQwRSA.js",
+       "it": "script",
+       "at": 22,
+       "ms": 1,
+       "kb": 3.6
+      },
+      {
+       "n": "/assets/noBrainerLabProgress-3iA67lTT.js",
+       "it": "script",
+       "at": 23,
+       "ms": 1,
+       "kb": 0.9
+      },
+      {
+       "n": "/assets/useDeferredAsset-DekbqL6b.js",
+       "it": "script",
+       "at": 23,
+       "ms": 1,
+       "kb": 0.5
+      },
+      {
+       "n": "/assets/SinglePlayerHubScreen-DDxm4LNK.css",
+       "it": "link",
+       "at": 23,
+       "ms": 1,
+       "kb": 2.1
+      },
+      {
+       "n": "/assets/fritzwave1-DQcQ2h8e.js",
+       "it": "script",
+       "at": 332,
+       "ms": 0,
+       "kb": 0.1
+      },
+      {
+       "n": "/assets/fritzghost2-DSgK1eeT.js",
+       "it": "script",
+       "at": 332,
+       "ms": 0,
+       "kb": 0.1
+      },
+      {
+       "n": "/assets/fritzjourney-ClcZMnQv.js",
+       "it": "script",
+       "at": 332,
+       "ms": 0,
+       "kb": 0.1
+      }
+     ],
+     "totalMs": 347,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 80,
+     "residualAnimationOrTimerMs": 267,
+     "longTasks": [],
+     "commits": 4,
+     "taskMs": 80,
+     "scriptMs": 30,
+     "layoutMs": 8,
+     "styleMs": 9,
+     "calls": []
+    },
+    {
+     "label": "hub: Play vs Fritz",
+     "ok": true,
+     "tapToFirstFrameMs": 448,
+     "requests": [
+      {
+       "n": "/assets/PlayVsFritz-Bv-9gMgM.js",
+       "it": "script",
+       "at": 10,
+       "ms": 0,
+       "kb": 3.8
+      },
+      {
+       "n": "/assets/PlayVsFritz-D77wsGnb.css",
+       "it": "link",
+       "at": 11,
+       "ms": 0,
+       "kb": 4.1
+      },
+      {
+       "n": "/rookieICON.webp",
+       "it": "img",
+       "at": 32,
+       "ms": 0,
+       "kb": 2.2
+      },
+      {
+       "n": "/GOATicon.webp",
+       "it": "img",
+       "at": 32,
+       "ms": 0,
+       "kb": 5
+      },
+      {
+       "n": "/assets/playfritz2png-BBXO7D6c.js",
+       "it": "script",
+       "at": 447,
+       "ms": 0,
+       "kb": 0.1
+      }
+     ],
+     "totalMs": 448,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 175,
+     "residualAnimationOrTimerMs": 273,
+     "longTasks": [
+      {
+       "at": 316,
+       "ms": 137
+      }
+     ],
+     "commits": 4,
+     "taskMs": 175,
+     "scriptMs": 15,
+     "layoutMs": 125,
+     "styleMs": 15,
+     "calls": []
+    },
+    {
+     "label": "tier: Rookie",
+     "ok": true,
+     "tapToFirstFrameMs": 12
+    },
+    {
+     "label": "start: Start Match -> match screen",
+     "ok": true,
+     "tapToFirstFrameMs": 365,
+     "requests": [
+      {
+       "n": "/assets/BotMatchScreen-CjYv1Ruz.js",
+       "it": "script",
+       "at": 9,
+       "ms": 4,
+       "kb": 67.6
+      },
+      {
+       "n": "/assets/GameOverModal-n9zbKZpj.css",
+       "it": "link",
+       "at": 9,
+       "ms": 1,
+       "kb": 5.1
+      },
+      {
+       "n": "/assets/GameOverModal-ejL2GkHB.js",
+       "it": "script",
+       "at": 9,
+       "ms": 2,
+       "kb": 9.6
+      },
+      {
+       "n": "/assets/leaveGameModal-BGFea7Oj.css",
+       "it": "link",
+       "at": 10,
+       "ms": 1,
+       "kb": 0.8
+      },
+      {
+       "n": "/assets/MatchLiveLayout-DS-EYB8D.js",
+       "it": "script",
+       "at": 10,
+       "ms": 2,
+       "kb": 1.2
+      },
+      {
+       "n": "/assets/vendor-confetti-D_RVyC63.js",
+       "it": "script",
+       "at": 10,
+       "ms": 2,
+       "kb": 4.1
+      },
+      {
+       "n": "/assets/siteUrl-CAfAH0GL.js",
+       "it": "script",
+       "at": 10,
+       "ms": 3,
+       "kb": 0.1
+      },
+      {
+       "n": "/assets/DailyFritzFinalResultOverlay-DZJVt1dC.js",
+       "it": "script",
+       "at": 10,
+       "ms": 3,
+       "kb": 2.7
+      },
+      {
+       "n": "/assets/telemetry-D8IY6aPN.js",
+       "it": "script",
+       "at": 10,
+       "ms": 2,
+       "kb": 2.4
+      },
+      {
+       "n": "/assets/DailyFritzFinalResultOverlay-BCqsU20S.css",
+       "it": "link",
+       "at": 11,
+       "ms": 2,
+       "kb": 1.8
+      },
+      {
+       "n": "/assets/format-DDUXg80R.js",
+       "it": "script",
+       "at": 11,
+       "ms": 2,
+       "kb": 0.4
+      },
+      {
+       "n": "/assets/bot-review-capture-CDJtQuSl.js",
+       "it": "script",
+       "at": 11,
+       "ms": 3,
+       "kb": 2.3
+      },
+      {
+       "n": "/assets/useGameSpeedPreference-CDi6Qbbn.js",
+       "it": "script",
+       "at": 12,
+       "ms": 2,
+       "kb": 0.4
+      },
+      {
+       "n": "/assets/BotMatchScreen-Ch8-f4Ya.css",
+       "it": "link",
+       "at": 12,
+       "ms": 2,
+       "kb": 6.4
+      },
+      {
+       "n": "/assets/usePostGamePivotalReview-Bgld7BcT.js",
+       "it": "script",
+       "at": 12,
+       "ms": 2,
+       "kb": 4.7
+      },
+      {
+       "n": "/assets/learn-BeGcR_X4.css",
+       "it": "link",
+       "at": 12,
+       "ms": 1,
+       "kb": 11.5
+      },
+      {
+       "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+       "it": "img",
+       "at": 90,
+       "ms": 5,
+       "kb": 5.1
+      },
+      {
+       "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+       "it": "img",
+       "at": 318,
+       "ms": 1,
+       "kb": 5.1
+      }
+     ],
+     "totalMs": 365,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 136,
+     "residualAnimationOrTimerMs": 229,
+     "longTasks": [],
+     "commits": 3,
+     "taskMs": 136,
+     "scriptMs": 70,
+     "layoutMs": 6,
+     "styleMs": 24,
+     "calls": []
+    }
+   ],
+   "pointMarks": [],
+   "guestWaits": [],
+   "enterAndPreDraw": {
+    "timeline": [
+     {
+      "step": "tap Start",
+      "atMsFromTap": 0,
+      "atMsFromMatchScreen": -355
+     },
+     {
+      "step": "match screen first frame",
+      "atMsFromTap": 365,
+      "atMsFromMatchScreen": 10
+     },
+     {
+      "step": "draw tiles visible",
+      "atMsFromTap": 355,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "draw tiles pickable (first interactive)",
+      "atMsFromTap": 355,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "player picks",
+      "atMsFromTap": 1317,
+      "atMsFromMatchScreen": 962
+     },
+     {
+      "step": "\"you/Fritz go first\" shown",
+      "atMsFromTap": 2365,
+      "atMsFromMatchScreen": 2010
+     },
+     {
+      "step": "draw board gone",
+      "atMsFromTap": 5374,
+      "atMsFromMatchScreen": 5019
+     },
+     {
+      "step": "hand on screen",
+      "atMsFromTap": 5374,
+      "atMsFromMatchScreen": 5019
+     },
+     {
+      "step": "first playable tile",
+      "atMsFromTap": 5374,
+      "atMsFromMatchScreen": 5019
+     }
+    ],
+    "segments": [
+     {
+      "name": "tap Start → draw pickable",
+      "totalMs": 355,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 130,
+      "residualAnimationOrTimerMs": 225,
+      "longTasks": [],
+      "commits": 3,
+      "taskMs": 130,
+      "scriptMs": 68,
+      "layoutMs": 5,
+      "styleMs": 22,
+      "calls": [],
+      "anims": [
+       "rh-screen-loader-scan",
+       "rh-screen-loader-in"
+      ],
+      "requests": [
+       {
+        "n": "/assets/BotMatchScreen-CjYv1Ruz.js",
+        "it": "script",
+        "at": 9,
+        "ms": 4,
+        "kb": 67.6
+       },
+       {
+        "n": "/assets/GameOverModal-n9zbKZpj.css",
+        "it": "link",
+        "at": 9,
+        "ms": 1,
+        "kb": 5.1
+       },
+       {
+        "n": "/assets/leaveGameModal-BGFea7Oj.css",
+        "it": "link",
+        "at": 10,
+        "ms": 1,
+        "kb": 0.8
+       },
+       {
+        "n": "/assets/DailyFritzFinalResultOverlay-BCqsU20S.css",
+        "it": "link",
+        "at": 11,
+        "ms": 2,
+        "kb": 1.8
+       },
+       {
+        "n": "/assets/BotMatchScreen-Ch8-f4Ya.css",
+        "it": "link",
+        "at": 12,
+        "ms": 2,
+        "kb": 6.4
+       },
+       {
+        "n": "/assets/learn-BeGcR_X4.css",
+        "it": "link",
+        "at": 12,
+        "ms": 1,
+        "kb": 11.5
+       },
+       {
+        "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+        "it": "img",
+        "at": 90,
+        "ms": 5,
+        "kb": 5.1
+       },
+       {
+        "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+        "it": "img",
+        "at": 318,
+        "ms": 1,
+        "kb": 5.1
+       }
+      ],
+      "imgs": 2
+     },
+     {
+      "name": "pickable → player picks",
+      "totalMs": 962,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 58,
+      "residualAnimationOrTimerMs": 903,
+      "longTasks": [],
+      "commits": 2,
+      "taskMs": 58,
+      "scriptMs": 15,
+      "layoutMs": 2,
+      "styleMs": 13,
+      "calls": [],
+      "anims": [
+       "match-hud-enter",
+       "match-board-enter",
+       "match-deck-enter"
+      ],
+      "requests": [
+       {
+        "n": "/brand_logo.png",
+        "it": "img",
+        "at": 14,
+        "ms": 1,
+        "kb": 13
+       }
+      ],
+      "imgs": 1
+     },
+     {
+      "name": "pick → hand on screen",
+      "totalMs": 4057,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 217,
+      "residualAnimationOrTimerMs": 3840,
+      "longTasks": [],
+      "commits": 5,
+      "taskMs": 217,
+      "scriptMs": 65,
+      "layoutMs": 5,
+      "styleMs": 24,
+      "calls": [],
+      "anims": [],
+      "requests": [],
+      "imgs": 0
+     }
+    ],
+    "tapToFirstPlayableMs": 5374,
+    "nonInteractiveWaitMs": 355
+   },
+   "boardMount": {
+    "first1500ms": {
+     "commits": 3,
+     "taskMs": 115,
+     "scriptMs": 28,
+     "layoutMs": 2,
+     "styleMs": 23,
+     "longTasks": []
+    },
+    "gbcrTotal": 32
+   },
+   "handEnds": [],
+   "placement": {
+    "n": 0,
+    "p50": null,
+    "p75": null,
+    "p95": null,
+    "p99": null,
+    "max": 0,
+    "over50": 0,
+    "over100": 0,
+    "over300": 0,
+    "note": "placement tap (tile or zone pointerdown) -> frame where the board tile count rose (frame start; real paint about one frame later)",
+    "slowest": []
+   },
+   "zoneAppear": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "max": 0
+   },
+   "draw": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "max": 0
+   },
+   "inp": {
+    "n": 5,
+    "p75": 48,
+    "p98": 56,
+    "max": 56
+   },
+   "longTasksTotal": {
+    "n": 5,
+    "over100": 2
+   },
+   "errors": 0,
+   "failedRequests": 0
+  }
+ ]
+}

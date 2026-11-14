@@ -1,0 +1,50 @@
+daily-desktop.json mode=daily profile=desktop cpu=1 net=none outcome={"reason":"wedged:42|","steps":613,"hands":7} 
+
+== daily-cold
+ load: reactReady 616 firstTapAt 2463 TTFB 11 FCP 396 LCP 736 (IMG.df-pvf-card-bg-img playvsfritzdone-DfjdB8K2.webp) DCL 252 load 365 CLS 0.1134; requests 158, before FCP 45; TBT 70; long tasks [{"at":2462,"ms":120}]; lastLongEnd<firstTap 2582
+   before FCP by type {"css":{"n":8,"encKB":88,"decKB":573,"transferKB":90},"js":{"n":32,"encKB":479,"decKB":1679,"transferKB":489},"image":{"n":3,"encKB":96,"decKB":96,"transferKB":97},"other":{"n":2,"encKB":0,"decKB":0,"transferKB":0}}
+   total by type {"css":{"n":14,"encKB":118,"decKB":729,"transferKB":122},"js":{"n":42,"encKB":572,"decKB":2002,"transferKB":584},"image":{"n":7,"encKB":190,"decKB":190,"transferKB":192},"other":{"n":94,"encKB":0,"decKB":0,"transferKB":0},"audio":{"n":1,"encKB":11,"decKB":11,"transferKB":12}}
+   biggest js [{"n":"index-itpnJz8B.js","encKB":155,"decKB":573},{"n":"BotMatchScreen-DjTHcUFB.js","encKB":68,"decKB":252},{"n":"bot-engine-rsadmHBa.js","encKB":63,"decKB":223},{"n":"vendor-supabase-BOBBjAUx.js","encKB":49,"decKB":206},{"n":"game-reviewer-DwUdDgEI.js","encKB":44,"decKB":136},{"n":"bot-guided-smRBxjAO.js","encKB":32,"decKB":111}]; main 0-3s {"taskMs":521,"scriptMs":275,"layoutMs":45,"styleMs":43}
+ tap "start: Daily Fritz -> match screen" -> first frame 466 ms | net 6 main 172 resid 289 commits 5 long [{"at":-1,"ms":120}] layout 3 style 14 script 111
+     reqs freesound_community-thwump-85836-BSZf6p1T.mp3(11.3KB @116+2) telemetry(0KB @120+10) start(0KB @137+6) GameOverModal-By4levoP.js(9.6KB @144+21) BotMatchScreen-DjTHcUFB.js(67.6KB @144+18) GameOverModal-n9zbKZpj.css(5.1KB @144+2) leaveGameModal-BGFea7Oj.css(0.8KB @144+3) MatchLiveLayout-C7vZPsbd.js(1.2KB @144+22) …+12
+ enter+predraw: tap→first playable 5438 ms; tap→draw pickable 464 ms
+         0 ms from tap |   -464 from match screen | tap Start
+       466 ms from tap |      2 from match screen | match screen first frame
+       464 ms from tap |      0 from match screen | draw tiles visible
+       464 ms from tap |      0 from match screen | draw tiles pickable (first interactive)
+      2434 ms from tap |   1970 from match screen | "you/Fritz go first" shown
+      5438 ms from tap |   4974 from match screen | draw board gone
+      5438 ms from tap |   4974 from match screen | hand on screen
+      5438 ms from tap |   4974 from match screen | first playable tile
+    seg tap Start → draw pickable: 464 ms = net 6 + main 171 + residual 287; long [{"at":-1,"ms":120}]; commits 5; anims df-fritz-loading-dot-pulse,df-fritz-loading-shimmer,df-fritz-loading-fade-in; imgs 2; calls /api/daily-fritz/start 137→143ms
+    board mount (first 1.5 s): {"commits":3,"taskMs":73,"scriptMs":16,"layoutMs":0,"styleMs":7,"longTasks":[]}, gbcr total 4489
+ hand ends (7): last tile → next hand first playable ms: 10477, 7038, 11200, 7525, 10492, 7180, 10495
+    hand 1: total 10477 ms (botOpened true); net 9 main 504 resid 9964; long tasks []
+       last tile → hand-over modal      2009 ms | net 0 main 119 resid 1890 long 0 
+       modal shown → reveal               16 ms | net 0 main 3 resid 13 long 0 
+       modal/reveal → closed            5010 ms | net 9 main 121 resid 4880 long 0 | /api/daily-fritz/next-hand 4977→4986ms
+       dealt → first playable           3443 ms | net 0 main 262 resid 3181 long 0 
+    hand 2: total 7038 ms (botOpened false); net 14 main 349 resid 6675; long tasks []
+       last tile → hand-over modal      2007 ms | net 0 main 168 resid 1839 long 0 
+       modal shown → reveal                5 ms | net 0 main 1 resid 4 long 0 
+       modal/reveal → closed            5026 ms | net 14 main 180 resid 4832 long 0 | /api/daily-fritz/next-hand 4999→5013ms
+    hand 3: total 11200 ms (botOpened true); net 158 main 1363 resid 9679; long tasks [{"at":6997,"ms":400},{"at":7569,"ms":176}]
+       last tile → hand-over modal      2004 ms | net 0 main 115 resid 1889 long 0 
+       modal shown → reveal               61 ms | net 0 main 6 resid 55 long 0 
+       modal/reveal → closed            5694 ms | net 158 main 885 resid 4651 long 2 | /api/daily-fritz/next-hand 5329→5488ms
+       dealt → first playable           3442 ms | net 0 main 358 resid 3084 long 0 
+ placement n=44 p50 8.8 p75 11.1 p95 14.4 p99 23.3 max 23.3 (>100ms 0, >300ms 0); zoneAppear {"n":22,"p50":4.7,"p95":11.6,"max":12.1}; draw {"n":7,"p50":90.7,"p95":253.8,"max":253.8}; INP {"n":643,"p75":40,"p98":64,"max":152}; long tasks {"n":15,"over100":11}
+    slow 23 ms @41s commits 2 long []  [{"d":53,"block":0,"scripts":[]}]
+    slow 15 ms @196s commits 1 long []  []
+    slow 14 ms @80s commits 2 long []  []
+    slow 14 ms @94s commits 1 long []  []
+    slow 14 ms @101s commits 1 long []  []
+    slow 12 ms @204s commits 1 long []  []
+
+== daily-warm
+ load: reactReady 6850 firstTapAt 11342 TTFB 322 FCP 7284 LCP 10912 (IMG.df-pvf-card-bg-img playvsfritzdone-DfjdB8K2.webp) DCL 4214 load 4262 CLS 0; requests 66, before FCP 49; TBT 0; long tasks [{"at":1538,"ms":670},{"at":2485,"ms":493},{"at":3073,"ms":504},{"at":3671,"ms":750},{"at":4583,"ms":97},{"at":4692,"ms":173},{"at":4877,"ms":540},{"at":5441,"ms":203},{"at":5689,"ms":83},{"at":5772,"ms":400}]; lastLongEnd<firstTap 11534
+   before FCP by type {"css":{"n":8,"encKB":88,"decKB":573,"transferKB":0},"js":{"n":30,"encKB":477,"decKB":1675,"transferKB":0},"image":{"n":3,"encKB":96,"decKB":96,"transferKB":0},"other":{"n":8,"encKB":0,"decKB":0,"transferKB":0}}
+   total by type {"css":{"n":11,"encKB":94,"decKB":599,"transferKB":5},"js":{"n":38,"encKB":489,"decKB":1707,"transferKB":8},"image":{"n":4,"encKB":168,"decKB":168,"transferKB":0},"other":{"n":12,"encKB":0,"decKB":0,"transferKB":0},"audio":{"n":1,"encKB":11,"decKB":11,"transferKB":0}}
+   biggest js [{"n":"index-itpnJz8B.js","encKB":155,"decKB":573},{"n":"bot-engine-rsadmHBa.js","encKB":63,"decKB":223},{"n":"vendor-supabase-BOBBjAUx.js","encKB":49,"decKB":206},{"n":"game-reviewer-DwUdDgEI.js","encKB":44,"decKB":136},{"n":"bot-guided-smRBxjAO.js","encKB":32,"decKB":111},{"n":"analyzer-Cnf_amDG.js","encKB":30,"decKB":104}]; main 0-3s {"taskMs":2634,"scriptMs":258,"layoutMs":68,"styleMs":768}
+ tap "start: Daily Fritz -> match screen" -> first frame null ms | net undefined main undefined resid undefined commits undefined long undefined layout undefined style undefined script undefined
+ placement n=0 p50 null p75 null p95 null p99 null max 0 (>100ms 0, >300ms 0); zoneAppear {"n":0,"p50":null,"p95":null,"max":0}; draw {"n":0,"p50":null,"p95":null,"max":0}; INP {"n":1,"p75":464,"p98":464,"max":464}; long tasks {"n":28,"over100":16}

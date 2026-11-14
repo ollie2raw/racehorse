@@ -1,0 +1,4 @@
+all placements: n=49 p50 8 p95 17 max 37
+  mid-hand placements: n=46 p50 8 p95 15 max 17
+  hand/game-ending placements: n=3 p50 17 p95 37 max 37 (hands 6)
+placements > 100 ms: 0; of those, hand/game-ending: 0; mid-hand: 
