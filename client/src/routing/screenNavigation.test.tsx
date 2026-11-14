@@ -81,4 +81,36 @@ describe('navigateToScreen', () => {
     });
     expect(commit).toHaveBeenCalledWith('bot');
   });
+
+  it('marks the tapped control pressed while the load is pending, and clears it after', async () => {
+    let finish!: () => void;
+    loads.next = new Promise<void>((r) => {
+      finish = r;
+    });
+    render(
+      <>
+        <SlowNavigationLoader />
+        <button type="button">Play vs Fritz</button>
+      </>,
+    );
+    const button = screen.getByRole('button', { name: 'Play vs Fritz' });
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    navigateToScreen('bot', vi.fn());
+    expect(button.getAttribute('data-nav-pending')).toBe('true');
+    await act(async () => finish());
+    expect(button.hasAttribute('data-nav-pending')).toBe(false);
+  });
+
+  it('does not mark anything when the screen is already loaded', () => {
+    render(
+      <>
+        <SlowNavigationLoader />
+        <button type="button">Back</button>
+      </>,
+    );
+    const button = screen.getByRole('button', { name: 'Back' });
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    navigateToScreen('home', vi.fn());
+    expect(button.hasAttribute('data-nav-pending')).toBe(false);
+  });
 });

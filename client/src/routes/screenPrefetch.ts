@@ -27,9 +27,13 @@ export function pendingScreenLoad(mode: AppMode): Promise<unknown> | null {
   return screen && !screen.isLoaded() ? screen.preload() : null;
 }
 
-function connectionAllowsPrefetch(): boolean {
-  const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-  return !connection?.saveData;
+/** Prefetch is a bet on the player's data: not on Save-Data, not on a 2g-class connection. */
+export function connectionAllowsPrefetch(): boolean {
+  const connection = (navigator as Navigator & {
+    connection?: { saveData?: boolean; effectiveType?: string };
+  }).connection;
+  if (connection?.saveData) return false;
+  return connection?.effectiveType !== '2g' && connection?.effectiveType !== 'slow-2g';
 }
 
 /** Fire-and-forget; a failed prefetch is retried by the real navigation. */
