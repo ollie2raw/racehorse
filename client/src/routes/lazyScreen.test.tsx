@@ -11,9 +11,9 @@ function deferredModule() {
   const gate = new Promise<void>((r) => {
     resolve = r;
   });
-  const screenUnderTest = lazyScreen<{ name: string }>(async () => {
+  const screenUnderTest = lazyScreen(async () => {
     await gate;
-    return { default: ({ name }) => <p>hello {name}</p> };
+    return { default: ({ name }: { name: string }) => <p>hello {name}</p> };
   });
   return { screenUnderTest, resolve };
 }
@@ -48,7 +48,7 @@ describe('lazyScreen', () => {
 
   it('forgets a failed load so the next preload retries', async () => {
     let calls = 0;
-    const Screen = lazyScreen<object>(async () => {
+    const Screen = lazyScreen(async () => {
       calls += 1;
       if (calls === 1) throw new Error('offline');
       return { default: () => <p>ok</p> };

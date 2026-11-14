@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import { Suspense } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { ScreenLoader } from '../ui/ScreenLoader';
@@ -15,15 +15,8 @@ import { Button } from '../components/primitives';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import '../components/leaveGameModal.css';
 import { publicPlayerName } from '../identity/publicPlayerName';
-
-const MatchmakingScreen = React.lazy(() => import('../matchmaking/MatchmakingScreen'));
-const PrivateMatchLobbyScreen = React.lazy(() => import('./PrivateMatchLobbyScreen'));
-const LiveMatchScreen = React.lazy(() =>
-  import('../match/LiveMatchScreen').then((module) => ({ default: module.LiveMatchScreen })),
-);
-const MatchFoundOverlay = React.lazy(() =>
-  import('../matchmaking/MatchFoundOverlay').then((module) => ({ default: module.MatchFoundOverlay })),
-);
+import { MatchmakingScreen } from '../routes/screenPrefetch';
+import { LiveMatchScreen, MatchFoundOverlay, PrivateMatchLobbyScreen, usePrefetchNestedMultiplayerScreens } from '../routes/multiplayerScreens';
 
 type HandEndedPayload = {
   handNumber: number;
@@ -171,6 +164,7 @@ export default function MultiplayerModeController({
   startGame,
   view,
 }: MultiplayerModeControllerProps) {
+  usePrefetchNestedMultiplayerScreens();
   const {
     createRoom,
     joinRoom,
