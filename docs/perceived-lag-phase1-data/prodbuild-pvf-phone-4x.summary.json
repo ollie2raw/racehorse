@@ -1,0 +1,240 @@
+{
+ "file": "/Users/olivermorid/.claude/jobs/54b8a1da/tmp/perf/runs/prodbuild-pvf-phone-4x.json",
+ "mode": "pvf",
+ "cpu": 4,
+ "profile": "phone",
+ "outcome": {
+  "reason": "result",
+  "own": 211
+ },
+ "sessions": [
+  {
+   "role": "solo",
+   "durationSec": 175.8,
+   "longTasks": {
+    "count": 7,
+    "totalMs": 647,
+    "maxMs": 176,
+    "over100": 2,
+    "over200": 0
+   },
+   "loaf": {
+    "count": 20,
+    "maxMs": 344.4,
+    "blockingMs": 397.1,
+    "scriptTime": 529.1,
+    "renderTime": 320.3,
+    "topScripts": [
+     {
+      "k": "user-callback|TimerHandler:setTimeout||",
+      "n": 4,
+      "ms": 169.1
+     },
+     {
+      "k": "event-listener|DOMWindow.onpointerdown|bot-hand-lifecycle-DHZqPZdp.js|n",
+      "n": 1,
+      "ms": 114.1
+     },
+     {
+      "k": "event-listener|MessagePort.onmessage|index-GaDHDjq4.js|B",
+      "n": 2,
+      "ms": 112.8
+     },
+     {
+      "k": "module-script|http://localhost:5311/assets/index-GaDHDjq4.js|index-GaDHDjq4.js|",
+      "n": 1,
+      "ms": 75.3
+     },
+     {
+      "k": "user-callback|TimerHandler:setTimeout|BotMatchScreen-CjYv1Ruz.js|",
+      "n": 1,
+      "ms": 50.8
+     },
+     {
+      "k": "user-callback|TimerHandler:setTimeout|index-GaDHDjq4.js|ey",
+      "n": 1,
+      "ms": 7
+     }
+    ]
+   },
+   "interactions": {
+    "n": 245,
+    "p50": 64,
+    "p75": 64,
+    "p98": 96,
+    "max": 176,
+    "over100": 4,
+    "over200": 0,
+    "inputDelayP75": 33.5,
+    "processingP75": 0.2,
+    "note": "event-timing entries <16 ms are not reported, so quantiles are of interactions >=16 ms (upper bound on typical)"
+   },
+   "frames": {
+    "total": 10475,
+    "over25ms": 28,
+    "over50ms": 9,
+    "over100ms": 4,
+    "worstMs": 168.6,
+    "pctSlow": 0.3
+   },
+   "tapToBoardPaintMs": {
+    "n": 37,
+    "p50": 15.9,
+    "p75": 17.6,
+    "p95": 482.1,
+    "max": 482.5,
+    "note": "pointerdown -> rAF frame where the board tile count rose (frame start; real paint ~1 frame later)"
+   },
+   "ownPaintToBotTilePaintMs": {
+    "n": 41,
+    "p50": 3467.5,
+    "p75": 6451,
+    "p95": 16682.7,
+    "max": 20034.6
+   },
+   "chooseBotMoveMs": {
+    "n": 0,
+    "p50": null,
+    "p90": null,
+    "max": 0,
+    "over50": 0,
+    "over100": 0
+   },
+   "botWindows": {
+    "n": 16,
+    "totalMs": 31117.6,
+    "longTasksInWindows": 0,
+    "longTaskMsInWindows": 0,
+    "slowFramesInWindows": 6
+   },
+   "reactCommits": {
+    "total": 1144,
+    "perPlacedTile": 14.7,
+    "idleCommitsPerSec": null
+   },
+   "heapMB": {
+    "startAfterGc": 6.9,
+    "midGcs": [
+     [
+      "12",
+      8
+     ],
+     [
+      "24",
+      8.4
+     ],
+     [
+      "36",
+      8.5
+     ],
+     [
+      "48",
+      8.6
+     ],
+     [
+      "60",
+      8.7
+     ],
+     [
+      "72",
+      8.9
+     ],
+     [
+      "84",
+      9
+     ],
+     [
+      "96",
+      9
+     ],
+     [
+      "108",
+      9.1
+     ],
+     [
+      "120",
+      9.2
+     ],
+     [
+      "132",
+      9.2
+     ],
+     [
+      "144",
+      9.4
+     ],
+     [
+      "156",
+      9.4
+     ],
+     [
+      "168",
+      9.4
+     ],
+     [
+      "180",
+      9.7
+     ],
+     [
+      "192",
+      9.6
+     ],
+     [
+      "204",
+      9.7
+     ]
+    ],
+    "endAfterGc": 9.8,
+    "nodesStart": 364,
+    "nodesEnd": 446,
+    "listenersStart": 358,
+    "listenersEnd": 503
+   },
+   "mainThread": {
+    "wallSec": 144.8,
+    "taskSec": 21,
+    "scriptSec": 2.6,
+    "layoutSec": 0.4,
+    "styleSec": 7.4,
+    "busyPct": 14.5
+   },
+   "network": {
+    "apiRequests": 3,
+    "assetRequests": 60,
+    "assetBytesKB": 887.3,
+    "groups": [
+     {
+      "k": "GET /solo/fritz",
+      "n": 1,
+      "KB": 1.5,
+      "maxMs": 8.5,
+      "status": "200"
+     },
+     {
+      "k": "GET /css2",
+      "n": 1,
+      "KB": 1,
+      "maxMs": 163,
+      "status": "200"
+     },
+     {
+      "k": "GET /assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+      "n": 1,
+      "KB": 11.3,
+      "maxMs": 3.7,
+      "status": "200"
+     }
+    ],
+    "lastSecondsBeforeAndAfterGameOver": []
+   },
+   "websocket": {
+    "frames": 0,
+    "out": 0,
+    "in": 0,
+    "bytes": 0,
+    "topMessages": []
+   },
+   "pageErrors": 0
+  }
+ ]
+}

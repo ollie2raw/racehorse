@@ -1,0 +1,321 @@
+{
+ "file": "/Users/olivermorid/.claude/jobs/54b8a1da/tmp/perf/runs/pvf-desktop-1x.json",
+ "mode": "pvf",
+ "cpu": 1,
+ "profile": "desktop",
+ "outcome": {
+  "reason": "result",
+  "own": 409
+ },
+ "sessions": [
+  {
+   "role": "solo",
+   "durationSec": 241.4,
+   "longTasks": {
+    "count": 1,
+    "totalMs": 167,
+    "maxMs": 167,
+    "over100": 1,
+    "over200": 0
+   },
+   "loaf": {
+    "count": 97,
+    "maxMs": 229.2,
+    "blockingMs": 149.1,
+    "scriptTime": 235,
+    "renderTime": 87.1,
+    "topScripts": [
+     {
+      "k": "event-listener|DOMWindow.onpointerdown|bot-hand-lifecycle-CdtpzLtN.js|n",
+      "n": 1,
+      "ms": 158.6
+     },
+     {
+      "k": "event-listener|MessagePort.onmessage|index-C6-Rih1j.js|B",
+      "n": 1,
+      "ms": 41.1
+     },
+     {
+      "k": "module-script|http://localhost:5312/assets/index-C6-Rih1j.js|index-C6-Rih1j.js|",
+      "n": 1,
+      "ms": 28.8
+     },
+     {
+      "k": "user-callback|TimerHandler:setTimeout|bot-hand-lifecycle-CdtpzLtN.js|",
+      "n": 1,
+      "ms": 6.5
+     }
+    ]
+   },
+   "interactions": {
+    "n": 444,
+    "p50": 40,
+    "p75": 48,
+    "p98": 64,
+    "max": 200,
+    "over100": 1,
+    "over200": 0,
+    "inputDelayP75": 0.5,
+    "processingP75": 0.1,
+    "note": "event-timing entries <16 ms are not reported, so quantiles are of interactions >=16 ms (upper bound on typical)"
+   },
+   "frames": {
+    "total": 13698,
+    "over25ms": 728,
+    "over50ms": 11,
+    "over100ms": 2,
+    "worstMs": 166.7,
+    "pctSlow": 5.3
+   },
+   "tapToBoardPaintMs": {
+    "n": 58,
+    "p50": 9.1,
+    "p75": 15.6,
+    "p95": 405.1,
+    "max": 420.7,
+    "note": "pointerdown -> rAF frame where the board tile count rose (frame start; real paint ~1 frame later)"
+   },
+   "ownPaintToBotTilePaintMs": {
+    "n": 60,
+    "p50": 3450.7,
+    "p75": 6734.9,
+    "p95": 16798.4,
+    "max": 20149.9
+   },
+   "chooseBotMoveMs": {
+    "n": 121,
+    "p50": 0.1,
+    "p90": 0.3,
+    "max": 4,
+    "over50": 0,
+    "over100": 0
+   },
+   "botWindows": {
+    "n": 25,
+    "totalMs": 59367.8,
+    "longTasksInWindows": 0,
+    "longTaskMsInWindows": 0,
+    "slowFramesInWindows": 194
+   },
+   "reactCommits": {
+    "total": 2149,
+    "perPlacedTile": 18.2,
+    "idleCommitsPerSec": null
+   },
+   "heapMB": {
+    "startAfterGc": 7.5,
+    "midGcs": [
+     [
+      "12",
+      8.4
+     ],
+     [
+      "24",
+      8.7
+     ],
+     [
+      "36",
+      9.1
+     ],
+     [
+      "48",
+      9.3
+     ],
+     [
+      "60",
+      9.3
+     ],
+     [
+      "72",
+      9.4
+     ],
+     [
+      "84",
+      9.5
+     ],
+     [
+      "96",
+      9.6
+     ],
+     [
+      "108",
+      9.7
+     ],
+     [
+      "120",
+      9.8
+     ],
+     [
+      "132",
+      9.8
+     ],
+     [
+      "144",
+      9.9
+     ],
+     [
+      "156",
+      9.9
+     ],
+     [
+      "168",
+      9.9
+     ],
+     [
+      "180",
+      10
+     ],
+     [
+      "192",
+      10
+     ],
+     [
+      "204",
+      10.1
+     ],
+     [
+      "216",
+      10.2
+     ],
+     [
+      "228",
+      10.2
+     ],
+     [
+      "240",
+      10.3
+     ],
+     [
+      "252",
+      10.2
+     ],
+     [
+      "264",
+      10.3
+     ],
+     [
+      "276",
+      10.6
+     ],
+     [
+      "288",
+      10.5
+     ],
+     [
+      "300",
+      10.5
+     ],
+     [
+      "312",
+      10.5
+     ],
+     [
+      "324",
+      11.5
+     ],
+     [
+      "336",
+      11.8
+     ],
+     [
+      "348",
+      11.8
+     ],
+     [
+      "360",
+      11.9
+     ],
+     [
+      "372",
+      12
+     ],
+     [
+      "384",
+      11.9
+     ],
+     [
+      "396",
+      12
+     ],
+     [
+      "408",
+      12.2
+     ]
+    ],
+    "endAfterGc": 12.2,
+    "nodesStart": 377,
+    "nodesEnd": 603,
+    "listenersStart": 215,
+    "listenersEnd": 366
+   },
+   "mainThread": {
+    "wallSec": 209.1,
+    "taskSec": 14.1,
+    "scriptSec": 2,
+    "layoutSec": 0.3,
+    "styleSec": 3.5,
+    "busyPct": 6.8
+   },
+   "network": {
+    "apiRequests": 5,
+    "assetRequests": 89,
+    "assetBytesKB": 1195,
+    "groups": [
+     {
+      "k": "GET /",
+      "n": 1,
+      "KB": 1.5,
+      "maxMs": 24.4,
+      "status": "200"
+     },
+     {
+      "k": "GET /css2",
+      "n": 1,
+      "KB": 1.2,
+      "maxMs": 147.7,
+      "status": "200"
+     },
+     {
+      "k": "GET /l/font",
+      "n": 1,
+      "KB": 42.9,
+      "maxMs": 162.9,
+      "status": "200"
+     },
+     {
+      "k": "GET /api/home/daily-summary",
+      "n": 1,
+      "KB": 0.2,
+      "maxMs": 15.9,
+      "status": "200"
+     },
+     {
+      "k": "GET /assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+      "n": 1,
+      "KB": 11.3,
+      "maxMs": 2.9,
+      "status": "200"
+     }
+    ],
+    "lastSecondsBeforeAndAfterGameOver": [
+     [
+      "GET /assets/reviewWorker-DmDR_XQJ.js",
+      8
+     ],
+     [
+      "GET /assets/applyCalibratedHandAccuracies-DnU3vMbe.js",
+      1
+     ]
+    ]
+   },
+   "websocket": {
+    "frames": 0,
+    "out": 0,
+    "in": 0,
+    "bytes": 0,
+    "topMessages": []
+   },
+   "pageErrors": 0
+  }
+ ]
+}

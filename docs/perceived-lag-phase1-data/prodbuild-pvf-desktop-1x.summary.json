@@ -1,0 +1,305 @@
+{
+ "file": "/Users/olivermorid/.claude/jobs/54b8a1da/tmp/perf/runs/prodbuild-pvf-desktop-1x.json",
+ "mode": "pvf",
+ "cpu": 1,
+ "profile": "desktop",
+ "outcome": {
+  "reason": "result",
+  "own": 444
+ },
+ "sessions": [
+  {
+   "role": "solo",
+   "durationSec": 256.3,
+   "longTasks": {
+    "count": 1,
+    "totalMs": 135,
+    "maxMs": 135,
+    "over100": 1,
+    "over200": 0
+   },
+   "loaf": {
+    "count": 71,
+    "maxMs": 183.4,
+    "blockingMs": 95.9,
+    "scriptTime": 183,
+    "renderTime": 98.1,
+    "topScripts": [
+     {
+      "k": "event-listener|DOMWindow.onpointerdown|bot-hand-lifecycle-DHZqPZdp.js|n",
+      "n": 1,
+      "ms": 127.4
+     },
+     {
+      "k": "user-callback|TimerHandler:setTimeout|bot-hand-lifecycle-DHZqPZdp.js|",
+      "n": 2,
+      "ms": 34.5
+     },
+     {
+      "k": "module-script|http://localhost:5311/assets/index-GaDHDjq4.js|index-GaDHDjq4.js|",
+      "n": 1,
+      "ms": 21.1
+     }
+    ]
+   },
+   "interactions": {
+    "n": 494,
+    "p50": 40,
+    "p75": 48,
+    "p98": 56,
+    "max": 168,
+    "over100": 1,
+    "over200": 0,
+    "inputDelayP75": 0.6,
+    "processingP75": 0.1,
+    "note": "event-timing entries <16 ms are not reported, so quantiles are of interactions >=16 ms (upper bound on typical)"
+   },
+   "frames": {
+    "total": 14629,
+    "over25ms": 696,
+    "over50ms": 12,
+    "over100ms": 2,
+    "worstMs": 133.4,
+    "pctSlow": 4.8
+   },
+   "tapToBoardPaintMs": {
+    "n": 73,
+    "p50": 8.5,
+    "p75": 13.4,
+    "p95": 338.4,
+    "max": 400.4,
+    "note": "pointerdown -> rAF frame where the board tile count rose (frame start; real paint ~1 frame later)"
+   },
+   "ownPaintToBotTilePaintMs": {
+    "n": 71,
+    "p50": 3050,
+    "p75": 4183.4,
+    "p95": 12499.8,
+    "max": 13983.2
+   },
+   "chooseBotMoveMs": {
+    "n": 0,
+    "p50": null,
+    "p90": null,
+    "max": 0,
+    "over50": 0,
+    "over100": 0
+   },
+   "botWindows": {
+    "n": 30,
+    "totalMs": 44830.6,
+    "longTasksInWindows": 0,
+    "longTaskMsInWindows": 0,
+    "slowFramesInWindows": 0
+   },
+   "reactCommits": {
+    "total": 2020,
+    "perPlacedTile": 14,
+    "idleCommitsPerSec": null
+   },
+   "heapMB": {
+    "startAfterGc": 6.8,
+    "midGcs": [
+     [
+      "12",
+      7.7
+     ],
+     [
+      "24",
+      8.1
+     ],
+     [
+      "36",
+      7.9
+     ],
+     [
+      "48",
+      8
+     ],
+     [
+      "60",
+      8.3
+     ],
+     [
+      "72",
+      8.4
+     ],
+     [
+      "84",
+      8.5
+     ],
+     [
+      "96",
+      8.6
+     ],
+     [
+      "108",
+      8.7
+     ],
+     [
+      "120",
+      8.7
+     ],
+     [
+      "132",
+      8.8
+     ],
+     [
+      "144",
+      8.8
+     ],
+     [
+      "156",
+      9
+     ],
+     [
+      "168",
+      9.1
+     ],
+     [
+      "180",
+      9.2
+     ],
+     [
+      "192",
+      9.2
+     ],
+     [
+      "204",
+      9.3
+     ],
+     [
+      "216",
+      9.3
+     ],
+     [
+      "228",
+      9.4
+     ],
+     [
+      "240",
+      9.5
+     ],
+     [
+      "252",
+      9.5
+     ],
+     [
+      "264",
+      9.8
+     ],
+     [
+      "276",
+      9.6
+     ],
+     [
+      "288",
+      10.6
+     ],
+     [
+      "300",
+      10.6
+     ],
+     [
+      "312",
+      10.8
+     ],
+     [
+      "324",
+      10.8
+     ],
+     [
+      "336",
+      11
+     ],
+     [
+      "348",
+      10.9
+     ],
+     [
+      "360",
+      11
+     ],
+     [
+      "372",
+      11.2
+     ],
+     [
+      "384",
+      11.2
+     ],
+     [
+      "396",
+      11.4
+     ],
+     [
+      "408",
+      11.3
+     ],
+     [
+      "420",
+      11.3
+     ],
+     [
+      "432",
+      11.4
+     ],
+     [
+      "444",
+      11.5
+     ]
+    ],
+    "endAfterGc": 11.5,
+    "nodesStart": 341,
+    "nodesEnd": 534,
+    "listenersStart": 219,
+    "listenersEnd": 360
+   },
+   "mainThread": {
+    "wallSec": 225.2,
+    "taskSec": 17.3,
+    "scriptSec": 2.2,
+    "layoutSec": 0.3,
+    "styleSec": 4.5,
+    "busyPct": 7.7
+   },
+   "network": {
+    "apiRequests": 3,
+    "assetRequests": 61,
+    "assetBytesKB": 967.1,
+    "groups": [
+     {
+      "k": "GET /solo/fritz",
+      "n": 1,
+      "KB": 1.5,
+      "maxMs": 129.7,
+      "status": "200"
+     },
+     {
+      "k": "GET /css2",
+      "n": 1,
+      "KB": 1.1,
+      "maxMs": 136.1,
+      "status": "200"
+     },
+     {
+      "k": "GET /assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+      "n": 1,
+      "KB": 11.3,
+      "maxMs": 7.7,
+      "status": "200"
+     }
+    ],
+    "lastSecondsBeforeAndAfterGameOver": []
+   },
+   "websocket": {
+    "frames": 0,
+    "out": 0,
+    "in": 0,
+    "bytes": 0,
+    "topMessages": []
+   },
+   "pageErrors": 0
+  }
+ ]
+}

@@ -1,0 +1,16 @@
+import { chromium, devices } from '@playwright/test';
+const phone = process.argv[2] === 'phone';
+const OUT = process.argv[3] ?? '/Users/olivermorid/.claude/jobs/54b8a1da/tmp/perf';
+const b = await chromium.launch();
+const ctx = await b.newContext(phone ? devices['iPhone 14 landscape'] : { viewport: { width: 1440, height: 900 } });
+await ctx.addInitScript(() => { localStorage.setItem('hasSeenWelcome', '1'); localStorage.setItem('racehorse_e2e_user_id', crypto.randomUUID()); localStorage.setItem('racehorse_e2e_bearer', 'e2e-daily-fritz'); });
+const p = await ctx.newPage();
+await p.goto('http://localhost:5312/daily-fritz');
+await p.getByRole('heading', { name: 'Daily Fritz' }).waitFor({ timeout: 30000 });
+await p.waitForTimeout(800);
+await p.screenshot({ path: `${OUT}/shot1.png` });
+await p.locator('.df-pvf-start-btn').click();
+await p.waitForTimeout(6000);
+await p.screenshot({ path: `${OUT}/shot2.png` });
+console.log(await p.evaluate(() => ({ pre: document.querySelectorAll('.pre-game-draw-board__tile-slot').length, pick: document.querySelectorAll('.pre-game-draw-board__tile-slot.is-pickable').length, hand: document.querySelectorAll('.hand-area .domino-tile, .wl-hand-area .domino-tile, .rh-tile-rack .domino-tile').length, body: document.body.innerText.slice(0, 300) })));
+await b.close();

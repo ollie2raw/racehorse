@@ -1,0 +1,151 @@
+{
+ "file": "/Users/olivermorid/.claude/jobs/54b8a1da/tmp/perf/runs/idle-desktop-1x.json",
+ "mode": "idle",
+ "cpu": 1,
+ "profile": "desktop",
+ "outcome": {
+  "reason": "idle",
+  "own": 0
+ },
+ "sessions": [
+  {
+   "role": "solo",
+   "durationSec": 28.6,
+   "longTasks": {
+    "count": 0,
+    "totalMs": 0,
+    "maxMs": 0,
+    "over100": 0,
+    "over200": 0
+   },
+   "loaf": {
+    "count": 2,
+    "maxMs": 259.3,
+    "blockingMs": 52.2,
+    "scriptTime": 75.8,
+    "renderTime": 68.5,
+    "topScripts": [
+     {
+      "k": "module-script|http://localhost:5312/assets/index-C6-Rih1j.js|index-C6-Rih1j.js|",
+      "n": 1,
+      "ms": 39.1
+     },
+     {
+      "k": "event-listener|MessagePort.onmessage|index-C6-Rih1j.js|B",
+      "n": 1,
+      "ms": 36.7
+     }
+    ]
+   },
+   "interactions": {
+    "n": 0,
+    "p50": null,
+    "p75": null,
+    "p98": null,
+    "max": 0,
+    "over100": 0,
+    "over200": 0,
+    "inputDelayP75": null,
+    "processingP75": null,
+    "note": "event-timing entries <16 ms are not reported, so quantiles are of interactions >=16 ms (upper bound on typical)"
+   },
+   "frames": {
+    "total": 1697,
+    "over25ms": 4,
+    "over50ms": 4,
+    "over100ms": 1,
+    "worstMs": 121.8,
+    "pctSlow": 0.2
+   },
+   "tapToBoardPaintMs": {
+    "n": 0,
+    "p50": null,
+    "p75": null,
+    "p95": null,
+    "max": 0,
+    "note": "pointerdown -> rAF frame where the board tile count rose (frame start; real paint ~1 frame later)"
+   },
+   "ownPaintToBotTilePaintMs": {
+    "n": 0,
+    "p50": null,
+    "p75": null,
+    "p95": null,
+    "max": 0
+   },
+   "chooseBotMoveMs": {
+    "n": 0,
+    "p50": null,
+    "p90": null,
+    "max": 0,
+    "over50": 0,
+    "over100": 0
+   },
+   "botWindows": {
+    "n": 0,
+    "totalMs": 0,
+    "longTasksInWindows": 0,
+    "longTaskMsInWindows": 0,
+    "slowFramesInWindows": 0
+   },
+   "reactCommits": {
+    "total": 6,
+    "perPlacedTile": 6,
+    "idleCommitsPerSec": null
+   },
+   "heapMB": {
+    "startAfterGc": 3.7,
+    "midGcs": [],
+    "endAfterGc": 3.7,
+    "nodesStart": 350,
+    "nodesEnd": 350,
+    "listenersStart": 187,
+    "listenersEnd": 187
+   },
+   "mainThread": {
+    "wallSec": 25,
+    "taskSec": 0.4,
+    "scriptSec": 0.2,
+    "layoutSec": 0,
+    "styleSec": 0,
+    "busyPct": 1.7
+   },
+   "network": {
+    "apiRequests": 3,
+    "assetRequests": 43,
+    "assetBytesKB": 735.6,
+    "groups": [
+     {
+      "k": "GET /",
+      "n": 1,
+      "KB": 1.5,
+      "maxMs": 28.7,
+      "status": "200"
+     },
+     {
+      "k": "GET /css2",
+      "n": 1,
+      "KB": 1.1,
+      "maxMs": 142.2,
+      "status": "200"
+     },
+     {
+      "k": "GET /api/home/daily-summary",
+      "n": 1,
+      "KB": 0.2,
+      "maxMs": 28.4,
+      "status": "200"
+     }
+    ],
+    "lastSecondsBeforeAndAfterGameOver": []
+   },
+   "websocket": {
+    "frames": 0,
+    "out": 0,
+    "in": 0,
+    "bytes": 0,
+    "topMessages": []
+   },
+   "pageErrors": 0
+  }
+ ]
+}

@@ -1,0 +1,17 @@
+run exp-anim-paused.json outcome {"reason":"budget","own":299} gameSec 200.1
+main thread over the game: task 29.2 s (14.6% busy), style recalc 11.8 s, layout 0.6 s, script 4.4 s
+long tasks 6 (558 ms), >100ms: 2; frames>25ms 59 of 13757
+INP-ish: n 360 p75 64 p98 96 max 168; >100ms: 7
+commits 1516
+getBoundingClientRect: 9751 calls, 3432.2 ms total (0.4 ms/call), >2ms: 639; per board-tile placement: 83.3 calls (117 placements)
+  sampled callers (every 10th call):
+    3710 calls at mi (http://localhost:5312/assets/game-reviewer-BBkPYYgF.js:2:69790)
+    1950 calls at Rr (http://localhost:5312/assets/game-reviewer-BBkPYYgF.js:2:79183)
+    1190 calls at K (http://localhost:5312/assets/game-reviewer-BBkPYYgF.js:2:73900)
+    1160 calls at W (http://localhost:5312/assets/game-reviewer-BBkPYYgF.js:2:72280)
+    1110 calls at mi (http://localhost:5312/assets/game-reviewer-BBkPYYgF.js:2:69679)
+    130 calls at http://localhost:5312/assets/game-reviewer-BBkPYYgF.js:2:80329
+    110 calls .W [as current] (http://localhost:5312/assets/game-reviewer-BBkPYYgF.js:2:72280)
+    100 calls at Gi (http://localhost:5312/assets/game-reviewer-BBkPYYgF.js:2:79455)
+animations alive (sampled each second): avg 5.1, infinite 0.8
+  by name (avg alive): match-hud-enter=1, match-board-enter=1, match-deck-enter=1, rh-scrubber-pulse [inf]=0.8, transition:filter=0.2, transition:opacity=0.2, transition:width=0.2, rh-number-change=0.2, transition:undefined=0.1, fly-tile-to-hand=0.1
