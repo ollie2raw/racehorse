@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore, type Dispatch, type SetStateAction } from 'react';
 import './App.css';
 import './match/match-live.css';
 import './styles/room-lobby.css';
@@ -70,6 +70,7 @@ import {
 // ─── Utilities ───────────────────────────────────────────────
 
 import type { AppMode } from './appRouteTypes';
+import { SlowNavigationLoader, navigateToScreen } from './routing/screenNavigation';
 import { selectLegacyAppSessionRuntime } from './multiplayer/runtime/runtimeSelectors';
 import { createMultiplayerRuntime } from './multiplayer/runtime/createMultiplayerRuntime';
 import { MultiplayerRuntimeProvider } from './multiplayer/runtime/runtimeProvider';
@@ -105,6 +106,11 @@ export default function App() {
     () => resolveAppRoute(window.location.pathname).multiplayerView ?? 'quick',
   );
   const appModeRef = useRef<AppMode>(appMode);
+  // Screen taps wait for the next screen's chunk, so it renders without a Suspense fallback.
+  const navigateAppMode = useCallback<Dispatch<SetStateAction<AppMode>>>(
+    (next) => navigateToScreen(next, setAppMode),
+    [],
+  );
   const mpSubViewRef = useRef<'quick' | 'private'>(mpSubView);
   const isMutedRef = useRef(false);
 
@@ -943,7 +949,7 @@ export default function App() {
       authModalsLayer,
     },
     routeBundles: {
-      navigation: { appMode, setAppMode, appRootRef },
+      navigation: { appMode, setAppMode: navigateAppMode, appRootRef },
       auth: {
         handleSignOut,
         handleSaveUsername,
@@ -1061,6 +1067,7 @@ export default function App() {
     <MultiplayerRuntimeProvider runtime={multiplayerRuntime}>
     <TournamentPostgameContext.Provider value={tournamentPostgame}>
       <OfflineBanner online={isOnline} />
+      <SlowNavigationLoader />
       <TournamentReadyBannerHost
         enabled={isTournamentsEnabled() && Boolean(authUser)}
         activeAssignedMatch={tournament.activeAssignedMatch}

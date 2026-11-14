@@ -171,3 +171,18 @@
     display: none;
   }
 }
+
+/* Over the screen being left while the next one's chunk is still loading (see routing/screenTransition.tsx). */
+.rh-screen-transition-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: var(--bg-obsidian);
+}
+
+/* The control that was tapped, while its screen's code is still loading. */
+[data-nav-pending='true'] {
+  transform: scale(0.97);
+  opacity: 0.85;
+  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms cubic-bezier(0.2, 0, 0, 1);
+}
