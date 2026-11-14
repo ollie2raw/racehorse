@@ -14,11 +14,17 @@ import { HandPrefetchCoordinator } from '../hand-lifecycle/handPrefetchCoordinat
 import { buildDailyFritzPrefetchParams } from '../hand-lifecycle/dailyFritzHandService.ts';
 import { findHand, type HandEndKind, type PlayedHand } from './earlyBodyFixtures.ts';
 
-const wire = vi.hoisted(() => ({ post: vi.fn() }));
+const wire = vi.hoisted(() => ({ post: vi.fn(), early: true }));
 vi.mock('../../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../api/client')>()),
   apiPost: (...args: unknown[]) => wire.post(...args),
 }));
+// The rollback switch, readable per test.
+vi.mock('../hand-lifecycle/handLifecycleRules.ts', async (importOriginal) => Object.defineProperty(
+  { ...(await importOriginal<typeof import('../hand-lifecycle/handLifecycleRules.ts')>()) },
+  'DAILY_FRITZ_EARLY_NEXT_HAND_ENABLED',
+  { get: () => wire.early, enumerable: true },
+));
 vi.mock('../hand-lifecycle/useHandLifecycleWatchdogs.ts', () => ({ useHandLifecycleWatchdogs: () => undefined }));
 
 const { useHandLifecycle } = await import('./useHandLifecycle.ts');
@@ -128,6 +134,7 @@ const REVEAL_UP_MS = 3_000;
 const KINDS: HandEndKind[] = ['domino-out', 'blocked', 'scoring-finish'];
 
 beforeEach(() => {
+  wire.early = true;
   wire.post.mockReset();
   wire.post.mockReturnValue(new Promise(() => undefined)); // the body is captured on the way out; the answer does not matter here
   vi.useFakeTimers();
@@ -173,5 +180,20 @@ describe.each(KINDS)('the early next-hand request for a hand that ends by %s', (
   it('would be caught if the early body were built one command too soon (missing the final move and its scoring)', () => {
     const tooSoon = bodyTheOldAdvanceSent(hand.beforeLast);
     expect(() => expectCompleteBody(tooSoon, hand)).toThrow();
+  });
+});
+
+describe('the rollback switch (DAILY_FRITZ_EARLY_NEXT_HAND_ENABLED = false)', () => {
+  it('sends nothing while the reveal is up, and still sends the one request at the end of its window', async () => {
+    wire.early = false;
+    const hand = findHand('domino-out');
+    const { result } = setupDaily(hand, hand.final);
+    act(() => result.current.notifyBotActionResult(hand.last));
+    await act(async () => { await vi.advanceTimersByTimeAsync(REVEAL_UP_MS); });
+    expect(nextHandBodies()).toHaveLength(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+    const bodies = nextHandBodies();
+    expect(bodies).toHaveLength(1);
+    expectCompleteBody(bodies[0], hand);
   });
 });

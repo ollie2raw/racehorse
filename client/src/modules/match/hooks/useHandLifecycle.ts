@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BotActionResult } from '../runtime/botEngine.ts';
 import {
+  DAILY_FRITZ_EARLY_NEXT_HAND_ENABLED,
   DAILY_FRITZ_HAND_AUTO_ADVANCE_MS,
   emitHandLifecycleDebugLog,
   isDailyFritzAdvanceLocked,
@@ -798,7 +799,7 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
    */
   // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   startNextHandPrefetchRef.current = () => {
-    if (!isDailyFritzMode || !dailyFritzPackage) return;
+    if (!DAILY_FRITZ_EARLY_NEXT_HAND_ENABLED || !isDailyFritzMode || !dailyFritzPackage) return;
     if (isDailyFritzSetTerminal(dailyFritzPackage.set_result)) return;
     const settled = matchRef.current;
     if (settled.gameOver || handTransitionInFlightRef.current) return;
