@@ -1,0 +1,3565 @@
+{
+ "file": "mp-phone-lat290.json",
+ "mode": "mp",
+ "profile": "phone",
+ "cpu": 4,
+ "net": "phone",
+ "outcome": {
+  "reason": "result",
+  "steps": 506,
+  "hands": 11
+ },
+ "sessions": [
+  {
+   "label": "host-cold",
+   "load": {
+    "reactReadyMs": 563,
+    "firstTapAtMs": 14291,
+    "navTTFBms": 8,
+    "fcp": 588,
+    "fp": 196,
+    "lcp": 1232,
+    "lcpEl": "H1.pvf-title",
+    "lcpUrl": "",
+    "domContentLoaded": 201,
+    "loadEvent": 202,
+    "htmlTransferKB": 1.7,
+    "cls": 0.2543,
+    "requestsTotal": 250,
+    "beforeFirstPaint": {
+     "n": 39,
+     "byType": {
+      "css": {
+       "n": 9,
+       "encKB": 84,
+       "decKB": 536,
+       "transferKB": 19
+      },
+      "js": {
+       "n": 26,
+       "encKB": 468,
+       "decKB": 1644,
+       "transferKB": 15
+      },
+      "font": {
+       "n": 2,
+       "encKB": 46,
+       "decKB": 46,
+       "transferKB": 0
+      },
+      "image": {
+       "n": 1,
+       "encKB": 2,
+       "decKB": 2,
+       "transferKB": 0
+      },
+      "other": {
+       "n": 1,
+       "encKB": 0,
+       "decKB": 0,
+       "transferKB": 0
+      }
+     }
+    },
+    "total": {
+     "css": {
+      "n": 13,
+      "encKB": 99,
+      "decKB": 608,
+      "transferKB": 32
+     },
+     "js": {
+      "n": 226,
+      "encKB": 2779,
+      "decKB": 8967,
+      "transferKB": 63
+     },
+     "font": {
+      "n": 2,
+      "encKB": 46,
+      "decKB": 46,
+      "transferKB": 0
+     },
+     "image": {
+      "n": 3,
+      "encKB": 20,
+      "decKB": 20,
+      "transferKB": 19
+     },
+     "other": {
+      "n": 5,
+      "encKB": 0,
+      "decKB": 0,
+      "transferKB": 0
+     },
+     "audio": {
+      "n": 1,
+      "encKB": 11,
+      "decKB": 11,
+      "transferKB": 12
+     }
+    },
+    "longTasks": [
+     {
+      "at": 861,
+      "ms": 170
+     }
+    ],
+    "totalBlockingMs": 120,
+    "mainThreadFirst3s": {
+     "taskMs": 525,
+     "scriptMs": 144,
+     "layoutMs": 163,
+     "styleMs": 55
+    },
+    "biggestJs": [
+     {
+      "n": "index-GaDHDjq4.js",
+      "encKB": 155,
+      "decKB": 573
+     },
+     {
+      "n": "bot-engine-rsadmHBa.js",
+      "encKB": 63,
+      "decKB": 223
+     },
+     {
+      "n": "vendor-supabase-BOBBjAUx.js",
+      "encKB": 49,
+      "decKB": 206
+     },
+     {
+      "n": "game-reviewer-CK-bzBq5.js",
+      "encKB": 44,
+      "decKB": 135
+     },
+     {
+      "n": "bot-guided-C5Gw7Zzr.js",
+      "encKB": 32,
+      "decKB": 111
+     },
+     {
+      "n": "analyzer-B7MCY4ev.js",
+      "encKB": 30,
+      "decKB": 104
+     }
+    ],
+    "lastLongTaskEndBeforeFirstTap": 14476
+   },
+   "menuTaps": [
+    {
+     "label": "mp: Private",
+     "ok": true,
+     "tapToFirstFrameMs": 235,
+     "requests": [
+      {
+       "n": "/assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+       "it": "fetch",
+       "at": 180,
+       "ms": 164,
+       "kb": 11.3
+      },
+      {
+       "n": "/assets/PrivateMatchLobbyScreen-DaG0NGKO.js",
+       "it": "script",
+       "at": 205,
+       "ms": 165,
+       "kb": 8.3
+      },
+      {
+       "n": "/assets/statsApi-DOEHoCxx.js",
+       "it": "script",
+       "at": 206,
+       "ms": 0,
+       "kb": 2.7
+      },
+      {
+       "n": "/assets/api-Bu_67uVt.js",
+       "it": "script",
+       "at": 207,
+       "ms": 0,
+       "kb": 0.5
+      },
+      {
+       "n": "/assets/socialApi-BhswcJmr.js",
+       "it": "script",
+       "at": 207,
+       "ms": 0,
+       "kb": 1.2
+      },
+      {
+       "n": "/assets/PrivateMatchLobbyScreen-CHGz3KpP.css",
+       "it": "link",
+       "at": 207,
+       "ms": 160,
+       "kb": 4.3
+      },
+      {
+       "n": "/assets/RacehorseHomeArt-Dcvfw8pH.css",
+       "it": "link",
+       "at": 208,
+       "ms": 0,
+       "kb": 3.9
+      }
+     ],
+     "totalMs": 235,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 209,
+     "residualAnimationOrTimerMs": 26,
+     "longTasks": [
+      {
+       "at": -11,
+       "ms": 196
+      }
+     ],
+     "commits": 2,
+     "taskMs": 209,
+     "scriptMs": 184,
+     "layoutMs": 1,
+     "styleMs": 4,
+     "calls": []
+    },
+    {
+     "label": "mp: Create lobby tab",
+     "ok": true,
+     "tapToFirstFrameMs": 11,
+     "requests": [],
+     "totalMs": 11,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 3,
+     "residualAnimationOrTimerMs": 8,
+     "longTasks": [],
+     "commits": 0,
+     "taskMs": 3,
+     "scriptMs": 1,
+     "layoutMs": 0,
+     "styleMs": 0,
+     "calls": []
+    },
+    {
+     "label": "mp: Create lobby -> room code",
+     "ok": true,
+     "tapToFirstFrameMs": 132,
+     "requests": [],
+     "totalMs": 132,
+     "networkInFlightMs": 124,
+     "mainThreadBusyMs": 113,
+     "residualAnimationOrTimerMs": 0,
+     "longTasks": [
+      {
+       "at": 17,
+       "ms": 114
+      }
+     ],
+     "commits": 3,
+     "taskMs": 113,
+     "scriptMs": 3,
+     "layoutMs": 73,
+     "styleMs": 9,
+     "calls": [
+      "ws room:create 8→132ms",
+      "ws player:ready 132→169ms"
+     ]
+    },
+    {
+     "label": "mp: Start Match -> match screen (host)",
+     "ok": true,
+     "tapToFirstFrameMs": 698,
+     "requests": [
+      {
+       "n": "/assets/GameOverModal-ejL2GkHB.js",
+       "it": "script",
+       "at": 314,
+       "ms": 181,
+       "kb": 9.6
+      },
+      {
+       "n": "/assets/LiveMatchScreen-CnicJYTZ.js",
+       "it": "script",
+       "at": 314,
+       "ms": 185,
+       "kb": 13.5
+      },
+      {
+       "n": "/assets/GameOverModal-n9zbKZpj.css",
+       "it": "link",
+       "at": 315,
+       "ms": 173,
+       "kb": 5.1
+      },
+      {
+       "n": "/assets/MatchLiveLayout-DS-EYB8D.js",
+       "it": "script",
+       "at": 315,
+       "ms": 166,
+       "kb": 1.2
+      },
+      {
+       "n": "/assets/moderationTypes-DJx9Ym8q.js",
+       "it": "script",
+       "at": 315,
+       "ms": 160,
+       "kb": 0.2
+      },
+      {
+       "n": "/assets/moderationApi-CRDfOvHa.js",
+       "it": "script",
+       "at": 315,
+       "ms": 161,
+       "kb": 0.3
+      },
+      {
+       "n": "/assets/useTournamentNow-CNn6ciE_.js",
+       "it": "script",
+       "at": 315,
+       "ms": 316,
+       "kb": 0.4
+      },
+      {
+       "n": "/assets/LiveMatchScreen-CNmp-vJ_.css",
+       "it": "link",
+       "at": 316,
+       "ms": 316,
+       "kb": 1.8
+      },
+      {
+       "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+       "it": "img",
+       "at": 646,
+       "ms": 157,
+       "kb": 5.1
+      }
+     ],
+     "totalMs": 698,
+     "networkInFlightMs": 301,
+     "mainThreadBusyMs": 89,
+     "residualAnimationOrTimerMs": 309,
+     "longTasks": [
+      {
+       "at": 652,
+       "ms": 62
+      }
+     ],
+     "commits": 7,
+     "taskMs": 89,
+     "scriptMs": 28,
+     "layoutMs": 16,
+     "styleMs": 21,
+     "calls": [
+      "ws game:start 10→311ms"
+     ]
+    }
+   ],
+   "pointMarks": [
+    {
+     "label": "deep link fallback /multiplayer (home Multiplayer tap not available on this layout)",
+     "atMs": 0
+    },
+    {
+     "label": "mp: socket connected (ms since navigation start)",
+     "atMs": 14173
+    },
+    {
+     "label": "end of play",
+     "atMs": 295664
+    }
+   ],
+   "guestWaits": [],
+   "enterAndPreDraw": {
+    "timeline": [
+     {
+      "step": "tap Start",
+      "atMsFromTap": 0,
+      "atMsFromMatchScreen": -652
+     },
+     {
+      "step": "match screen first frame",
+      "atMsFromTap": 698,
+      "atMsFromMatchScreen": 47
+     },
+     {
+      "step": "draw tiles visible",
+      "atMsFromTap": 652,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "draw tiles pickable (first interactive)",
+      "atMsFromTap": 652,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "\"you/Fritz go first\" shown",
+      "atMsFromTap": 1954,
+      "atMsFromMatchScreen": 1302
+     },
+     {
+      "step": "draw board gone",
+      "atMsFromTap": 5251,
+      "atMsFromMatchScreen": 4599
+     },
+     {
+      "step": "hand on screen",
+      "atMsFromTap": 5251,
+      "atMsFromMatchScreen": 4599
+     },
+     {
+      "step": "first playable tile",
+      "atMsFromTap": 5251,
+      "atMsFromMatchScreen": 4599
+     }
+    ],
+    "segments": [
+     {
+      "name": "tap Start → draw pickable",
+      "totalMs": 652,
+      "networkInFlightMs": 301,
+      "mainThreadBusyMs": 60,
+      "residualAnimationOrTimerMs": 291,
+      "longTasks": [
+       {
+        "at": 652,
+        "ms": 62
+       }
+      ],
+      "commits": 7,
+      "taskMs": 60,
+      "scriptMs": 22,
+      "layoutMs": 7,
+      "styleMs": 12,
+      "calls": [
+       "ws game:start 10→311ms"
+      ],
+      "anims": [
+       "rh-screen-loader-scan",
+       "rh-screen-loader-in"
+      ],
+      "requests": [
+       {
+        "n": "/assets/GameOverModal-n9zbKZpj.css",
+        "it": "link",
+        "at": 315,
+        "ms": 173,
+        "kb": 5.1
+       },
+       {
+        "n": "/assets/LiveMatchScreen-CNmp-vJ_.css",
+        "it": "link",
+        "at": 316,
+        "ms": 316,
+        "kb": 1.8
+       },
+       {
+        "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+        "it": "img",
+        "at": 646,
+        "ms": 157,
+        "kb": 5.1
+       }
+      ],
+      "imgs": 1
+     }
+    ],
+    "tapToFirstPlayableMs": 5251,
+    "nonInteractiveWaitMs": 652
+   },
+   "boardMount": {
+    "first1500ms": {
+     "commits": 6,
+     "taskMs": 294,
+     "scriptMs": 47,
+     "layoutMs": 19,
+     "styleMs": 55,
+     "longTasks": [
+      {
+       "at": 0,
+       "ms": 62
+      }
+     ]
+    },
+    "gbcrTotal": 18217
+   },
+   "handEnds": [
+    {
+     "n": 1,
+     "lastTileToFirstPlayableMs": 7430,
+     "total": {
+      "totalMs": 7430,
+      "networkInFlightMs": 891,
+      "mainThreadBusyMs": 1007,
+      "residualAnimationOrTimerMs": 5532,
+      "longTasks": [],
+      "commits": 227,
+      "taskMs": 1007,
+      "scriptMs": 299,
+      "layoutMs": 42,
+      "styleMs": 259,
+      "calls": [
+       "ws hand:ready 5376→6267ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1422,
+       "net": 0,
+       "main": 327,
+       "residual": 1095,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3974,
+       "net": 20,
+       "main": 386,
+       "residual": 3568,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3954→4845ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 889,
+       "net": 871,
+       "main": 56,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -20→871ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 1145,
+       "net": 0,
+       "main": 237,
+       "residual": 908,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 2,
+     "lastTileToFirstPlayableMs": 6297,
+     "total": {
+      "totalMs": 6297,
+      "networkInFlightMs": 922,
+      "mainThreadBusyMs": 760,
+      "residualAnimationOrTimerMs": 4615,
+      "longTasks": [],
+      "commits": 219,
+      "taskMs": 760,
+      "scriptMs": 263,
+      "layoutMs": 21,
+      "styleMs": 56,
+      "calls": [
+       "ws game:action -334→7ms",
+       "ws hand:ready 5382→6297ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1399,
+       "net": 7,
+       "main": 170,
+       "residual": 1223,
+       "longTasks": 0,
+       "calls": [
+        "ws game:action -334→7ms"
+       ]
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3994,
+       "net": 12,
+       "main": 417,
+       "residual": 3565,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3982→4897ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 904,
+       "net": 903,
+       "main": 173,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -12→903ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 3,
+     "lastTileToFirstPlayableMs": 7065,
+     "total": {
+      "totalMs": 7065,
+      "networkInFlightMs": 928,
+      "mainThreadBusyMs": 1196,
+      "residualAnimationOrTimerMs": 4941,
+      "longTasks": [],
+      "commits": 244,
+      "taskMs": 1196,
+      "scriptMs": 340,
+      "layoutMs": 35,
+      "styleMs": 275,
+      "calls": [
+       "ws hand:ready 5383→6311ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1399,
+       "net": 0,
+       "main": 378,
+       "residual": 1021,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 22,
+       "net": 0,
+       "main": 6,
+       "residual": 16,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3974,
+       "net": 11,
+       "main": 549,
+       "residual": 3414,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3962→4890ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 916,
+       "net": 916,
+       "main": 79,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -11→917ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 755,
+       "net": 0,
+       "main": 185,
+       "residual": 569,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -928→0ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 4,
+     "lastTileToFirstPlayableMs": 6281,
+     "total": {
+      "totalMs": 6281,
+      "networkInFlightMs": 910,
+      "mainThreadBusyMs": 873,
+      "residualAnimationOrTimerMs": 4498,
+      "longTasks": [],
+      "commits": 191,
+      "taskMs": 873,
+      "scriptMs": 280,
+      "layoutMs": 27,
+      "styleMs": 224,
+      "calls": [
+       "ws hand:ready 5371→6291ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1397,
+       "net": 0,
+       "main": 370,
+       "residual": 1026,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3994,
+       "net": 20,
+       "main": 427,
+       "residual": 3547,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3975→4895ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 890,
+       "net": 890,
+       "main": 76,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -20→900ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 5,
+     "lastTileToFirstPlayableMs": 7313,
+     "total": {
+      "totalMs": 7313,
+      "networkInFlightMs": 1009,
+      "mainThreadBusyMs": 1207,
+      "residualAnimationOrTimerMs": 5097,
+      "longTasks": [],
+      "commits": 253,
+      "taskMs": 1207,
+      "scriptMs": 349,
+      "layoutMs": 32,
+      "styleMs": 331,
+      "calls": [
+       "ws hand:ready 5377→6386ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1395,
+       "net": 0,
+       "main": 375,
+       "residual": 1020,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 9,
+       "net": 0,
+       "main": 2,
+       "residual": 7,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3997,
+       "net": 23,
+       "main": 454,
+       "residual": 3519,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3973→4982ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 1014,
+       "net": 986,
+       "main": 91,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -23→986ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 899,
+       "net": 0,
+       "main": 284,
+       "residual": 614,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 6,
+     "lastTileToFirstPlayableMs": 6317,
+     "total": {
+      "totalMs": 6317,
+      "networkInFlightMs": 923,
+      "mainThreadBusyMs": 1387,
+      "residualAnimationOrTimerMs": 4007,
+      "longTasks": [],
+      "commits": 211,
+      "taskMs": 1387,
+      "scriptMs": 396,
+      "layoutMs": 45,
+      "styleMs": 429,
+      "calls": [
+       "ws hand:ready 5394→6318ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1432,
+       "net": 0,
+       "main": 653,
+       "residual": 779,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 23,
+       "net": 0,
+       "main": 15,
+       "residual": 8,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3961,
+       "net": 22,
+       "main": 621,
+       "residual": 3318,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3939→4863ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 902,
+       "net": 902,
+       "main": 98,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -22→902ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 7,
+     "lastTileToFirstPlayableMs": 7266,
+     "total": {
+      "totalMs": 7266,
+      "networkInFlightMs": 927,
+      "mainThreadBusyMs": 1653,
+      "residualAnimationOrTimerMs": 4685,
+      "longTasks": [
+       {
+        "at": 7210,
+        "ms": 54
+       }
+      ],
+      "commits": 252,
+      "taskMs": 1653,
+      "scriptMs": 468,
+      "layoutMs": 52,
+      "styleMs": 482,
+      "calls": [
+       "ws game:action -346→34ms",
+       "ws hand:ready 5424→6317ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1417,
+       "net": 34,
+       "main": 586,
+       "residual": 796,
+       "longTasks": 0,
+       "calls": [
+        "ws game:action -346→34ms"
+       ]
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 6,
+       "net": 0,
+       "main": 2,
+       "residual": 4,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 4025,
+       "net": 23,
+       "main": 651,
+       "residual": 3351,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 4002→4895ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 869,
+       "net": 869,
+       "main": 99,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -23→870ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 950,
+       "net": 1,
+       "main": 315,
+       "residual": 633,
+       "longTasks": 1,
+       "calls": [
+        "ws hand:ready -892→1ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 8,
+     "lastTileToFirstPlayableMs": 6275,
+     "total": {
+      "totalMs": 6275,
+      "networkInFlightMs": 916,
+      "mainThreadBusyMs": 1514,
+      "residualAnimationOrTimerMs": 3845,
+      "longTasks": [],
+      "commits": 199,
+      "taskMs": 1514,
+      "scriptMs": 438,
+      "layoutMs": 45,
+      "styleMs": 412,
+      "calls": [
+       "ws hand:ready 5359→6276ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1406,
+       "net": 0,
+       "main": 636,
+       "residual": 770,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3983,
+       "net": 30,
+       "main": 751,
+       "residual": 3202,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3952→4869ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 886,
+       "net": 886,
+       "main": 127,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -30→887ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 9,
+     "lastTileToFirstPlayableMs": 7837,
+     "total": {
+      "totalMs": 7837,
+      "networkInFlightMs": 951,
+      "mainThreadBusyMs": 1761,
+      "residualAnimationOrTimerMs": 5125,
+      "longTasks": [
+       {
+        "at": 7104,
+        "ms": 55
+       },
+       {
+        "at": 7775,
+        "ms": 60
+       }
+      ],
+      "commits": 281,
+      "taskMs": 1761,
+      "scriptMs": 537,
+      "layoutMs": 53,
+      "styleMs": 419,
+      "calls": [
+       "ws hand:ready 5377→6328ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1408,
+       "net": 0,
+       "main": 280,
+       "residual": 1128,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3986,
+       "net": 17,
+       "main": 657,
+       "residual": 3312,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3969→4920ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 934,
+       "net": 934,
+       "main": 94,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -17→934ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 1509,
+       "net": 0,
+       "main": 729,
+       "residual": 779,
+       "longTasks": 2,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 10,
+     "lastTileToFirstPlayableMs": 6325,
+     "total": {
+      "totalMs": 6325,
+      "networkInFlightMs": 922,
+      "mainThreadBusyMs": 1226,
+      "residualAnimationOrTimerMs": 4176,
+      "longTasks": [],
+      "commits": 210,
+      "taskMs": 1226,
+      "scriptMs": 355,
+      "layoutMs": 32,
+      "styleMs": 361,
+      "calls": [
+       "ws hand:ready 5403→6336ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1383,
+       "net": 0,
+       "main": 576,
+       "residual": 807,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 47,
+       "net": 0,
+       "main": 9,
+       "residual": 38,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3985,
+       "net": 12,
+       "main": 561,
+       "residual": 3412,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3973→4906ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 911,
+       "net": 911,
+       "main": 80,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -12→921ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 11,
+     "lastTileToFirstPlayableMs": 9537,
+     "total": {
+      "totalMs": 9537,
+      "networkInFlightMs": 961,
+      "mainThreadBusyMs": 2109,
+      "residualAnimationOrTimerMs": 6467,
+      "longTasks": [
+       {
+        "at": 6569,
+        "ms": 57
+       },
+       {
+        "at": 8733,
+        "ms": 50
+       }
+      ],
+      "commits": 294,
+      "taskMs": 2109,
+      "scriptMs": 574,
+      "layoutMs": 43,
+      "styleMs": 497,
+      "calls": [
+       "ws hand:ready 5366→6327ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1383,
+       "net": 0,
+       "main": 311,
+       "residual": 1072,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 51,
+       "net": 0,
+       "main": 12,
+       "residual": 39,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3961,
+       "net": 29,
+       "main": 635,
+       "residual": 3297,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3932→4893ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 917,
+       "net": 917,
+       "main": 93,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -29→932ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 3226,
+       "net": 16,
+       "main": 1058,
+       "residual": 2153,
+       "longTasks": 2,
+       "calls": [
+        "ws hand:ready -945→16ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 12,
+     "lastTileToFirstPlayableMs": 6305,
+     "total": {
+      "totalMs": 6305,
+      "networkInFlightMs": 928,
+      "mainThreadBusyMs": 1048,
+      "residualAnimationOrTimerMs": 4329,
+      "longTasks": [],
+      "commits": 203,
+      "taskMs": 1048,
+      "scriptMs": 319,
+      "layoutMs": 29,
+      "styleMs": 240,
+      "calls": [
+       "ws hand:ready 5363→6291ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1389,
+       "net": 0,
+       "main": 415,
+       "residual": 974,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 40,
+       "net": 0,
+       "main": 12,
+       "residual": 29,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3952,
+       "net": 18,
+       "main": 533,
+       "residual": 3401,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3934→4862ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 924,
+       "net": 910,
+       "main": 88,
+       "residual": 0,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -18→910ms"
+       ]
+      }
+     ]
+    }
+   ],
+   "gameEnd": {
+    "lastTileToResultMs": 1472,
+    "totalMs": 1472,
+    "networkInFlightMs": 475,
+    "mainThreadBusyMs": 902,
+    "residualAnimationOrTimerMs": 94,
+    "longTasks": [
+     {
+      "at": 26,
+      "ms": 73
+     },
+     {
+      "at": 1391,
+      "ms": 78
+     }
+    ],
+    "commits": 30,
+    "taskMs": 902,
+    "scriptMs": 106,
+    "layoutMs": 40,
+    "styleMs": 265,
+    "calls": [
+     "ws game:action 29→105ms",
+     "ws game:action 1072→1611ms"
+    ],
+    "afterResultCalls": []
+   },
+   "placement": {
+    "n": 102,
+    "p50": 54.5,
+    "p75": 69,
+    "p95": 121.2,
+    "p99": 362.1,
+    "max": 366.3,
+    "over50": 54,
+    "over100": 9,
+    "over300": 2,
+    "note": "placement tap (tile or zone pointerdown) -> frame where the board tile count rose (frame start; real paint about one frame later)",
+    "slowest": [
+     {
+      "ms": 366,
+      "atSec": 133,
+      "longTasks": [],
+      "loaf": [],
+      "commits": 12,
+      "note": "near hand end"
+     },
+     {
+      "ms": 362,
+      "atSec": 54,
+      "longTasks": [],
+      "loaf": [],
+      "commits": 5,
+      "note": "near hand end"
+     },
+     {
+      "ms": 153,
+      "atSec": 178,
+      "longTasks": [
+       60
+      ],
+      "loaf": [
+       {
+        "d": 75,
+        "block": 22,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:61",
+         "user-callback:game-reviewer-CK-bzBq5.js:9"
+        ]
+       }
+      ],
+      "commits": 7
+     },
+     {
+      "ms": 130,
+      "atSec": 155,
+      "longTasks": [
+       59
+      ],
+      "loaf": [
+       {
+        "d": 76,
+        "block": 24,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:60",
+         "user-callback:game-reviewer-CK-bzBq5.js:12"
+        ]
+       }
+      ],
+      "commits": 6
+     },
+     {
+      "ms": 126,
+      "atSec": 154,
+      "longTasks": [],
+      "loaf": [
+       {
+        "d": 74,
+        "block": 12,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:48",
+         "user-callback:game-reviewer-CK-bzBq5.js:12"
+        ]
+       }
+      ],
+      "commits": 5
+     },
+     {
+      "ms": 121,
+      "atSec": 200,
+      "longTasks": [],
+      "loaf": [
+       {
+        "d": 56,
+        "block": 2,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:47"
+        ]
+       }
+      ],
+      "commits": 7
+     }
+    ]
+   },
+   "zoneAppear": {
+    "n": 109,
+    "p50": 25.2,
+    "p95": 45.9,
+    "max": 57.2
+   },
+   "draw": {
+    "n": 34,
+    "p50": 605.3,
+    "p95": 2167.1,
+    "max": 2239.8
+   },
+   "inp": {
+    "n": 365,
+    "p75": 96,
+    "p98": 184,
+    "max": 280
+   },
+   "longTasksTotal": {
+    "n": 112,
+    "over100": 14
+   },
+   "errors": 0,
+   "failedRequests": 0
+  },
+  {
+   "label": "guest-cold",
+   "load": {
+    "reactReadyMs": 557,
+    "firstTapAtMs": 1492,
+    "navTTFBms": 3,
+    "fcp": 580,
+    "fp": 188,
+    "lcp": 1164,
+    "lcpEl": "H1.pvf-title",
+    "lcpUrl": "",
+    "domContentLoaded": 196,
+    "loadEvent": 196,
+    "htmlTransferKB": 1.7,
+    "cls": 0.3872,
+    "requestsTotal": 250,
+    "beforeFirstPaint": {
+     "n": 39,
+     "byType": {
+      "css": {
+       "n": 9,
+       "encKB": 84,
+       "decKB": 536,
+       "transferKB": 19
+      },
+      "js": {
+       "n": 26,
+       "encKB": 468,
+       "decKB": 1644,
+       "transferKB": 15
+      },
+      "font": {
+       "n": 2,
+       "encKB": 46,
+       "decKB": 46,
+       "transferKB": 0
+      },
+      "image": {
+       "n": 1,
+       "encKB": 2,
+       "decKB": 2,
+       "transferKB": 0
+      },
+      "other": {
+       "n": 1,
+       "encKB": 0,
+       "decKB": 0,
+       "transferKB": 0
+      }
+     }
+    },
+    "total": {
+     "css": {
+      "n": 13,
+      "encKB": 99,
+      "decKB": 608,
+      "transferKB": 32
+     },
+     "js": {
+      "n": 226,
+      "encKB": 2779,
+      "decKB": 8967,
+      "transferKB": 63
+     },
+     "font": {
+      "n": 2,
+      "encKB": 46,
+      "decKB": 46,
+      "transferKB": 0
+     },
+     "image": {
+      "n": 3,
+      "encKB": 20,
+      "decKB": 20,
+      "transferKB": 19
+     },
+     "other": {
+      "n": 5,
+      "encKB": 0,
+      "decKB": 0,
+      "transferKB": 0
+     },
+     "audio": {
+      "n": 1,
+      "encKB": 11,
+      "decKB": 11,
+      "transferKB": 12
+     }
+    },
+    "longTasks": [
+     {
+      "at": 856,
+      "ms": 107
+     },
+     {
+      "at": 2242,
+      "ms": 96
+     }
+    ],
+    "totalBlockingMs": 103,
+    "mainThreadFirst3s": {
+     "taskMs": 744,
+     "scriptMs": 195,
+     "layoutMs": 191,
+     "styleMs": 84
+    },
+    "biggestJs": [
+     {
+      "n": "index-GaDHDjq4.js",
+      "encKB": 155,
+      "decKB": 573
+     },
+     {
+      "n": "bot-engine-rsadmHBa.js",
+      "encKB": 63,
+      "decKB": 223
+     },
+     {
+      "n": "vendor-supabase-BOBBjAUx.js",
+      "encKB": 49,
+      "decKB": 206
+     },
+     {
+      "n": "game-reviewer-CK-bzBq5.js",
+      "encKB": 44,
+      "decKB": 135
+     },
+     {
+      "n": "bot-guided-C5Gw7Zzr.js",
+      "encKB": 32,
+      "decKB": 111
+     },
+     {
+      "n": "analyzer-B7MCY4ev.js",
+      "encKB": 30,
+      "decKB": 104
+     }
+    ],
+    "lastLongTaskEndBeforeFirstTap": 963
+   },
+   "menuTaps": [
+    {
+     "label": "mp: Private",
+     "ok": true,
+     "tapToFirstFrameMs": 47,
+     "requests": [
+      {
+       "n": "/assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+       "it": "fetch",
+       "at": 4,
+       "ms": 171,
+       "kb": 11.3
+      },
+      {
+       "n": "/assets/PrivateMatchLobbyScreen-DaG0NGKO.js",
+       "it": "script",
+       "at": 14,
+       "ms": 166,
+       "kb": 8.3
+      },
+      {
+       "n": "/assets/statsApi-DOEHoCxx.js",
+       "it": "script",
+       "at": 15,
+       "ms": 0,
+       "kb": 2.7
+      },
+      {
+       "n": "/assets/api-Bu_67uVt.js",
+       "it": "script",
+       "at": 15,
+       "ms": 0,
+       "kb": 0.5
+      },
+      {
+       "n": "/assets/socialApi-BhswcJmr.js",
+       "it": "script",
+       "at": 16,
+       "ms": 0,
+       "kb": 1.2
+      },
+      {
+       "n": "/assets/PrivateMatchLobbyScreen-CHGz3KpP.css",
+       "it": "link",
+       "at": 16,
+       "ms": 163,
+       "kb": 4.3
+      },
+      {
+       "n": "/assets/RacehorseHomeArt-Dcvfw8pH.css",
+       "it": "link",
+       "at": 16,
+       "ms": 0,
+       "kb": 3.9
+      }
+     ],
+     "totalMs": 47,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 19,
+     "residualAnimationOrTimerMs": 27,
+     "longTasks": [],
+     "commits": 2,
+     "taskMs": 19,
+     "scriptMs": 9,
+     "layoutMs": 1,
+     "styleMs": 3,
+     "calls": []
+    },
+    {
+     "label": "mp: Join lobby tab",
+     "ok": true,
+     "tapToFirstFrameMs": 44,
+     "requests": [],
+     "totalMs": 44,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 25,
+     "residualAnimationOrTimerMs": 19,
+     "longTasks": [],
+     "commits": 1,
+     "taskMs": 25,
+     "scriptMs": 5,
+     "layoutMs": 4,
+     "styleMs": 5,
+     "calls": []
+    },
+    {
+     "label": "mp: Join -> in room",
+     "ok": true,
+     "tapToFirstFrameMs": 115,
+     "requests": [],
+     "totalMs": 115,
+     "networkInFlightMs": 105,
+     "mainThreadBusyMs": 99,
+     "residualAnimationOrTimerMs": 0,
+     "longTasks": [
+      {
+       "at": 19,
+       "ms": 96
+      }
+     ],
+     "commits": 4,
+     "taskMs": 99,
+     "scriptMs": 12,
+     "layoutMs": 48,
+     "styleMs": 10,
+     "calls": [
+      "ws room:join 10→115ms"
+     ]
+    }
+   ],
+   "pointMarks": [
+    {
+     "label": "deep link fallback /multiplayer (home Multiplayer tap not available on this layout)",
+     "atMs": 0
+    },
+    {
+     "label": "mp: socket connected (ms since navigation start)",
+     "atMs": 1089
+    }
+   ],
+   "guestWaits": [
+    {
+     "label": "mp: match screen (guest, host tapped Start)",
+     "ok": true,
+     "shownT": 6105
+    }
+   ],
+   "enterAndPreDraw": {
+    "timeline": [
+     {
+      "step": "match screen first frame",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "draw tiles visible",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "draw tiles pickable (first interactive)",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "draw board gone",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 4545
+     },
+     {
+      "step": "hand on screen",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 4545
+     },
+     {
+      "step": "first playable tile",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 5246
+     }
+    ],
+    "segments": [
+     {
+      "name": "hand on screen → first playable",
+      "totalMs": 700,
+      "networkInFlightMs": 0,
+      "mainThreadBusyMs": 222,
+      "residualAnimationOrTimerMs": 479,
+      "longTasks": [],
+      "commits": 16,
+      "taskMs": 222,
+      "scriptMs": 77,
+      "layoutMs": 8,
+      "styleMs": 63,
+      "calls": [],
+      "anims": [
+       "rh-turn-handoff",
+       "rh-number-change",
+       "rh-scrubber-pulse",
+       "fly-tile-to-hand",
+       "rh-tile-land"
+      ],
+      "requests": [],
+      "imgs": 0
+     }
+    ],
+    "tapToFirstPlayableMs": null,
+    "nonInteractiveWaitMs": null
+   },
+   "boardMount": {
+    "first1500ms": {
+     "commits": 5,
+     "taskMs": 207,
+     "scriptMs": 34,
+     "layoutMs": 3,
+     "styleMs": 33,
+     "longTasks": []
+    },
+    "gbcrTotal": 17806
+   },
+   "handEnds": [
+    {
+     "n": 1,
+     "lastTileToFirstPlayableMs": 6280,
+     "total": {
+      "totalMs": 6280,
+      "networkInFlightMs": 303,
+      "mainThreadBusyMs": 803,
+      "residualAnimationOrTimerMs": 5174,
+      "longTasks": [],
+      "commits": 217,
+      "taskMs": 803,
+      "scriptMs": 263,
+      "layoutMs": 36,
+      "styleMs": 208,
+      "calls": [
+       "ws hand:ready 5367→5670ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1410,
+       "net": 0,
+       "main": 321,
+       "residual": 1089,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 22,
+       "net": 0,
+       "main": 10,
+       "residual": 13,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3951,
+       "net": 16,
+       "main": 413,
+       "residual": 3521,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3934→4237ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 897,
+       "net": 287,
+       "main": 59,
+       "residual": 551,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -16→287ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 2,
+     "lastTileToFirstPlayableMs": 7030,
+     "total": {
+      "totalMs": 7030,
+      "networkInFlightMs": 308,
+      "mainThreadBusyMs": 1043,
+      "residualAnimationOrTimerMs": 5679,
+      "longTasks": [],
+      "commits": 263,
+      "taskMs": 1043,
+      "scriptMs": 329,
+      "layoutMs": 30,
+      "styleMs": 104,
+      "calls": [
+       "ws hand:ready 5375→5683ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1393,
+       "net": 0,
+       "main": 178,
+       "residual": 1215,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 37,
+       "net": 0,
+       "main": 11,
+       "residual": 26,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3958,
+       "net": 13,
+       "main": 610,
+       "residual": 3335,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3945→4253ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 900,
+       "net": 295,
+       "main": 51,
+       "residual": 553,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -13→295ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 743,
+       "net": 0,
+       "main": 193,
+       "residual": 550,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 3,
+     "lastTileToFirstPlayableMs": 6306,
+     "total": {
+      "totalMs": 6306,
+      "networkInFlightMs": 313,
+      "mainThreadBusyMs": 968,
+      "residualAnimationOrTimerMs": 5025,
+      "longTasks": [],
+      "commits": 235,
+      "taskMs": 968,
+      "scriptMs": 321,
+      "layoutMs": 27,
+      "styleMs": 208,
+      "calls": [
+       "ws hand:ready 5375→5688ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1393,
+       "net": 0,
+       "main": 382,
+       "residual": 1010,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 4001,
+       "net": 19,
+       "main": 499,
+       "residual": 3484,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3982→4295ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 913,
+       "net": 294,
+       "main": 88,
+       "residual": 531,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -19→294ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 4,
+     "lastTileToFirstPlayableMs": 7178,
+     "total": {
+      "totalMs": 7178,
+      "networkInFlightMs": 307,
+      "mainThreadBusyMs": 1139,
+      "residualAnimationOrTimerMs": 5732,
+      "longTasks": [],
+      "commits": 254,
+      "taskMs": 1139,
+      "scriptMs": 353,
+      "layoutMs": 30,
+      "styleMs": 290,
+      "calls": [
+       "ws hand:ready 5372→5679ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1385,
+       "net": 0,
+       "main": 335,
+       "residual": 1050,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 21,
+       "net": 0,
+       "main": 5,
+       "residual": 16,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3989,
+       "net": 22,
+       "main": 486,
+       "residual": 3481,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3966→4273ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 893,
+       "net": 285,
+       "main": 77,
+       "residual": 532,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -22→285ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 890,
+       "net": 0,
+       "main": 236,
+       "residual": 653,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 5,
+     "lastTileToFirstPlayableMs": 6424,
+     "total": {
+      "totalMs": 6424,
+      "networkInFlightMs": 412,
+      "mainThreadBusyMs": 1252,
+      "residualAnimationOrTimerMs": 4759,
+      "longTasks": [],
+      "commits": 226,
+      "taskMs": 1252,
+      "scriptMs": 316,
+      "layoutMs": 27,
+      "styleMs": 255,
+      "calls": [
+       "ws hand:ready 5377→5789ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1394,
+       "net": 0,
+       "main": 433,
+       "residual": 961,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 32,
+       "net": 0,
+       "main": 6,
+       "residual": 25,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3977,
+       "net": 25,
+       "main": 722,
+       "residual": 3230,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3952→4364ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 1022,
+       "net": 387,
+       "main": 91,
+       "residual": 544,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -25→387ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 6,
+     "lastTileToFirstPlayableMs": 7273,
+     "total": {
+      "totalMs": 7273,
+      "networkInFlightMs": 319,
+      "mainThreadBusyMs": 1744,
+      "residualAnimationOrTimerMs": 5210,
+      "longTasks": [],
+      "commits": 240,
+      "taskMs": 1744,
+      "scriptMs": 458,
+      "layoutMs": 37,
+      "styleMs": 541,
+      "calls": [
+       "ws hand:ready 5379→5698ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1408,
+       "net": 0,
+       "main": 667,
+       "residual": 741,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3993,
+       "net": 22,
+       "main": 692,
+       "residual": 3278,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3971→4290ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 912,
+       "net": 297,
+       "main": 124,
+       "residual": 490,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -22→297ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 961,
+       "net": 0,
+       "main": 260,
+       "residual": 700,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 7,
+     "lastTileToFirstPlayableMs": 6275,
+     "total": {
+      "totalMs": 6275,
+      "networkInFlightMs": 312,
+      "mainThreadBusyMs": 1501,
+      "residualAnimationOrTimerMs": 4462,
+      "longTasks": [],
+      "commits": 217,
+      "taskMs": 1501,
+      "scriptMs": 417,
+      "layoutMs": 33,
+      "styleMs": 456,
+      "calls": [
+       "ws hand:ready 5342→5654ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1371,
+       "net": 0,
+       "main": 702,
+       "residual": 669,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 28,
+       "net": 0,
+       "main": 11,
+       "residual": 16,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3964,
+       "net": 21,
+       "main": 667,
+       "residual": 3276,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3943→4255ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 912,
+       "net": 291,
+       "main": 121,
+       "residual": 500,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -21→291ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 8,
+     "lastTileToFirstPlayableMs": 8343,
+     "total": {
+      "totalMs": 8343,
+      "networkInFlightMs": 322,
+      "mainThreadBusyMs": 2671,
+      "residualAnimationOrTimerMs": 5350,
+      "longTasks": [
+       {
+        "at": 3120,
+        "ms": 77
+       },
+       {
+        "at": 8274,
+        "ms": 68
+       }
+      ],
+      "commits": 275,
+      "taskMs": 2671,
+      "scriptMs": 547,
+      "layoutMs": 53,
+      "styleMs": 676,
+      "calls": [
+       "ws hand:ready 5348→5670ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1380,
+       "net": 0,
+       "main": 638,
+       "residual": 742,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 24,
+       "net": 0,
+       "main": 11,
+       "residual": 13,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3968,
+       "net": 24,
+       "main": 1204,
+       "residual": 2740,
+       "longTasks": 1,
+       "calls": [
+        "ws hand:ready 3944→4266ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 929,
+       "net": 298,
+       "main": 121,
+       "residual": 509,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -24→298ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 2042,
+       "net": 0,
+       "main": 697,
+       "residual": 1346,
+       "longTasks": 1,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 9,
+     "lastTileToFirstPlayableMs": 6301,
+     "total": {
+      "totalMs": 6301,
+      "networkInFlightMs": 328,
+      "mainThreadBusyMs": 1516,
+      "residualAnimationOrTimerMs": 4456,
+      "longTasks": [],
+      "commits": 206,
+      "taskMs": 1516,
+      "scriptMs": 381,
+      "layoutMs": 31,
+      "styleMs": 99,
+      "calls": [
+       "ws hand:ready 5355→5683ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1383,
+       "net": 0,
+       "main": 232,
+       "residual": 1151,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 10,
+       "net": 0,
+       "main": 4,
+       "residual": 5,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3983,
+       "net": 20,
+       "main": 1174,
+       "residual": 2789,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3963→4291ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 925,
+       "net": 308,
+       "main": 106,
+       "residual": 511,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -20→308ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 10,
+     "lastTileToFirstPlayableMs": 8010,
+     "total": {
+      "totalMs": 8010,
+      "networkInFlightMs": 336,
+      "mainThreadBusyMs": 1750,
+      "residualAnimationOrTimerMs": 5923,
+      "longTasks": [
+       {
+        "at": 7958,
+        "ms": 50
+       }
+      ],
+      "commits": 256,
+      "taskMs": 1750,
+      "scriptMs": 431,
+      "layoutMs": 47,
+      "styleMs": 511,
+      "calls": [
+       "ws hand:ready 5350→5686ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1368,
+       "net": 0,
+       "main": 595,
+       "residual": 773,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 7,
+       "net": 0,
+       "main": 2,
+       "residual": 5,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3991,
+       "net": 16,
+       "main": 581,
+       "residual": 3394,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3975→4311ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 951,
+       "net": 320,
+       "main": 102,
+       "residual": 529,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -16→320ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 1693,
+       "net": 0,
+       "main": 470,
+       "residual": 1222,
+       "longTasks": 1,
+       "calls": []
+      }
+     ]
+    },
+    {
+     "n": 11,
+     "lastTileToFirstPlayableMs": 6312,
+     "total": {
+      "totalMs": 6312,
+      "networkInFlightMs": 330,
+      "mainThreadBusyMs": 1103,
+      "residualAnimationOrTimerMs": 4879,
+      "longTasks": [],
+      "commits": 223,
+      "taskMs": 1103,
+      "scriptMs": 390,
+      "layoutMs": 33,
+      "styleMs": 93,
+      "calls": [
+       "ws hand:ready 5357→5687ms"
+      ]
+     },
+     "botOpened": false,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1381,
+       "net": 0,
+       "main": 285,
+       "residual": 1096,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 2,
+       "net": 0,
+       "main": 1,
+       "residual": 1,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3995,
+       "net": 20,
+       "main": 695,
+       "residual": 3279,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3975→4305ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 935,
+       "net": 310,
+       "main": 122,
+       "residual": 503,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready -20→310ms"
+       ]
+      }
+     ]
+    },
+    {
+     "n": 12,
+     "lastTileToFirstPlayableMs": 7339,
+     "total": {
+      "totalMs": 7339,
+      "networkInFlightMs": 321,
+      "mainThreadBusyMs": 2014,
+      "residualAnimationOrTimerMs": 5005,
+      "longTasks": [
+       {
+        "at": 6147,
+        "ms": 82
+       },
+       {
+        "at": 6295,
+        "ms": 136
+       }
+      ],
+      "commits": 237,
+      "taskMs": 2014,
+      "scriptMs": 497,
+      "layoutMs": 40,
+      "styleMs": 368,
+      "calls": [
+       "ws hand:ready 5363→5684ms"
+      ]
+     },
+     "botOpened": true,
+     "phases": [
+      {
+       "name": "last tile → hand-over modal",
+       "ms": 1394,
+       "net": 0,
+       "main": 505,
+       "residual": 889,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal shown → reveal",
+       "ms": 15,
+       "net": 0,
+       "main": 5,
+       "residual": 10,
+       "longTasks": 0,
+       "calls": []
+      },
+      {
+       "name": "modal/reveal → closed",
+       "ms": 3977,
+       "net": 23,
+       "main": 606,
+       "residual": 3348,
+       "longTasks": 0,
+       "calls": [
+        "ws hand:ready 3954→4275ms"
+       ]
+      },
+      {
+       "name": "closed → next hand dealt",
+       "ms": 1046,
+       "net": 298,
+       "main": 377,
+       "residual": 370,
+       "longTasks": 2,
+       "calls": [
+        "ws hand:ready -23→298ms"
+       ]
+      },
+      {
+       "name": "dealt → first playable",
+       "ms": 907,
+       "net": 0,
+       "main": 520,
+       "residual": 387,
+       "longTasks": 0,
+       "calls": []
+      }
+     ]
+    }
+   ],
+   "gameEnd": {
+    "lastTileToResultMs": 8,
+    "totalMs": 8,
+    "networkInFlightMs": 0,
+    "mainThreadBusyMs": 3,
+    "residualAnimationOrTimerMs": 4,
+    "longTasks": [],
+    "commits": 1,
+    "taskMs": 3,
+    "scriptMs": 1,
+    "layoutMs": 1,
+    "styleMs": 1,
+    "calls": [],
+    "afterResultCalls": []
+   },
+   "placement": {
+    "n": 93,
+    "p50": 57.4,
+    "p75": 70,
+    "p95": 102.7,
+    "p99": 374.9,
+    "max": 374.9,
+    "over50": 56,
+    "over100": 5,
+    "over300": 1,
+    "note": "placement tap (tile or zone pointerdown) -> frame where the board tile count rose (frame start; real paint about one frame later)",
+    "slowest": [
+     {
+      "ms": 375,
+      "atSec": 91,
+      "longTasks": [],
+      "loaf": [],
+      "commits": 8,
+      "note": "near hand end"
+     },
+     {
+      "ms": 157,
+      "atSec": 193,
+      "longTasks": [],
+      "loaf": [
+       {
+        "d": 51,
+        "block": 0,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:26",
+         "user-callback:game-reviewer-CK-bzBq5.js:9"
+        ]
+       }
+      ],
+      "commits": 5
+     },
+     {
+      "ms": 109,
+      "atSec": 182,
+      "longTasks": [
+       78
+      ],
+      "loaf": [
+       {
+        "d": 89,
+        "block": 37,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:68"
+        ]
+       }
+      ],
+      "commits": 3
+     },
+     {
+      "ms": 107,
+      "atSec": 163,
+      "longTasks": [
+       84
+      ],
+      "loaf": [
+       {
+        "d": 99,
+        "block": 49,
+        "scripts": [
+         "event-listener:index-GaDHDjq4.js:72",
+         "user-callback:game-reviewer-CK-bzBq5.js:12"
+        ]
+       }
+      ],
+      "commits": 2
+     },
+     {
+      "ms": 103,
+      "atSec": 103,
+      "longTasks": [],
+      "loaf": [],
+      "commits": 6
+     },
+     {
+      "ms": 94,
+      "atSec": 242,
+      "longTasks": [],
+      "loaf": [],
+      "commits": 5
+     }
+    ]
+   },
+   "zoneAppear": {
+    "n": 104,
+    "p50": 23.4,
+    "p95": 47.9,
+    "max": 58.3
+   },
+   "draw": {
+    "n": 20,
+    "p50": 1116.6,
+    "p95": 2392.1,
+    "max": 2392.1
+   },
+   "inp": {
+    "n": 362,
+    "p75": 104,
+    "p98": 168,
+    "max": 216
+   },
+   "longTasksTotal": {
+    "n": 103,
+    "over100": 8
+   },
+   "errors": 0,
+   "failedRequests": 0
+  },
+  {
+   "label": "host-warm",
+   "load": {
+    "reactReadyMs": 570,
+    "firstTapAtMs": 13533,
+    "navTTFBms": 41,
+    "fcp": 752,
+    "fp": 192,
+    "lcp": 752,
+    "lcpEl": "DIV.rh-nav-wordmark uppercase text-white",
+    "lcpUrl": "",
+    "domContentLoaded": 199,
+    "loadEvent": 199,
+    "htmlTransferKB": 1.7,
+    "cls": 0.0106,
+    "requestsTotal": 61,
+    "beforeFirstPaint": {
+     "n": 40,
+     "byType": {
+      "css": {
+       "n": 9,
+       "encKB": 84,
+       "decKB": 536,
+       "transferKB": 0
+      },
+      "js": {
+       "n": 26,
+       "encKB": 468,
+       "decKB": 1644,
+       "transferKB": 0
+      },
+      "font": {
+       "n": 2,
+       "encKB": 46,
+       "decKB": 46,
+       "transferKB": 0
+      },
+      "image": {
+       "n": 1,
+       "encKB": 2,
+       "decKB": 2,
+       "transferKB": 0
+      },
+      "other": {
+       "n": 2,
+       "encKB": 0,
+       "decKB": 0,
+       "transferKB": 0
+      }
+     }
+    },
+    "total": {
+     "css": {
+      "n": 13,
+      "encKB": 99,
+      "decKB": 608,
+      "transferKB": 0
+     },
+     "js": {
+      "n": 36,
+      "encKB": 506,
+      "decKB": 1759,
+      "transferKB": 0
+     },
+     "font": {
+      "n": 2,
+      "encKB": 46,
+      "decKB": 46,
+      "transferKB": 0
+     },
+     "image": {
+      "n": 4,
+      "encKB": 25,
+      "decKB": 25,
+      "transferKB": 11
+     },
+     "other": {
+      "n": 5,
+      "encKB": 0,
+      "decKB": 0,
+      "transferKB": 0
+     },
+     "audio": {
+      "n": 1,
+      "encKB": 11,
+      "decKB": 11,
+      "transferKB": 0
+     }
+    },
+    "longTasks": [
+     {
+      "at": 569,
+      "ms": 165
+     }
+    ],
+    "totalBlockingMs": 0,
+    "mainThreadFirst3s": {
+     "taskMs": 505,
+     "scriptMs": 137,
+     "layoutMs": 159,
+     "styleMs": 46
+    },
+    "biggestJs": [
+     {
+      "n": "index-GaDHDjq4.js",
+      "encKB": 155,
+      "decKB": 573
+     },
+     {
+      "n": "bot-engine-rsadmHBa.js",
+      "encKB": 63,
+      "decKB": 223
+     },
+     {
+      "n": "vendor-supabase-BOBBjAUx.js",
+      "encKB": 49,
+      "decKB": 206
+     },
+     {
+      "n": "game-reviewer-CK-bzBq5.js",
+      "encKB": 44,
+      "decKB": 135
+     },
+     {
+      "n": "bot-guided-C5Gw7Zzr.js",
+      "encKB": 32,
+      "decKB": 111
+     },
+     {
+      "n": "analyzer-B7MCY4ev.js",
+      "encKB": 30,
+      "decKB": 104
+     }
+    ],
+    "lastLongTaskEndBeforeFirstTap": 734
+   },
+   "menuTaps": [
+    {
+     "label": "mp: Private",
+     "ok": true,
+     "tapToFirstFrameMs": 62,
+     "requests": [
+      {
+       "n": "/assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+       "it": "fetch",
+       "at": 12,
+       "ms": 1,
+       "kb": 11.3
+      },
+      {
+       "n": "/assets/PrivateMatchLobbyScreen-DaG0NGKO.js",
+       "it": "script",
+       "at": 28,
+       "ms": 0,
+       "kb": 8.3
+      },
+      {
+       "n": "/assets/statsApi-DOEHoCxx.js",
+       "it": "script",
+       "at": 29,
+       "ms": 0,
+       "kb": 2.7
+      },
+      {
+       "n": "/assets/api-Bu_67uVt.js",
+       "it": "script",
+       "at": 29,
+       "ms": 0,
+       "kb": 0.5
+      },
+      {
+       "n": "/assets/socialApi-BhswcJmr.js",
+       "it": "script",
+       "at": 30,
+       "ms": 0,
+       "kb": 1.2
+      },
+      {
+       "n": "/assets/PrivateMatchLobbyScreen-CHGz3KpP.css",
+       "it": "link",
+       "at": 34,
+       "ms": 1,
+       "kb": 4.3
+      },
+      {
+       "n": "/assets/RacehorseHomeArt-Dcvfw8pH.css",
+       "it": "link",
+       "at": 35,
+       "ms": 0,
+       "kb": 3.9
+      }
+     ],
+     "totalMs": 62,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 31,
+     "residualAnimationOrTimerMs": 31,
+     "longTasks": [],
+     "commits": 2,
+     "taskMs": 31,
+     "scriptMs": 17,
+     "layoutMs": 0,
+     "styleMs": 2,
+     "calls": []
+    },
+    {
+     "label": "mp: Create lobby tab",
+     "ok": true,
+     "tapToFirstFrameMs": 11,
+     "requests": [],
+     "totalMs": 11,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 2,
+     "residualAnimationOrTimerMs": 8,
+     "longTasks": [],
+     "commits": 0,
+     "taskMs": 2,
+     "scriptMs": 1,
+     "layoutMs": 0,
+     "styleMs": 0,
+     "calls": []
+    },
+    {
+     "label": "mp: Create lobby -> room code",
+     "ok": true,
+     "tapToFirstFrameMs": 81,
+     "requests": [],
+     "totalMs": 81,
+     "networkInFlightMs": 75,
+     "mainThreadBusyMs": 68,
+     "residualAnimationOrTimerMs": 0,
+     "longTasks": [
+      {
+       "at": 16,
+       "ms": 73
+      }
+     ],
+     "commits": 1,
+     "taskMs": 68,
+     "scriptMs": 9,
+     "layoutMs": 18,
+     "styleMs": 9,
+     "calls": [
+      "ws room:create 6→90ms"
+     ]
+    },
+    {
+     "label": "mp: Start Match -> match screen (host)",
+     "ok": true,
+     "tapToFirstFrameMs": 665,
+     "requests": [
+      {
+       "n": "/assets/LiveMatchScreen-CnicJYTZ.js",
+       "it": "script",
+       "at": 314,
+       "ms": 1,
+       "kb": 13.5
+      },
+      {
+       "n": "/assets/GameOverModal-n9zbKZpj.css",
+       "it": "link",
+       "at": 315,
+       "ms": 2,
+       "kb": 5.1
+      },
+      {
+       "n": "/assets/GameOverModal-ejL2GkHB.js",
+       "it": "script",
+       "at": 315,
+       "ms": 1,
+       "kb": 9.6
+      },
+      {
+       "n": "/assets/MatchLiveLayout-DS-EYB8D.js",
+       "it": "script",
+       "at": 315,
+       "ms": 3,
+       "kb": 1.2
+      },
+      {
+       "n": "/assets/moderationTypes-DJx9Ym8q.js",
+       "it": "script",
+       "at": 315,
+       "ms": 4,
+       "kb": 0.2
+      },
+      {
+       "n": "/assets/moderationApi-CRDfOvHa.js",
+       "it": "script",
+       "at": 316,
+       "ms": 4,
+       "kb": 0.3
+      },
+      {
+       "n": "/assets/useTournamentNow-CNn6ciE_.js",
+       "it": "script",
+       "at": 316,
+       "ms": 4,
+       "kb": 0.4
+      },
+      {
+       "n": "/assets/LiveMatchScreen-CNmp-vJ_.css",
+       "it": "link",
+       "at": 316,
+       "ms": 3,
+       "kb": 1.8
+      },
+      {
+       "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+       "it": "img",
+       "at": 339,
+       "ms": 4,
+       "kb": 5.1
+      },
+      {
+       "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+       "it": "img",
+       "at": 619,
+       "ms": 3,
+       "kb": 5.1
+      },
+      {
+       "n": "/brand_logo.png",
+       "it": "img",
+       "at": 623,
+       "ms": 1,
+       "kb": 13
+      }
+     ],
+     "totalMs": 665,
+     "networkInFlightMs": 298,
+     "mainThreadBusyMs": 100,
+     "residualAnimationOrTimerMs": 267,
+     "longTasks": [],
+     "commits": 8,
+     "taskMs": 100,
+     "scriptMs": 28,
+     "layoutMs": 10,
+     "styleMs": 14,
+     "calls": [
+      "ws game:start 11→309ms"
+     ]
+    }
+   ],
+   "pointMarks": [
+    {
+     "label": "deep link fallback /multiplayer (home Multiplayer tap not available on this layout)",
+     "atMs": 0
+    },
+    {
+     "label": "mp: socket connected (ms since navigation start)",
+     "atMs": 13463
+    }
+   ],
+   "guestWaits": [],
+   "enterAndPreDraw": {
+    "timeline": [
+     {
+      "step": "tap Start",
+      "atMsFromTap": 0,
+      "atMsFromMatchScreen": -632
+     },
+     {
+      "step": "match screen first frame",
+      "atMsFromTap": 665,
+      "atMsFromMatchScreen": 33
+     },
+     {
+      "step": "draw tiles visible",
+      "atMsFromTap": 633,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "draw tiles pickable (first interactive)",
+      "atMsFromTap": 633,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "draw board gone",
+      "atMsFromTap": 5227,
+      "atMsFromMatchScreen": 4594
+     },
+     {
+      "step": "hand on screen",
+      "atMsFromTap": 5227,
+      "atMsFromMatchScreen": 4594
+     }
+    ],
+    "segments": [
+     {
+      "name": "tap Start → draw pickable",
+      "totalMs": 633,
+      "networkInFlightMs": 298,
+      "mainThreadBusyMs": 75,
+      "residualAnimationOrTimerMs": 259,
+      "longTasks": [],
+      "commits": 8,
+      "taskMs": 75,
+      "scriptMs": 27,
+      "layoutMs": 6,
+      "styleMs": 9,
+      "calls": [
+       "ws game:start 11→309ms"
+      ],
+      "anims": [
+       "rh-screen-loader-scan",
+       "rh-screen-loader-in"
+      ],
+      "requests": [
+       {
+        "n": "/assets/GameOverModal-n9zbKZpj.css",
+        "it": "link",
+        "at": 315,
+        "ms": 2,
+        "kb": 5.1
+       },
+       {
+        "n": "/assets/LiveMatchScreen-CNmp-vJ_.css",
+        "it": "link",
+        "at": 316,
+        "ms": 3,
+        "kb": 1.8
+       },
+       {
+        "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+        "it": "img",
+        "at": 339,
+        "ms": 4,
+        "kb": 5.1
+       },
+       {
+        "n": "/assets/match-v2/final/arena/arena-watermark-r.webp",
+        "it": "img",
+        "at": 619,
+        "ms": 3,
+        "kb": 5.1
+       },
+       {
+        "n": "/brand_logo.png",
+        "it": "img",
+        "at": 623,
+        "ms": 1,
+        "kb": 13
+       }
+      ],
+      "imgs": 3
+     }
+    ],
+    "tapToFirstPlayableMs": null,
+    "nonInteractiveWaitMs": 633
+   },
+   "boardMount": {
+    "first1500ms": {
+     "commits": 4,
+     "taskMs": 237,
+     "scriptMs": 30,
+     "layoutMs": 16,
+     "styleMs": 48,
+     "longTasks": [
+      {
+       "at": 59,
+       "ms": 57
+      }
+     ]
+    },
+    "gbcrTotal": 32
+   },
+   "handEnds": [],
+   "placement": {
+    "n": 0,
+    "p50": null,
+    "p75": null,
+    "p95": null,
+    "p99": null,
+    "max": 0,
+    "over50": 0,
+    "over100": 0,
+    "over300": 0,
+    "note": "placement tap (tile or zone pointerdown) -> frame where the board tile count rose (frame start; real paint about one frame later)",
+    "slowest": []
+   },
+   "zoneAppear": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "max": 0
+   },
+   "draw": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "max": 0
+   },
+   "inp": {
+    "n": 6,
+    "p75": 48,
+    "p98": 72,
+    "max": 72
+   },
+   "longTasksTotal": {
+    "n": 3,
+    "over100": 1
+   },
+   "errors": 0,
+   "failedRequests": 0
+  },
+  {
+   "label": "guest-warm",
+   "load": {
+    "reactReadyMs": 575,
+    "firstTapAtMs": 1231,
+    "navTTFBms": 4,
+    "fcp": 700,
+    "fp": 216,
+    "lcp": 700,
+    "lcpEl": "DIV.rh-nav-wordmark uppercase text-white",
+    "lcpUrl": "",
+    "domContentLoaded": 201,
+    "loadEvent": 204,
+    "htmlTransferKB": 1.7,
+    "cls": 0.0106,
+    "requestsTotal": 61,
+    "beforeFirstPaint": {
+     "n": 39,
+     "byType": {
+      "css": {
+       "n": 9,
+       "encKB": 84,
+       "decKB": 536,
+       "transferKB": 0
+      },
+      "js": {
+       "n": 26,
+       "encKB": 468,
+       "decKB": 1644,
+       "transferKB": 0
+      },
+      "font": {
+       "n": 2,
+       "encKB": 46,
+       "decKB": 46,
+       "transferKB": 0
+      },
+      "image": {
+       "n": 1,
+       "encKB": 2,
+       "decKB": 2,
+       "transferKB": 0
+      },
+      "other": {
+       "n": 1,
+       "encKB": 0,
+       "decKB": 0,
+       "transferKB": 0
+      }
+     }
+    },
+    "total": {
+     "css": {
+      "n": 13,
+      "encKB": 99,
+      "decKB": 608,
+      "transferKB": 0
+     },
+     "js": {
+      "n": 36,
+      "encKB": 506,
+      "decKB": 1759,
+      "transferKB": 0
+     },
+     "font": {
+      "n": 2,
+      "encKB": 46,
+      "decKB": 46,
+      "transferKB": 0
+     },
+     "image": {
+      "n": 4,
+      "encKB": 25,
+      "decKB": 25,
+      "transferKB": 11
+     },
+     "other": {
+      "n": 5,
+      "encKB": 0,
+      "decKB": 0,
+      "transferKB": 0
+     },
+     "audio": {
+      "n": 1,
+      "encKB": 11,
+      "decKB": 11,
+      "transferKB": 0
+     }
+    },
+    "longTasks": [
+     {
+      "at": 575,
+      "ms": 96
+     },
+     {
+      "at": 1813,
+      "ms": 56
+     },
+     {
+      "at": 5618,
+      "ms": 60
+     }
+    ],
+    "totalBlockingMs": 16,
+    "mainThreadFirst3s": {
+     "taskMs": 694,
+     "scriptMs": 193,
+     "layoutMs": 127,
+     "styleMs": 81
+    },
+    "biggestJs": [
+     {
+      "n": "index-GaDHDjq4.js",
+      "encKB": 155,
+      "decKB": 573
+     },
+     {
+      "n": "bot-engine-rsadmHBa.js",
+      "encKB": 63,
+      "decKB": 223
+     },
+     {
+      "n": "vendor-supabase-BOBBjAUx.js",
+      "encKB": 49,
+      "decKB": 206
+     },
+     {
+      "n": "game-reviewer-CK-bzBq5.js",
+      "encKB": 44,
+      "decKB": 135
+     },
+     {
+      "n": "bot-guided-C5Gw7Zzr.js",
+      "encKB": 32,
+      "decKB": 111
+     },
+     {
+      "n": "analyzer-B7MCY4ev.js",
+      "encKB": 30,
+      "decKB": 104
+     }
+    ],
+    "lastLongTaskEndBeforeFirstTap": 671
+   },
+   "menuTaps": [
+    {
+     "label": "mp: Private",
+     "ok": true,
+     "tapToFirstFrameMs": 47,
+     "requests": [
+      {
+       "n": "/assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+       "it": "fetch",
+       "at": 4,
+       "ms": 1,
+       "kb": 11.3
+      },
+      {
+       "n": "/assets/PrivateMatchLobbyScreen-DaG0NGKO.js",
+       "it": "script",
+       "at": 14,
+       "ms": 0,
+       "kb": 8.3
+      },
+      {
+       "n": "/assets/statsApi-DOEHoCxx.js",
+       "it": "script",
+       "at": 14,
+       "ms": 0,
+       "kb": 2.7
+      },
+      {
+       "n": "/assets/api-Bu_67uVt.js",
+       "it": "script",
+       "at": 14,
+       "ms": 0,
+       "kb": 0.5
+      },
+      {
+       "n": "/assets/socialApi-BhswcJmr.js",
+       "it": "script",
+       "at": 15,
+       "ms": 0,
+       "kb": 1.2
+      },
+      {
+       "n": "/assets/PrivateMatchLobbyScreen-CHGz3KpP.css",
+       "it": "link",
+       "at": 15,
+       "ms": 0,
+       "kb": 4.3
+      },
+      {
+       "n": "/assets/RacehorseHomeArt-Dcvfw8pH.css",
+       "it": "link",
+       "at": 16,
+       "ms": 0,
+       "kb": 3.9
+      }
+     ],
+     "totalMs": 47,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 16,
+     "residualAnimationOrTimerMs": 31,
+     "longTasks": [],
+     "commits": 2,
+     "taskMs": 16,
+     "scriptMs": 9,
+     "layoutMs": 0,
+     "styleMs": 2,
+     "calls": []
+    },
+    {
+     "label": "mp: Join lobby tab",
+     "ok": true,
+     "tapToFirstFrameMs": 44,
+     "requests": [],
+     "totalMs": 44,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 30,
+     "residualAnimationOrTimerMs": 14,
+     "longTasks": [],
+     "commits": 1,
+     "taskMs": 30,
+     "scriptMs": 7,
+     "layoutMs": 3,
+     "styleMs": 5,
+     "calls": []
+    },
+    {
+     "label": "mp: Join -> in room",
+     "ok": true,
+     "tapToFirstFrameMs": 65,
+     "requests": [],
+     "totalMs": 65,
+     "networkInFlightMs": 57,
+     "mainThreadBusyMs": 34,
+     "residualAnimationOrTimerMs": 0,
+     "longTasks": [
+      {
+       "at": 17,
+       "ms": 56
+      }
+     ],
+     "commits": 1,
+     "taskMs": 34,
+     "scriptMs": 2,
+     "layoutMs": 9,
+     "styleMs": 5,
+     "calls": [
+      "ws room:join 7→72ms"
+     ]
+    }
+   ],
+   "pointMarks": [
+    {
+     "label": "deep link fallback /multiplayer (home Multiplayer tap not available on this layout)",
+     "atMs": 0
+    },
+    {
+     "label": "mp: socket connected (ms since navigation start)",
+     "atMs": 700
+    }
+   ],
+   "guestWaits": [
+    {
+     "label": "mp: match screen (guest, host tapped Start)",
+     "ok": true,
+     "shownT": 5594
+    }
+   ],
+   "enterAndPreDraw": {
+    "timeline": [
+     {
+      "step": "match screen first frame",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "draw tiles visible",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "draw tiles pickable (first interactive)",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 0
+     },
+     {
+      "step": "\"you/Fritz go first\" shown",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 1279
+     },
+     {
+      "step": "draw board gone",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 4567
+     },
+     {
+      "step": "hand on screen",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 4567
+     },
+     {
+      "step": "first playable tile",
+      "atMsFromTap": null,
+      "atMsFromMatchScreen": 4567
+     }
+    ],
+    "segments": [],
+    "tapToFirstPlayableMs": null,
+    "nonInteractiveWaitMs": null
+   },
+   "boardMount": {
+    "first1500ms": {
+     "commits": 4,
+     "taskMs": 210,
+     "scriptMs": 23,
+     "layoutMs": 13,
+     "styleMs": 43,
+     "longTasks": [
+      {
+       "at": 19,
+       "ms": 60
+      }
+     ]
+    },
+    "gbcrTotal": 32
+   },
+   "handEnds": [],
+   "placement": {
+    "n": 0,
+    "p50": null,
+    "p75": null,
+    "p95": null,
+    "p99": null,
+    "max": 0,
+    "over50": 0,
+    "over100": 0,
+    "over300": 0,
+    "note": "placement tap (tile or zone pointerdown) -> frame where the board tile count rose (frame start; real paint about one frame later)",
+    "slowest": []
+   },
+   "zoneAppear": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "max": 0
+   },
+   "draw": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "max": 0
+   },
+   "inp": {
+    "n": 4,
+    "p75": 64,
+    "p98": 64,
+    "max": 64
+   },
+   "longTasksTotal": {
+    "n": 3,
+    "over100": 0
+   },
+   "errors": 0,
+   "failedRequests": 0
+  }
+ ]
+}

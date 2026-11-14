@@ -1,0 +1,429 @@
+{
+ "file": "/Users/olivermorid/.claude/jobs/54b8a1da/tmp/perf/runs/daily-desktop-1x.json",
+ "mode": "daily",
+ "cpu": 1,
+ "profile": "desktop",
+ "outcome": {
+  "reason": "result",
+  "own": 390
+ },
+ "sessions": [
+  {
+   "role": "solo",
+   "durationSec": 237.7,
+   "longTasks": {
+    "count": 5,
+    "totalMs": 466,
+    "maxMs": 208,
+    "over100": 1,
+    "over200": 1
+   },
+   "loaf": {
+    "count": 154,
+    "maxMs": 254.9,
+    "blockingMs": 257.8,
+    "scriptTime": 446.7,
+    "renderTime": 165.8,
+    "topScripts": [
+     {
+      "k": "event-listener|DOMWindow.onpointerdown|bot-hand-lifecycle-CdtpzLtN.js|n",
+      "n": 1,
+      "ms": 200.5
+     },
+     {
+      "k": "user-callback|TimerHandler:setTimeout||",
+      "n": 2,
+      "ms": 89.1
+     },
+     {
+      "k": "user-callback|TimerHandler:setTimeout|BotMatchScreen-DdYpEr74.js|",
+      "n": 1,
+      "ms": 59.4
+     },
+     {
+      "k": "event-listener|MessagePort.onmessage|index-C6-Rih1j.js|B",
+      "n": 2,
+      "ms": 27.4
+     },
+     {
+      "k": "event-listener|DIV#root.onclick|index-C6-Rih1j.js|ab",
+      "n": 1,
+      "ms": 26.5
+     },
+     {
+      "k": "module-script|http://localhost:5312/assets/index-C6-Rih1j.js|index-C6-Rih1j.js|",
+      "n": 1,
+      "ms": 22.4
+     },
+     {
+      "k": "user-callback|TimerHandler:setTimeout|bot-hand-lifecycle-CdtpzLtN.js|",
+      "n": 1,
+      "ms": 15.3
+     },
+     {
+      "k": "event-listener|XMLHttpRequest.onreadystatechange|vendor-socket-CzTGKfeH.js|",
+      "n": 1,
+      "ms": 6.1
+     }
+    ]
+   },
+   "interactions": {
+    "n": 423,
+    "p50": 40,
+    "p75": 48,
+    "p98": 64,
+    "max": 256,
+    "over100": 2,
+    "over200": 1,
+    "inputDelayP75": 0.6,
+    "processingP75": 0.1,
+    "note": "event-timing entries <16 ms are not reported, so quantiles are of interactions >=16 ms (upper bound on typical)"
+   },
+   "frames": {
+    "total": 13346,
+    "over25ms": 781,
+    "over50ms": 24,
+    "over100ms": 4,
+    "worstMs": 233.3,
+    "pctSlow": 5.9
+   },
+   "tapToBoardPaintMs": {
+    "n": 57,
+    "p50": 9.7,
+    "p75": 14.9,
+    "p95": 339.1,
+    "max": 348.5,
+    "note": "pointerdown -> rAF frame where the board tile count rose (frame start; real paint ~1 frame later)"
+   },
+   "ownPaintToBotTilePaintMs": {
+    "n": 60,
+    "p50": 3451.9,
+    "p75": 5333.8,
+    "p95": 10616.6,
+    "max": 14166.6
+   },
+   "chooseBotMoveMs": {
+    "n": 57,
+    "p50": 0.6,
+    "p90": 1.8,
+    "max": 9.9,
+    "over50": 0,
+    "over100": 0
+   },
+   "botWindows": {
+    "n": 27,
+    "totalMs": 67501.5,
+    "longTasksInWindows": 1,
+    "longTaskMsInWindows": 64,
+    "slowFramesInWindows": 205
+   },
+   "reactCommits": {
+    "total": 1775,
+    "perPlacedTile": 15.2,
+    "idleCommitsPerSec": null
+   },
+   "heapMB": {
+    "startAfterGc": 6.8,
+    "midGcs": [
+     [
+      "12",
+      8.4
+     ],
+     [
+      "24",
+      8.8
+     ],
+     [
+      "36",
+      9
+     ],
+     [
+      "48",
+      8.7
+     ],
+     [
+      "60",
+      8.9
+     ],
+     [
+      "72",
+      9.1
+     ],
+     [
+      "84",
+      9.2
+     ],
+     [
+      "96",
+      9.2
+     ],
+     [
+      "108",
+      9.3
+     ],
+     [
+      "120",
+      9.5
+     ],
+     [
+      "132",
+      9.5
+     ],
+     [
+      "144",
+      9.6
+     ],
+     [
+      "156",
+      9.8
+     ],
+     [
+      "168",
+      9.8
+     ],
+     [
+      "180",
+      10
+     ],
+     [
+      "192",
+      10.1
+     ],
+     [
+      "204",
+      10.2
+     ],
+     [
+      "216",
+      10.2
+     ],
+     [
+      "228",
+      10.3
+     ],
+     [
+      "240",
+      10.2
+     ],
+     [
+      "252",
+      10.3
+     ],
+     [
+      "264",
+      11.5
+     ],
+     [
+      "276",
+      10.4
+     ],
+     [
+      "288",
+      11.6
+     ],
+     [
+      "300",
+      11.7
+     ],
+     [
+      "312",
+      11.7
+     ],
+     [
+      "324",
+      11.7
+     ],
+     [
+      "336",
+      11.8
+     ],
+     [
+      "348",
+      12.1
+     ],
+     [
+      "360",
+      12.2
+     ],
+     [
+      "372",
+      12.2
+     ],
+     [
+      "384",
+      12.3
+     ]
+    ],
+    "endAfterGc": 12.6,
+    "nodesStart": 276,
+    "nodesEnd": 565,
+    "listenersStart": 224,
+    "listenersEnd": 364
+   },
+   "mainThread": {
+    "wallSec": 206.3,
+    "taskSec": 19.2,
+    "scriptSec": 3.2,
+    "layoutSec": 0.5,
+    "styleSec": 4.4,
+    "busyPct": 9.3
+   },
+   "network": {
+    "apiRequests": 100,
+    "assetRequests": 67,
+    "assetBytesKB": 1016.4,
+    "groups": [
+     {
+      "k": "POST /api/daily-fritz/checkpoint",
+      "n": 74,
+      "KB": 4.3,
+      "maxMs": 161.2,
+      "status": "200"
+     },
+     {
+      "k": "POST /api/daily-fritz/next-hand",
+      "n": 7,
+      "KB": 7.2,
+      "maxMs": 142.1,
+      "status": "200"
+     },
+     {
+      "k": "GET /socket.io/",
+      "n": 4,
+      "KB": 0.2,
+      "maxMs": 100.5,
+      "status": "200"
+     },
+     {
+      "k": "POST /api/daily-fritz/telemetry",
+      "n": 4,
+      "KB": 0.2,
+      "maxMs": 94.3,
+      "status": "503"
+     },
+     {
+      "k": "POST /socket.io/",
+      "n": 2,
+      "KB": 0,
+      "maxMs": 21.6,
+      "status": "200"
+     },
+     {
+      "k": "GET /daily-fritz",
+      "n": 1,
+      "KB": 1.5,
+      "maxMs": 5.5,
+      "status": "200"
+     },
+     {
+      "k": "GET /css2",
+      "n": 1,
+      "KB": 1.1,
+      "maxMs": 208.1,
+      "status": "200"
+     },
+     {
+      "k": "GET /api/ghost/profile/:id",
+      "n": 1,
+      "KB": 0.1,
+      "maxMs": 14.5,
+      "status": "500"
+     },
+     {
+      "k": "GET /api/progress/journey",
+      "n": 1,
+      "KB": 0,
+      "maxMs": 5.3,
+      "status": "200"
+     },
+     {
+      "k": "GET /api/daily-fritz/today",
+      "n": 1,
+      "KB": 0.7,
+      "maxMs": 24.6,
+      "status": "200"
+     },
+     {
+      "k": "GET /assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+      "n": 1,
+      "KB": 11.3,
+      "maxMs": 15.9,
+      "status": "200"
+     },
+     {
+      "k": "POST /api/daily-fritz/start",
+      "n": 1,
+      "KB": 0.5,
+      "maxMs": 22.7,
+      "status": "200"
+     },
+     {
+      "k": "POST /api/daily-fritz/record-game",
+      "n": 1,
+      "KB": 0.5,
+      "maxMs": 96,
+      "status": "200"
+     },
+     {
+      "k": "POST /api/daily-fritz/complete",
+      "n": 1,
+      "KB": 0,
+      "maxMs": 24.8,
+      "status": "500"
+     }
+    ],
+    "lastSecondsBeforeAndAfterGameOver": [
+     [
+      "POST /api/daily-fritz/checkpoint",
+      9
+     ],
+     [
+      "POST /api/daily-fritz/record-game",
+      1
+     ],
+     [
+      "POST /api/daily-fritz/complete",
+      1
+     ],
+     [
+      "POST /api/daily-fritz/telemetry",
+      1
+     ]
+    ]
+   },
+   "websocket": {
+    "frames": 22,
+    "out": 11,
+    "in": 11,
+    "bytes": 73,
+    "topMessages": [
+     [
+      "2",
+      9
+     ],
+     [
+      "3",
+      9
+     ],
+     [
+      "5",
+      1
+     ],
+     [
+      "2probe",
+      1
+     ],
+     [
+      "3probe",
+      1
+     ],
+     [
+      "42[\"queue:online\",{\"online\":1,\"queued\":0",
+      1
+     ]
+    ]
+   },
+   "pageErrors": 0
+  }
+ ]
+}

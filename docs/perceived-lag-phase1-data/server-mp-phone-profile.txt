@@ -1,0 +1,44 @@
+profiling for 240 s
+total sampled 240.2 s
+--- top self-time functions
+ 222453 ms   92.6%  (idle) :-1
+   2317 ms    1.0%  (garbage collector) :-1
+   2134 ms    0.9%  (program) :-1
+   1301 ms    0.5%  structuredClone worker/js_transferable:111
+    617 ms    0.3%  writev :-1
+    571 ms    0.2%  assertJsonSerializable multiplayer/roomLivePersistence.ts:622
+    481 ms    0.2%  persistLiveSessionRowNow multiplayer/roomLivePersistence.ts:630
+    310 ms    0.1%  encode node:internal/encoding:350
+    305 ms    0.1%  writeBuffer :-1
+    255 ms    0.1%  match dist/index.js:232
+    244 ms    0.1%  prepareEvent utils/prepareEvent.js:13
+    196 ms    0.1%  consoleCall :-1
+    172 ms    0.1%  parserOnHeadersComplete node:_http_common:74
+    151 ms    0.1%  encodeAsString cjs/index.js:76
+    145 ms    0.1%  (anon) node:internal/util:594
+    137 ms    0.1%  setPromiseHandled webstreams/util:185
+    129 ms    0.1%  derefWeakRef utils/weakRef.js:14
+    119 ms    0.0%  nextTick process/task_queues:111
+    112 ms    0.0%  runMicrotasks :-1
+    108 ms    0.0%  text undici/undici:6819
+     93 ms    0.0%  (anon) src/rooms.ts:825
+     91 ms    0.0%  sendPacket build/socket.js:385
+     90 ms    0.0%  getParentSpan tracing/trace.js:369
+     85 ms    0.0%  uuid4 utils/misc.js:15
+     84 ms    0.0%  match lib/layer.js:177
+--- top files
+ 228439 ms   95.1%  (native)
+   1340 ms    0.6%  node:internal/worker/js_transferable
+   1311 ms    0.5%  node:internal/deps/undici/undici
+   1121 ms    0.5%  server/src/multiplayer/roomLivePersistence.ts
+    404 ms    0.2%  node:internal/webstreams/readablestream
+    347 ms    0.1%  node:internal/streams/readable
+    312 ms    0.1%  node:internal/encoding
+    255 ms    0.1%  file:///Users/olivermorid/racehorse-dominoes/.claude/worktrees/identity-gate/node_modules/path-to-regexp/dist/index.js
+    244 ms    0.1%  file:///Users/olivermorid/racehorse-dominoes/.claude/worktrees/identity-gate/node_modules/@sentry/core/build/cjs/utils/prepareEvent.js
+    244 ms    0.1%  node:internal/webstreams/util
+    233 ms    0.1%  node:events
+    222 ms    0.1%  file:///Users/olivermorid/racehorse-dominoes/.claude/worktrees/identity-gate/node_modules/socket.io-parser/build/cjs/index.js
+    200 ms    0.1%  node:internal/util
+    179 ms    0.1%  file:///Users/olivermorid/racehorse-dominoes/.claude/worktrees/identity-gate/node_modules/@sentry/opentelemetry/build/cjs/asyncContextStrategy-xEzxBKVX.js
+    178 ms    0.1%  file:///Users/olivermorid/racehorse-dominoes/.claude/worktrees/identity-gate/node_modules/@opentelemetry/api/build/src/context/context.js

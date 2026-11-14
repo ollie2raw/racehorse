@@ -1,0 +1,10 @@
+load-desktop-cold.json mode=load profile=desktop cpu=1 net=none outcome=undefined 
+
+== load-cold
+ load: reactReady null firstTapAt 1952 TTFB 18 FCP 408 LCP 680 (DIV.home-card-art home-card-art--fritz newHOMEdailyfritz-BStEWwo1.webp) DCL 219 load 380 CLS 0.0005; requests 49, before FCP 42; TBT 208; long tasks [{"at":1951,"ms":258}]; lastLongEnd<firstTap 2209
+   before FCP by type {"css":{"n":8,"encKB":71,"decKB":454,"transferKB":73},"js":{"n":31,"encKB":473,"decKB":1659,"transferKB":482},"image":{"n":3,"encKB":96,"decKB":96,"transferKB":97}}
+   total by type {"css":{"n":9,"encKB":73,"decKB":465,"transferKB":75},"js":{"n":34,"encKB":478,"decKB":1671,"transferKB":488},"image":{"n":4,"encKB":97,"decKB":97,"transferKB":98},"other":{"n":1,"encKB":0,"decKB":0,"transferKB":0},"audio":{"n":1,"encKB":11,"decKB":11,"transferKB":12}}
+   biggest js [{"n":"index-GaDHDjq4.js","encKB":155,"decKB":573},{"n":"bot-engine-rsadmHBa.js","encKB":63,"decKB":223},{"n":"vendor-supabase-BOBBjAUx.js","encKB":49,"decKB":206},{"n":"game-reviewer-CK-bzBq5.js","encKB":44,"decKB":135},{"n":"bot-guided-C5Gw7Zzr.js","encKB":32,"decKB":111},{"n":"analyzer-B7MCY4ev.js","encKB":30,"decKB":104}]; main 0-3s {"taskMs":655,"scriptMs":357,"layoutMs":105,"styleMs":28}
+ tap "first tap: Single Player" -> first frame 597 ms | net 0 main 343 resid 254 commits 4 long [{"at":-1,"ms":258}] layout 42 style 7 script 234
+     reqs freesound_community-thwump-85836-BSZf6p1T.mp3(11.3KB @245+12) SinglePlayerHubScreen-DGIQwRSA.js(3.6KB @251+6) noBrainerLabProgress-3iA67lTT.js(0.9KB @251+6) useDeferredAsset-DekbqL6b.js(0.5KB @252+12) SinglePlayerHubScreen-DDxm4LNK.css(2.1KB @252+5)
+ placement n=0 p50 null p75 null p95 null p99 null max 0 (>100ms 0, >300ms 0); zoneAppear {"n":0,"p50":null,"p95":null,"max":0}; draw {"n":0,"p50":null,"p95":null,"max":0}; INP {"n":1,"p75":320,"p98":320,"max":320}; long tasks {"n":1,"over100":1}

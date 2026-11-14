@@ -1,0 +1,668 @@
+{
+ "file": "/Users/olivermorid/.claude/jobs/54b8a1da/tmp/perf/runs/prodbuild-mp-desktop-1x-lat290.json",
+ "mode": "mp",
+ "cpu": 1,
+ "profile": "desktop",
+ "outcome": {
+  "reason": "result",
+  "own": 295
+ },
+ "sessions": [
+  {
+   "role": "host",
+   "durationSec": 147.6,
+   "longTasks": {
+    "count": 8,
+    "totalMs": 1137,
+    "maxMs": 510,
+    "over100": 3,
+    "over200": 2
+   },
+   "loaf": {
+    "count": 342,
+    "maxMs": 524.9,
+    "blockingMs": 751.3,
+    "scriptTime": 185,
+    "renderTime": 1279.8,
+    "topScripts": [
+     {
+      "k": "event-listener|DOMWindow.onpointerdown|bot-hand-lifecycle-DHZqPZdp.js|n",
+      "n": 1,
+      "ms": 118.4
+     },
+     {
+      "k": "event-listener|MessagePort.onmessage|index-GaDHDjq4.js|B",
+      "n": 4,
+      "ms": 26.7
+     },
+     {
+      "k": "module-script|http://localhost:5311/assets/index-GaDHDjq4.js|index-GaDHDjq4.js|",
+      "n": 1,
+      "ms": 20.1
+     },
+     {
+      "k": "user-callback|FrameRequestCallback|game-reviewer-CK-bzBq5.js|_",
+      "n": 1,
+      "ms": 12.2
+     },
+     {
+      "k": "user-callback|TimerHandler:setTimeout|index-GaDHDjq4.js|ey",
+      "n": 1,
+      "ms": 7.6
+     }
+    ]
+   },
+   "interactions": {
+    "n": 206,
+    "p50": 56,
+    "p75": 64,
+    "p98": 96,
+    "max": 208,
+    "over100": 4,
+    "over200": 1,
+    "inputDelayP75": 1.1,
+    "processingP75": 0.1,
+    "note": "event-timing entries <16 ms are not reported, so quantiles are of interactions >=16 ms (upper bound on typical)"
+   },
+   "frames": {
+    "total": 6973,
+    "over25ms": 991,
+    "over50ms": 247,
+    "over100ms": 50,
+    "worstMs": 516.6,
+    "pctSlow": 14.2
+   },
+   "tapToBoardPaintMs": {
+    "n": 87,
+    "p50": 12.5,
+    "p75": 45.5,
+    "p95": 212.8,
+    "max": 663.5,
+    "note": "pointerdown -> rAF frame where the board tile count rose (frame start; real paint ~1 frame later)"
+   },
+   "ownPaintToBotTilePaintMs": {
+    "n": 68,
+    "p50": 983.4,
+    "p75": 1849.9,
+    "p95": 8116.6,
+    "max": 8599.7
+   },
+   "chooseBotMoveMs": {
+    "n": 0,
+    "p50": null,
+    "p90": null,
+    "max": 0,
+    "over50": 0,
+    "over100": 0
+   },
+   "botWindows": {
+    "n": 37,
+    "totalMs": 25384,
+    "longTasksInWindows": 0,
+    "longTaskMsInWindows": 0,
+    "slowFramesInWindows": 227
+   },
+   "reactCommits": {
+    "total": 4658,
+    "perPlacedTile": 30.1,
+    "idleCommitsPerSec": null
+   },
+   "heapMB": {
+    "startAfterGc": 7.3,
+    "midGcs": [
+     [
+      "12",
+      8.6
+     ],
+     [
+      "24",
+      8.6
+     ],
+     [
+      "36",
+      9
+     ],
+     [
+      "48",
+      9.2
+     ],
+     [
+      "60",
+      9.4
+     ],
+     [
+      "72",
+      9.7
+     ],
+     [
+      "84",
+      10
+     ],
+     [
+      "96",
+      9.9
+     ],
+     [
+      "108",
+      10.3
+     ],
+     [
+      "120",
+      10.3
+     ],
+     [
+      "132",
+      10.5
+     ],
+     [
+      "144",
+      10.7
+     ],
+     [
+      "156",
+      10.7
+     ],
+     [
+      "168",
+      10.8
+     ],
+     [
+      "180",
+      10.8
+     ],
+     [
+      "192",
+      10.9
+     ],
+     [
+      "204",
+      11
+     ],
+     [
+      "216",
+      11.1
+     ],
+     [
+      "228",
+      11.1
+     ],
+     [
+      "240",
+      11.7
+     ],
+     [
+      "252",
+      11.2
+     ],
+     [
+      "264",
+      11.3
+     ],
+     [
+      "276",
+      11.2
+     ],
+     [
+      "288",
+      11.3
+     ]
+    ],
+    "endAfterGc": 11.4,
+    "nodesStart": 348,
+    "nodesEnd": 570,
+    "listenersStart": 232,
+    "listenersEnd": 372
+   },
+   "mainThread": {
+    "wallSec": 135.9,
+    "taskSec": 22.1,
+    "scriptSec": 2.8,
+    "layoutSec": 0.3,
+    "styleSec": 7.1,
+    "busyPct": 16.3
+   },
+   "network": {
+    "apiRequests": 8,
+    "assetRequests": 215,
+    "assetBytesKB": 866.9,
+    "groups": [
+     {
+      "k": "GET /socket.io/",
+      "n": 3,
+      "KB": 0.2,
+      "maxMs": 8.5,
+      "status": "200"
+     },
+     {
+      "k": "POST /socket.io/",
+      "n": 2,
+      "KB": 0,
+      "maxMs": 7.3,
+      "status": "200"
+     },
+     {
+      "k": "GET /multiplayer",
+      "n": 1,
+      "KB": 1.5,
+      "maxMs": 4.4,
+      "status": "200"
+     },
+     {
+      "k": "GET /css2",
+      "n": 1,
+      "KB": 1.1,
+      "maxMs": 145.4,
+      "status": "200"
+     },
+     {
+      "k": "GET /assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+      "n": 1,
+      "KB": 11.3,
+      "maxMs": 5.3,
+      "status": "200"
+     }
+    ]
+   },
+   "websocket": {
+    "frames": 802,
+    "out": 281,
+    "in": 521,
+    "bytes": 553509,
+    "topMessages": [
+     [
+      "42[\"state:update\",{\"state\":{\"config\":{\"m",
+      186
+     ],
+     [
+      "42[\"player:dragging\",{\"playerId\":\":id",
+      158
+     ],
+     [
+      "42[\"player:dragging\",\"XAS46\",{\"dragging\"",
+      152
+     ],
+     [
+      "42[\"game:draw_animation\",{\"playerId\":\":i",
+      39
+     ],
+     [
+      "2",
+      5
+     ],
+     [
+      "3",
+      5
+     ],
+     [
+      "42[\"room:update\",{\"players\":[{\"id\":\":id",
+      3
+     ],
+     [
+      "5",
+      1
+     ]
+    ]
+   },
+   "pageErrors": 0
+  },
+  {
+   "role": "guest",
+   "durationSec": 147.9,
+   "longTasks": {
+    "count": 3,
+    "totalMs": 293,
+    "maxMs": 150,
+    "over100": 1,
+    "over200": 0
+   },
+   "loaf": {
+    "count": 343,
+    "maxMs": 215.2,
+    "blockingMs": 143.7,
+    "scriptTime": 74.9,
+    "renderTime": 456.4,
+    "topScripts": [
+     {
+      "k": "event-listener|MessagePort.onmessage|index-GaDHDjq4.js|B",
+      "n": 4,
+      "ms": 31.9
+     },
+     {
+      "k": "user-callback|FrameRequestCallback|game-reviewer-CK-bzBq5.js|_",
+      "n": 1,
+      "ms": 14.7
+     },
+     {
+      "k": "module-script|http://localhost:5311/assets/index-GaDHDjq4.js|index-GaDHDjq4.js|",
+      "n": 1,
+      "ms": 14.3
+     },
+     {
+      "k": "resolve-promise|import.then|index-GaDHDjq4.js|",
+      "n": 1,
+      "ms": 7.9
+     },
+     {
+      "k": "module-script|http://localhost:5311/assets/vendor-confetti-D_RVyC63.js|vendor-confetti-D_RVyC63.js|",
+      "n": 1,
+      "ms": 6.1
+     }
+    ]
+   },
+   "interactions": {
+    "n": 212,
+    "p50": 56,
+    "p75": 72,
+    "p98": 112,
+    "max": 144,
+    "over100": 13,
+    "over200": 0,
+    "inputDelayP75": 1.2,
+    "processingP75": 0.1,
+    "note": "event-timing entries <16 ms are not reported, so quantiles are of interactions >=16 ms (upper bound on typical)"
+   },
+   "frames": {
+    "total": 6893,
+    "over25ms": 1038,
+    "over50ms": 252,
+    "over100ms": 62,
+    "worstMs": 249.9,
+    "pctSlow": 15.1
+   },
+   "tapToBoardPaintMs": {
+    "n": 96,
+    "p50": 31.5,
+    "p75": 365.9,
+    "p95": 717.1,
+    "max": 851.1,
+    "note": "pointerdown -> rAF frame where the board tile count rose (frame start; real paint ~1 frame later)"
+   },
+   "ownPaintToBotTilePaintMs": {
+    "n": 58,
+    "p50": 1165.2,
+    "p75": 1783.3,
+    "p95": 7016.6,
+    "max": 8401.3
+   },
+   "chooseBotMoveMs": {
+    "n": 0,
+    "p50": null,
+    "p90": null,
+    "max": 0,
+    "over50": 0,
+    "over100": 0
+   },
+   "botWindows": {
+    "n": 34,
+    "totalMs": 42134.8,
+    "longTasksInWindows": 1,
+    "longTaskMsInWindows": 81,
+    "slowFramesInWindows": 321
+   },
+   "reactCommits": {
+    "total": 4321,
+    "perPlacedTile": 28.1,
+    "idleCommitsPerSec": null
+   },
+   "heapMB": {
+    "startAfterGc": 7.2,
+    "midGcs": [
+     [
+      "12",
+      8.4
+     ],
+     [
+      "24",
+      8.5
+     ],
+     [
+      "36",
+      8.7
+     ],
+     [
+      "48",
+      8.9
+     ],
+     [
+      "60",
+      9.1
+     ],
+     [
+      "72",
+      9.3
+     ],
+     [
+      "84",
+      9.5
+     ],
+     [
+      "96",
+      9.7
+     ],
+     [
+      "108",
+      10.1
+     ],
+     [
+      "120",
+      10.2
+     ],
+     [
+      "132",
+      10.4
+     ],
+     [
+      "144",
+      10.5
+     ],
+     [
+      "156",
+      10.6
+     ],
+     [
+      "168",
+      10.6
+     ],
+     [
+      "180",
+      10.9
+     ],
+     [
+      "192",
+      10.8
+     ],
+     [
+      "204",
+      10.9
+     ],
+     [
+      "216",
+      11.2
+     ],
+     [
+      "228",
+      11.1
+     ],
+     [
+      "240",
+      11.2
+     ],
+     [
+      "252",
+      11.3
+     ],
+     [
+      "264",
+      11.3
+     ],
+     [
+      "276",
+      11.4
+     ],
+     [
+      "288",
+      11.5
+     ]
+    ],
+    "endAfterGc": 11.3,
+    "nodesStart": 346,
+    "nodesEnd": 560,
+    "listenersStart": 225,
+    "listenersEnd": 371
+   },
+   "mainThread": {
+    "wallSec": 136,
+    "taskSec": 20.1,
+    "scriptSec": 2.6,
+    "layoutSec": 0.3,
+    "styleSec": 6.5,
+    "busyPct": 14.7
+   },
+   "network": {
+    "apiRequests": 9,
+    "assetRequests": 218,
+    "assetBytesKB": 871.1,
+    "groups": [
+     {
+      "k": "GET /socket.io/",
+      "n": 3,
+      "KB": 0.2,
+      "maxMs": 2,
+      "status": "200"
+     },
+     {
+      "k": "POST /socket.io/",
+      "n": 2,
+      "KB": 0,
+      "maxMs": 1.1,
+      "status": "200"
+     },
+     {
+      "k": "GET /multiplayer",
+      "n": 1,
+      "KB": 1.5,
+      "maxMs": 1.5,
+      "status": "200"
+     },
+     {
+      "k": "GET /css2",
+      "n": 1,
+      "KB": 1.1,
+      "maxMs": 187.6,
+      "status": "200"
+     },
+     {
+      "k": "GET /assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+      "n": 1,
+      "KB": 11.3,
+      "maxMs": 4,
+      "status": "200"
+     },
+     {
+      "k": "GET blob:http://localhost:5311/:id",
+      "n": 1,
+      "KB": -0.1,
+      "maxMs": 27.9,
+      "status": "200"
+     }
+    ]
+   },
+   "websocket": {
+    "frames": 748,
+    "out": 261,
+    "in": 487,
+    "bytes": 544390,
+    "topMessages": [
+     [
+      "42[\"state:update\",{\"state\":{\"config\":{\"m",
+      186
+     ],
+     [
+      "42[\"player:dragging\",\"XAS46\",{\"dragging\"",
+      158
+     ],
+     [
+      "42[\"player:dragging\",{\"playerId\":\":id",
+      152
+     ],
+     [
+      "42[\"game:draw_animation\",{\"playerId\":\":i",
+      39
+     ],
+     [
+      "2",
+      5
+     ],
+     [
+      "3",
+      5
+     ],
+     [
+      "42[\"room:update\",{\"players\":[{\"id\":\":id",
+      2
+     ],
+     [
+      "42[\"game:pregame_draw_pick\",{\"slotId\":\"s",
+      2
+     ]
+    ]
+   },
+   "pageErrors": 0
+  }
+ ],
+ "mpPropagationMs": {
+  "hostToGuest": {
+   "n": 83,
+   "p50": 63,
+   "p75": 1032.9,
+   "p95": 2369.9,
+   "max": 2875.1
+  },
+  "guestToHost": {
+   "n": 96,
+   "p50": 93.7,
+   "p75": 860.4,
+   "p95": 2150.1,
+   "max": 2549.9
+  }
+ },
+ "mpSocket": {
+  "actionAckRttHost": {
+   "n": 109,
+   "p50": 22,
+   "p75": 56,
+   "p95": 142,
+   "max": 368
+  },
+  "actionAckRttGuest": {
+   "n": 83,
+   "p50": 45,
+   "p75": 76,
+   "p95": 326,
+   "max": 494
+  },
+  "handReadyAckHost": {
+   "n": 7,
+   "p50": 883,
+   "p75": 913,
+   "p95": 926,
+   "max": 926
+  },
+  "actionToOtherPlayersStateUpdateMs": {
+   "hostToGuest": {
+    "n": 109,
+    "p50": 25,
+    "p75": 65,
+    "p95": 272,
+    "max": 368
+   },
+   "guestToHost": {
+    "n": 83,
+    "p50": 28,
+    "p75": 58,
+    "p95": 310,
+    "max": 487
+   }
+  }
+ }
+}

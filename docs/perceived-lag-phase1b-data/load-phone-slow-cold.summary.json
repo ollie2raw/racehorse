@@ -1,0 +1,256 @@
+{
+ "file": "load-phone-slow-cold.json",
+ "mode": "load",
+ "profile": "phone",
+ "cpu": 4,
+ "net": "slow",
+ "sessions": [
+  {
+   "label": "load-cold",
+   "load": {
+    "reactReadyMs": null,
+    "firstTapAtMs": 4895,
+    "navTTFBms": 4,
+    "fcp": 3488,
+    "fp": 2184,
+    "lcp": 4196,
+    "lcpEl": "H1.text-[34px] font-black leading-[0.95] tr",
+    "lcpUrl": "",
+    "domContentLoaded": 3174,
+    "loadEvent": 3174,
+    "htmlTransferKB": 1.7,
+    "cls": 0.0002,
+    "requestsTotal": 49,
+    "beforeFirstPaint": {
+     "n": 22,
+     "byType": {
+      "css": {
+       "n": 4,
+       "encKB": 63,
+       "decKB": 423,
+       "transferKB": 64
+      },
+      "js": {
+       "n": 17,
+       "encKB": 449,
+       "decKB": 1584,
+       "transferKB": 454
+      },
+      "image": {
+       "n": 1,
+       "encKB": 2,
+       "decKB": 2,
+       "transferKB": 3
+      }
+     }
+    },
+    "total": {
+     "css": {
+      "n": 9,
+      "encKB": 73,
+      "decKB": 465,
+      "transferKB": 75
+     },
+     "js": {
+      "n": 34,
+      "encKB": 478,
+      "decKB": 1671,
+      "transferKB": 488
+     },
+     "image": {
+      "n": 4,
+      "encKB": 39,
+      "decKB": 39,
+      "transferKB": 41
+     },
+     "other": {
+      "n": 1,
+      "encKB": 0,
+      "decKB": 0,
+      "transferKB": 0
+     },
+     "audio": {
+      "n": 1,
+      "encKB": 11,
+      "decKB": 11,
+      "transferKB": 12
+     }
+    },
+    "longTasks": [
+     {
+      "at": 2102,
+      "ms": 79
+     },
+     {
+      "at": 3101,
+      "ms": 73
+     },
+     {
+      "at": 3177,
+      "ms": 91
+     },
+     {
+      "at": 4882,
+      "ms": 559
+     },
+     {
+      "at": 5443,
+      "ms": 59
+     },
+     {
+      "at": 5779,
+      "ms": 64
+     }
+    ],
+    "totalBlockingMs": 532,
+    "mainThreadFirst3s": {
+     "taskMs": 188,
+     "scriptMs": 10,
+     "layoutMs": 97,
+     "styleMs": 18
+    },
+    "biggestJs": [
+     {
+      "n": "index-GaDHDjq4.js",
+      "encKB": 155,
+      "decKB": 573
+     },
+     {
+      "n": "bot-engine-rsadmHBa.js",
+      "encKB": 63,
+      "decKB": 223
+     },
+     {
+      "n": "vendor-supabase-BOBBjAUx.js",
+      "encKB": 49,
+      "decKB": 206
+     },
+     {
+      "n": "game-reviewer-CK-bzBq5.js",
+      "encKB": 44,
+      "decKB": 135
+     },
+     {
+      "n": "bot-guided-C5Gw7Zzr.js",
+      "encKB": 32,
+      "decKB": 111
+     },
+     {
+      "n": "analyzer-B7MCY4ev.js",
+      "encKB": 30,
+      "decKB": 104
+     }
+    ],
+    "lastLongTaskEndBeforeFirstTap": 5441
+   },
+   "menuTaps": [
+    {
+     "label": "first tap: Single Player",
+     "ok": true,
+     "tapToFirstFrameMs": 949,
+     "requests": [
+      {
+       "n": "/assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+       "it": "fetch",
+       "at": 539,
+       "ms": 263,
+       "kb": 11.3
+      },
+      {
+       "n": "/assets/SinglePlayerHubScreen-DGIQwRSA.js",
+       "it": "script",
+       "at": 571,
+       "ms": 224,
+       "kb": 3.6
+      },
+      {
+       "n": "/assets/noBrainerLabProgress-3iA67lTT.js",
+       "it": "script",
+       "at": 571,
+       "ms": 173,
+       "kb": 0.9
+      },
+      {
+       "n": "/assets/useDeferredAsset-DekbqL6b.js",
+       "it": "script",
+       "at": 572,
+       "ms": 178,
+       "kb": 0.5
+      },
+      {
+       "n": "/assets/SinglePlayerHubScreen-DDxm4LNK.css",
+       "it": "link",
+       "at": 573,
+       "ms": 208,
+       "kb": 2.1
+      }
+     ],
+     "totalMs": 949,
+     "networkInFlightMs": 0,
+     "mainThreadBusyMs": 735,
+     "residualAnimationOrTimerMs": 214,
+     "longTasks": [
+      {
+       "at": -13,
+       "ms": 559
+      },
+      {
+       "at": 548,
+       "ms": 59
+      },
+      {
+       "at": 884,
+       "ms": 64
+      }
+     ],
+     "commits": 4,
+     "taskMs": 735,
+     "scriptMs": 586,
+     "layoutMs": 19,
+     "styleMs": 20,
+     "calls": []
+    }
+   ],
+   "pointMarks": [],
+   "guestWaits": [],
+   "handEnds": [],
+   "placement": {
+    "n": 0,
+    "p50": null,
+    "p75": null,
+    "p95": null,
+    "p99": null,
+    "max": 0,
+    "over50": 0,
+    "over100": 0,
+    "over300": 0,
+    "note": "placement tap (tile or zone pointerdown) -> frame where the board tile count rose (frame start; real paint about one frame later)",
+    "slowest": []
+   },
+   "zoneAppear": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "max": 0
+   },
+   "draw": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "max": 0
+   },
+   "inp": {
+    "n": 1,
+    "p75": 712,
+    "p98": 712,
+    "max": 712
+   },
+   "longTasksTotal": {
+    "n": 6,
+    "over100": 1
+   },
+   "errors": 0,
+   "failedRequests": 0
+  }
+ ]
+}

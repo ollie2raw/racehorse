@@ -1,0 +1,394 @@
+{
+ "file": "/Users/olivermorid/.claude/jobs/54b8a1da/tmp/perf/runs/attrib-pvf-phone-4x.json",
+ "mode": "pvf",
+ "cpu": 4,
+ "profile": "phone",
+ "outcome": {
+  "reason": "result",
+  "own": 429
+ },
+ "sessions": [
+  {
+   "role": "solo",
+   "durationSec": 321.1,
+   "longTasks": {
+    "count": 13,
+    "totalMs": 1117,
+    "maxMs": 166,
+    "over100": 4,
+    "over200": 0
+   },
+   "loaf": {
+    "count": 50,
+    "maxMs": 446.1,
+    "blockingMs": 612.2,
+    "scriptTime": 1057.5,
+    "renderTime": 501.6,
+    "topScripts": [
+     {
+      "k": "user-callback|TimerHandler:setTimeout||",
+      "n": 10,
+      "ms": 444.9
+     },
+     {
+      "k": "event-listener|MessagePort.onmessage|index-Y3zkbe2R.js|performWorkUntilDeadline",
+      "n": 4,
+      "ms": 166.9
+     },
+     {
+      "k": "event-listener|DIV#root.onclick|index-Y3zkbe2R.js|dispatchDiscreteEvent",
+      "n": 3,
+      "ms": 145.7
+     },
+     {
+      "k": "event-listener|DOMWindow.onpointerdown|bot-hand-lifecycle-B_25B5Fq.js|unlock",
+      "n": 1,
+      "ms": 112
+     },
+     {
+      "k": "module-script|http://localhost:5313/assets/index-Y3zkbe2R.js|index-Y3zkbe2R.js|",
+      "n": 1,
+      "ms": 107.2
+     },
+     {
+      "k": "user-callback|TimerHandler:setTimeout|BotMatchScreen-BbEFB8rL.js|",
+      "n": 1,
+      "ms": 60.7
+     },
+     {
+      "k": "user-callback|TimerHandler:setTimeout|index-Y3zkbe2R.js|commitRootWhenReady",
+      "n": 1,
+      "ms": 9.7
+     },
+     {
+      "k": "user-callback|FrameRequestCallback|game-reviewer-8iKVjYo2.js|runFit",
+      "n": 1,
+      "ms": 5.4
+     }
+    ]
+   },
+   "interactions": {
+    "n": 513,
+    "p50": 64,
+    "p75": 72,
+    "p98": 112,
+    "max": 184,
+    "over100": 29,
+    "over200": 0,
+    "inputDelayP75": 34.2,
+    "processingP75": 0.6,
+    "note": "event-timing entries <16 ms are not reported, so quantiles are of interactions >=16 ms (upper bound on typical)"
+   },
+   "frames": {
+    "total": 19007,
+    "over25ms": 121,
+    "over50ms": 29,
+    "over100ms": 8,
+    "worstMs": 267.5,
+    "pctSlow": 0.6
+   },
+   "tapToBoardPaintMs": {
+    "n": 84,
+    "p50": 15.1,
+    "p75": 16.7,
+    "p95": 482.6,
+    "max": 515.5,
+    "note": "pointerdown -> rAF frame where the board tile count rose (frame start; real paint ~1 frame later)"
+   },
+   "ownPaintToBotTilePaintMs": {
+    "n": 74,
+    "p50": 3998.7,
+    "p75": 5352,
+    "p95": 11434.9,
+    "max": 15051.6
+   },
+   "chooseBotMoveMs": {
+    "n": 165,
+    "p50": 0.1,
+    "p90": 0.9,
+    "max": 9.7,
+    "over50": 0,
+    "over100": 0
+   },
+   "botWindows": {
+    "n": 37,
+    "totalMs": 102149.9,
+    "longTasksInWindows": 2,
+    "longTaskMsInWindows": 113,
+    "slowFramesInWindows": 32
+   },
+   "reactCommits": {
+    "total": 2393,
+    "perPlacedTile": 15.1,
+    "idleCommitsPerSec": null,
+    "topRerenders": [
+     [
+      "DominoTileComponent",
+      29248
+     ],
+     [
+      "AnimatedScore",
+      4707
+     ],
+     [
+      "FeedbackNumber",
+      4263
+     ],
+     [
+      "Button",
+      3740
+     ],
+     [
+      "ScoreTrackOverlay",
+      2381
+     ],
+     [
+      "BotHandOverModal",
+      2381
+     ],
+     [
+      "BotMatchHandTraySection",
+      2381
+     ],
+     [
+      "BotHandTray",
+      2372
+     ],
+     [
+      "BoardOpenEndsPill",
+      2161
+     ],
+     [
+      "BoneyardCountPill2",
+      2161
+     ],
+     [
+      "BotMatchLiveHudRight",
+      2020
+     ],
+     [
+      "BotMatchLiveHudLeft",
+      1850
+     ],
+     [
+      "MatchHistoryScrubber",
+      1733
+     ],
+     [
+      "MatchBoardCanvas",
+      1390
+     ],
+     [
+      "BotMatchBoardStage",
+      1390
+     ]
+    ],
+    "avgRenderedFibersPerCommit": 36.6
+   },
+   "heapMB": {
+    "startAfterGc": 7.2,
+    "midGcs": [
+     [
+      "12",
+      8.9
+     ],
+     [
+      "24",
+      9.1
+     ],
+     [
+      "36",
+      9.6
+     ],
+     [
+      "48",
+      9.6
+     ],
+     [
+      "60",
+      9.9
+     ],
+     [
+      "72",
+      10
+     ],
+     [
+      "84",
+      10.4
+     ],
+     [
+      "96",
+      10.6
+     ],
+     [
+      "108",
+      10.6
+     ],
+     [
+      "120",
+      10.9
+     ],
+     [
+      "132",
+      10.9
+     ],
+     [
+      "144",
+      11
+     ],
+     [
+      "156",
+      11.2
+     ],
+     [
+      "168",
+      11.3
+     ],
+     [
+      "180",
+      11.3
+     ],
+     [
+      "192",
+      11.3
+     ],
+     [
+      "204",
+      11.3
+     ],
+     [
+      "216",
+      12.8
+     ],
+     [
+      "228",
+      13
+     ],
+     [
+      "240",
+      13.1
+     ],
+     [
+      "252",
+      13.3
+     ],
+     [
+      "264",
+      13.5
+     ],
+     [
+      "276",
+      13.5
+     ],
+     [
+      "288",
+      13.6
+     ],
+     [
+      "300",
+      13.8
+     ],
+     [
+      "312",
+      13.8
+     ],
+     [
+      "324",
+      14
+     ],
+     [
+      "336",
+      14
+     ],
+     [
+      "348",
+      14.1
+     ],
+     [
+      "360",
+      14.1
+     ],
+     [
+      "372",
+      14.2
+     ],
+     [
+      "384",
+      14.2
+     ],
+     [
+      "396",
+      14.3
+     ],
+     [
+      "408",
+      14.4
+     ],
+     [
+      "420",
+      14.5
+     ]
+    ],
+    "endAfterGc": 14.9,
+    "nodesStart": 378,
+    "nodesEnd": 547,
+    "listenersStart": 355,
+    "listenersEnd": 499
+   },
+   "mainThread": {
+    "wallSec": 289.6,
+    "taskSec": 53.5,
+    "scriptSec": 7.5,
+    "layoutSec": 1,
+    "styleSec": 19,
+    "busyPct": 18.5
+   },
+   "network": {
+    "apiRequests": 3,
+    "assetRequests": 69,
+    "assetBytesKB": 1267.1,
+    "groups": [
+     {
+      "k": "GET /solo/fritz",
+      "n": 1,
+      "KB": 1.5,
+      "maxMs": 126.3,
+      "status": "200"
+     },
+     {
+      "k": "GET /css2",
+      "n": 1,
+      "KB": 1,
+      "maxMs": 191.8,
+      "status": "200"
+     },
+     {
+      "k": "GET /assets/freesound_community-thwump-85836-BSZf6p1T.mp3",
+      "n": 1,
+      "KB": 11.3,
+      "maxMs": 3.7,
+      "status": "200"
+     }
+    ],
+    "lastSecondsBeforeAndAfterGameOver": [
+     [
+      "GET /assets/reviewWorker-Dc8EDJnY.js",
+      8
+     ],
+     [
+      "GET /assets/applyCalibratedHandAccuracies-M8rzpDdq.js",
+      1
+     ]
+    ]
+   },
+   "websocket": {
+    "frames": 0,
+    "out": 0,
+    "in": 0,
+    "bytes": 0,
+    "topMessages": []
+   },
+   "pageErrors": 0
+  }
+ ]
+}

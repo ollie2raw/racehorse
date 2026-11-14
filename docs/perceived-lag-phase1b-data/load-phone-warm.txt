@@ -1,0 +1,10 @@
+load-phone-warm.json mode=load profile=phone cpu=4 net=phone outcome=undefined 
+
+== load-warm
+ load: reactReady null firstTapAt 1909 TTFB 1 FCP 736 LCP 736 (H1.text-[34px] font-black leading-[0.95] tr ) DCL 298 load 299 CLS 0; requests 49, before FCP 44; TBT 325; long tasks [{"at":235,"ms":63},{"at":301,"ms":64},{"at":1906,"ms":375}]; lastLongEnd<firstTap 2281
+   before FCP by type {"css":{"n":8,"encKB":71,"decKB":454,"transferKB":0},"js":{"n":31,"encKB":473,"decKB":1659,"transferKB":0},"image":{"n":4,"encKB":39,"decKB":39,"transferKB":0},"other":{"n":1,"encKB":0,"decKB":0,"transferKB":0}}
+   total by type {"css":{"n":9,"encKB":73,"decKB":465,"transferKB":2},"js":{"n":34,"encKB":478,"decKB":1671,"transferKB":6},"image":{"n":4,"encKB":39,"decKB":39,"transferKB":0},"other":{"n":1,"encKB":0,"decKB":0,"transferKB":0},"audio":{"n":1,"encKB":11,"decKB":11,"transferKB":12}}
+   biggest js [{"n":"index-GaDHDjq4.js","encKB":155,"decKB":573},{"n":"bot-engine-rsadmHBa.js","encKB":63,"decKB":223},{"n":"vendor-supabase-BOBBjAUx.js","encKB":49,"decKB":206},{"n":"game-reviewer-CK-bzBq5.js","encKB":44,"decKB":135},{"n":"bot-guided-C5Gw7Zzr.js","encKB":32,"decKB":111},{"n":"analyzer-B7MCY4ev.js","encKB":30,"decKB":104}]; main 0-3s {"taskMs":986,"scriptMs":656,"layoutMs":60,"styleMs":38}
+ tap "first tap: Single Player" -> first frame 718 ms | net 0 main 466 resid 252 commits 4 long [{"at":-3,"ms":375}] layout 2 style 9 script 406
+     reqs freesound_community-thwump-85836-BSZf6p1T.mp3(11.3KB @367+163) SinglePlayerHubScreen-DGIQwRSA.js(3.6KB @388+161) noBrainerLabProgress-3iA67lTT.js(0.9KB @388+156) useDeferredAsset-DekbqL6b.js(0.5KB @389+158) SinglePlayerHubScreen-DDxm4LNK.css(2.1KB @389+159)
+ placement n=0 p50 null p75 null p95 null p99 null max 0 (>100ms 0, >300ms 0); zoneAppear {"n":0,"p50":null,"p95":null,"max":0}; draw {"n":0,"p50":null,"p95":null,"max":0}; INP {"n":1,"p75":448,"p98":448,"max":448}; long tasks {"n":3,"over100":1}

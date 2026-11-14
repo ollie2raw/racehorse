@@ -1,0 +1,30 @@
+run exp-origins-pvf.json outcome {"reason":"budget","own":218} gameSec 150.3
+main thread over the game: task 25.1 s (16.7% busy), style recalc 8.6 s, layout 0.5 s, script 3.9 s
+long tasks 12 (1073 ms), >100ms: 3; frames>25ms 69 of 9254
+INP-ish: n 260 p75 72 p98 120 max 216; >100ms: 8
+commits 1195
+getBoundingClientRect: 6467 calls, 2153.3 ms total (0.3 ms/call), >2ms: 383; per board-tile placement: 80.8 calls (80 placements)
+  sampled callers (every 10th call):
+    2430 calls ctReservedRects (http://localhost:5313/assets/game-reviewer-8iKVjYo2.js:4615:18)
+    1370 calls at rectOf (http://localhost:5313/assets/game-reviewer-8iKVjYo2.js:5280:16)
+    810 calls ctReservedRects (http://localhost:5313/assets/game-reviewer-8iKVjYo2.js:4611:25)
+    800 calls at t7 (http://localhost:5313/assets/game-reviewer-8iKVjYo2.js:4784:30)
+    680 calls at runFit (http://localhost:5313/assets/game-reviewer-8iKVjYo2.js:4926:36)
+    70 calls t7 [as current] (http://localhost:5313/assets/game-reviewer-8iKVjYo2.js:4784:30)
+    70 calls onentRackSource (http://localhost:5313/assets/game-reviewer-8iKVjYo2.js:5291:20)
+    50 calls onentRackSource (http://localhost:5313/assets/game-reviewer-8iKVjYo2.js:5293:61)
+state origins over 1195 commits (component#hookIndex whose own state changed):
+      2305 FeedbackNumber#0
+      2210 AnimatedScore#2
+       188 BoardComponent#30
+       168 BotMatchScreenInner#246
+       149 BotMatchScreenInner#370
+        95 BotMatchScreenInner#12
+        90 BotMatchScreenInner#91
+        85 BoardComponent#24
+        84 BotMatchScreenInner#210
+        83 BotMatchScreenInner#63
+        74 BoardComponent#5
+        68 BotMatchScreenInner#19
+        68 BotMatchScreenInner#20
+        66 BotMatchScreenInner#92
