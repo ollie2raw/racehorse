@@ -531,3 +531,77 @@ describe('notifyBotActionResult', () => {
     expect(service.request).toHaveBeenCalled();
   });
 });
+
+describe('Daily Fritz: the next hand is requested while the reveal is on screen', () => {
+  const handEnded = () => ({
+    state: { ...createBotMatch(60, 7), handNumber: 1, handOver: true },
+    handEnded: { winner: 'you', reason: 'domino', pointsAwarded: 15, loserPips: 12, calcText: 'You went out' },
+  }) as unknown as BotActionResult;
+  const REVEAL_UP_MS = 3_000; // past the reveal delay, well inside the window that holds the advance
+  const WINDOW_OVER_MS = 20_000;
+
+  it('asks once when the reveal appears, then applies that answer at the end of the window with no second request', async () => {
+    service.request.mockResolvedValue(response());
+    service.apply.result = { applied: true, nextState: nextHandState() };
+    const { result, args } = setup(dailyArgs());
+    act(() => result.current.notifyBotActionResult(handEnded()));
+    expect(service.request).not.toHaveBeenCalled(); // the hand has ended but the reveal is not up yet
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(REVEAL_UP_MS); });
+    expect(service.request).toHaveBeenCalledTimes(1);
+    expect(args.applyDailyFritzNextHand).not.toHaveBeenCalled(); // the player is still reading the reveal
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(WINDOW_OVER_MS); });
+    expect(service.request).toHaveBeenCalledTimes(1);
+    expect(args.applyDailyFritzNextHand).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed early request is replaced by a fresh one at the end of the window, and the hand is still dealt once', async () => {
+    service.request
+      .mockRejectedValueOnce(new DailyFritzNextHandHttpError('incomplete transcript', 400, 'incomplete_transcript'))
+      .mockResolvedValue(response());
+    service.apply.result = { applied: true, nextState: nextHandState() };
+    const { result, args } = setup(dailyArgs());
+    act(() => result.current.notifyBotActionResult(handEnded()));
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(REVEAL_UP_MS); });
+    expect(service.request).toHaveBeenCalledTimes(1);
+    expect(result.current.handAdvanceError).toBeNull(); // nothing is shown for a request the player did not ask for
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(WINDOW_OVER_MS); });
+    expect(service.request).toHaveBeenCalledTimes(2);
+    expect(args.applyDailyFritzNextHand).toHaveBeenCalledTimes(1);
+  });
+
+  it('an answer that arrives after the window ends is awaited, not asked for again', async () => {
+    let answer!: (value: unknown) => void;
+    service.request.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    service.apply.result = { applied: true, nextState: nextHandState() };
+    const { result, args } = setup(dailyArgs());
+    act(() => result.current.notifyBotActionResult(handEnded()));
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(REVEAL_UP_MS); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(WINDOW_OVER_MS); });
+    expect(service.request).toHaveBeenCalledTimes(1);
+    expect(args.applyDailyFritzNextHand).not.toHaveBeenCalled();
+
+    await act(async () => { answer(response()); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(service.request).toHaveBeenCalledTimes(1);
+    expect(args.applyDailyFritzNextHand).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for nothing outside Daily Fritz', async () => {
+    const { result } = setup();
+    act(() => result.current.notifyBotActionResult(handEnded()));
+    await act(async () => { await vi.advanceTimersByTimeAsync(WINDOW_OVER_MS); });
+    expect(service.request).not.toHaveBeenCalled();
+  });
+
+  it('asks for nothing when the hand ended the game', async () => {
+    const { result } = setup(dailyArgs(), { ...completedHand(), gameOver: true });
+    act(() => result.current.notifyBotActionResult(handEnded()));
+    await act(async () => { await vi.advanceTimersByTimeAsync(WINDOW_OVER_MS); });
+    expect(service.request).not.toHaveBeenCalled();
+  });
+});

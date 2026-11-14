@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { BotMatchState } from '../modules/match/runtime/botEngine.ts';
 import { DailyFritzBroadcastControl, useDailyFritzBroadcast } from './DailyFritzBroadcastControl.tsx';
@@ -9,8 +9,8 @@ import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 import type { DailyFritzGameCompletionPayload } from './dailyFritzScreenTypes';
 import { DailyFritzLoadingScreen } from './DailyFritzLoadingScreen';
 import { isSpectatorModeEnabled } from '../config/spectatorModeFeature.ts';
+import { BotMatchScreen } from '../routes/screenPrefetch';
 
-const LazyBotMatchScreen = lazy(() => import('../bot/BotMatchScreen'));
 
 export type DailyFritzEmbeddedMatchViewProps = {
   embeddedMatchKey: string;
@@ -115,7 +115,7 @@ function DailyFritzCoreMatchView({
         />
       }
     >
-      <LazyBotMatchScreen
+      <BotMatchScreen
         key={embeddedMatchKey}
         matchInstanceKey={embeddedMatchKey}
         onBack={onEmbeddedBack}
