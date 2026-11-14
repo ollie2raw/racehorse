@@ -785,26 +785,33 @@ export function useHandLifecycle(args: UseHandLifecycleArgs): UseHandLifecycleRe
 
   /**
    * Asks the server for the next hand while the hand-end reveal is on screen, so the reveal's close does
-   * not wait on the network. The request waits for the reveal rather than the hand's last move because
-   * the replay recorder has only written the terminal action by then; a request built at hand end went
-   * out with an incomplete transcript (7ff0a587). The evidence is deliberately NOT frozen here: if this
-   * request fails, advance rebuilds it from the then-complete log and the coordinator's cache error
-   * makes that a fresh request.
+   * not wait on the network. This request is a commitment the server cannot take back: it advances the
+   * run, and a request whose evidence does not verify is NOT refused, it advances the run as unverified
+   * (sticky `rejected`, off the leaderboard). So it only goes out when the state the screen holds proves
+   * the evidence is complete, and anything else is left to advance, as before:
+   *  - the hand is over in that state, and its official journal (written inside the same engine commands
+   *    as the state) is there, so the transcript has the hand's last command and the scores are final;
+   *  - the transcript built from it is usable.
+   * It waits for the reveal rather than the hand's last move because a request built at hand end can see
+   * the state before its last write lands (7ff0a587). The evidence is deliberately NOT frozen here: if
+   * this request fails, advance rebuilds it and the coordinator's cache error makes that a fresh request.
    */
   // eslint-disable-next-line react-hooks/refs -- keeps a ref synced to the latest render value for async consumers; moving the write to an effect would defer it past paint
   startNextHandPrefetchRef.current = () => {
     if (!isDailyFritzMode || !dailyFritzPackage) return;
     if (isDailyFritzSetTerminal(dailyFritzPackage.set_result)) return;
-    if (matchRef.current.gameOver || handTransitionInFlightRef.current) return;
-    prefetchCoordinator.startPrefetch(
-      buildDailyFritzPrefetchParams(
-        dailyFritzPackage,
-        dailyFritzHandIndex,
-        matchRef.current,
-        getMoveLog(),
-        dailyFritzTranscriptProtocolVersion,
-      ),
+    const settled = matchRef.current;
+    if (settled.gameOver || handTransitionInFlightRef.current) return;
+    if (!settled.handOver || !settled.officialJournal?.actions.length) return;
+    const params = buildDailyFritzPrefetchParams(
+      dailyFritzPackage,
+      dailyFritzHandIndex,
+      settled,
+      getMoveLog(),
+      dailyFritzTranscriptProtocolVersion,
     );
+    if (!params.transcript || params.transcriptError) return;
+    prefetchCoordinator.startPrefetch(params);
   };
 
   const notifyBotActionResult = useCallback(
