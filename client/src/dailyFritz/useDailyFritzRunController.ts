@@ -39,6 +39,7 @@ import {
   buildDailyFritzStorageKey,
   discardDailyFritzSnapshot,
 } from '../modules/daily/dailyFritzSessionStorage';
+import { prefetchScreen } from '../routes/screenPrefetch';
 
 export type UseDailyFritzRunControllerParams = {
   today: DailyFritzTodayResponse | null;
@@ -303,6 +304,8 @@ export function useDailyFritzRunController({
       });
     }
     try {
+      // The match screen's code loads while /start is in flight instead of after it.
+      prefetchScreen('botMatch');
       const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
       await handleStartResponse(started, normalizeSetResult(today?.set_result ?? today?.result));
     } catch (err) {
@@ -334,6 +337,8 @@ export function useDailyFritzRunController({
       });
     }
     try {
+      // The match screen's code loads while /start is in flight instead of after it.
+      prefetchScreen('botMatch');
       const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
       const advancingFromBetweenOverlay = setOverlay?.kind === 'between';
       setSetOverlay(null);

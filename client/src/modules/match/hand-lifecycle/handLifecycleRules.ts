@@ -85,6 +85,12 @@ export function shouldShowHandRevealForHand(
 /** Pause after the last tile so the board beat lands before the hand-over modal. */
 export const DAILY_FRITZ_HAND_REVEAL_DELAY_MS = 2000;
 export const DAILY_FRITZ_HAND_AUTO_ADVANCE_MS = 5000;
+/**
+ * Whether Daily Fritz asks the server for the next hand while the hand-end reveal is on screen (so the reveal
+ * closes without waiting on the network). false = the next hand is requested when the reveal ends, as before.
+ * This is the rollback switch: flip it and ship, nothing else depends on it.
+ */
+export const DAILY_FRITZ_EARLY_NEXT_HAND_ENABLED = true;
 
 /**
  * Bot / Daily Fritz hand-over always waits after the final play.

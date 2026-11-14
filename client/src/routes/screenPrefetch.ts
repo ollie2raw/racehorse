@@ -5,11 +5,13 @@ import { lazyScreen } from './lazyScreen';
 export const SinglePlayerHubScreen = lazyScreen(() => import('../screens/SinglePlayerHubScreen'));
 export const PlayVsFritz = lazyScreen(() => import('../bot/PlayVsFritz'));
 export const BotMatchScreen = lazyScreen(() => import('../bot/BotMatchScreen'));
+export const DailyFritzScreen = lazyScreen(() => import('../dailyFritz/DailyFritzScreen'));
 
 const SCREENS = {
   hub: SinglePlayerHubScreen,
   playVsFritz: PlayVsFritz,
   botMatch: BotMatchScreen,
+  dailyFritz: DailyFritzScreen,
 } as const;
 
 export type PrefetchScreen = keyof typeof SCREENS;
@@ -19,6 +21,7 @@ const SCREEN_FOR_MODE: Partial<Record<AppMode, { preload: () => Promise<unknown>
   singlePlayerHub: SinglePlayerHubScreen,
   botSetup: PlayVsFritz,
   bot: BotMatchScreen,
+  dailyFritz: DailyFritzScreen,
 };
 
 /** The not-yet-loaded chunk a navigation to `mode` has to wait for, if any. */
@@ -61,7 +64,11 @@ export function useScreenPrefetch(appMode: AppMode): void {
       return whenIdle(() => {
         prefetchScreen('hub');
         prefetchScreen('playVsFritz');
+        prefetchScreen('dailyFritz');
       });
+    }
+    if (appMode === 'dailyFritz') {
+      return whenIdle(() => prefetchScreen('botMatch'));
     }
     if (appMode === 'singlePlayerHub') {
       return whenIdle(() => {

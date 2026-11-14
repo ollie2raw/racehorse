@@ -1,4 +1,5 @@
 import React, { Suspense } from 'react';
+import { DailyFritzScreen } from './screenPrefetch';
 import { ScreenLoader } from '../ui/ScreenLoader';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import type {
@@ -9,7 +10,6 @@ import type {
   AppRoutesSocialProps,
 } from '../appRouteTypes';
 
-const DailyFritzScreen = React.lazy(() => import('../dailyFritz/DailyFritzScreen'));
 const DailyFritzLeaderboardRouteScreen = React.lazy(
   () => import('../dailyFritz/DailyFritzLeaderboardRoute'),
 );

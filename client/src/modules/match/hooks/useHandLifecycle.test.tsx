@@ -15,6 +15,8 @@ import type { UseHandLifecycleArgs } from '../hand-lifecycle/types.ts';
 const service = vi.hoisted(() => ({
   request: vi.fn(),
   telemetry: vi.fn(),
+  /** What the mocked evidence builder returns: a usable transcript, none, or a build error. */
+  evidence: { mode: 'ok' as 'ok' | 'none' | 'error' },
   /** What the (mocked) step that applies the server's next hand to the local match returns. */
   apply: { result: null as unknown, calls: [] as unknown[][] },
   pkg: {
@@ -39,7 +41,8 @@ vi.mock('../hand-lifecycle/dailyFritzHandService.ts', async (importOriginal) => 
     dailyFritzPackage: service.pkg,
     dailyFritzHandIndex: 0,
     gameNumber: 1,
-    transcript: null,
+    transcript: service.evidence.mode === 'none' ? null : { actions: [{ sequence: 0 }] },
+    ...(service.evidence.mode === 'error' ? { transcriptError: 'could not build' } : {}),
     completedHandScores: { you: 10, fritz: 5 },
   }),
 }));
@@ -118,6 +121,7 @@ const flush = async () => {
 };
 
 beforeEach(() => {
+  service.evidence.mode = 'ok';
   service.request.mockReset();
   service.telemetry.mockReset().mockResolvedValue(undefined);
   service.apply.result = null;
@@ -529,5 +533,76 @@ describe('notifyBotActionResult', () => {
     // once the window has passed the hand is requested, without anyone pressing anything
     await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
     expect(service.request).toHaveBeenCalled();
+  });
+});
+
+describe('Daily Fritz: the next hand is requested while the reveal is on screen', () => {
+  const handEnded = () => ({ state: { ...createBotMatch(60, 7), handNumber: 1, handOver: true }, handEnded: { winner: 'you', reason: 'domino', pointsAwarded: 15, loserPips: 12, calcText: 'You went out' } }) as unknown as BotActionResult;
+  /** A hand the screen holds as over, with the official journal the transcript is built from. */
+  const settledHand = () => ({ ...completedHand(), officialJournal: { handNumber: 1, actions: [{ actor: 'player', kind: 'play' }] } }) as unknown as BotMatchState;
+  const REVEAL_UP_MS = 3_000; // past the reveal delay, well inside the window that holds the advance
+  const WINDOW_OVER_MS = 20_000;
+  const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+  /** Ends the hand and lets the reveal come up (not yet the end of its window). */
+  const upToReveal = async (overrides: Partial<UseHandLifecycleArgs> = dailyArgs(), match: BotMatchState = settledHand()) => {
+    const view = setup(overrides, match);
+    act(() => view.result.current.notifyBotActionResult(handEnded()));
+    await advance(REVEAL_UP_MS);
+    return view;
+  };
+
+  it('asks once when the reveal appears, then applies that answer at the end of the window with no second request', async () => {
+    service.request.mockResolvedValue(response());
+    service.apply.result = { applied: true, nextState: nextHandState() };
+    const { result, args } = setup(dailyArgs(), settledHand());
+    act(() => result.current.notifyBotActionResult(handEnded()));
+    expect(service.request).not.toHaveBeenCalled(); // the hand has ended but the reveal is not up yet
+    await advance(REVEAL_UP_MS);
+    expect(service.request).toHaveBeenCalledTimes(1);
+    expect(args.applyDailyFritzNextHand).not.toHaveBeenCalled(); // the player is still reading the reveal
+    await advance(WINDOW_OVER_MS);
+    expect(service.request).toHaveBeenCalledTimes(1);
+    expect(args.applyDailyFritzNextHand).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed early request is replaced by a fresh one at the end of the window, and the hand is still dealt once', async () => {
+    service.request.mockRejectedValueOnce(new DailyFritzNextHandHttpError('incomplete transcript', 400, 'incomplete_transcript')).mockResolvedValue(response());
+    service.apply.result = { applied: true, nextState: nextHandState() };
+    const { result, args } = await upToReveal();
+    expect(service.request).toHaveBeenCalledTimes(1);
+    expect(result.current.handAdvanceError).toBeNull(); // nothing is shown for a request the player did not ask for
+    await advance(WINDOW_OVER_MS);
+    expect(service.request).toHaveBeenCalledTimes(2);
+    expect(args.applyDailyFritzNextHand).toHaveBeenCalledTimes(1);
+  });
+
+  it('an answer that arrives after the window ends is awaited, not asked for again', async () => {
+    let answer!: (value: unknown) => void;
+    service.request.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    service.apply.result = { applied: true, nextState: nextHandState() };
+    const { args } = await upToReveal();
+    await advance(WINDOW_OVER_MS);
+    expect(service.request).toHaveBeenCalledTimes(1);
+    expect(args.applyDailyFritzNextHand).not.toHaveBeenCalled();
+    await act(async () => { answer(response()); });
+    await advance(50);
+    expect(service.request).toHaveBeenCalledTimes(1);
+    expect(args.applyDailyFritzNextHand).toHaveBeenCalledTimes(1);
+  });
+
+  // The server does not refuse a request whose evidence fails to verify: it advances the run as unverified
+  // (sticky `rejected`, off the leaderboard). So an early request goes out only on evidence that is complete.
+  it.each([
+    ['outside Daily Fritz', {}, settledHand(), 'ok'],
+    ['when the hand ended the game', dailyArgs(), { ...settledHand(), gameOver: true }, 'ok'],
+    ['when the screen does not yet hold the hand as over (the transcript could lack its last command)', dailyArgs(), { ...settledHand(), handOver: false }, 'ok'],
+    ['when the state has no official journal to build the transcript from', dailyArgs(), completedHand(), 'ok'],
+    ['when there is no transcript', dailyArgs(), settledHand(), 'none'],
+    ['when the transcript could not be built', dailyArgs(), settledHand(), 'error'],
+  ] as const)('asks for nothing early %s', async (_name, overrides, match, evidence) => {
+    service.evidence.mode = evidence;
+    service.request.mockResolvedValue(response());
+    await upToReveal(overrides, match as BotMatchState);
+    expect(service.request).not.toHaveBeenCalled();
   });
 });

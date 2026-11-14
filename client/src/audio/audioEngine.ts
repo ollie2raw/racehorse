@@ -12,8 +12,10 @@
 // graph (no panning, no bus) and starts with noticeable latency, worst in the iOS WebView. A decoded
 // AudioBuffer plays with no start-up cost, can overlap itself, and can be pitched and panned per hit.
 //
-// Autoplay policy: the context is created and resumed on the first user gesture (installAudioUnlock), and
-// decoding starts then too, so the first tile placed after a tap is already ready to play.
+// Autoplay policy: the context is created while the page is idle (suspended: no gesture yet, so the browser will
+// not start it) and resumed inside the first user gesture (installAudioUnlock), which is the only place iOS allows
+// resume(). Decoding starts at the gesture, so the first tile placed after a tap is ready to play. Creating the
+// context is the expensive part (it opens the audio device), so doing it in idle time keeps it out of the first tap.
 
 export interface Playback {
   /** Linear gain, 1 = the sample as authored. */
@@ -221,11 +223,33 @@ export function playBuffer(buffer: AudioBuffer, options: Playback = {}): boolean
 }
 
 /**
- * Create the context and start decoding on the first real user gesture, so the first sound after a tap is ready.
- * Idempotent; removes its own listeners once it has run.
+ * Opens the audio device once the page has loaded and gone idle. The context starts suspended (no gesture has
+ * happened), and nothing here resumes it: only the gesture handler below does, as iOS requires.
+ */
+function createContextWhenIdle(): void {
+  const create = () => {
+    try {
+      ensureContext();
+    } catch {
+      /* no audio device: the gesture path tries again and every sound fails silently */
+    }
+  };
+  const schedule = () => {
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(create, { timeout: 5000 });
+    else window.setTimeout(create, 2000);
+  };
+  if (document.readyState === 'complete') schedule();
+  else window.addEventListener('load', schedule, { once: true });
+}
+
+/**
+ * Resume the context and start decoding on the first real user gesture, so the first sound after a tap is ready.
+ * The context itself is normally already there, created suspended in idle time; if the gesture comes first it is
+ * created here. Idempotent; removes its own listeners once it has run.
  */
 export function installAudioUnlock(prime: () => void): void {
   if (typeof window === 'undefined') return;
+  createContextWhenIdle();
   const events = ['pointerdown', 'keydown', 'touchstart'] as const;
   const unlock = () => {
     for (const name of events) window.removeEventListener(name, unlock, true);
