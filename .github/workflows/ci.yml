@@ -11,6 +11,10 @@ on:
 jobs:
   server:
     name: Server Validation
+    # Skipped on a docs-only diff (see the `changes` job). A job skipped by an `if:` is reported as "skipped", which GitHub counts as passing
+    # for a required status check; the soak below `needs` this job, so it is skipped with it.
+    needs: [changes]
+    if: needs.changes.outputs.server_required == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -138,6 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       e2e_required: ${{ steps.check.outputs.e2e_required }}
+      server_required: ${{ steps.check.outputs.server_required }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -153,15 +158,21 @@ jobs:
       # affect what client actually imports, so it still gets E2E. Only
       # applies to pull_request diffs (base..head); a push to main always
       # runs E2E regardless of which files changed.
-      - name: Determine whether this diff needs Playwright E2E
+      # Docs-only diffs skip the two heaviest jobs (Playwright E2E, Server Validation; the MP soak needs Server Validation). The allow-list is
+      # DENY BY DEFAULT: a file is docs-only only if it matches a pattern below, and one file that does not match makes the whole diff
+      # "needs everything". Allowed: anything under docs/ except docs/architecture/ (the architecture checker reads
+      # docs/architecture/architecture-manifest.json), and *.md files in the repository root. Client Unit Tests, Lint, Build and the
+      # reachability gate are NOT gated: client/src/auth/usernamePolicy.test.ts imports docs/ops/moderation-rollout/preflight.sql.
+      - name: Determine which heavy jobs this diff needs
         id: check
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "Not a pull_request event -- always running E2E."
+            echo "Not a pull_request event -- always running everything."
             echo "e2e_required=true" >> "$GITHUB_OUTPUT"
+            echo "server_required=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -170,15 +181,43 @@ jobs:
           echo "$changed_files"
 
           e2e_required=false
+          docs_only=true
+          seen_any=false
           while IFS= read -r file; do
             [ -z "$file" ] && continue
+            seen_any=true
+
+            # Docs-only allow-list (Playwright E2E and Server Validation).
             case "$file" in
+              *..*) docs_only=false ;; # git never prints these; anything odd runs everything
+              docs/architecture/*) docs_only=false ;;
+              docs/*) ;;
+              */*) docs_only=false ;;
+              *.md) ;;
+              *) docs_only=false ;;
+            esac
+
+            # Non-shipping allow-list (Playwright E2E only): a diff confined to calibration tooling never reaches a player.
+            # packages/review-engine/src/index.ts is excluded even though it is inside packages/review-engine, because it is the
+            # package's public export surface.
+            case "$file" in
+              *..*)
+                e2e_required=true
+                ;;
               packages/review-engine/src/index.ts)
-                # Public export surface -- always requires E2E.
                 e2e_required=true
                 ;;
               client/src/devtools/*|packages/review-engine/*|*/fixtures/recorded-*/*)
-                # Allowlisted non-shipping path -- no-op.
+                ;;
+              docs/architecture/*)
+                e2e_required=true
+                ;;
+              docs/*)
+                ;;
+              */*)
+                e2e_required=true
+                ;;
+              *.md)
                 ;;
               *)
                 e2e_required=true
@@ -186,11 +225,24 @@ jobs:
             esac
           done <<< "$changed_files"
 
+          # An empty diff proves nothing: run everything.
+          if [ "$seen_any" = "false" ]; then
+            e2e_required=true
+            docs_only=false
+          fi
+
           echo "e2e_required=$e2e_required" >> "$GITHUB_OUTPUT"
-          if [ "$e2e_required" = "true" ]; then
-            echo "At least one changed path falls outside the non-shipping allowlist -- E2E required."
+          if [ "$docs_only" = "true" ]; then
+            echo "server_required=false" >> "$GITHUB_OUTPUT"
+            echo "Docs-only diff (every path is under docs/ outside docs/architecture/, or a root *.md) -- Playwright E2E and Server Validation skipped."
           else
-            echo "Every changed path falls inside the non-shipping allowlist -- E2E skipped."
+            echo "server_required=true" >> "$GITHUB_OUTPUT"
+            echo "At least one changed path is outside the docs allow-list -- Server Validation required."
+          fi
+          if [ "$e2e_required" = "true" ]; then
+            echo "At least one changed path needs Playwright E2E."
+          else
+            echo "Every changed path is docs or non-shipping -- E2E skipped."
           fi
 
   e2e:
