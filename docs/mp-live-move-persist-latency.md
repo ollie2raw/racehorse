@@ -276,3 +276,21 @@ is real, was reproduced every time, and is now fixed. Backfill of the historical
   package.json entry pointing at a non-existent file; written for this change.)
 - Full server suite (1297) + client suite (1553) + `check:architecture` (20/20)
   green with the change.
+
+## MP P1: the hand boundary (`MP_HAND_BOUNDARY_FAST`, default off)
+
+Measured with the stub at 290 ms database latency (3 runs, `server` harness in the PR): the second player's `hand:ready`
+waited ~870 ms = three sequential writes, all under the room's gameplay lock: the first player's ready-mark write, its own
+ready-mark write, then the new-hand write. With the flag on, a ready mark only takes the normal 75 ms debounced persist and
+is acknowledged at once; the new hand is still mutated, written and proven durable before anything is broadcast, and as a
+whole-room snapshot it carries the marks, so the second player waits for one write (~305 ms). Never applies to
+scheduled-tournament rooms. A `degraded` room (a debounced mark write failed) may start the hand, because the start is
+itself the proven-durable write that heals it; a `failed` room (database fence) never does.
+
+What it gives up: the first player's mark is acknowledged before it is durable. A hard kill (not a SIGTERM, which flushes)
+inside ~75 ms + one write loses that mark; the restarted room shows nobody ready. The client treats an acknowledged
+`hand:ready` as handled and does not resend it after a reconnect, so that player would have to leave and rejoin the room.
+Follow-up (client, not in this change): resend `hand:ready` after a reconnect even when acknowledged; the server ignores
+duplicates.
+
+Tests: `server/src/multiplayer/handBoundaryFast.test.ts`, each case with `LIVE_SESSION_LOG_ENTRIES` off and on.
