@@ -17,6 +17,8 @@ interface Metrics {
   centroidHz: number;
   balance: number;
   hitMs: number;
+  endMs: number;
+  endDb: number;
 }
 
 async function bench(page: import('@playwright/test').Page): Promise<Metrics[]> {
@@ -35,7 +37,7 @@ test('every sound renders cleanly through the mix bus', async ({ page }) => {
     const rows = results.map(
       (m) =>
         `${m.name.padEnd(20)} peak ${m.peakDb.toFixed(1).padStart(6)}  loud ${m.momentaryDb.toFixed(1).padStart(6)}  ` +
-        `${m.activeMs.toFixed(0).padStart(5)} ms  dc ${m.dc.toFixed(4).padStart(7)}  ${m.centroidHz.toFixed(0).padStart(5)} Hz  bal ${m.balance.toFixed(2)}  hit ${m.hitMs.toFixed(0).padStart(4)} ms`,
+        `${m.activeMs.toFixed(0).padStart(5)} ms  dc ${m.dc.toFixed(4).padStart(7)}  ${m.centroidHz.toFixed(0).padStart(5)} Hz  bal ${m.balance.toFixed(2)}  hit ${m.hitMs.toFixed(0).padStart(4)} ms  end ${m.endMs.toFixed(0).padStart(5)} ms @ ${m.endDb.toFixed(0)} dB`,
     );
     console.log(`\nSOUND BENCH\n${rows.join('\n')}\n`);
   }
@@ -46,6 +48,8 @@ test('every sound renders cleanly through the mix bus', async ({ page }) => {
     expect(Math.abs(m.dc), `${m.name} has a DC offset`).toBeLessThan(0.005);
     expect(m.activeMs, `${m.name} should have a sound`).toBeGreaterThan(5);
     expect(m.activeMs, `${m.name} rings too long`).toBeLessThan(2500);
+    // A sound that ends while still audible stops with a step: a click, heard as static on a laptop speaker.
+    expect(m.endDb, `${m.name} stops while still audible`).toBeLessThan(-55);
   }
 });
 

@@ -25,11 +25,16 @@ export interface SoundMetrics {
   centroidHz: number;
   balance: number;
   hitMs: number;
+  /** Where the sound truly ends: the last sample above -80 dBFS, in ms. Well past activeMs means a long faint tail. */
+  endMs: number;
+  /** Peak level (dBFS) of the final 5 ms before that end. A sound that stops while still audible (a cut) reads high. */
+  endDb: number;
 }
 
 const SAMPLE_RATE = 44_100;
 const RENDER_SECONDS = 3;
 const AUDIBLE = 10 ** (-50 / 20);
+const FLOOR = 10 ** (-80 / 20);
 
 const toDb = (linear: number) => 20 * Math.log10(Math.max(linear, 1e-9));
 
@@ -98,7 +103,19 @@ export function analyse(name: string, left: Float32Array, right: Float32Array): 
     }
   }
   if (first < 0) {
-    return { name, peakDb: -120, momentaryDb: -120, activeMs: 0, dc: 0, centroidHz: 0, balance: 0, hitMs: 0 };
+    return { name, peakDb: -120, momentaryDb: -120, activeMs: 0, dc: 0, centroidHz: 0, balance: 0, hitMs: 0, endMs: 0, endDb: -120 };
+  }
+
+  let end = last;
+  for (let i = n - 1; i > last; i -= 1) {
+    if (Math.max(Math.abs(left[i]), Math.abs(right[i])) > FLOOR) {
+      end = i;
+      break;
+    }
+  }
+  let endPeak = 0;
+  for (let i = Math.max(0, end - Math.round(SAMPLE_RATE * 0.005)); i <= end; i += 1) {
+    endPeak = Math.max(endPeak, Math.abs(left[i]), Math.abs(right[i]));
   }
 
   let sum = 0;
@@ -150,6 +167,8 @@ export function analyse(name: string, left: Float32Array, right: Float32Array): 
     centroidHz: total > 0 ? weighted / total : 0,
     balance: energyL + energyR > 0 ? (energyR - energyL) / (energyR + energyL) : 0,
     hitMs: loudestWindowStartMs(left, right),
+    endMs: (end / SAMPLE_RATE) * 1000,
+    endDb: toDb(endPeak),
   };
 }
 
