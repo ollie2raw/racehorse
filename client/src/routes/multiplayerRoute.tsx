@@ -1,6 +1,5 @@
-import { Suspense } from 'react';
+import React, { Suspense } from 'react';
 import { ScreenLoader } from '../ui/ScreenLoader';
-import { MultiplayerModeController } from './screenPrefetch';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import type {
   AppRoutesShellProps,
@@ -8,6 +7,7 @@ import type {
   AppRoutesSocialProps,
 } from '../appRouteTypes';
 
+const MultiplayerModeController = React.lazy(() => import('../multiplayer/MultiplayerModeController'));
 
 export function MultiplayerRoute({
   shell,

@@ -1,7 +1,5 @@
 import { createElement, lazy, type ComponentType } from 'react';
 
-type PropsOf<C> = C extends ComponentType<infer P> ? P : never;
-
 export type LazyScreen<P> = ComponentType<P> & {
   /** Starts (or joins) the chunk load. A failed load is forgotten so the next call retries. */
   preload: () => Promise<unknown>;
@@ -13,17 +11,16 @@ export type LazyScreen<P> = ComponentType<P> & {
  * React.lazy suspends one more time even for a cached import(), which commits the route's
  * fallback and then holds the real screen behind React's ~300 ms fallback reveal throttle.
  */
-export function lazyScreen<C extends ComponentType<never>>(
-  load: () => Promise<{ default: C }>,
-): LazyScreen<PropsOf<C>> {
-  type P = PropsOf<C>;
+export function lazyScreen<P extends object>(
+  load: () => Promise<{ default: ComponentType<P> }>,
+): LazyScreen<P> {
   let loaded: ComponentType<P> | null = null;
   let pending: Promise<unknown> | null = null;
 
   const preload = () => {
     pending ??= load().then(
       (mod) => {
-        loaded = mod.default as unknown as ComponentType<P>;
+        loaded = mod.default;
       },
       (error: unknown) => {
         pending = null;
@@ -37,6 +34,6 @@ export function lazyScreen<C extends ComponentType<never>>(
   const UntilLoaded = lazy(() => preload().then(() => ({ default: loaded as ComponentType<P> })));
 
   const Screen = (props: P) =>
-    createElement((loaded ?? UntilLoaded) as ComponentType<object>, props as object);
+    createElement((loaded ?? UntilLoaded) as ComponentType<P>, props);
   return Object.assign(Screen, { preload, isLoaded: () => loaded !== null });
 }
