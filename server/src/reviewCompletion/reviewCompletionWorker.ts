@@ -26,6 +26,7 @@ import { ReviewSearchRunner } from './reviewSearchRunner';
 import { config } from '../config';
 import { isReviewSweepEnabled } from './reviewSweepFlag';
 import { withBoundedExactOption } from './reviewBoundedExactFlag';
+import { isReviewCpuBenchmarkEnabled } from './reviewCpuBenchmarkFlag';
 import { withCutHonestyOption } from './reviewCutHonestyFlag';
 import {
   noteReviewCpuBenchmark,
@@ -490,12 +491,17 @@ export function scheduleReviewCompletionSweep(): void {
   if (typeof sweepTimer.unref === 'function') sweepTimer.unref();
 }
 
-/** About 30 s after boot, once, while no job is active: the fixed-position CPU benchmark, in the worker thread (it cannot stall live sockets). */
+/** Off by default (REVIEW_CPU_BENCHMARK_ENABLED=true turns it on). About 30 s after boot, once, while no job is active: the fixed-position CPU benchmark, in the worker thread (it cannot stall live sockets). */
 export const REVIEW_CPU_BENCHMARK_DELAY_MS = 30_000;
 const REVIEW_CPU_BENCHMARK_MAX_ATTEMPTS = 6;
 let benchmarkScheduled = false;
 
 function scheduleReviewCpuBenchmark(attempt = 1): void {
+  if (!isReviewCpuBenchmarkEnabled()) {
+    if (attempt === 1 && !benchmarkScheduled) log.info('review cpu benchmark is off (set REVIEW_CPU_BENCHMARK_ENABLED=true to run it at boot)');
+    benchmarkScheduled = true;
+    return;
+  }
   if (attempt === 1 && benchmarkScheduled) return;
   benchmarkScheduled = true;
   const timer = setTimeout(() => {
