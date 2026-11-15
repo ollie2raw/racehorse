@@ -161,6 +161,28 @@ describe('the starvation guard', () => {
     expect(open / afterStarvation).toBeCloseTo(REVIEW_YIELD_CONFIG.sliceOnMs / REVIEW_YIELD_CONFIG.slicePeriodMs, 2);
   });
 
+  it('a hold caused only by event-loop lag (no live room) is bounded too: reviews cannot be blocked indefinitely on a lagging server', () => {
+    setReviewLiveRoomProbe(() => 0);
+    setReviewLagSourceForTests(() => 5_000); // permanently lagging, nobody playing
+    const { starvationAfterMs } = REVIEW_YIELD_CONFIG;
+    for (let t = 0; t < starvationAfterMs; t += 1_000) expect(reviewYieldDecision(t)).toMatchObject({ allowed: false, reason: 'event_loop_lag' });
+    expect(reviewYieldDecision(starvationAfterMs)).toMatchObject({ allowed: true, reason: 'starvation_slice' });
+  });
+
+  it('a held decision on a permanently lagging server is released after the starvation point (the real wait loop, simulated clock)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(0);
+    setReviewLiveRoomProbe(() => 0);
+    setReviewLagSourceForTests(() => 5_000);
+    let polls = 0;
+    setReviewYieldSleepForTests(async (ms) => { polls += 1; vi.setSystemTime(Date.now() + ms); });
+
+    await waitForReviewSlot();
+
+    expect(Date.now()).toBe(REVIEW_YIELD_CONFIG.starvationAfterMs);
+    expect(polls).toBe(REVIEW_YIELD_CONFIG.starvationAfterMs / REVIEW_YIELD_CONFIG.pollMs);
+  });
+
   it('a quiet moment resets it: the 10 minutes start over', () => {
     let live = 1;
     setReviewLiveRoomProbe(() => live);

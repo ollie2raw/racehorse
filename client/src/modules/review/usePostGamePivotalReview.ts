@@ -487,8 +487,10 @@ export function usePostGamePivotalReview({
   const reviewWait: ReviewWaitState | null = reviewPersistenceEnabled && serverJobId && !reviewUnavailable
     ? {
       stage: serverCompletion?.stage === 'queued' || serverCompletion?.stage === 'running' ? serverCompletion.stage : null,
-      stalled: reviewStalled,
+      // A job held back for live games is waiting on purpose: it is not "taking longer than expected" and Try again cannot speed it up.
+      stalled: reviewStalled && serverCompletion?.pausedForLivePlay !== true,
       sweepErrorCode: serverCompletion?.sweepError?.code ?? null,
+      pausedForLivePlay: serverCompletion?.pausedForLivePlay === true,
     }
     : null;
   const retryReview = useCallback(async () => {

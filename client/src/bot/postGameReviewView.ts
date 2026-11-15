@@ -1,6 +1,7 @@
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
 import type { PlayerDecisionLedgerSummary } from '../modules/review/reviewDecisionAccounting';
 import type { ReviewUnavailableReason, ReviewWaitState } from '../modules/review/reviewCompletionClient';
+import { PAUSED_FOR_LIVE_PLAY_TEXT } from '../modules/review/pausedCopy';
 import {
   RETRY_NOTE,
   SETUP_CODES,
@@ -118,6 +119,19 @@ export function buildPostGameReviewView(input: {
       canRetry: input.retryAvailable,
       retryLabel: 'Try again',
       retrying: input.retryState === 'retrying',
+    };
+  }
+
+  if (wait?.pausedForLivePlay === true) {
+    return {
+      status: 'queued',
+      canOpen: true,
+      statusText: PAUSED_FOR_LIVE_PLAY_TEXT,
+      accuracyText: null,
+      gradeText: null,
+      progress: resolved.progress,
+      note: null,
+      ...NO_RETRY,
     };
   }
 

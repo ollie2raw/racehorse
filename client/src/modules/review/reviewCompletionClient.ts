@@ -116,6 +116,8 @@ export type ReviewWaitState = {
   readonly stalled: boolean;
   /** The server's last sweep error as a short code (for example `rpc_missing`), when it has one for this job. */
   readonly sweepErrorCode: string | null;
+  /** The server is holding review back because games are being played; it continues when they finish. Not a stall, and retrying cannot help. */
+  readonly pausedForLivePlay?: boolean;
 };
 
 /** After this long without a decision completing, the card says the review is taking longer than expected and offers a retry. */
@@ -150,6 +152,8 @@ export async function pollServerReviewCompletion(input: {
   /** queued / running, from the server (absent on an older one). */
   readonly stage?: ReviewJobStage | 'complete' | 'failed' | null;
   readonly sweepError?: { readonly code: string | null; readonly detail?: string | null } | null;
+  /** Held back while games are live (absent on an older server). */
+  readonly pausedForLivePlay?: boolean;
   readonly progress: EnqueueReviewCompletionResponse['progress'];
   readonly evaluations?: ReviewEvaluationV1[];
   readonly decisions: readonly { decisionId: string; lifecycle: string; positionHash: string }[];
@@ -169,6 +173,7 @@ export async function pollServerReviewCompletion(input: {
       unavailableReason?: ReviewUnavailableReason | null;
       stage?: ReviewJobStage | 'complete' | 'failed' | null;
       sweepError?: { code: string | null; detail?: string | null } | null;
+      pausedForLivePlay?: boolean;
       progress: EnqueueReviewCompletionResponse['progress'];
       evaluations?: ReviewEvaluationV1[];
       decisions: { decisionId: string; lifecycle: string; positionHash: string }[];

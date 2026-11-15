@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { GameAnalysis } from '../../analyzer/moveAnalyzer.ts';
 import type { GameAccuracyModelResult } from '@racehorse/review-engine';
+import { PAUSED_FOR_LIVE_PLAY_TEXT } from '../../modules/review/pausedCopy';
 import { PostGameReviewPrompt } from './PostGameReviewPrompt.tsx';
 
 function baseAnalysis(overrides: Partial<GameAnalysis> = {}): GameAnalysis {
@@ -282,6 +283,23 @@ describe('PostGameReviewPrompt — a queued or stalled review says so', () => {
     expect(screen.getByText('Queued…')).toBeInTheDocument();
     expect(screen.getByText(/waiting for the analysis to start/i)).toBeInTheDocument();
     expect(screen.queryByText(/Analyzing game/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+
+  it('says it is paused while games are live, not Queued, with no "taking longer" note and no Try again', () => {
+    render(
+      <PostGameReviewPrompt
+        {...requiredProps}
+        analysis={baseAnalysis()}
+        accuracyModelPending
+        reviewWait={{ stage: 'queued', stalled: false, sweepErrorCode: null, pausedForLivePlay: true }}
+        onRetryReview={() => undefined}
+      />,
+    );
+    expect(screen.getByText('Paused…')).toBeInTheDocument();
+    expect(screen.getByText(PAUSED_FOR_LIVE_PLAY_TEXT)).toBeInTheDocument();
+    expect(screen.queryByText('Queued…')).not.toBeInTheDocument();
+    expect(screen.queryByText(/taking longer than expected/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
   });
 
