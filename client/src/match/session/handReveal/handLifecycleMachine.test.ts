@@ -18,6 +18,7 @@ const view = (over: Partial<HandView> = {}): HandView => ({
   hand: { handNumber: 2, handOver: true, gameOver: false, version: 1 },
   roomJoined: true,
   socketId: 1,
+  connectionKey: 'c1',
   socketConnected: true,
   ...over,
 });
@@ -182,16 +183,68 @@ describe('what the fuzzer found (handLifecycleFuzz.test.ts)', () => {
     ]);
   });
 
-  it('P5: an acknowledged ready is not sent again on a new connection', () => {
+  it('P5: an acknowledged ready is not sent again on the same connection, even when the view is rebuilt', () => {
     const { effects } = run([
       { type: 'view', view: view() },
       { type: 'revealTimerFired', handNumber: 2 },
       { type: 'view', view: view({ reveal: reveal(2) }) },
       { type: 'continue' },
       { type: 'readySettled', handNumber: 2, source: 'continue', ok: true },
-      { type: 'view', view: view({ reveal: null, socketId: 2 }) },
+      { type: 'view', view: view({ reveal: null }) },
+      { type: 'view', view: view({ reveal: null, socketId: 2 }) }, // a new socket object on the same connection
     ]);
     expect(sent(effects)).toEqual([{ type: 'sendReady', handNumber: 2, source: 'continue' }]);
+  });
+
+  it('after a reconnect an acknowledged ready is sent again (the server may have restarted and lost a mark it acknowledged before it was durable)', () => {
+    // socket.io keeps the same socket object across a reconnect (socketId does not change); the connection (socket.id) does.
+    const { effects } = run([
+      { type: 'view', view: view() },
+      { type: 'revealTimerFired', handNumber: 2 },
+      { type: 'view', view: view({ reveal: reveal(2) }) },
+      { type: 'continue' },
+      { type: 'readySettled', handNumber: 2, source: 'continue', ok: true }, // acknowledged on c1
+      { type: 'view', view: view({ reveal: null }) },
+      { type: 'view', view: view({ reveal: null, connectionKey: null, socketConnected: false }) }, // the server goes away
+      { type: 'view', view: view({ reveal: null, connectionKey: 'c2' }) }, // back, same socket object
+    ]);
+    expect(sent(effects)).toEqual([
+      { type: 'sendReady', handNumber: 2, source: 'continue' },
+      { type: 'sendReady', handNumber: 2, source: 'recovery' },
+    ]);
+  });
+
+  it('the resend is acknowledged on the new connection and is not repeated until the next reconnect', () => {
+    const { effects } = run([
+      { type: 'view', view: view() },
+      { type: 'revealTimerFired', handNumber: 2 },
+      { type: 'view', view: view({ reveal: reveal(2) }) },
+      { type: 'continue' },
+      { type: 'readySettled', handNumber: 2, source: 'continue', ok: true, connectionKey: 'c1' },
+      { type: 'view', view: view({ reveal: null }) },
+      { type: 'view', view: view({ reveal: null, connectionKey: 'c2' }) },
+      { type: 'readySettled', handNumber: 2, source: 'recovery', ok: true, connectionKey: 'c2' },
+      { type: 'view', view: view({ reveal: null, connectionKey: 'c2', hand: over(2, 2) }) }, // an echo of the state
+      { type: 'view', view: view({ reveal: null, connectionKey: 'c3' }) }, // and another reconnect
+    ]);
+    expect(sent(effects).map((e) => e.source)).toEqual(['continue', 'recovery', 'recovery']);
+  });
+
+  it('a reconnect does not resend for a hand that has moved on, nor before the reveal for it has been seen', () => {
+    const moved = run([
+      { type: 'view', view: view() },
+      { type: 'revealTimerFired', handNumber: 2 },
+      { type: 'view', view: view({ reveal: reveal(2) }) },
+      { type: 'continue' },
+      { type: 'readySettled', handNumber: 2, source: 'continue', ok: true },
+      { type: 'view', view: view({ reveal: null, hand: playing(3), connectionKey: 'c2' }) },
+    ]);
+    expect(sent(moved.effects)).toEqual([{ type: 'sendReady', handNumber: 2, source: 'continue' }]);
+    const unseen = run([
+      { type: 'view', view: view() },
+      { type: 'view', view: view({ connectionKey: 'c2' }) }, // reconnect inside the 1.4 s window: reveal not opened yet
+    ]);
+    expect(sent(unseen.effects)).toEqual([]);
   });
 
   it('P5: a ready that is never acknowledged is retried at once, not when something else changes', () => {
