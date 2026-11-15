@@ -1,0 +1,166 @@
+name: Perf Budgets
+
+# Tier 1 (blocking): counts and bytes that do not depend on runner speed. Tier 2 (report only): wall-clock timings, a trend artifact.
+# Policy, thresholds and the demotion rule: docs/perf-budget.md and client/scripts/perf/perf-budgets.json.
+#
+# The `paths` filter is on the workflow, so a docs-only PR does not start it at all (no job, no check). That is safe only while these
+# checks are not "required": a required check that never starts blocks the merge. If they ever become required, move the filter into a
+# job-level `if` (as ci.yml's "Detect Non-Shipping-Only Diff" does for Playwright), because a skipped job counts as passing.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'client/src/**'
+      - 'client/index.html'
+      - 'client/package.json'
+      - 'client/vite.config.ts'
+      - 'client/scripts/perf/**'
+      - 'server/src/**'
+      - 'server/package.json'
+      - 'packages/game-core/**'
+      - 'package-lock.json'
+      - '.github/workflows/perf-budgets.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'client/src/**'
+      - 'client/index.html'
+      - 'client/package.json'
+      - 'client/vite.config.ts'
+      - 'client/scripts/perf/**'
+      - 'server/src/**'
+      - 'server/package.json'
+      - 'packages/game-core/**'
+      - 'package-lock.json'
+      - '.github/workflows/perf-budgets.yml'
+  schedule:
+    - cron: '17 6 * * *' # nightly on main: the trend artifact
+  workflow_dispatch:
+
+jobs:
+  tier1:
+    name: Perf Budgets (Tier 1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
+      - name: Build server
+        run: npm run build --prefix server
+
+      - name: Build client (production)
+        env:
+          # Inert values for the legal release guard, as in ci.yml's "Client build": this build is only measured, never shipped.
+          VITE_LEGAL_LEGAL_ENTITY_NAME: CI Validation Only
+          VITE_LEGAL_SUPPORT_EMAIL: support@ci-validation.invalid
+          VITE_LEGAL_MINIMUM_AGE: '13'
+          VITE_LEGAL_POLICY_EFFECTIVE_DATE: '2026-01-01'
+          VITE_LEGAL_POSTHOG_LOCATION: discarded
+        run: npm run build --prefix client
+
+      - name: Get installed Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Tier 1 budgets (bundle bytes, Daily checkpoint, hand boundary writes and bytes)
+        run: node client/scripts/perf/perfBudgetsTier1.mjs --out tier1-result.json --summary tier1-summary.md
+        working-directory: client
+
+      - name: Job summary
+        if: always()
+        run: '[ -f client/tier1-summary.md ] && cat client/tier1-summary.md >> "$GITHUB_STEP_SUMMARY" || true'
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-tier1-${{ github.sha }}
+          path: client/tier1-result.json
+          if-no-files-found: ignore
+
+  tier2:
+    name: Perf Timing (Tier 2, report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Report only: this job can never fail the workflow, whatever the timings are.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build game-core
+        run: npm run build -w @racehorse/game-core
+
+      - name: Build server
+        run: npm run build --prefix server
+
+      - name: Build client (production)
+        env:
+          VITE_LEGAL_LEGAL_ENTITY_NAME: CI Validation Only
+          VITE_LEGAL_SUPPORT_EMAIL: support@ci-validation.invalid
+          VITE_LEGAL_MINIMUM_AGE: '13'
+          VITE_LEGAL_POLICY_EFFECTIVE_DATE: '2026-01-01'
+          VITE_LEGAL_POSTHOG_LOCATION: discarded
+        run: npm run build --prefix client
+
+      - name: Get installed Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Tier 2 timings (median of 3, one retry per run)
+        run: node client/scripts/perf/perfTimingTier2.mjs --out tier2-result.json --summary tier2-summary.md
+        working-directory: client
+
+      - name: Job summary
+        if: always()
+        run: '[ -f client/tier2-summary.md ] && cat client/tier2-summary.md >> "$GITHUB_STEP_SUMMARY" || true'
+
+      - name: Upload trend artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-tier2-${{ github.sha }}
+          path: client/tier2-result.json
+          if-no-files-found: ignore
+          retention-days: 90
