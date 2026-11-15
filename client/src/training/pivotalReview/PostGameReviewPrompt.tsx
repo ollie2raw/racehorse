@@ -5,6 +5,7 @@ import {
   type PlayerDecisionLedgerSummary,
 } from '../../modules/review/reviewDecisionAccounting';
 import type { ReviewUnavailableReason, ReviewWaitState } from '../../modules/review/reviewCompletionClient';
+import { PAUSED_FOR_LIVE_PLAY_TEXT } from '../../modules/review/pausedCopy';
 import '../../styles/dossierRecord.css';
 import './postGameReviewPrompt.css';
 
@@ -103,10 +104,13 @@ export function resolveAccuracyStatValues({
     const done = ledger?.scoredCount;
     // "Queued" until a pass actually holds the job: saying "Analyzing 0 / 50" about a job nothing is working on is what made a stuck review look busy.
     const queued = reviewWait?.stage === 'queued' && (done ?? 0) === 0;
+    const paused = reviewWait?.pausedForLivePlay === true;
     return {
-      accuracyText: queued ? 'Queued…' : 'Analyzing game…',
+      accuracyText: paused ? 'Paused…' : queued ? 'Queued…' : 'Analyzing game…',
       gradeText: '—',
-      coverageText: queued
+      coverageText: paused
+        ? PAUSED_FOR_LIVE_PLAY_TEXT
+        : queued
         ? 'Waiting for the analysis to start'
         : totalNonForced !== null && done !== undefined
           ? `Analyzing ${done} / ${totalNonForced} decisions`

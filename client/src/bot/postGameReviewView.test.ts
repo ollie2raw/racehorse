@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameAccuracyModelResult } from '@racehorse/review-engine';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
+import { PAUSED_FOR_LIVE_PLAY_TEXT } from '../modules/review/pausedCopy';
 import { buildPostGameReviewView } from './postGameReviewView';
 
 function analysis(overrides: Partial<GameAnalysis> = {}): GameAnalysis {
@@ -125,6 +126,20 @@ describe('buildPostGameReviewView: the server job stage (#496) reaches the card'
     expect(view.canOpen).toBe(true);
     expect(view.statusText).toMatch(/^Queued/);
     expect(view.progress).toBeNull();
+  });
+
+  it('says it is paused while games are live, with no stall note and no Try again, even after 90 s; the review still opens', () => {
+    const view = buildPostGameReviewView({
+      ...base,
+      accuracyModelPending: true,
+      decisionLedger: ledger0,
+      reviewWait: { stage: 'queued', stalled: false, sweepErrorCode: null, pausedForLivePlay: true },
+      retryAvailable: true,
+    })!;
+    expect(view.statusText).toBe(PAUSED_FOR_LIVE_PLAY_TEXT);
+    expect(view.canOpen).toBe(true);
+    expect(view.canRetry).toBe(false);
+    expect(view.note).toBeNull();
   });
 
   it('says Analyzing once a pass holds the job, and also once decisions have completed even if the stage still says queued', () => {

@@ -10,6 +10,7 @@ import { resolveReleaseVersion } from './releaseVersion';
 import { isReviewSweepEnabled } from '../../reviewCompletion/reviewSweepFlag';
 import { isReviewBoundedExactEnabled } from '../../reviewCompletion/reviewBoundedExactFlag';
 import { isReviewCutHonestyEnabled } from '../../reviewCompletion/reviewCutHonestyFlag';
+import { getReviewYieldStatus } from '../../reviewCompletion/reviewLivePlayYield';
 import { isLiveSessionLogEntriesEnabled } from '../../multiplayer/roomLivePersistence';
 import { getReviewSweepStatus } from '../../reviewCompletion/reviewSweepStatus';
 import {
@@ -140,6 +141,8 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
       liveSessionLogEntries: isLiveSessionLogEntriesEnabled(),
       // Last tick, last claimed job, last error as a short code, and which database functions the review sweep is missing (empty when none): one request to see why a review is stuck.
       reviewSweepStatus: getReviewSweepStatus(),
+      // Whether review is paused for live play right now, why, and the counters (claims deferred, decisions held, starvation slices).
+      reviewYield: getReviewYieldStatus(),
     });
   });
 

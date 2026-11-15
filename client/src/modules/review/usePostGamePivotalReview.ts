@@ -350,7 +350,8 @@ export function usePostGamePivotalReview({
       if (result?.complete || result?.unavailable) return;
       const progressKey = result ? `${result.progress.scored}:${result.progress.forced}:${result.status}` : '';
       const progressed = progressKey !== lastProgressKey;
-      if (progressed) lastProgressAt = Date.now();
+      // A poll that says the job is paused for live games counts as alive: the 90 s stall clock restarts when the pause ends, so the card does not flash "taking longer than expected" while the first decision after it lands.
+      if (progressed || result?.pausedForLivePlay === true) lastProgressAt = Date.now();
       const stalled = isReviewStalled(Date.now(), lastProgressAt);
       if (stalled) {
         logger.warn('usePostGamePivotalReview', 'server review has not progressed', {
@@ -487,8 +488,10 @@ export function usePostGamePivotalReview({
   const reviewWait: ReviewWaitState | null = reviewPersistenceEnabled && serverJobId && !reviewUnavailable
     ? {
       stage: serverCompletion?.stage === 'queued' || serverCompletion?.stage === 'running' ? serverCompletion.stage : null,
-      stalled: reviewStalled,
+      // A job held back for live games is waiting on purpose: it is not "taking longer than expected" and Try again cannot speed it up.
+      stalled: reviewStalled && serverCompletion?.pausedForLivePlay !== true,
       sweepErrorCode: serverCompletion?.sweepError?.code ?? null,
+      pausedForLivePlay: serverCompletion?.pausedForLivePlay === true,
     }
     : null;
   const retryReview = useCallback(async () => {
