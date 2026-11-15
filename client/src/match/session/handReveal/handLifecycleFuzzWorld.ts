@@ -208,6 +208,13 @@ export function runWorld(seed: number, options: FuzzOptions = DEFAULT_OPTIONS): 
   function onServerMessage(msg: ClientMsg) {
     if (msg.type === 'ready') {
       toClient({ type: 'ack', id: msg.ackId });
+      if (options.readyLostRate > 0 && server.handOver && !server.gameOver && !server.readyYou && rng() < options.readyLostRate) {
+        // Acknowledged, never durable, and the process dies: the mark is gone and the connection with it.
+        log(`server: acknowledged hand:ready(${msg.handNumber}) but was restarted before it was durable`);
+        // The ack is on its way (at most 250 ms); the restart comes after it has landed, as the real kill does.
+        clock.after(300, 'server restart', () => dropConnection());
+        return;
+      }
       if (server.handOver && !server.gameOver && (msg.handNumber === undefined || msg.handNumber === server.handNumber)) {
         server.readyYou = true;
         log(`server: human ready for hand ${server.handNumber}`);
@@ -224,6 +231,8 @@ export function runWorld(seed: number, options: FuzzOptions = DEFAULT_OPTIONS): 
   type RevealView = { handNumber: number; version: number };
   const client = {
     socketId: 1,
+    /** which connection the socket is on: a reconnect is a new one (socket.id changes) even when the socket object is kept */
+    connection: 1,
     state: null as StateMsg | null,
     stateVersion: 0,
     reveal: null as RevealView | null,
@@ -342,6 +351,7 @@ export function runWorld(seed: number, options: FuzzOptions = DEFAULT_OPTIONS): 
     reveal: client.reveal,
     roomJoined: true,
     socketId: client.socketId,
+    connectionKey: connected ? `c${client.connection}` : null,
     socketConnected: connected,
   });
 
@@ -492,25 +502,30 @@ export function runWorld(seed: number, options: FuzzOptions = DEFAULT_OPTIONS): 
   }
 
   // ── chaos ──
+  const dropConnection = (afterReconnect?: () => void) => {
+    if (!connected) return;
+    connected = false;
+    epoch += 1;
+    log('connection lost');
+    render();
+    clock.after(between(100, 2500), 'reconnect', () => {
+      connected = true;
+      lastReconnectAt = clock.now;
+      epoch += 1;
+      client.socketId += 1;
+      client.connection += 1;
+      log('reconnected, asking for the room state');
+      for (const buffered of bufferedEmits.splice(0)) toServer(buffered);
+      toServer({ type: 'resync', clearsReveal: rng() < options.reconnectClearsReveal });
+      render();
+      afterReconnect?.();
+    });
+  };
   const scheduleDisconnect = () => {
     if (options.disconnectEveryMs <= 0) return;
     clock.after(-Math.log(1 - rng()) * options.disconnectEveryMs, 'disconnect', () => {
       if (server.gameOver && !client.reveal) return;
-      connected = false;
-      epoch += 1;
-      log('connection lost');
-      render();
-      clock.after(between(100, 2500), 'reconnect', () => {
-        connected = true;
-        lastReconnectAt = clock.now;
-        epoch += 1;
-        client.socketId += 1;
-        log('reconnected, asking for the room state');
-        for (const buffered of bufferedEmits.splice(0)) toServer(buffered);
-        toServer({ type: 'resync', clearsReveal: rng() < options.reconnectClearsReveal });
-        render();
-        scheduleDisconnect();
-      });
+      dropConnection(scheduleDisconnect);
     });
   };
 

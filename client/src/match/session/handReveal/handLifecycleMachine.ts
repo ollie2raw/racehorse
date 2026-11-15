@@ -30,6 +30,11 @@ export type HandView = {
   roomJoined: boolean;
   /** Which socket object is in use (null: none). A new connection object is a new id. */
   socketId: number | null;
+  /**
+   * Which connection the socket is on (socket.id while connected, else null). socket.io reconnects on the SAME socket object, so `socketId` does
+   * not change when a connection drops and comes back; this does. A server that restarted in between has forgotten anything not yet durable.
+   */
+  connectionKey: string | null;
   /** The socket is connected (what the recovery path checks). */
   socketConnected: boolean;
 };
@@ -44,8 +49,12 @@ export type HandLifecycleState = {
   /** The hand whose hand:ready this session has sent, and on which connection (a send in flight when the connection drops is lost). */
   readySentFor: number | null;
   readySentSocket: number | null;
+  /** The connection it was sent on (`connectionKey`): the socket object is kept across a reconnect, the connection is not. */
+  readySentConnection: string | null;
   /** The hand whose hand:ready the server has acknowledged. */
   readyAckedFor: number | null;
+  /** The connection that acknowledgement came on. An ack from an earlier connection does not count on a later one (see `connectionKey`). */
+  readyAckedConnection: string | null;
   /** A recovery send is latched, so it is not repeated while the conditions hold. */
   recoveryLatched: boolean;
   /** The reveal and gameOver the auto-continue was last armed for, so it restarts only when they change. */
@@ -63,7 +72,7 @@ export type HandLifecycleEvent =
   | { type: 'revealTimerFired'; handNumber: number }
   | { type: 'autoContinueFired' }
   | { type: 'continue' }
-  | { type: 'readySettled'; handNumber: number | null; source: 'continue' | 'recovery'; ok: boolean };
+  | { type: 'readySettled'; handNumber: number | null; source: 'continue' | 'recovery'; ok: boolean; connectionKey?: string | null };
 
 export type HandLifecycleEffect =
   | { type: 'armRevealTimer'; handNumber: number; delayMs: number }
@@ -82,6 +91,7 @@ export const EMPTY_HAND_VIEW: HandView = {
   reveal: null,
   roomJoined: false,
   socketId: null,
+  connectionKey: null,
   socketConnected: false,
 };
 
@@ -92,7 +102,9 @@ export function initialHandLifecycleState(seed: Partial<HandLifecycleState> = {}
     openedFor: null,
     readySentFor: null,
     readySentSocket: null,
+    readySentConnection: null,
     readyAckedFor: null,
+    readyAckedConnection: null,
     recoveryLatched: false,
     autoContinueFor: null,
     view: EMPTY_HAND_VIEW,
@@ -119,7 +131,8 @@ export function stepsForViewChange(prev: HandView | null, next: HandView): HandL
     revealChanged ||
     prev.preGameDraw !== next.preGameDraw ||
     prev.roomJoined !== next.roomJoined ||
-    prev.socketId !== next.socketId
+    prev.socketId !== next.socketId ||
+    prev.connectionKey !== next.connectionKey
   ) {
     steps.push('recovery');
   }
@@ -141,9 +154,12 @@ function readyHandNumber(view: HandView): number | undefined {
  */
 function recoveryStep(state: HandLifecycleState, view: HandView, effects: HandLifecycleEffect[]): HandLifecycleState {
   const hand = view.hand;
+  // An acknowledgement only settles the hand on the connection it came on: after a reconnect the server may have restarted and lost a mark it
+  // acknowledged before it was durable (MP_HAND_BOUNDARY_FAST), so it is sent again. The server ignores a duplicate, so a mark it kept costs nothing.
   const handled =
     hand !== null &&
-    (state.readyAckedFor === hand.handNumber || (state.readySentFor === hand.handNumber && state.readySentSocket === view.socketId));
+    ((state.readyAckedFor === hand.handNumber && state.readyAckedConnection === view.connectionKey) ||
+      (state.readySentFor === hand.handNumber && state.readySentSocket === view.socketId && state.readySentConnection === view.connectionKey));
   const needsReady =
     Boolean(hand?.handOver) &&
     !hand?.gameOver &&
@@ -156,7 +172,7 @@ function recoveryStep(state: HandLifecycleState, view: HandView, effects: HandLi
     view.socketConnected;
   if (!needsReady) return state.recoveryLatched ? { ...state, recoveryLatched: false } : state;
   effects.push({ type: 'sendReady', handNumber: hand?.handNumber, source: 'recovery' });
-  return { ...state, recoveryLatched: true, readySentFor: hand?.handNumber ?? null, readySentSocket: view.socketId };
+  return { ...state, recoveryLatched: true, readySentFor: hand?.handNumber ?? null, readySentSocket: view.socketId, readySentConnection: view.connectionKey };
 }
 
 /** Arm the reveal for a hand that is over; cancel a pending one when the hand is no longer over. */
@@ -212,7 +228,7 @@ function continueStep(state: HandLifecycleState): Step {
   const handNumber = readyHandNumber(view);
   let next = state;
   if (view.socketId !== null && view.roomJoined) {
-    next = { ...next, readySentFor: handNumber ?? null, readySentSocket: view.socketId };
+    next = { ...next, readySentFor: handNumber ?? null, readySentSocket: view.socketId, readySentConnection: view.connectionKey };
     effects.push({ type: 'sendReady', handNumber, source: 'continue' });
   }
   effects.push({ type: 'closeReveal' });
@@ -248,7 +264,10 @@ export function reduceHandLifecycle(state: HandLifecycleState, event: HandLifecy
       return continueStep(state);
     case 'readySettled': {
       if (event.ok) {
-        return { state: { ...state, readyAckedFor: event.handNumber }, effects: [] };
+        return {
+          state: { ...state, readyAckedFor: event.handNumber, readyAckedConnection: event.connectionKey !== undefined ? event.connectionKey : state.view.connectionKey },
+          effects: [],
+        };
       }
       // Never acknowledged (the connection dropped with it in flight, or the ack timed out): it is not sent after all. Look again at once, on
       // the current view, rather than waiting for the view to change: nothing else would run the check, and the next-hand clock would ready
@@ -259,6 +278,7 @@ export function reduceHandLifecycle(state: HandLifecycleState, event: HandLifecy
         recoveryLatched: false,
         readySentFor: state.readySentFor === event.handNumber ? null : state.readySentFor,
         readySentSocket: state.readySentFor === event.handNumber ? null : state.readySentSocket,
+        readySentConnection: state.readySentFor === event.handNumber ? null : state.readySentConnection,
       };
       if (event.source === 'recovery') effects.push({ type: 'warnReadyFailed' });
       next = recoveryStep(next, next.view, effects);

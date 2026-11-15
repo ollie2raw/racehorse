@@ -81,6 +81,12 @@ export type FuzzOptions = {
   silentDropRate: number;
   /** Probability that the player taps Continue rather than waiting for the countdown. */
   tapRate: number;
+  /**
+   * Probability that the server acknowledges the player's hand:ready and then loses the mark with a restart (MP_HAND_BOUNDARY_FAST: the
+   * ack comes before the write, and a hard kill inside the window takes the mark with it). The connection drops and comes back; the
+   * client must send hand:ready again. A mark the server still has is ignored as a duplicate.
+   */
+  readyLostRate: number;
 };
 
 export const DEFAULT_OPTIONS: FuzzOptions = {
@@ -89,6 +95,7 @@ export const DEFAULT_OPTIONS: FuzzOptions = {
   reconnectClearsReveal: 0.7,
   silentDropRate: 0,
   tapRate: 0.6,
+  readyLostRate: 0,
 };
 
 export const NEXT_HAND_CLOCK_MS = 45_000;

@@ -38,6 +38,11 @@ export type UseHandRevealSequenceResult = {
   handReadyRecoveryRef: MutableRefObject<boolean>;
 };
 
+/** The connection the socket is on: socket.io keeps the socket object across a reconnect but gives each connection a new id. */
+function connectionKeyOf(socket: { connected?: boolean; id?: string } | null | undefined): string | null {
+  return socket?.connected ? (socket.id ?? null) : null;
+}
+
 /** A stable number per object, so the machine can tell "a new socket" or "a new state" without holding either. */
 function useIdentityCounter(value: unknown): number {
   const last = useRef<{ value: unknown; id: number }>({ value: undefined, id: 0 });
@@ -94,6 +99,7 @@ export function useHandRevealSequence(
       reveal: p.handReveal ? { handNumber: p.handReveal.handNumber, version: rv } : null,
       roomJoined: Boolean(p.joinedRoom),
       socketId: p.socket ? sid : null,
+      connectionKey: connectionKeyOf(p.socket),
       socketConnected: Boolean(p.socket?.connected),
     };
   }, []);
@@ -178,9 +184,11 @@ export function useHandRevealSequence(
         if (effect.source === 'recovery' && import.meta.env.DEV) {
           logger.operational('hand:ready', 'recovering lost hand:ready signal after reconnect');
         }
+        // The connection it goes out on: an acknowledgement settles the hand only on that connection.
+        const sentOn = connectionKeyOf(socketNow);
         emitHandReady(socketNow, room, effect.handNumber).then(
           () => {
-            dispatchRef.current({ type: 'readySettled', handNumber: effect.handNumber ?? null, source: effect.source, ok: true });
+            dispatchRef.current({ type: 'readySettled', handNumber: effect.handNumber ?? null, source: effect.source, ok: true, connectionKey: sentOn });
           },
           (error) => {
             dispatchRef.current({ type: 'readySettled', handNumber: effect.handNumber ?? null, source: effect.source, ok: false });
@@ -265,6 +273,8 @@ export function useHandRevealSequence(
     handReveal,
     joinedRoom,
     socket,
+    socket?.id,
+    socket?.connected,
     state?.handOver,
     state?.gameOver,
     state?.handNumber,

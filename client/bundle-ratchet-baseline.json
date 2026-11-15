@@ -1,5 +1,5 @@
 {
-  "total": 3543903,
+  "total": 3545020,
   "chunks": {
     "ActivityFeedLobbyBridge": 34153,
     "analyzer": 106395,
@@ -8,7 +8,7 @@
     "bot-guided": 113248,
     "bot-hand-lifecycle": 53516,
     "bot-heuristics": 24269,
-    "BotMatchScreen": 258890,
+    "BotMatchScreen": 259459,
     "DailyFritzLeaderboardRoute": 20296,
     "DailyFritzScreen": 54298,
     "FriendsScreenLobbyBridge": 20712,
@@ -19,7 +19,7 @@
     "GuidedMatchSourceEditor": 11234,
     "HistoricalGameReviewPortal": 25252,
     "HomeScreen": 41507,
-    "index": 590922,
+    "index": 591470,
     "LearnHome": 15051,
     "LearnHowToPlayRacehorse": 36075,
     "LegalScreen": 20615,

@@ -25,6 +25,8 @@ const SCENARIOS: Record<string, Partial<FuzzOptions>> = {
   'a player who always taps Continue, on a flaky connection': { tapRate: 1, disconnectEveryMs: 10_000 },
   'state updates silently dropped by the client (the dimmed-tiles scenario)': { silentDropRate: 0.05 },
   'state updates silently dropped on a flaky connection': { silentDropRate: 0.2, disconnectEveryMs: 8_000 },
+  'a server restart that loses an acknowledged ready mark (MP_HAND_BOUNDARY_FAST)': { readyLostRate: 0.3, disconnectEveryMs: 8_000 },
+  'a restart that sometimes loses the mark, with taps and countdowns': { readyLostRate: 0.5, tapRate: 0.5, disconnectEveryMs: 6_000 },
 };
 
 describe('the hand lifecycle fuzzer', () => {

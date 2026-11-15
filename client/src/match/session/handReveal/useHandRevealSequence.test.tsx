@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { useHandRevealSequence, type UseHandRevealSequenceParams } from './useHandRevealSequence';
 import type { GameState } from '../../../types';
 
@@ -200,6 +200,39 @@ describe('useHandRevealSequence — the player is ready when they have seen the 
 
     expect(emitHandReady).toHaveBeenCalledTimes(1);
     expect(emitHandReady).toHaveBeenCalledWith(socket, 'ROOM123', 2);
+  });
+
+  it('resends an acknowledged hand:ready after a reconnect on the same socket object (the server may have restarted and lost the mark)', async () => {
+    // socket.io keeps the Socket object when it reconnects; only its id changes.
+    const live = { connected: true, id: 'conn-a' };
+    const state = makeState({ handNumber: 2 });
+    const p = (handReveal: UseHandRevealSequenceParams['handReveal'], s = state): UseHandRevealSequenceParams => ({ ...params(s, handReveal), socket: live as never });
+    const { rerender } = renderHook(({ handReveal, s }) => useHandRevealSequence(p(handReveal, s)), {
+      initialProps: { handReveal: null as UseHandRevealSequenceParams['handReveal'], s: state },
+    });
+    vi.advanceTimersByTime(1500);
+    rerender({ handReveal: reveal(2), s: state });
+    vi.advanceTimersByTime(4100); // continued: hand:ready sent on conn-a
+    await act(async () => { await Promise.resolve(); }); // acknowledged
+    rerender({ handReveal: null, s: state });
+    expect(emitHandReady).toHaveBeenCalledTimes(1);
+
+    // The same connection echoing the state does not send it again.
+    rerender({ handReveal: null, s: makeState({ handNumber: 2 }) });
+    expect(emitHandReady).toHaveBeenCalledTimes(1);
+
+    live.connected = false; // the server goes away
+    rerender({ handReveal: null, s: state });
+    expect(emitHandReady).toHaveBeenCalledTimes(1); // nothing is sent while offline
+    live.connected = true;
+    live.id = 'conn-b'; // back on a new connection, same socket object
+    rerender({ handReveal: null, s: makeState({ handNumber: 2 }) }); // the rejoin brings the state again
+
+    expect(emitHandReady).toHaveBeenCalledTimes(2);
+    expect(emitHandReady).toHaveBeenLastCalledWith(live, 'ROOM123', 2);
+    await act(async () => { await Promise.resolve(); });
+    rerender({ handReveal: null, s: makeState({ handNumber: 2 }) });
+    expect(emitHandReady).toHaveBeenCalledTimes(2); // acknowledged on conn-b: not repeated
   });
 
   it('does not re-signal while the reveal is still waiting to open', () => {

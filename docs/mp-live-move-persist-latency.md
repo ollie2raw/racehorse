@@ -288,9 +288,9 @@ scheduled-tournament rooms. A `degraded` room (a debounced mark write failed) ma
 itself the proven-durable write that heals it; a `failed` room (database fence) never does.
 
 What it gives up: the first player's mark is acknowledged before it is durable. A hard kill (not a SIGTERM, which flushes)
-inside ~75 ms + one write loses that mark; the restarted room shows nobody ready. The client treats an acknowledged
-`hand:ready` as handled and does not resend it after a reconnect, so that player would have to leave and rejoin the room.
-Follow-up (client, not in this change): resend `hand:ready` after a reconnect even when acknowledged; the server ignores
-duplicates.
+inside ~75 ms + one write loses that mark; the restarted room shows nobody ready. The client used to treat an acknowledged
+`hand:ready` as handled for good, so that player was stuck until they left and rejoined. It now sends `hand:ready` again
+after any reconnect (`handLifecycleMachine`: an acknowledgement only counts on the connection it came on); the server ignores
+a duplicate (`stale_or_duplicate_hand_ready`, `ignored: true`), so a mark it kept costs nothing.
 
 Tests: `server/src/multiplayer/handBoundaryFast.test.ts`, each case with `LIVE_SESSION_LOG_ENTRIES` off and on.
