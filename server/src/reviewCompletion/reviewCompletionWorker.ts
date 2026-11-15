@@ -27,6 +27,7 @@ import { config } from '../config';
 import { isReviewSweepEnabled } from './reviewSweepFlag';
 import { withBoundedExactOption } from './reviewBoundedExactFlag';
 import { isReviewCpuBenchmarkEnabled } from './reviewCpuBenchmarkFlag';
+import { reviewYieldDecision, shouldDeferClaims, waitForReviewSlot } from './reviewLivePlayYield';
 import { withCutHonestyOption } from './reviewCutHonestyFlag';
 import {
   noteReviewCpuBenchmark,
@@ -256,7 +257,8 @@ export async function retryReviewCompletionJob(input: {
   return { kind: 'restarted', job: restarted };
 }
 
-type SweepResult = { ran: number; completed: number; recovered: number };
+/** `yielded`: the sweep claimed nothing because a game is live (the periodic timer must not back off to its idle interval for that). */
+type SweepResult = { ran: number; completed: number; recovered: number; yielded?: boolean };
 type EvaluatePosition = NonNullable<RunCompletionPassOptions['evaluatePosition']>;
 
 let searchRunner: ReviewSearchRunner | null = null;
@@ -264,10 +266,10 @@ let evaluatorOverride: EvaluatePosition | null = null;
 
 /** Search runs in a worker thread, never on this process's event loop. */
 function evaluatePositionOffThread(): EvaluatePosition {
-  if (evaluatorOverride) return evaluatorOverride;
+  if (evaluatorOverride) return withLivePlayYield(evaluatorOverride);
   searchRunner ??= new ReviewSearchRunner();
   const runner = searchRunner;
-  return async (snapshot, options) => {
+  return withLivePlayYield(async (snapshot, options) => {
     // Per-decision cost, so /health can tell an expensive search from a CPU-starved instance (reviewDecisionCost.ts).
     const startedAt = performance.now();
     const cpuBefore = process.cpuUsage();
@@ -292,6 +294,20 @@ function evaluatePositionOffThread(): EvaluatePosition {
       ...(result.evaluation.boundedSearch ? { boundedStop: result.evaluation.boundedSearch.stopReason, boundedHands: result.evaluation.boundedSearch.handsVisited } : {}),
     }, 'review decision evaluated');
     return result;
+  });
+}
+
+/** True while a pass has lost its lease: a held decision stops holding so the pass can wind down. */
+let passLeaseLost = false;
+
+/**
+ * Holds each decision's evaluation while a game is live (reviewLivePlayYield.ts). The hold is inside the running pass, so
+ * the claim, its attempt count and its lease heartbeat are untouched: nothing is aborted, released or retried.
+ */
+function withLivePlayYield(evaluate: EvaluatePosition): EvaluatePosition {
+  return async (snapshot, options) => {
+    await waitForReviewSlot({ shouldStop: () => isProcessClosing() || passLeaseLost });
+    return evaluate(snapshot, options);
   };
 }
 
@@ -326,7 +342,7 @@ export function sweepReviewCompletionJobs(limit = 4): Promise<SweepResult> {
     return Promise.resolve({ ran: 0, completed: 0, recovered: 0 });
   }
   const run = (async () => {
-    const total: SweepResult = { ran: 0, completed: 0, recovered: 0 };
+    const total: SweepResult = { ran: 0, completed: 0, recovered: 0, yielded: false };
     try {
       do {
         sweepRequestedAgain = false;
@@ -334,6 +350,7 @@ export function sweepReviewCompletionJobs(limit = 4): Promise<SweepResult> {
         total.ran += round.ran;
         total.completed += round.completed;
         total.recovered += round.recovered;
+        total.yielded ||= round.yielded === true;
       } while (sweepRequestedAgain && !isProcessClosing());
     } catch (error) {
       // Listing the claimable jobs failed (for example its database function is missing): record why, then let the caller see it.
@@ -354,6 +371,9 @@ async function sweepOnce(limit: number): Promise<SweepResult> {
   let ran = 0;
   let completed = 0;
   let recovered = 0;
+  let yielded = false;
+  // A game is live: claim nothing (a claim counts an attempt), and skip the list call too. Jobs stay queued and the next tick looks again.
+  if (shouldDeferClaims()) return { ran, completed, recovered, yielded: true };
   const listedAt = Date.now();
   // The list is only a hint: claim_review_completion_job_v2 re-checks each
   // job on its locked row when the claim lands.
@@ -364,6 +384,11 @@ async function sweepOnce(limit: number): Promise<SweepResult> {
   // One job at a time: there is one search worker thread.
   for (const job of claimable) {
     if (isProcessClosing()) break;
+    // Play can start while an earlier job in this round runs: do not claim the next one into it.
+    if (ran > 0 && shouldDeferClaims()) {
+      yielded = true;
+      break;
+    }
     const hadForeignClaim =
       job.claimToken != null
       && job.leaseExpiresAt != null
@@ -381,7 +406,7 @@ async function sweepOnce(limit: number): Promise<SweepResult> {
       recordSweepFailure(error, 'pass', job.jobId);
     }
   }
-  return { ran, completed, recovered };
+  return { ran, completed, recovered, yielded };
 }
 
 /**
@@ -393,6 +418,7 @@ async function sweepOnce(limit: number): Promise<SweepResult> {
 async function runJobPass(jobId: string, claimToken: string) {
   let heartbeat: ReturnType<typeof setInterval> | null = null;
   let leaseLost = false;
+  passLeaseLost = false;
   currentPassJobId = jobId;
   currentPassAttempt = null;
   const throttleBefore = readCpuThrottle();
@@ -418,6 +444,7 @@ async function runJobPass(jobId: string, claimToken: string) {
             .then((renewed) => {
               if (renewed || leaseLost) return;
               leaseLost = true;
+              passLeaseLost = true;
               log.warn({ jobId, generation }, 'review lease lost; stopping pass');
               searchRunner?.abort('review lease lost');
             })
@@ -431,6 +458,7 @@ async function runJobPass(jobId: string, claimToken: string) {
     });
   } finally {
     if (heartbeat) cancelProcessInterval(heartbeat);
+    passLeaseLost = false;
     // The container's CPU throttle counters across this pass: a throttled job says so on /health.
     noteReviewJobThrottle(jobId, throttleBefore, readCpuThrottle(), performance.now() - passStartedAt);
   }
@@ -483,7 +511,8 @@ export function scheduleReviewCompletionSweep(): void {
   sweepTimer = processInterval('review', () => {
     if (!shouldRunPeriodicSweep(Date.now())) return;
     return sweepReviewCompletionJobs()
-      .then((result) => notePeriodicSweep(Date.now(), result.ran))
+      // A sweep that yielded to live play is not an idle one: keep the normal tick so the queue is looked at again soon after the game ends.
+      .then((result) => notePeriodicSweep(Date.now(), result.ran + (result.yielded ? 1 : 0)))
       .catch((error) => {
         log.warn({ err: error }, 'periodic sweep failed');
       });
@@ -620,11 +649,14 @@ export function registerReviewCompletionJobsRoute(app: Application): void {
     const complete = jobAuthoritativeComplete(job);
     const now = Date.now();
     const sweep = getReviewSweepStatus();
+    const liveYield = reviewYieldDecision(now);
     res.status(200).json({
       jobId: job.jobId,
       status: job.status,
       // queued (no pass holds it), running (a live lease) or the terminal states: the card says "Queued" and "Analyzing" truthfully from this.
       stage: jobStage(job, now),
+      // True while the sweep is holding this job back because a game is being played; it resumes when the room goes quiet (or in slices after 10 minutes of continuous play).
+      pausedForLivePlay: !complete && job.status !== 'failed_fatal' && isReviewSweepEnabled() && !liveYield.allowed,
       // How long since the job last changed; a queued job that keeps growing this is stuck, and `sweepError` says why when the sweep knows.
       waitingMs: Math.max(0, now - (job.updatedAt ?? job.createdAt)),
       sweepError: complete || sweep.lastErrorAt == null || sweep.lastErrorAt < job.createdAt

@@ -200,6 +200,19 @@ describe('GET /health — reviewSweep', () => {
     delete process.env.REVIEW_BOUNDED_EXACT_ENABLED;
   });
 
+  it('shows whether review is paused for live play, and the counters behind it', async () => {
+    const request = makeHarness();
+    const { body } = await request('GET', '/health');
+    expect(body.reviewYield).toMatchObject({
+      enabled: true,
+      pausedForLivePlay: false,
+      claimsDeferred: 0,
+      decisionsHeld: 0,
+      starvationSlices: 0,
+      config: { activityWindowMs: 60_000, lagThresholdMs: 100, starvationAfterMs: 600_000, sliceOnMs: 5_000, slicePeriodMs: 60_000 },
+    });
+  });
+
   it('says whether incremental live-session log writes are on (off by default; exactly "true" turns it on)', async () => {
     const request = makeHarness();
     delete process.env.LIVE_SESSION_LOG_ENTRIES;

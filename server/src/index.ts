@@ -142,6 +142,8 @@ import {
   getRoomCanDraw,
   getRoomMatchEventMeta,
   getRoomRuntimeStats,
+  listRoomCodes,
+  peekRoom,
   type DrawAnimationStep,
   type Room,
 } from './rooms';
@@ -287,6 +289,8 @@ import {
   registerReviewCompletionJobsRoute,
   scheduleReviewCompletionSweep,
 } from './reviewCompletion/reviewCompletionWorker';
+import { REVIEW_YIELD_CONFIG, isReviewYieldEnabled, setReviewLiveRoomProbe, startReviewLagSampler } from './reviewCompletion/reviewLivePlayYield';
+import { createLiveRoomProbe } from './reviewCompletion/liveRoomProbe';
 import {
   getDailyFritzEventsPersistenceAvailability,
   probeDailyFritzEventsPersistence,
@@ -960,6 +964,14 @@ server.listen(PORT, () => {
   scheduleRoomRetention();
   scheduleDeferredGhostDrain();
   scheduleTerminalCompletionRecovery();
+  // The review sweep yields to live play: a room with a connected socket and a recent match event.
+  setReviewLiveRoomProbe(createLiveRoomProbe({
+    roomCodes: listRoomCodes,
+    peekRoom,
+    connectedSockets: (code) => io.sockets.adapter.rooms.get(code)?.size ?? 0,
+    activityWindowMs: REVIEW_YIELD_CONFIG.activityWindowMs,
+  }));
+  if (isReviewYieldEnabled()) onProcessStop(startReviewLagSampler());
   scheduleReviewCompletionSweep();
   onProcessStop(startResourceUsageLog());
   const lagMonitor = startEventLoopLagMonitor({
