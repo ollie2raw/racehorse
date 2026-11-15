@@ -18,6 +18,7 @@ import {
 } from '../durableReviewCompletionRuntime';
 
 const POLICY: ReviewCompletionAttemptPolicy = { maxAttempts: 3, backoffMs: (n) => 30_000 * 2 ** (n - 1) };
+const CLOCK_SLACK_MS = 50;
 const LEASE = 60_000;
 
 function snapshots(count = 3) {
@@ -176,8 +177,9 @@ describe('resume from checkpoint and retryable per-position failures', () => {
     expect(slow.lifecycle).toBe('FAILED_RETRYABLE');
     expect(slow.attemptCount).toBe(1);
     expect(pass1.job.status).toBe('pending');
-    // Job-level backoff applies to the requeue, not just the decision backoff.
-    expect(pass1.job.nextAttemptAt - pass1.job.updatedAt).toBeGreaterThanOrEqual(30_000);
+    // Job-level backoff applies to the requeue, not just the decision backoff. nextAttemptAt and updatedAt come from
+    // two separate Date.now() reads inside the pass, so allow a few ms of clock slack (an exact >= 30_000 flaked at 29_999).
+    expect(pass1.job.nextAttemptAt - pass1.job.updatedAt).toBeGreaterThanOrEqual(30_000 - CLOCK_SLACK_MS);
     const doneAfterPass1 = pass1.job.decisions
       .filter((d) => d.lifecycle === 'SCORED' || d.lifecycle === 'FORCED')
       .map((d) => d.decisionId);
