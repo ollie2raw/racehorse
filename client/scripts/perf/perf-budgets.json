@@ -1,0 +1,47 @@
+{
+  "_comment": "Thresholds for perfBudgetsTier1.mjs (blocking) and the report-only limits for perfTimingTier2.mjs. See docs/perf-budget.md. Tier 1 are counts and bytes (they do not depend on runner speed). Tier 2 limits are provisional: calibrate to about 2.5x the CI p95 after ten PRs of data, and only then make a timing check blocking.",
+  "tier1": {
+    "jsBeforeFirstPaintBrotliBytes": {
+      "max": 460000,
+      "note": "entry script + every modulepreload in dist/index.html, brotli quality 6 (the staticServer's). Measured 440185 on 2026-11-15."
+    },
+    "dailyCheckpointPostsOver3Hands": {
+      "max": 12,
+      "note": "phone profile, 4x CPU, 12 s checkpoint window. Measured 6; the old 600 ms debounce gave 26."
+    },
+    "dailyCheckpointBytesOver3Hands": {
+      "max": 450000,
+      "note": "Measured 259092; the old debounce gave 1039967."
+    },
+    "awaitedRoomWritesSecondPlayer": {
+      "max": 1,
+      "note": "median over the boundaries, MP_HAND_BOUNDARY_FAST=true, stub at 290 ms, second tap 10 ms after the first. Flag off is 3."
+    },
+    "roomSessionBytesPerStepAtHandBoundary": {
+      "max": 2000,
+      "note": "median over the boundaries of (room-session bytes written from the first tap to the new hand dealt) / (game-state steps so far), flag on, entries off. Measured 1055-1485, runs' medians 1187-1357 on 2026-11-15; the snapshot grows with the match, so bytes per step is what stays comparable. S1 on would be about 300."
+    }
+  },
+  "tier2": {
+    "mpSecondAckMsAt290": {
+      "max": 500,
+      "note": "flag on; 301-306 ms measured. Dominated by the stub's 290 ms, not by CPU, so it holds on CI: one write is ~306, two ~600, three ~870."
+    },
+    "mpDealtMsAt290": {
+      "max": 500,
+      "note": "flag on; 307-338 ms measured; two writes would be ~620."
+    },
+    "pvfStartMatchToMatchMsPhoneCold": {
+      "max": 1500,
+      "note": "PLACEHOLDER, same caveat: 380 ms after #507, 624 before."
+    },
+    "pvfHomeToHubMsPhoneCold": {
+      "max": 1000,
+      "note": "PLACEHOLDER until CI data exists: 144 ms on the laptop after #507 (475 before). CPU-bound, so the CI value is unknown; set to about 2.5x the CI p95 after ten PRs, and check it still sits below the regressed value x the CI/laptop factor."
+    },
+    "coldLoadFcpMsPhone": {
+      "max": 4000,
+      "note": "PLACEHOLDER, same caveat: 1148-1228 ms on the laptop."
+    }
+  }
+}

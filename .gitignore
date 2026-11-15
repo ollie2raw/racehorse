@@ -33,3 +33,4 @@ packages/review-engine/src/devtools/soak-results/
 
 # Local reference docs dropped into the repo root (not repo assets)
 /Racehorse-Dominoes-Growth-Assessment.pdf
+client/dist-perf-daily/
