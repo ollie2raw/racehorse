@@ -86,7 +86,7 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       - name: Tier 1 budgets (bundle bytes, Daily checkpoint, hand boundary writes and bytes)
-        run: node client/scripts/perf/perfBudgetsTier1.mjs --out tier1-result.json --summary tier1-summary.md
+        run: node scripts/perf/perfBudgetsTier1.mjs --out tier1-result.json --summary tier1-summary.md
         working-directory: client
 
       - name: Job summary
@@ -149,7 +149,7 @@ jobs:
         run: npx playwright install chromium --with-deps
 
       - name: Tier 2 timings (median of 3, one retry per run)
-        run: node client/scripts/perf/perfTimingTier2.mjs --out tier2-result.json --summary tier2-summary.md
+        run: node scripts/perf/perfTimingTier2.mjs --out tier2-result.json --summary tier2-summary.md
         working-directory: client
 
       - name: Job summary
