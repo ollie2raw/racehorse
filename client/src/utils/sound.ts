@@ -95,6 +95,9 @@ function jitter(range = 0.02): number {
 
 // ─── Core builder ─────────────────────────────────────────────────────────
 
+/** Every synth envelope ends with a linear ramp to exactly zero this long, so no voice stops at a non-zero level (a click). */
+const END_FADE_S = 0.02;
+
 /**
  * buildThwack — constructs and fires one complete percussive sound event.
  *
@@ -156,12 +159,15 @@ function buildThwack(
   // A 150ms soft tail (ramp continuing past decayTime) ensures no abrupt cutoff.
   oscGain.gain.setValueAtTime(peakGain * jitter(0.02), t0);
   oscGain.gain.exponentialRampToValueAtTime(0.001, t0 + decayTime + 0.06);
+  // The exponential stops at -60 dB, not silence; finish to zero so the stop below is not a step.
+  oscGain.gain.linearRampToValueAtTime(0, t0 + decayTime + 0.06 + END_FADE_S);
 
   osc.connect(oscGain);
   oscGain.connect(lp);
 
   osc.start(t0);
-  osc.stop(t0 + decayTime + 0.01);
+  // Stop only after the envelope has finished: stopping at decayTime + 0.01 cut the tone mid-decay (about -40 dB).
+  osc.stop(t0 + decayTime + 0.06 + END_FADE_S + 0.005);
 
   // ── White noise friction burst ────────────────────────────────────────────
   // Simulates the tile surface scraping across felt at the moment of contact.
@@ -184,6 +190,7 @@ function buildThwack(
     // Ramp to 0.001 not 0: exponentialRamp to exactly 0 is undefined in the
     // Web Audio spec and causes a discontinuity click in some browsers.
     noiseEnv.gain.exponentialRampToValueAtTime(0.001, t0 + noiseDuration);
+    noiseEnv.gain.linearRampToValueAtTime(0, t0 + noiseDuration + 0.008);
 
     noise.connect(noiseEnv);
     noiseEnv.connect(lp); // noise shares the same lowpass — keeps it warm
@@ -457,12 +464,14 @@ export function playScoreSound(points: number, isMuted: boolean): void {
     env.gain.linearRampToValueAtTime(0.22, t + 0.04); // slight decay
     env.gain.linearRampToValueAtTime(0.18, t + 0.12); // sustain
     env.gain.exponentialRampToValueAtTime(0.001, t + 0.35); // release
+    env.gain.linearRampToValueAtTime(0, t + 0.35 + END_FADE_S);
 
     // Shimmer gain much quieter
     const env2 = ac.createGain();
     env2.gain.setValueAtTime(0, t);
     env2.gain.linearRampToValueAtTime(0.06, t + 0.01);
     env2.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    env2.gain.linearRampToValueAtTime(0, t + 0.2 + END_FADE_S);
 
     osc.connect(env);
     osc2.connect(env2);
@@ -611,6 +620,7 @@ export function playYourTurnSound(isMuted: boolean): void {
       env.gain.linearRampToValueAtTime(0.15, t0 + 0.012); // soft attack
       env.gain.linearRampToValueAtTime(0.1, t0 + 0.06); // slight decay
       env.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28); // gentle fade
+      env.gain.linearRampToValueAtTime(0, t0 + 0.28 + END_FADE_S);
 
       osc.connect(env);
       env.connect(out(ac));
@@ -645,6 +655,7 @@ export function playMatchFoundSound(isMuted: boolean): void {
       env.gain.setValueAtTime(0, t0);
       env.gain.linearRampToValueAtTime(0.18, t0 + 0.012);
       env.gain.exponentialRampToValueAtTime(0.001, t0 + 0.32);
+      env.gain.linearRampToValueAtTime(0, t0 + 0.32 + END_FADE_S);
 
       osc.connect(env);
       env.connect(out(ac));

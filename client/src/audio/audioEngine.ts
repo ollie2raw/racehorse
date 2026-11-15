@@ -187,6 +187,9 @@ export function readySample(url: string): AudioBuffer | null {
   return cached && !(cached instanceof Promise) ? cached : null;
 }
 
+/** How long the end of a sample fades to silence, so it never stops at a non-zero level. */
+const END_FADE_S = 0.04;
+
 /** Play a decoded buffer through the bus. False when audio is unavailable. */
 export function playBuffer(buffer: AudioBuffer, options: Playback = {}): boolean {
   const ac = getAudioContext();
@@ -203,6 +206,15 @@ export function playBuffer(buffer: AudioBuffer, options: Playback = {}): boolean
       gain.gain.linearRampToValueAtTime(level, t0 + options.fadeInS);
     } else {
       gain.gain.value = level;
+    }
+    // Fade the sample out over its last few ms: a recording that ends while still audible stops with a step (a click,
+    // heard as static on a laptop speaker). The tile sample is cut at about -50 dBFS.
+    const startAt = ac.currentTime + (options.delay ?? 0);
+    const playable = (buffer.duration - Math.max(0, options.offset ?? 0)) / Math.max(0.01, options.rate ?? 1);
+    const fadeOutS = Math.min(END_FADE_S, playable / 2);
+    if (fadeOutS > 0) {
+      gain.gain.setValueAtTime(level, startAt + playable - fadeOutS);
+      gain.gain.linearRampToValueAtTime(0, startAt + playable);
     }
     source.connect(gain);
     let tail: AudioNode = gain;
