@@ -10,6 +10,7 @@ import {
   deleteLiveRoomSession,
   ensureRoomHydrated,
   finalizeAndDeleteLiveRoomSession,
+  LOG_ENTRIES_FAILURE_COOLDOWN_MS,
   LOG_ENTRIES_UNAVAILABLE_RETRY_MS,
   persistLiveRoomSessionNow,
   resetLiveRoomPersistenceForTests,
@@ -31,7 +32,28 @@ const db = vi.hoisted(() => ({
   fullRowPosts: 0,
   rpcMissing: false,
   failNextRpc: false,
+  /** While set, the RPC throws this message (and changes nothing, like a rolled-back transaction). */
+  rpcError: null as string | null,
+  /** While set, the whole-row upsert throws this message. */
+  fullRowError: null as string | null,
 }));
+
+const logCalls = vi.hoisted(() => ({
+  warn: [] as Array<[Record<string, unknown>, string]>,
+  error: [] as Array<[Record<string, unknown>, string]>,
+}));
+vi.mock('../logger', () => {
+  const fake: Record<string, unknown> = {
+    warn: (obj: Record<string, unknown>, msg: string) => logCalls.warn.push([obj, msg]),
+    error: (obj: Record<string, unknown>, msg: string) => logCalls.error.push([obj, msg]),
+    info: () => undefined,
+    debug: () => undefined,
+    trace: () => undefined,
+    fatal: () => undefined,
+  };
+  fake.child = () => fake;
+  return { logger: fake, childLogger: () => fake };
+});
 
 vi.mock('../supabaseUtils', () => ({
   supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
@@ -40,6 +62,7 @@ vi.mock('../supabaseUtils', () => ({
       if (db.rpcMissing) {
         throw new Error('Supabase request failed: 404 {"code":"PGRST202","message":"Could not find the function public.persist_room_live_session"}');
       }
+      if (db.rpcError) throw new Error(db.rpcError);
       if (db.failNextRpc) {
         db.failNextRpc = false;
         throw new Error('Supabase request failed: 503 upstream');
@@ -52,6 +75,7 @@ vi.mock('../supabaseUtils', () => ({
       return undefined;
     }
     if (path.startsWith('/rest/v1/room_live_sessions') && method === 'POST') {
+      if (db.fullRowError) throw new Error(db.fullRowError);
       db.fullRowPosts += 1;
       for (const row of JSON.parse(String(init?.body)) as Array<Record<string, unknown>>) {
         db.sessions.set(String(row.room_code), row);
@@ -189,6 +213,10 @@ beforeEach(() => {
   db.fullRowPosts = 0;
   db.rpcMissing = false;
   db.failNextRpc = false;
+  db.rpcError = null;
+  db.fullRowError = null;
+  logCalls.warn.length = 0;
+  logCalls.error.length = 0;
   vi.mocked(supabaseFetch).mockClear();
 });
 
@@ -245,23 +273,6 @@ describe('LIVE_SESSION_LOG_ENTRIES=true', () => {
     await persistLiveRoomSessionNow(room, roster);
 
     expect(db.rpcCalls[1]!.entries.map((e) => `${e.stream}:${e.idx}`)).toEqual(['events:3', 'ghost:seat-b:1']);
-  });
-
-  it('after a failed write, the next write resends everything since the last confirmed one', async () => {
-    const room = mkRoom('ENTR3', 2);
-    await persistLiveRoomSessionNow(room, roster);
-    play(room);
-    db.failNextRpc = true;
-    expect(await persistLiveRoomSessionNow(room, roster)).toBe(false);
-    play(room);
-    await persistLiveRoomSessionNow(room, roster);
-
-    expect(db.rpcCalls.at(-1)!.entries.map((e) => `${e.stream}:${e.idx}`)).toEqual([
-      'events:2',
-      'events:3',
-      'ghost:seat-a:1',
-      'ghost:seat-b:1',
-    ]);
   });
 
   it('a rematch reset rewrites entries from index 0 and hydration reads only the new match', async () => {
@@ -424,6 +435,181 @@ describe('LIVE_SESSION_LOG_ENTRIES=true', () => {
     await deleteLiveRoomSession('DEL1');
     await persistLiveRoomSessionNow(room, roster);
     expect(db.rpcCalls.at(-1)!.entries).toHaveLength(4);
+  });
+});
+
+describe('LIVE_SESSION_LOG_ENTRIES=true: the entries write fails', () => {
+  const TIMEOUT = 'Supabase request timed out after 8000ms: /rest/v1/rpc/persist_room_live_session';
+  const TABLE_MISSING = 'Supabase request failed: 404 {"code":"42P01","message":"relation \\"public.room_live_session_entries\\" does not exist"}';
+  const hydratedLogs = async (code: string) => {
+    resetRoomRuntimeForTests();
+    expect((await ensureRoomHydrated(code)).kind).toBe('hydrated');
+    const back = peekRoom(code)!;
+    return { events: back.events, ghostMoveLogs: back.ghostMoveLogs };
+  };
+
+  it.each([
+    ['a 503', 'Supabase request failed: 503 upstream', 'http_503'],
+    ['the function existing but the entries table missing', TABLE_MISSING, 'entries_table_missing'],
+    ['a request timeout', TIMEOUT, 'timeout'],
+    ['an unclassified error', 'Supabase request failed: 400 {"message":"boom"}', 'http_400'],
+  ])('%s: the same persist writes the whole row, with a distinct log line', async (_label, message, reason) => {
+    const room = mkRoom('FALL1', 3);
+    await persistLiveRoomSessionNow(room, roster);
+    play(room);
+    db.rpcError = message;
+
+    expect(await persistLiveRoomSessionNow(room, roster)).toBe(true);
+    expect(db.fullRowPosts).toBe(1);
+    const row = db.sessions.get('FALL1')!;
+    expect(row.events).toHaveLength(4);
+    expect((row.room_shell as Record<string, unknown>).logStorage).toBeUndefined();
+    expect(room.durability.status).toBe('healthy');
+
+    const fallbackLog = logCalls.warn.find(([, msg]) => msg.includes('LIVE_SESSION_LOG_ENTRIES write failed'));
+    expect(fallbackLog?.[0]).toMatchObject({ roomCode: 'FALL1', reason, cooldownMs: LOG_ENTRIES_FAILURE_COOLDOWN_MS });
+    // Only the real "function is missing" case may say the RPC is missing.
+    expect(logCalls.error.some(([, msg]) => msg.includes('is missing'))).toBe(false);
+  });
+
+  it('a request timeout is not labelled "RPC missing" and waits the short cooldown, not the long one', async () => {
+    vi.useFakeTimers();
+    const room = mkRoom('TMO1', 2);
+    db.rpcError = TIMEOUT;
+    await persistLiveRoomSessionNow(room, roster);
+    db.rpcError = null;
+    expect(LOG_ENTRIES_FAILURE_COOLDOWN_MS).toBeLessThan(LOG_ENTRIES_UNAVAILABLE_RETRY_MS);
+
+    play(room);
+    await persistLiveRoomSessionNow(room, roster);
+    expect(db.rpcCalls).toHaveLength(0); // still inside the cooldown: full rows
+    expect(db.fullRowPosts).toBe(2);
+
+    vi.advanceTimersByTime(LOG_ENTRIES_FAILURE_COOLDOWN_MS + 1);
+    play(room);
+    await persistLiveRoomSessionNow(room, roster);
+    expect(db.rpcCalls).toHaveLength(1);
+    expect(logCalls.error).toEqual([]);
+  });
+
+  it('a missing RPC still says so, and still waits the long cooldown', async () => {
+    vi.useFakeTimers();
+    const room = mkRoom('MISS1', 2);
+    db.rpcMissing = true;
+    await persistLiveRoomSessionNow(room, roster);
+    db.rpcMissing = false;
+    expect(logCalls.error[0]?.[0]).toMatchObject({ reason: 'rpc_missing' });
+    vi.advanceTimersByTime(LOG_ENTRIES_FAILURE_COOLDOWN_MS + 1);
+    play(room);
+    await persistLiveRoomSessionNow(room, roster);
+    expect(db.rpcCalls).toHaveLength(0);
+    vi.advanceTimersByTime(LOG_ENTRIES_UNAVAILABLE_RETRY_MS);
+    play(room);
+    await persistLiveRoomSessionNow(room, roster);
+    expect(db.rpcCalls).toHaveLength(1);
+  });
+
+  it.each([
+    'room_live_session_stale_write',
+    'room_live_session_stale_writer',
+    'room_live_session_stale_generation',
+    'room_live_session_retired_match',
+    'room_live_session_terminal_regression',
+    'room_live_session_owes_completion',
+  ])('a fence rejection (%s) never falls back to the whole-row upsert', async (code) => {
+    const room = mkRoom('FENCE1', 3);
+    await persistLiveRoomSessionNow(room, roster);
+    const rowBefore = structuredClone(db.sessions.get('FENCE1'));
+    play(room);
+    db.rpcError = `Supabase request failed: 400 {"code":"P0001","message":"${code}"}`;
+
+    expect(await persistLiveRoomSessionNow(room, roster)).toBe(false);
+    expect(db.fullRowPosts).toBe(0);
+    expect(db.sessions.get('FENCE1')).toEqual(rowBefore);
+    expect(room.durability.status).toBe('failed');
+    expect(logCalls.warn.some(([, msg]) => msg.includes('LIVE_SESSION_LOG_ENTRIES write failed'))).toBe(false);
+    expect(logCalls.error[0]?.[0]).toMatchObject({ error: code });
+
+    // No cooldown was started either: the next persist tries the RPC again, and a recovered database accepts it.
+    db.rpcError = null;
+    play(room);
+    expect(await persistLiveRoomSessionNow(room, roster)).toBe(true);
+    expect(db.rpcCalls.at(-1)!.entries.length).toBeGreaterThan(0);
+    expect(db.fullRowPosts).toBe(0);
+  });
+
+  it('fallback then restart: hydration restores identical move logs, from the full row', async () => {
+    const room = mkRoom('FALLRST', 3);
+    await persistLiveRoomSessionNow(room, roster); // entries mode: 3 moves in the entries table
+    play(room);
+    db.rpcError = 'Supabase request failed: 503 upstream';
+    await persistLiveRoomSessionNow(room, roster); // fallback: full row with 4 moves
+    play(room);
+    play(room);
+    await persistLiveRoomSessionNow(room, roster); // still in the cooldown: full row with 6 moves
+    expect(db.fullRowPosts).toBe(2);
+    expect([...db.entries.keys()].filter((k) => k.startsWith('FALLRST|events|')).length).toBe(3); // the table is stale
+
+    const back = await hydratedLogs('FALLRST');
+    expect(back.events).toEqual(room.events);
+    expect(back.ghostMoveLogs).toEqual(room.ghostMoveLogs);
+    expect(room.events).toHaveLength(6);
+  });
+
+  it('cooldown expiry returns to entries mode with no stale or short logs, in both directions', async () => {
+    vi.useFakeTimers();
+    const room = mkRoom('FLIP1', 3);
+    await persistLiveRoomSessionNow(room, roster); // entries
+    play(room);
+    db.rpcError = 'Supabase request failed: 503 upstream';
+    await persistLiveRoomSessionNow(room, roster); // full row (fallback)
+    db.rpcError = null;
+    play(room);
+    await persistLiveRoomSessionNow(room, roster); // full row (cooldown)
+    expect((db.sessions.get('FLIP1')!.room_shell as Record<string, unknown>).logStorage).toBeUndefined();
+    let back = await hydratedLogs('FLIP1');
+    expect(back.events).toEqual(room.events);
+    expect(back.ghostMoveLogs).toEqual(room.ghostMoveLogs);
+
+    // Cooldown over: entries mode again, and every entry is resent from index 0 (nothing is assumed confirmed).
+    vi.advanceTimersByTime(LOG_ENTRIES_FAILURE_COOLDOWN_MS + 1);
+    const room2 = peekRoom('FLIP1')!; // the hydrated room carries on
+    play(room2);
+    await persistLiveRoomSessionNow(room2, roster);
+    const call = db.rpcCalls.at(-1)!;
+    expect((call.session.room_shell as Record<string, unknown>).logStorage).toBe('entries');
+    expect(call.entries.filter((e) => e.stream === 'events').map((e) => e.idx)).toEqual([0, 1, 2, 3, 4, 5]);
+    back = await hydratedLogs('FLIP1');
+    expect(back.events).toEqual(room2.events);
+    expect(back.ghostMoveLogs).toEqual(room2.ghostMoveLogs);
+    expect(back.events).toHaveLength(6);
+
+    // Entries -> full row by switching the flag off: the row's marker decides, so both directions hydrate identically.
+    delete process.env.LIVE_SESSION_LOG_ENTRIES;
+    const room3 = peekRoom('FLIP1')!;
+    play(room3);
+    await persistLiveRoomSessionNow(room3, roster);
+    expect((db.sessions.get('FLIP1')!.room_shell as Record<string, unknown>).logStorage).toBeUndefined();
+    back = await hydratedLogs('FLIP1');
+    expect(back.events).toEqual(room3.events);
+    process.env.LIVE_SESSION_LOG_ENTRIES = 'true';
+    const room4 = peekRoom('FLIP1')!;
+    play(room4);
+    await persistLiveRoomSessionNow(room4, roster);
+    expect(db.rpcCalls.at(-1)!.entries.filter((e) => e.stream === 'events')).toHaveLength(room4.events.length);
+    back = await hydratedLogs('FLIP1');
+    expect(back.events).toEqual(room4.events);
+    expect(back.ghostMoveLogs).toEqual(room4.ghostMoveLogs);
+    expect(back.events).toHaveLength(8);
+  });
+
+  it('a failed fallback write is a normal degraded persist, not a loop', async () => {
+    const room = mkRoom('BOTH1', 2);
+    db.rpcError = 'Supabase request failed: 503 upstream';
+    db.fullRowError = 'Supabase request failed: 503 upstream';
+    expect(await persistLiveRoomSessionNow(room, roster)).toBe(false);
+    expect(room.durability.status).toBe('degraded');
+    expect(db.rpcCalls).toHaveLength(0);
   });
 });
 
