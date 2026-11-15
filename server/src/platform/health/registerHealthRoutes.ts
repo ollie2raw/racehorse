@@ -10,6 +10,7 @@ import { resolveReleaseVersion } from './releaseVersion';
 import { isReviewSweepEnabled } from '../../reviewCompletion/reviewSweepFlag';
 import { isReviewBoundedExactEnabled } from '../../reviewCompletion/reviewBoundedExactFlag';
 import { isReviewCutHonestyEnabled } from '../../reviewCompletion/reviewCutHonestyFlag';
+import { isLiveSessionLogEntriesEnabled } from '../../multiplayer/roomLivePersistence';
 import { getReviewSweepStatus } from '../../reviewCompletion/reviewSweepStatus';
 import {
   assessDailyPuzzleGenerationHealth,
@@ -135,6 +136,8 @@ export function registerHealthRoutes(deps: HealthRouteDeps): void {
       reviewBoundedExact: isReviewBoundedExactEnabled(),
       // Honest labelling of a review verdict cut short (REVIEW_CUT_HONESTY_ENABLED); off by default.
       reviewCutHonesty: isReviewCutHonestyEnabled(),
+      // Incremental live-session log writes (LIVE_SESSION_LOG_ENTRIES, S1); off by default, and needs the persist_room_live_session migration before it is turned on.
+      liveSessionLogEntries: isLiveSessionLogEntriesEnabled(),
       // Last tick, last claimed job, last error as a short code, and which database functions the review sweep is missing (empty when none): one request to see why a review is stuck.
       reviewSweepStatus: getReviewSweepStatus(),
     });

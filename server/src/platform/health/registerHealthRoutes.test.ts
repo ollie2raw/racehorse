@@ -200,6 +200,17 @@ describe('GET /health — reviewSweep', () => {
     delete process.env.REVIEW_BOUNDED_EXACT_ENABLED;
   });
 
+  it('says whether incremental live-session log writes are on (off by default; exactly "true" turns it on)', async () => {
+    const request = makeHarness();
+    delete process.env.LIVE_SESSION_LOG_ENTRIES;
+    expect((await request('GET', '/health')).body.liveSessionLogEntries).toBe(false);
+    process.env.LIVE_SESSION_LOG_ENTRIES = '1';
+    expect((await request('GET', '/health')).body.liveSessionLogEntries).toBe(false);
+    process.env.LIVE_SESSION_LOG_ENTRIES = 'true';
+    expect((await request('GET', '/health')).body.liveSessionLogEntries).toBe(true);
+    delete process.env.LIVE_SESSION_LOG_ENTRIES;
+  });
+
   it('says whether honest labelling of cut review verdicts is on (off by default; exactly "true" turns it on)', async () => {
     const request = makeHarness();
     delete process.env.REVIEW_CUT_HONESTY_ENABLED;
