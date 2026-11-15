@@ -57,8 +57,8 @@ describe('flushDailyFritzCheckpointOnUnload', () => {
 });
 
 describe('DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS', () => {
-  it('is within the requested 500-800ms window', () => {
-    expect(DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS).toBeGreaterThanOrEqual(500);
-    expect(DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS).toBeLessThanOrEqual(800);
+  it('is within the 10-15 s window', () => {
+    expect(DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS).toBeGreaterThanOrEqual(10_000);
+    expect(DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS).toBeLessThanOrEqual(15_000);
   });
 });

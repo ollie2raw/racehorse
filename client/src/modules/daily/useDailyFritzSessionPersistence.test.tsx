@@ -216,4 +216,131 @@ describe('useDailyFritzSessionPersistence', () => {
     });
     expect(saveDailyFritzCheckpointMock).not.toHaveBeenCalled();
   });
+
+  describe('mid-hand checkpoint window', () => {
+    const entry = (n: number) => ({
+      moveNumber: n,
+      handNumber: 1,
+      player: 'you' as const,
+      action: 'place' as const,
+      tile: [0, n] as [number, number],
+      position: 'left' as const,
+      boardEnds: [-1, -1] as [number, number],
+      handBefore: [[0, n]] as [number, number][],
+      validMoves: [[0, n]] as [number, number][],
+      pipDelta: 1,
+      pointsScored: 0,
+      boardState: [],
+      boardRenderState: null,
+      handSnapshot: [[0, n]] as [number, number][],
+      engineBestMove: null,
+    });
+    const props = (n: number, over: Record<string, unknown> = {}) => ({
+      enabled: true,
+      storageKey: 'racehorse:daily-fritz:test-window',
+      attemptId: 'attempt-1',
+      verifiedMatchId: 'verified-1',
+      runDate: '2026-07-25',
+      runFingerprint: 'run-fingerprint',
+      session: sessionFromHand(0),
+      moveLog: Array.from({ length: n }, (_, i) => entry(i + 1)),
+      movesUsed: n,
+      preGameDrawActive: false,
+      drawSequenceActive: false,
+      handResult: null,
+      ...over,
+    });
+    const revisionOf = (call: unknown) =>
+      ((call as { checkpoint: { checkpointRevision: number } }).checkpoint).checkpointRevision;
+    const callArg = (i: number) => (saveDailyFritzCheckpointMock.mock.calls as unknown as unknown[][])[i][0];
+    const settle = () => act(async () => { await Promise.resolve(); });
+
+    it('posts once per window with the newest state, and the window is not restarted by later moves', async () => {
+      const { rerender } = renderHook((p) => useDailyFritzSessionPersistence(p), { initialProps: props(1) });
+      for (let n = 2; n <= 5; n++) {
+        act(() => { vi.advanceTimersByTime(2_500); });
+        rerender(props(n));
+      }
+      // 10 s in: still inside the window the first move opened.
+      expect(saveDailyFritzCheckpointMock).toHaveBeenCalledTimes(0);
+      act(() => { vi.advanceTimersByTime(DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS - 10_000); });
+      await settle();
+      expect(saveDailyFritzCheckpointMock).toHaveBeenCalledTimes(1);
+      const posted = callArg(0);
+      const local = JSON.parse(window.localStorage.getItem('racehorse:daily-fritz:test-window')!);
+      expect(revisionOf(posted)).toBe(local.checkpointRevision);
+    });
+
+    it('flushes the unsent state when the tab is hidden (once), and not when it becomes visible', async () => {
+      const { rerender } = renderHook((p) => useDailyFritzSessionPersistence(p), { initialProps: props(1) });
+      rerender(props(2));
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+      expect(flushDailyFritzCheckpointOnUnloadMock).not.toHaveBeenCalled();
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+      expect(flushDailyFritzCheckpointOnUnloadMock).toHaveBeenCalledTimes(1);
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+      expect(flushDailyFritzCheckpointOnUnloadMock).toHaveBeenCalledTimes(1);
+      act(() => { vi.advanceTimersByTime(DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS * 2); });
+      expect(saveDailyFritzCheckpointMock).not.toHaveBeenCalled();
+    });
+
+    it('flushes the unsent state when the screen unmounts', () => {
+      const { rerender, unmount } = renderHook((p) => useDailyFritzSessionPersistence(p), { initialProps: props(1) });
+      rerender(props(2));
+      unmount();
+      expect(flushDailyFritzCheckpointOnUnloadMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('posts the hand-end checkpoint immediately, ahead of the window', async () => {
+      const handOne = sessionFromHand(0);
+      const { rerender } = renderHook((p) => useDailyFritzSessionPersistence(p), { initialProps: props(1, { session: handOne }) });
+      expect(saveDailyFritzCheckpointMock).not.toHaveBeenCalled();
+      rerender(props(2, { session: { ...handOne, match: { ...handOne.match, handOver: true } } }));
+      await settle();
+      expect(saveDailyFritzCheckpointMock).toHaveBeenCalledTimes(1);
+      // and nothing is left to fire later
+      act(() => { vi.advanceTimersByTime(DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS * 2); });
+      await settle();
+      expect(saveDailyFritzCheckpointMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the latest state and retries when the post fails (offline), then stops once it lands', async () => {
+      saveDailyFritzCheckpointMock
+        .mockResolvedValueOnce(null as never)
+        .mockResolvedValueOnce(null as never);
+      const { rerender } = renderHook((p) => useDailyFritzSessionPersistence(p), { initialProps: props(1) });
+      act(() => { vi.advanceTimersByTime(DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS); });
+      await settle();
+      expect(saveDailyFritzCheckpointMock).toHaveBeenCalledTimes(1);
+      // a newer state arrives while offline: the retry carries it, not the stale one
+      rerender(props(2));
+      act(() => { vi.advanceTimersByTime(2_000); });
+      await settle();
+      expect(saveDailyFritzCheckpointMock).toHaveBeenCalledTimes(2);
+      const lastRev = revisionOf(callArg(1));
+      expect(lastRev).toBeGreaterThan(revisionOf(callArg(0)));
+      act(() => { vi.advanceTimersByTime(5_000); });
+      await settle();
+      expect(saveDailyFritzCheckpointMock).toHaveBeenCalledTimes(3); // second failure retried, third lands
+      act(() => { vi.advanceTimersByTime(60_000); });
+      await settle();
+      expect(saveDailyFritzCheckpointMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('sends a still-pending checkpoint when the browser comes back online', async () => {
+      saveDailyFritzCheckpointMock.mockResolvedValueOnce(null as never);
+      renderHook((p) => useDailyFritzSessionPersistence(p), { initialProps: props(1) });
+      act(() => { vi.advanceTimersByTime(DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS); });
+      await settle();
+      expect(saveDailyFritzCheckpointMock).toHaveBeenCalledTimes(1);
+      act(() => { window.dispatchEvent(new Event('online')); });
+      await settle();
+      // the retry timer is already armed, so online does not double-post; the retry fires on schedule
+      act(() => { vi.advanceTimersByTime(2_000); });
+      await settle();
+      expect(saveDailyFritzCheckpointMock).toHaveBeenCalledTimes(2);
+    });
+  });
 });

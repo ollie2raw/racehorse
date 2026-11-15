@@ -2,8 +2,15 @@ import { readE2eDevAuth } from '../auth/e2eDevAuth';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { createDailyFritzRequestId, DAILY_FRITZ_REQUEST_ID_HEADER } from './dailyFritzRequestIds';
 
-/** Debounced mid-hand checkpoint POST delay (hand-over uses immediate sync). */
-export const DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS = 600;
+/**
+ * Mid-hand checkpoint POST window (hand/game end posts immediately; hiding the tab, pagehide and leaving the screen flush
+ * what is pending). A reload or crash can lose at most this much mid-hand progress, and the local snapshot, which is
+ * written on every change, still restores it on the same device. Rollback: set this back to 600.
+ */
+export const DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS = 12_000;
+
+/** A failed post is retried after each of these delays, then left pending for the next flush or state change. */
+export const DAILY_FRITZ_CHECKPOINT_RETRY_DELAYS_MS: readonly number[] = [2_000, 5_000, 15_000];
 
 export type FlushDailyFritzCheckpointOnUnloadInput = {
   attemptId: string;

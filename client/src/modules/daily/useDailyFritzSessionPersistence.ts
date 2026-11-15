@@ -13,6 +13,7 @@ import { buildDailyFritzTranscript } from '../../dailyFritz/dailyFritzTranscript
 import { getFritzPolicyContract, isSupportedFritzPolicyVersion } from '@racehorse/game-core';
 import { saveDailyFritzCheckpoint, recordDailyFritzTelemetry } from '../../dailyFritz/api.ts';
 import {
+  DAILY_FRITZ_CHECKPOINT_RETRY_DELAYS_MS,
   DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS,
   flushDailyFritzCheckpointOnUnload,
 } from '../../dailyFritz/dailyFritzCheckpointUnload.ts';
@@ -85,43 +86,66 @@ export function useDailyFritzSessionPersistence({
     });
   }, [enabled, attemptId]);
 
+  /** Posts the newest pending snapshot. A failed post keeps it pending and retries a few times with backoff. */
+  const postPendingCheckpoint = (retriesLeft: number = DAILY_FRITZ_CHECKPOINT_RETRY_DELAYS_MS.length) => {
+    const snapshot = pendingServerSyncSnapshotRef.current;
+    if (!snapshot || !attemptId || !verifiedMatchId) return;
+    if (snapshot.checkpointRevision <= lastServerSyncRevisionRef.current) {
+      pendingServerSyncSnapshotRef.current = null;
+      return;
+    }
+    pendingServerSyncSnapshotRef.current = null;
+    void getAuthHeaders().then(({ headers }) => {
+      const authorization = headers.Authorization ?? '';
+      const match = authorization.match(/^Bearer\s+(.+)$/i);
+      accessTokenRef.current = match?.[1]?.trim() ?? accessTokenRef.current;
+    });
+    void saveDailyFritzCheckpoint({
+      attemptId,
+      verifiedMatchId,
+      checkpoint: serializeDailyFritzCheckpointForServer(snapshot),
+    }).then((response) => {
+      if (response?.ok) {
+        lastServerSyncRevisionRef.current = Math.max(
+          lastServerSyncRevisionRef.current,
+          response.checkpoint_revision,
+        );
+        return;
+      }
+      // Failed (offline, timeout, 5xx): the latest state must not be lost. Keep it pending unless a newer one has
+      // replaced it, and retry; the unload / visibility / online flushes also pick it up.
+      if (snapshot.checkpointRevision <= lastServerSyncRevisionRef.current) return;
+      pendingServerSyncSnapshotRef.current ??= snapshot;
+      if (retriesLeft <= 0 || serverSyncTimerRef.current) return;
+      const delay = DAILY_FRITZ_CHECKPOINT_RETRY_DELAYS_MS[DAILY_FRITZ_CHECKPOINT_RETRY_DELAYS_MS.length - retriesLeft];
+      serverSyncTimerRef.current = setTimeout(() => {
+        serverSyncTimerRef.current = null;
+        postPendingCheckpoint(retriesLeft - 1);
+      }, delay);
+    });
+  };
+
+  /**
+   * Mid-hand snapshots post at most once per DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS, carrying whichever snapshot is
+   * newest when the window closes (the window is not restarted by later changes, so the unsent state is never older than
+   * one window). Hand/game end posts immediately.
+   */
   const syncCheckpointToServer = (snapshot: DailyFritzPersistedSnapshot, immediate: boolean) => {
     if (!attemptId || !verifiedMatchId) return;
     if (snapshot.checkpointRevision <= lastServerSyncRevisionRef.current) return;
     pendingServerSyncSnapshotRef.current = snapshot;
-    const serverCheckpoint = serializeDailyFritzCheckpointForServer(snapshot);
-    const runSync = () => {
-      pendingServerSyncSnapshotRef.current = null;
-      void getAuthHeaders().then(({ headers }) => {
-        const authorization = headers.Authorization ?? '';
-        const match = authorization.match(/^Bearer\s+(.+)$/i);
-        accessTokenRef.current = match?.[1]?.trim() ?? accessTokenRef.current;
-      });
-      void saveDailyFritzCheckpoint({
-        attemptId,
-        verifiedMatchId,
-        checkpoint: serverCheckpoint,
-      }).then((response) => {
-        if (response?.ok) {
-          lastServerSyncRevisionRef.current = Math.max(
-            lastServerSyncRevisionRef.current,
-            response.checkpoint_revision,
-          );
-        }
-      });
-    };
     if (immediate) {
       if (serverSyncTimerRef.current) {
         clearTimeout(serverSyncTimerRef.current);
         serverSyncTimerRef.current = null;
       }
-      runSync();
+      postPendingCheckpoint();
       return;
     }
-    if (serverSyncTimerRef.current) clearTimeout(serverSyncTimerRef.current);
+    if (serverSyncTimerRef.current) return;
     serverSyncTimerRef.current = setTimeout(() => {
       serverSyncTimerRef.current = null;
-      runSync();
+      postPendingCheckpoint();
     }, DAILY_FRITZ_CHECKPOINT_SYNC_DEBOUNCE_MS);
   };
 
@@ -137,13 +161,21 @@ export function useDailyFritzSessionPersistence({
       return;
     }
     pendingServerSyncSnapshotRef.current = null;
-    flushDailyFritzCheckpointOnUnload({
+    const sent = flushDailyFritzCheckpointOnUnload({
       attemptId,
       verifiedMatchId,
       checkpoint: serializeDailyFritzCheckpointForServer(snapshot),
       accessToken: accessTokenRef.current,
     });
+    // The browser refused the beacon (queue full): keep it so the next flush or change can still send it.
+    if (!sent) pendingServerSyncSnapshotRef.current ??= snapshot;
   };
+  const flushPendingRef = useRef(flushPendingCheckpointOnUnload);
+  const postPendingRef = useRef(postPendingCheckpoint);
+  useEffect(() => {
+    flushPendingRef.current = flushPendingCheckpointOnUnload;
+    postPendingRef.current = postPendingCheckpoint;
+  });
 
   useEffect(() => {
     if (!enabled || !attemptId || !runDate || firstMoveReportedRef.current) return;
@@ -282,10 +314,6 @@ export function useDailyFritzSessionPersistence({
         clearTimeout(storageTimerRef.current);
         storageTimerRef.current = null;
       }
-      if (serverSyncTimerRef.current) {
-        clearTimeout(serverSyncTimerRef.current);
-        serverSyncTimerRef.current = null;
-      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is syncCheckpointToServer, a useCallback stable within the persistence lifecycle
   }, [
@@ -324,11 +352,25 @@ export function useDailyFritzSessionPersistence({
       flushLocal();
       flushPendingCheckpointOnUnload();
     };
+    // Backgrounding the tab (phone app switch, tab switch) is the last reliable moment on mobile: pagehide may never fire.
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushAll();
+    };
+    // Back online after a failed post: send what is still pending.
+    const onOnline = () => {
+      if (pendingServerSyncSnapshotRef.current && !serverSyncTimerRef.current) postPendingRef.current();
+    };
     window.addEventListener('pagehide', flushAll);
     window.addEventListener('beforeunload', flushAll);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', onOnline);
     return () => {
       window.removeEventListener('pagehide', flushAll);
       window.removeEventListener('beforeunload', flushAll);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('online', onOnline);
+      // Leaving the screen (route click, attempt change) must not strand an unsent mid-hand state behind the window.
+      flushPendingRef.current();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- missing dep is flushPendingCheckpointOnUnload, a stable useCallback; unload handler wiring
   }, [enabled, attemptId, verifiedMatchId]);
