@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   act,
+  assertNewHandAllowed,
   captureRoomGameplaySnapshot,
   getRoom,
   HAND_LIFECYCLE_PERSIST_RETRY_MESSAGE,
@@ -316,7 +317,7 @@ export function registerGameplayActionHandlers(
     const { handNumber, requestId, matchId: claimedMatchId, cb } = parseHandReadyArgs(arg2, arg3);
     try {
       const room = getRoom(roomCode);
-      assertRoomDurabilityOperationAllowed(room, 'new_hand');
+      assertNewHandAllowed(room);
       const playerSeatId = resolveActorSeatId(roomCode, socket);
       const handReceipt = requestId
         ? lookupGameActionReceipt(roomCode, playerSeatId, requestId, fingerprintGameCommand('hand:ready', { handNumber }))

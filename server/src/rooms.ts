@@ -1,4 +1,5 @@
 import { assertReservationNotExpiring } from './matchmaking/reservationExpiryState';
+import { usesFastHandBoundary } from './multiplayer/handBoundaryFast';
 import { GameState, Config, PlacementPosition, Move, Tile, BoardState } from './game/types';
 import type { RoomGameActionPayload } from '@racehorse/game-core';
 import { assertTileCountInvariant, assertValidGameState } from './game/invariants';
@@ -318,6 +319,30 @@ async function commitLifecycleAfterMutate(
     throw new RoomLifecyclePersistUncertainError();
   }
 }
+/**
+ * A ready mark's commit. Normally the mark is persisted and proven durable here, before the ack. With MP_HAND_BOUNDARY_FAST
+ * (never for a scheduled-tournament room) it only takes the normal debounced persist: the new-hand write that follows
+ * is a whole-room snapshot and carries the marks, and a mark the persist loses is simply sent again by its player.
+ */
+async function commitReadyMark(room: Room, snapshot: RoomLifecycleSnapshot): Promise<void> {
+  if (usesFastHandBoundary(room)) {
+    notifyLiveRoomStateCommitted(room);
+    return;
+  }
+  await commitLifecycleAfterMutate(room, snapshot);
+}
+
+/**
+ * The new-hand gate. With MP_HAND_BOUNDARY_FAST a `degraded` room (a debounced ready-mark write failed) may still start
+ * the hand: the start is itself a write that is proven durable before anything is broadcast (commitLifecycleAfterMutate
+ * rolls back and reports uncertain otherwise), and it is how the room gets healthy again. A `failed` room (a database
+ * fence refused the room) is never let through.
+ */
+export function assertNewHandAllowed(room: Room): void {
+  if (usesFastHandBoundary(room) && room.durability.status === 'degraded') return;
+  assertRoomDurabilityOperationAllowed(room, 'new_hand');
+}
+
 const MIN_HAND_OVER_MS = 2500;
 const MP_DEBUG =
   process.env.NODE_ENV !== 'production' ||
@@ -890,7 +915,7 @@ export async function startGame(
 
 export async function nextHand(code: string, io: Server): Promise<Room> {
   const room = getRoom(code);
-  assertRoomDurabilityOperationAllowed(room, 'new_hand');
+  assertNewHandAllowed(room);
   assertRoomNotAbandonedOrForfeitBlocked(room);
   if (!room.state) throw new Error('Game not started.');
 
@@ -973,7 +998,7 @@ export async function readyForNextHand(
     if (!room.state.handOver) {
       return { kind: 'return', value: { started: false, room } };
     }
-    assertRoomDurabilityOperationAllowed(room, 'new_hand');
+    assertNewHandAllowed(room);
 
     const readyHandNumber = room.state.handNumber;
     const existingStart = nextHandStartsByRoom.get(code);
@@ -1007,7 +1032,7 @@ export async function readyForNextHand(
 
       if (room.nextHandReady.size < room.players.length) {
         try {
-          await commitLifecycleAfterMutate(room, snapshot);
+          await commitReadyMark(room, snapshot);
         } catch (err) {
           if (!isRoomLifecyclePersistUncertainError(err)) {
             rollbackRoomLifecycleCommit(room, snapshot);
@@ -1019,8 +1044,9 @@ export async function readyForNextHand(
 
       // Both ready: persist the ready marks first so a later nextHand rollback
       // can restore readiness (do not clear nextHandReady before nextHand).
+      // (MP_HAND_BOUNDARY_FAST: the marks ride on the new-hand write instead, see commitReadyMark.)
       try {
-        await commitLifecycleAfterMutate(room, snapshot);
+        await commitReadyMark(room, snapshot);
       } catch (err) {
         if (!isRoomLifecyclePersistUncertainError(err)) {
           rollbackRoomLifecycleCommit(room, snapshot);
