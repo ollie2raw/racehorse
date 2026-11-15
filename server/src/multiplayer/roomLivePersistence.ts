@@ -873,6 +873,11 @@ export const LIVE_SESSION_EVENTS_STREAM = 'events';
 const GHOST_STREAM_PREFIX = 'ghost:';
 /** After the RPC is found missing, use full rows for this long, then try again. */
 export const LOG_ENTRIES_UNAVAILABLE_RETRY_MS = 10 * 60_000;
+/**
+ * After the entries write fails for any other reason (5xx, timeout, entries table missing, ...), use full rows for this
+ * long, then try again. Shorter than the missing-RPC wait because these are usually transient.
+ */
+export const LOG_ENTRIES_FAILURE_COOLDOWN_MS = 60_000;
 
 /**
  * What this process last confirmed in the database for one log: its length,
@@ -943,9 +948,24 @@ function fencedLiveSessionWrite(error: unknown): Extract<PersistLiveSessionAttem
   return match ? { ok: false, status: 'failed', error: match[0] } : null;
 }
 
+/**
+ * The RPC does not exist (PostgREST PGRST202, or Postgres naming the function). A request timeout or an open circuit
+ * breaker also carry the request path, which contains the function name, but say nothing about it being missing.
+ */
 function isMissingPersistFunction(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return message.includes('PGRST202') || message.includes('persist_room_live_session');
+  if (message.includes('PGRST202')) return true;
+  if (/Supabase request timed out|circuit breaker is open/i.test(message)) return false;
+  return message.includes('persist_room_live_session');
+}
+
+/** A short label for why the entries write failed, for the fallback log line. */
+function entriesFailureReason(message: string): string {
+  if (/Supabase request timed out/i.test(message)) return 'timeout';
+  if (/circuit breaker is open/i.test(message)) return 'circuit_open';
+  if (/room_live_session_entries/i.test(message) && /does not exist|42P01/i.test(message)) return 'entries_table_missing';
+  const status = /request failed: (\d{3})/.exec(message)?.[1];
+  return status ? `http_${status}` : 'rpc_error';
 }
 
 async function persistLiveSessionEntriesNow(
@@ -971,8 +991,8 @@ async function persistLiveSessionEntriesNow(
       return fenced;
     }
     if (isMissingPersistFunction(error)) return 'function_missing';
+    // Not logged here: persistLiveSessionForRoom logs it with what it does next (fall back to the full row).
     const errorMessage = error instanceof Error ? error.message : String(error);
-    log.warn({ roomCode: row.room_code, error: errorMessage }, 'room_live_sessions entries persist failed');
     return { ok: false, status: 'degraded', error: errorMessage };
   }
 }
@@ -1040,9 +1060,24 @@ async function persistLiveSessionForRoom(
   if (result === 'function_missing') {
     logEntriesUnavailableUntilMs = Date.now() + LOG_ENTRIES_UNAVAILABLE_RETRY_MS;
     log.error(
-      { roomCode, retryInMs: LOG_ENTRIES_UNAVAILABLE_RETRY_MS },
+      { roomCode, reason: 'rpc_missing', retryInMs: LOG_ENTRIES_UNAVAILABLE_RETRY_MS },
       'LIVE_SESSION_LOG_ENTRIES is on but persist_room_live_session is missing; writing full rows (apply 2026-10-05_room_live_session_entries.sql)',
     );
+    persistedLogLengthsByRoomCode.delete(roomCode);
+    return persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
+  }
+  // Any other failure that is not a fence rejection: the match must keep going, so write the whole row for this same
+  // persist and stay on full rows for a short cooldown. A fence rejection comes back as status 'failed' and is returned
+  // as-is below: a full-row write would be refused by the same fence, and must never be used to get around it.
+  if (!result.ok && result.status === 'degraded') {
+    const reason = entriesFailureReason(result.error);
+    logEntriesUnavailableUntilMs = Date.now() + LOG_ENTRIES_FAILURE_COOLDOWN_MS;
+    log.warn(
+      { roomCode, reason, error: result.error, cooldownMs: LOG_ENTRIES_FAILURE_COOLDOWN_MS },
+      'LIVE_SESSION_LOG_ENTRIES write failed; writing the full row for this persist and using full rows for the cooldown',
+    );
+    // The entries table may or may not hold what this process thought it confirmed: forget it, so the return to entries
+    // mode resends every entry from index 0.
     persistedLogLengthsByRoomCode.delete(roomCode);
     return persistLiveSessionRowNow(buildLiveSessionRow(room, roster, commitFence));
   }
