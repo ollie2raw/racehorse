@@ -64,6 +64,7 @@ The numbers are from the Phase 1 / 1b reports (`perceived-lag-phase1.md`, `perce
 * **#509 (prefetch of the multiplayer chunk) was reverted (#512)** after main's Playwright went red; its gains are not in the numbers above and the cause was never proven.
 
 ## Gaps (what these numbers cannot tell you)
+* **WebKit (Playwright, Safari 26.5 build, unthrottled iPhone 14 landscape profile, 3 runs; `transitionHarness.mjs --browser webkit`)** is about 1.5-2.7x slower than Chromium on the same Mac for the same taps (median ms, Chromium vs WebKit): home -> hub 53 vs 102, Start Match 40 vs 108, Daily start 71 vs 155, multiplayer start 349 vs 490. It has no CPU throttle, long-task or long-animation-frame data, so the 4x phone rows below remain Chromium-only.
 * **No real iPhone or Capacitor shell.** Phone rows are headless Chromium with CPU throttling on a laptop; the first-tap long-task numbers and every frame-time number are headless and software-rasterized.
 * **No real Render or Supabase latency.** The multiplayer rows use a stub with a chosen delay (290 ms was inferred from `/healthz` minus `/ping` from one location, 160-350 ms). In-match Supabase round trips on Render were never measured. The 0.15-CPU container behaviour is read from `/health`, not reproduced.
 * **Daily Fritz timing runs use a build with the dev-auth gate forced**, so they are slightly pessimistic; the Daily checkpoint numbers are deterministic per fixture and do not depend on it.
