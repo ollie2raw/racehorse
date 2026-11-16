@@ -67,6 +67,10 @@
         }
       ]
     },
+    "rum_hourly": {
+      "_source": "2026-11-16_rum_hourly.sql (first-party speed measurements, docs/ops/rum-beacon.md). RLS enabled with no policies at all: server-only (service_role). The empty list means no policy may exist, which holds both before and after the migration is applied.",
+      "policies": []
+    },
     "room_live_session_entries": {
       "_source": "2026-10-05_room_live_session_entries.sql (storage fix S1). RLS enabled with no policies at all: server-only (service_role), the same deny-by-default posture as room_live_sessions. The empty list means no policy may exist, which holds both before and after the migration is applied.",
       "policies": []

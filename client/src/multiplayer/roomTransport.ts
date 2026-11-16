@@ -1,6 +1,7 @@
 /** Socket.IO emit-with-ack transport for live multiplayer / tournament rooms. */
 
 import { logger } from '../utils/logger';
+import { rumRecord } from '../rum/rumSink';
 import type { GameState } from '../types';
 import { recordJoinAckTimeout } from './mpTelemetry';
 // Single-sourced from @racehorse/game-core's dtoContracts module (also used
@@ -205,7 +206,11 @@ export function emitRoomJoin(
   roomCode: string,
   identity: RoomJoinIdentity,
 ): Promise<RoomAckResponse> {
-  return emitWithAck<RoomAckResponse>(socket, 'room:join', roomCode, identity);
+  const sentAt = performance.now();
+  return emitWithAck<RoomAckResponse>(socket, 'room:join', roomCode, identity).then((resp) => {
+    if (resp?.ok) rumRecord('mp.room_join_ack', performance.now() - sentAt);
+    return resp;
+  });
 }
 
 export function emitRoomSpectate(

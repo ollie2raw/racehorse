@@ -37,6 +37,7 @@ import { installGlobalErrorHandlers } from "./debug/globalErrors";
 import { installWebPhoneClass } from './utils/webPhoneClass';
 import { markAppLoadSuccessful } from './debug/moduleImportRecovery';
 import { reportWebVitals } from './debug/reportWebVitals';
+import { startRumAfterFirstPaint } from './rum/startRum';
 import { migrateLegacyHashRoute } from './routing/legacyHashRoute';
 import './styles/tokens.css';
 import './styles/rh-mobile-chrome.css';
@@ -74,6 +75,7 @@ installWebPhoneClass();
 // Web Vitals → Sentry. Its chunk fetch is guarded inside the module: a
 // telemetry chunk failing must never surface as an unhandled rejection.
 void reportWebVitals();
+startRumAfterFirstPaint();
 
 async function bootstrap() {
   // DEV-ONLY manual test harness for PuzzleSprintModal — see

@@ -9,6 +9,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type { Socket } from 'socket.io-client';
+import { rumRecord } from '../../../rum/rumSink';
 import type { GameState } from '../../../types';
 import { emitHandReady } from '../../../multiplayer/roomTransport';
 import { tileListEquals } from '../../boardSessionUtils';
@@ -186,8 +187,10 @@ export function useHandRevealSequence(
         }
         // The connection it goes out on: an acknowledgement settles the hand only on that connection.
         const sentOn = connectionKeyOf(socketNow);
+        const sentAt = performance.now();
         emitHandReady(socketNow, room, effect.handNumber).then(
           () => {
+            rumRecord('mp.hand_ready_ack', performance.now() - sentAt);
             dispatchRef.current({ type: 'readySettled', handNumber: effect.handNumber ?? null, source: effect.source, ok: true, connectionKey: sentOn });
           },
           (error) => {

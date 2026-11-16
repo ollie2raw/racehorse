@@ -76,6 +76,12 @@ the team's personal details.
 | Diagnostics → Other Diagnostic Data | App Functionality |
 
 - [ ] Tracking: **No** for every type (no ATT prompt needed).
+- [ ] **Before the first iOS build that includes the speed-measurement beacon (`client/src/rum/`, PR C) ships:** review the declared data
+      purposes in App Store Connect. The beacon sends timings and coarse device bands, with no identifier, to our own game server. It fits
+      the existing **Diagnostics → Performance Data** type, but its purpose is product improvement, so decide whether that type's purposes
+      should also include **Analytics** (today: App Functionality only), and whether it is still "not linked to the user" (the summary
+      carries no identifier; the server keeps no individual summary). Nothing was changed in this repo or in App Store Connect; the beacon
+      is sampled at 25% (`VITE_RUM_SAMPLE_RATE`) and `0` switches it off for a build. Details: [rum-beacon.md](../rum-beacon.md).
 - [ ] After the first archive, compare against Xcode's **Privacy Report**
       ([testflight-candidate.md](testflight-candidate.md)). They must match.
 

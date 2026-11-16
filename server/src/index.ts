@@ -18,6 +18,9 @@ Sentry.init({
   environment: config.nodeEnv,
   release: config.renderGitCommit ?? config.packageVersion,
   tracesSampleRate: 0.2,
+  // The speed-measurement beacon (POST /api/rum) is not traced: a transaction for it would carry the request's address, and the
+  // privacy policy says our application does not record that address with these measurements (docs/ops/rum-beacon.md).
+  integrations: [Sentry.httpIntegration({ ignoreIncomingRequests: (urlPath) => urlPath.startsWith('/api/rum') })],
   beforeSend: sentryBeforeSend,
 });
 import fs from 'node:fs';
@@ -228,6 +231,8 @@ import {
 import { TRUSTED_PROXY } from './trustedProxy';
 import { getGameCoreConsistency } from './platform/gameCoreConsistency';
 import { registerHealthRoutes } from './platform/health/registerHealthRoutes';
+import { registerRumRoutes } from './rum/registerRumRoutes';
+import { startRumHourly } from './rum/rumHourly';
 import { registerE2eInspectRoutes } from './http/routes/e2eInspectRoute';
 import {
   isGracefulShutdownInProgress,
@@ -429,6 +434,9 @@ const moderationLimit = createRateLimitMiddleware(
   { windowMs: 10 * 60_000, max: 60 },
   'rest:moderation',
 );
+// First-party speed measurements: a visit sends at most a few small summaries an hour. Keyed on `req.ip` in memory only.
+const rumIngestLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 30 }, 'rest:rum');
+const rumSummaryLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:rum-summary');
 const cronLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:cron');
 // Leaderboard queries are read-heavy and trigger unbounded DB scans — give them their own budget
 // so a single poller can't exhaust the global restApiLimit for all other /api/* callers.
@@ -882,6 +890,7 @@ server.on('error', (error: NodeJS.ErrnoException) => {
 
 registerE2eInspectRoutes(app);
 
+registerRumRoutes(app, { ingest: rumIngestLimit, summary: rumSummaryLimit });
 registerHealthRoutes({
   app,
   io,
@@ -974,6 +983,7 @@ server.listen(PORT, () => {
   if (isReviewYieldEnabled()) onProcessStop(startReviewLagSampler());
   scheduleReviewCompletionSweep();
   onProcessStop(startResourceUsageLog());
+  startRumHourly();
   const lagMonitor = startEventLoopLagMonitor({
     sentry: {
       dsn: config.sentryDsn || undefined,
