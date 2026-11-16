@@ -11,10 +11,12 @@
  *   network requests and websocket frames. A second page in the same context then repeats menu -> first playable (warm HTTP cache).
  */
 import fs from 'node:fs';
-import { chromium, devices } from '@playwright/test';
+import { chromium, devices, webkit } from '@playwright/test';
 
 const args = Object.fromEntries(process.argv.slice(2).flatMap((a, i, all) => (a.startsWith('--') ? [[a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? true : all[i + 1]]] : [])));
 const MODE = args.mode ?? 'pvf';
+/** chromium (default) or webkit. WebKit has no CDP: no CPU or network throttling, no main-thread metrics, no profiler; taps, frames and screen timings still work. */
+const BROWSER = args.browser ?? 'chromium';
 const BASE = args.base ?? 'http://127.0.0.1:5401';
 const PROFILE = args.profile ?? 'desktop';
 const CPU = Number(args.cpu ?? (PROFILE === 'phone' ? 4 : 1));
@@ -82,10 +84,12 @@ const COLLECTOR = `(() => {
 
 async function newSession(context, label) {
   const page = await context.newPage();
-  const cdp = await context.newCDPSession(page);
-  await cdp.send('Performance.enable');
-  if (CPU > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU });
-  if (NET !== 'none') await cdp.send('Network.emulateNetworkConditions', NETS[NET]);
+  const cdp = BROWSER === 'chromium' ? await context.newCDPSession(page) : { send: async () => ({}) };
+  if (BROWSER === 'chromium') {
+    await cdp.send('Performance.enable');
+    if (CPU > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU });
+    if (NET !== 'none') await cdp.send('Network.emulateNetworkConditions', NETS[NET]);
+  }
   const s = { label, page, cdp, net: [], ws: [], metrics: [], marks: [], errors: [], failed: [] };
   (globalThis.__live ??= []).push(s);
   page.on('requestfinished', async (req) => { try { const sizes = await req.sizes(); const t = req.timing(); const res = await req.response(); s.net.push({ url: req.url().replace(/^https?:\/\/[^/]+/, '').slice(0, 140), method: req.method(), status: res?.status(), type: req.resourceType(), startWall: t.startTime, endWall: t.responseEnd >= 0 ? t.startTime + t.responseEnd : null, resBytes: sizes.responseBodySize, reqBytes: sizes.requestBodySize, fromCache: undefined }); } catch {} });
@@ -163,7 +167,7 @@ async function enterMp(host, guest) {
   for (const s of [host, guest]) { const t = s.page.getByRole('tab', { name: /Private/i }); const b = s.page.getByRole('button', { name: /^Private$/i }); await tapAndWait(s, 'mp: Private', (await t.isVisible().catch(() => false)) ? t : b, '[role=tab], .pml-root, .claude-mode-join-box, .pml-panel-footer', 15000); }
   await tapAndWait(host, 'mp: Create lobby tab', host.page.getByRole('tab', { name: /Create lobby/i }), '.pml-panel-footer', 15000);
   await tapAndWait(host, 'mp: Create lobby -> room code', host.page.locator('.pml-panel-footer').getByRole('button', { name: /^Create lobby/i }), '.pml-roomcode-bar-code', 20000);
-  const code = (await host.page.locator('.pml-roomcode-bar-code').innerText()).trim().toUpperCase();
+  const code = ((await host.page.locator('.pml-roomcode-bar-code').first().textContent()) ?? '').trim().toUpperCase();
   await tapAndWait(guest, 'mp: Join lobby tab', guest.page.getByRole('tab', { name: /Join lobby/i }), 'input[placeholder="ROOM CODE"]', 15000);
   await guest.page.getByPlaceholder('ROOM CODE').fill(code);
   await tapAndWait(guest, 'mp: Join -> in room', guest.page.locator('.claude-mode-join-box').getByRole('button', { name: /^Join$/i }), '.pml-roomcode-bar-code', 30000);
@@ -248,8 +252,8 @@ setTimeout(async () => {
   process.exit(3);
 }, BUDGET + 360000).unref();
 
-const browser = await chromium.launch({ args: ['--enable-precise-memory-info'] });
-const result = { mode: MODE, base: BASE, profile: PROFILE, cpu: CPU, net: NET, cache: CACHE, startedAt: new Date().toISOString(), runs: [] };
+const browser = BROWSER === 'webkit' ? await webkit.launch() : await chromium.launch({ args: ['--enable-precise-memory-info'] });
+const result = { mode: MODE, browser: BROWSER, base: BASE, profile: PROFILE, cpu: CPU, net: NET, cache: CACHE, startedAt: new Date().toISOString(), runs: [] };
 try {
   if (MODE === 'load') {
     const ctx = await newContext(browser, {});
@@ -276,7 +280,9 @@ try {
     const seed = MODE === 'daily' ? { racehorse_e2e_user_id: crypto.randomUUID(), racehorse_e2e_bearer: 'e2e-daily-fritz' } : {};
     const mkSeed = (r) => ({ racehorse_guest_identity_v1: `guest_trans_${r}_${Date.now()}`, racehorse_guest_display_name_v1: `Guest ${r === 'a' ? '3333' : '4444'}` });
     if (MODE === 'mp') {
-      const cA = await newContext(browser, mkSeed('a')); const cB = await newContext(browser, mkSeed('b'));
+      // WebKit treats a second page in the same browser as backgrounded (no rAF, so nothing is ever "shown"): the guest gets its own browser process.
+      const browserB = BROWSER === 'webkit' ? await webkit.launch() : browser;
+      const cA = await newContext(browser, mkSeed('a')); const cB = await newContext(browserB, mkSeed('b'));
       const host = await newSession(cA, 'host-cold'); const guest = await newSession(cB, 'guest-cold');
       await Promise.all([loadPage(host, BASE + '/'), loadPage(guest, BASE + '/')]);
       await enterMp(host, guest);
