@@ -28,11 +28,17 @@ export interface ReservedRect {
 /** Gap kept between a tile edge and an overlay, in px. */
 export const RESERVED_CLEARANCE_PX = 4;
 
-export function collectReservedRects(container: HTMLElement): ReservedRect[] {
-  const box = container.getBoundingClientRect();
-  const scope = container.closest('.screen') ?? document;
+/** The container's box in viewport pixels, as getBoundingClientRect reports it. */
+export interface ContainerBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+function reservedFromElements(elements: Iterable<Element>, box: ContainerBox): ReservedRect[] {
   const rects: ReservedRect[] = [];
-  for (const el of scope.querySelectorAll(BOARD_RESERVED_SELECTOR)) {
+  for (const el of elements) {
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) continue;
     const local = { left: r.left - box.left, top: r.top - box.top, right: r.right - box.left, bottom: r.bottom - box.top };
@@ -41,6 +47,42 @@ export function collectReservedRects(container: HTMLElement): ReservedRect[] {
     rects.push(local);
   }
   return rects;
+}
+
+const overlayScope = (container: HTMLElement): ParentNode => container.closest('.screen') ?? document;
+
+/** Reads every overlay's rect now: one layout read for the container (unless `box` is given) and one per overlay. */
+export function collectReservedRects(container: HTMLElement, box?: ContainerBox): ReservedRect[] {
+  const b = box ?? container.getBoundingClientRect();
+  return reservedFromElements(overlayScope(container).querySelectorAll(BOARD_RESERVED_SELECTOR), b);
+}
+
+/**
+ * The overlays' rects, read once and reused. Reading them forces layout, and the camera fits on every placement (and again on the next
+ * frames), so reading each time cost about 4 x (2 + overlays) forced layouts per placed tile. The cache is dropped by `invalidate()` (the
+ * container or an overlay resized) and rebuilt on its own when the set of overlay elements changes (a DOM query, which does not force layout).
+ */
+export class ReservedRectsCache {
+  private rects: ReservedRect[] | null = null;
+  private elements: Element[] = [];
+
+  invalidate(): void {
+    this.rects = null;
+  }
+
+  /** The overlay elements the cache last read (for observing their size). */
+  observed(): readonly Element[] {
+    return this.elements;
+  }
+
+  get(container: HTMLElement, box: ContainerBox): ReservedRect[] {
+    const current = Array.from(overlayScope(container).querySelectorAll(BOARD_RESERVED_SELECTOR));
+    const same = current.length === this.elements.length && current.every((el, i) => el === this.elements[i]);
+    if (this.rects && same) return this.rects;
+    this.elements = current;
+    this.rects = reservedFromElements(current, box);
+    return this.rects;
+  }
 }
 
 export interface ClearScaleInput {
