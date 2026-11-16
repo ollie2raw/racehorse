@@ -1,5 +1,5 @@
 {
-  "total": 3552960,
+  "total": 3554534,
   "chunks": {
     "ActivityFeedLobbyBridge": 34153,
     "analyzer": 106395,
@@ -12,7 +12,7 @@
     "DailyFritzLeaderboardRoute": 20296,
     "DailyFritzScreen": 54298,
     "FriendsScreenLobbyBridge": 20712,
-    "game-reviewer": 137995,
+    "game-reviewer": 139569,
     "GameOverModal": 29642,
     "GhostSetupScreen": 14990,
     "GuidedMatchRecorderScreen": 36116,
