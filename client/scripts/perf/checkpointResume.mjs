@@ -5,13 +5,15 @@
  *   hide     : play, hide the tab (visibilitychange) right after a move, then resume in a fresh context (no local storage)
  *              from the SERVER checkpoint alone; the restored board must equal the board at hide time
  *   offline  : go offline, play, come back online; the latest revision must reach the server
- *   node scripts/perf/checkpointResume.mjs --base http://127.0.0.1:5422
+ *   node scripts/perf/checkpointResume.mjs --base http://127.0.0.1:5422 [--browser webkit]
+ *   Caveat: the reload scenario relies on the beacon replay below being an ASYNC fetch; WebKit cancels it during unload, so a WebKit reload result is not meaningful (it needs a real JWT in a native beacon, a device test).
  */
-import { chromium, devices } from '@playwright/test';
+import { chromium, devices, webkit } from '@playwright/test';
 
 const args = Object.fromEntries(process.argv.slice(2).flatMap((a, i, all) => (a.startsWith('--') ? [[a.slice(2), all[i + 1]]] : [])));
 const BASE = args.base;
-const browser = await chromium.launch();
+const BROWSER = args.browser ?? 'chromium';
+const browser = await (BROWSER === 'webkit' ? webkit : chromium).launch();
 const userId = crypto.randomUUID();
 const mk = async () => {
   const context = await browser.newContext(devices['iPhone 14 landscape']);
