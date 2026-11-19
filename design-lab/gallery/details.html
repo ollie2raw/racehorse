@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boneyard and Fritz count</title>
+<link rel="stylesheet" href="../themes/current.css">
+<link rel="stylesheet" href="../themes/hud-v2.css">
+<style>
+  html, body { overflow: auto; height: auto; }
+  body { padding: 28px; font: 15px/1.4 'Helvetica Neue', Arial, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 18px; } h2 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: #8d97a8; margin: 26px 0 10px; }
+  .row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+  .cell { position: relative; width: 420px; height: 150px; background: #0c0e12; border-radius: 16px; border: 1px solid #1c2533; }
+  .cell > .lab { position: absolute; left: 12px; bottom: 8px; color: #8d97a8; font-size: 13px; }
+  .cell .hud-pill, .cell .hud2-boneyard, .cell .rh-tile-rack, .cell .hud2-fritz-count { position: absolute; }
+  .cell .corner-pill { right: auto; left: 20px; top: 20px; } .cell .hud2-boneyard { left: 20px; right: auto; top: 20px; }
+  .cell .rh-tile-rack, .cell .hud2-fritz-count { left: 20px; top: 20px; }
+  .small .cell { width: 300px; height: 100px; }
+</style>
+</head>
+<body>
+<h1>Boneyard and Fritz tile count: X (current) and Y (proposed)</h1>
+<h2>Boneyard pill</h2>
+<div class="row">
+  <div class="cell"><div class="hud-pill corner-pill boneyard-pill"><svg class="boneyard-icon" viewBox="0 0 24 24" fill="none"><rect x="2.8" y="7" width="18.4" height="10" rx="2.8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="8.9" x2="12" y2="15.1" stroke="currentColor" stroke-width="2"/></svg><span class="boneyard-count">14</span></div><span class="lab">X</span></div>
+  <div class="cell"><div class="hud2-boneyard" style="position:absolute"><svg viewBox="0 0 34 30" fill="none"><g stroke="#e7b64a" stroke-width="2" stroke-linejoin="round"><rect x="3" y="14" width="22" height="11" rx="3" fill="#0a0f18" transform="rotate(-8 14 19)"/><rect x="6" y="9" width="22" height="11" rx="3" fill="#0a0f18" transform="rotate(4 17 14)"/><rect x="9" y="4" width="22" height="11" rx="3" fill="#10161f"/><path d="M20 5.5v8"/></g></svg><div class="num">14</div><div class="lbl">Boneyard<br>draw</div></div><span class="lab">Y</span></div>
+</div>
+<h2>Fritz hand size</h2>
+<div class="row">
+  <div class="cell"><div class="rh-tile-rack" style="position:absolute">
+    <div class="rh-tile-rack__tile"></div><div class="rh-tile-rack__tile"></div><div class="rh-tile-rack__tile"></div><div class="rh-tile-rack__tile"></div><div class="rh-tile-rack__tile"></div></div><span class="lab">X</span></div>
+  <div class="cell"><div class="hud2-fritz-count"><div class="chip">5</div><div class="lbl">Fritz<br>tiles left</div><div class="minis"><i></i><i></i><i></i><i></i><i></i></div></div><span class="lab">Y</span></div>
+</div>
+<p style="color:#8d97a8;max-width:720px">Read from code: the current boneyard icon is a 21px outline of a single domino (BoneyardStackIcon.tsx) so it reads as "a tile", not "a pile to draw from"; Fritz's count is a row of identical blank ivory tiles with no numeral (TileRack.tsx), so with 7+ tiles the count has to be counted by eye. Both Y variants need a DOM change, so they are gallery only and not part of the injected perf runs.</p>
+</body>
+</html>

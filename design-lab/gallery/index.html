@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Racehorse tile and board lab</title>
+<!-- Static gallery: each card is an iframe of scene.html at a fixed viewport, scaled down. Letters only; the key is in ../KEY.md. -->
+<style>
+  :root { color-scheme: dark; --bg: #04070c; --panel: #0a0f18; --line: #1c2533; --ink: #f4efe4; --mute: #8d97a8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 'Helvetica Neue', Arial, sans-serif; padding: 24px 16px 64px; }
+  .wrap { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 17px; margin: 32px 0 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--mute); }
+  nav a { color: #8fc4ff; margin-right: 14px; } p.sub { color: var(--mute); margin: 0 0 10px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+  .card b { display: block; margin: 0 0 8px 2px; font-size: 15px; }
+  .frame { position: relative; width: 100%; overflow: hidden; border-radius: 8px; }
+  .frame iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; }
+  .tabs { margin: 12px 0 0; } .tabs a { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; margin-right: 8px; text-decoration: none; color: var(--ink); } .tabs a.on { background: #12304f; border-color: #3b79b8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Tile and board lab</h1>
+  <p class="sub">Design exploration. Nothing here is wired into the app. Variants are letters only.</p>
+  <nav><a href="details.html">Boneyard and Fritz count</a><a href="motion.html">Motion prototype</a></nav>
+  <div class="tabs" id="tabs"></div>
+  <div id="out"></div>
+</div>
+<script>
+const VPS = { desktop: [1440, 900], laptop: [1512, 982], phone: [844, 390] };
+const vp = new URLSearchParams(location.search).get('vp') || 'desktop';
+document.getElementById('tabs').innerHTML = Object.keys(VPS).map((k) => `<a class="${k === vp ? 'on' : ''}" href="?vp=${k}">${k} ${VPS[k].join('x')}</a>`).join('');
+const [W, H] = VPS[vp];
+const SECTIONS = [
+  ['Reference', [['Current', 'tiles=ref&board=ref&hand=cur&state=idle']]],
+  ['Tile sets (current board)', ['A', 'B', 'C'].map((l) => ['Tiles ' + l, `tiles=${l}&board=ref&hand=lg&state=idle`])],
+  ['Board surfaces (current tiles)', ['A', 'B', 'C'].map((l) => ['Board ' + l, `tiles=ref&board=${l}&hand=lg&state=idle`])],
+  ['Combined, nothing selected (open ends marked), proposed HUD', ['A', 'B', 'C'].map((l) => [`Tiles ${l} + Board ${l}`, `tiles=${l}&board=${l}&hud=v2&hand=lg&state=idle`])],
+  ['Combined, a 5 selected (legal ends active)', [['Current', 'tiles=ref&board=ref&state=sel']].concat(['A', 'B', 'C'].map((l) => [`Tiles ${l} + Board ${l}`, `tiles=${l}&board=${l}&hud=v2&hand=lg&state=sel`]))],
+];
+const out = document.getElementById('out');
+for (const [title, cards] of SECTIONS) {
+  const sec = document.createElement('section'); sec.innerHTML = `<h2>${title}</h2><div class="grid"></div>`;
+  const grid = sec.querySelector('.grid');
+  for (const [name, qs] of cards) {
+    const card = document.createElement('div'); card.className = 'card'; card.innerHTML = `<b>${name}</b><div class="frame"><iframe loading="lazy" width="${W}" height="${H}" src="scene.html?${qs}"></iframe></div>`;
+    grid.appendChild(card);
+  }
+  out.appendChild(sec);
+}
+function fit() { document.querySelectorAll('.frame').forEach((f) => { const s = f.clientWidth / W; f.style.height = H * s + 'px'; f.firstElementChild.style.transform = `scale(${s})`; }); }
+addEventListener('resize', fit); addEventListener('load', fit); fit();
+</script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion prototype</title>
+<link rel="stylesheet" href="../themes/current.css">
+<link rel="stylesheet" href="../themes/tiles.css">
+<style>
+  /*
+   * MICRO-MOTION PROTOTYPE (gallery only). Rules: transform and opacity only; no box-shadow/filter/size animation;
+   * will-change is added when a settle starts and removed on animationend (no permanent layers); one short animation per event.
+   * Budget (proposal, see ../MOTION-PROPOSAL.md): tile settle 180 ms, score pulse 240 ms, at most 2 running at once.
+   */
+  html, body { overflow: auto; height: auto; }
+  body { padding: 24px; font: 15px/1.4 'Helvetica Neue', Arial, sans-serif; }
+  .stage { position: relative; height: 330px; max-width: 980px; border-radius: 24px; background: #0c0e12; border: 1px solid #1c2533; overflow: hidden; }
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 14px 0; }
+  button.ctl { background: #12304f; color: #f4efe4; border: 1px solid #3b79b8; border-radius: 10px; padding: 10px 16px; font: inherit; cursor: pointer; }
+  .row { position: absolute; left: 50%; top: 150px; transform: translate(-50%, -50%); display: flex; }
+  .slot { width: 0; } .slot.landed { width: auto; }
+  .score { position: absolute; right: 28px; top: 24px; display: flex; align-items: center; gap: 10px; padding: 0 26px; height: 60px; border: 1px solid rgba(226,176,72,.3); border-radius: 16px; background: #070b12; font-weight: 800; letter-spacing: .17em; font-size: 15px; }
+  .score b { font-size: 28px; letter-spacing: 0; display: inline-block; }
+  .score::after { content: ''; position: absolute; inset: -1px; border-radius: 16px; border: 2px solid #e7b64a; opacity: 0; pointer-events: none; }
+
+  /* --- tile settle: the tile lands from 10px above with a 6% scale, a tiny undershoot, then rests. Contact shadow is a sibling layer whose OPACITY fades in. --- */
+  .settle-wrap { position: relative; display: block; }
+  .settle-wrap::before { content: ''; position: absolute; left: 4%; right: 4%; bottom: -4px; height: 8px; border-radius: 50%; background: rgba(0,0,0,.55); opacity: 1; z-index: 0; }
+  .settle-wrap .domino-tile { position: relative; z-index: 1; }
+  .settle-wrap.go { will-change: transform; animation: settle 180ms cubic-bezier(.2,.8,.25,1) both; }
+  .settle-wrap.go::before { will-change: opacity; animation: shadow-in 180ms ease-out both; }
+  @keyframes settle { 0% { transform: translate3d(0,-10px,0) scale(1.06); } 62% { transform: translate3d(0,1px,0) scale(.995); } 100% { transform: translate3d(0,0,0) scale(1); } }
+  @keyframes shadow-in { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+  /* --- score pulse: number scales 1 -> 1.14 -> 1, a ring fades 0 -> .85 -> 0 while growing (all transform/opacity) --- */
+  .score.go b { will-change: transform; animation: pulse 240ms cubic-bezier(.3,.7,.3,1) both; }
+  .score.go::after { will-change: opacity, transform; animation: ring 240ms ease-out both; }
+  @keyframes pulse { 0% { transform: scale(1); } 35% { transform: scale(1.14); } 100% { transform: scale(1); } }
+  @keyframes ring { 0% { opacity: 0; transform: scale(1); } 30% { opacity: .85; } 100% { opacity: 0; transform: scale(1.12); } }
+
+  /* --- reduced motion: no movement. Settle becomes a 120 ms opacity fade of the tile (no translate/scale); the score pulse becomes a 240 ms ring fade only. --- */
+  @media (prefers-reduced-motion: reduce) {
+    .settle-wrap.go { animation: fade-only 120ms linear both; will-change: opacity; }
+    .score.go b { animation: none; }
+    .score.go::after { animation: ring-rm 240ms linear both; }
+  }
+  html[data-reduce="1"] .settle-wrap.go { animation: fade-only 120ms linear both; will-change: opacity; }
+  html[data-reduce="1"] .score.go b { animation: none; }
+  html[data-reduce="1"] .score.go::after { animation: ring-rm 240ms linear both; }
+  @keyframes fade-only { 0% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes ring-rm { 0% { opacity: 0; } 40% { opacity: .85; } 100% { opacity: 0; } }
+</style>
+</head>
+<body>
+<h1 style="font-size:22px;margin:0 0 8px">Micro-motion prototype</h1>
+<p style="color:#8d97a8;max-width:760px;margin:0">Tile settle (180 ms) and score pulse (240 ms). Compositor-only properties. Tick the box to preview the reduced-motion path; the real <code>prefers-reduced-motion</code> media query is handled too.</p>
+<div class="controls">
+  <button class="ctl" id="place">Place a tile</button><button class="ctl" id="score">Score +5</button><button class="ctl" id="reset">Reset</button>
+  <label><input type="checkbox" id="rm"> simulate reduced motion</label>
+  <select id="tv"><option value="">current tiles</option><option>A</option><option>B</option><option>C</option></select>
+</div>
+<div class="stage screen game-screen walnut-live rh-match-live" style="width:auto;height:330px;max-width:980px"><div class="row" id="row"></div><div class="score">YOU <b id="sc">3</b></div></div>
+<script>
+const LAYOUT = { 0: [], 1: [[1,1]], 2: [[0,0],[2,2]], 3: [[0,0],[1,1],[2,2]], 4: [[0,0],[0,2],[2,0],[2,2]], 5: [[0,0],[0,2],[1,1],[2,0],[2,2]], 6: [[0,0],[0,2],[1,0],[1,2],[2,0],[2,2]] };
+const COLOR = { 1: '#1e3a8a', 2: '#0B5A3C', 3: '#38bdf8', 4: '#f97316', 5: '#22c55e', 6: '#dc2626' };
+const half = (v, size) => { const h = document.createElement('div'); h.className = 'pip-half'; Object.assign(h.style, { width: size + 'px', height: size + 'px', position: 'relative', flexShrink: '0' }); const ps = Math.max(6, size / 4.2), cs = size / 3; for (const [r, c] of LAYOUT[v]) { const p = document.createElement('div'); p.className = 'pip'; Object.assign(p.style, { position: 'absolute', width: ps + 'px', height: ps + 'px', borderRadius: '50%', backgroundColor: COLOR[v], left: c * cs + cs / 2 - ps / 2 + 'px', top: r * cs + cs / 2 - ps / 2 + 'px' }); h.appendChild(p); } return h; };
+const tile = (l, r, size) => { const b = document.createElement('button'); b.className = 'domino-tile board-tile'; const body = document.createElement('div'); body.className = 'domino-body'; const d = document.createElement('div'); d.className = 'domino-divider vertical'; body.append(half(l, size), d, half(r, size)); b.appendChild(body); return b; };
+const SEQ = [[6,6],[6,4],[4,2],[2,5],[5,0],[0,3]];
+const row = document.getElementById('row'), sc = document.getElementById('sc'), scoreBox = document.querySelector('.score');
+let n = 0;
+const q = new URLSearchParams(location.search);
+function setTiles(v) { if (v) document.documentElement.dataset.rhTiles = v; else delete document.documentElement.dataset.rhTiles; }
+setTiles(q.get('tiles') || '');
+function place() {
+  const [a, b] = SEQ[n % SEQ.length]; n++;
+  const wrap = document.createElement('span'); wrap.className = 'settle-wrap'; wrap.style.margin = '0 3px';
+  wrap.appendChild(tile(a, b, 52)); row.appendChild(wrap);
+  while (row.children.length > 6) row.firstElementChild.remove();
+  wrap.classList.add('go');
+  wrap.addEventListener('animationend', (e) => { if (e.target === wrap) wrap.classList.remove('go'); }, { once: true }); // drop will-change when done
+}
+function score() {
+  sc.textContent = String(+sc.textContent + 5);
+  scoreBox.classList.remove('go'); void scoreBox.offsetWidth; scoreBox.classList.add('go');
+  scoreBox.addEventListener('animationend', () => scoreBox.classList.remove('go'), { once: true });
+}
+document.getElementById('place').onclick = place; document.getElementById('score').onclick = score;
+document.getElementById('reset').onclick = () => { row.innerHTML = ''; n = 0; sc.textContent = '3'; };
+document.getElementById('rm').onchange = (e) => { document.documentElement.dataset.reduce = e.target.checked ? '1' : '0'; };
+document.getElementById('tv').onchange = (e) => setTiles(e.target.value);
+for (let i = 0; i < 3; i++) place();
+// bench hook for design-lab/perf/motionBench.mjs: N back-to-back placements (one every 260 ms) plus a score pulse every 3rd
+window.runBench = (count) => new Promise((resolve) => { let i = 0; const t = setInterval(() => { place(); if (i % 3 === 0) score(); if (++i >= count) { clearInterval(t); setTimeout(resolve, 400); } }, 260); });
+</script>
+</body>
+</html>
