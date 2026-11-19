@@ -38,6 +38,19 @@
   @keyframes pulse { 0% { transform: scale(1); } 35% { transform: scale(1.14); } 100% { transform: scale(1); } }
   @keyframes ring { 0% { opacity: 0; transform: scale(1); } 30% { opacity: .85; } 100% { opacity: 0; transform: scale(1.12); } }
 
+  /* --- CURRENT app motion for comparison (copied from components/board/placementFeedback.css and components/animatedScore.css) --- */
+  html[data-motion="app"] .settle-wrap.go { animation: none; will-change: auto; }
+  html[data-motion="app"] .settle-wrap.go::before { animation: none; }
+  html[data-motion="app"] .settle-wrap.go > .domino-tile { animation: rh-tile-land 220ms cubic-bezier(0.2,0.8,0.2,1); }
+  @keyframes rh-tile-land { from { opacity: .65; translate: 0 -6px; scale: 1.035; } to { opacity: 1; translate: 0 0; scale: 1; } }
+  html[data-motion="app"] .score.go b { animation: rh-score-ack 360ms cubic-bezier(0.2,0.8,0.2,1); will-change: auto; }
+  html[data-motion="app"] .score.go::after { animation: none; }
+  @keyframes rh-score-ack { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.08); } }
+  @media (prefers-reduced-motion: reduce) { html[data-motion="app"] .settle-wrap.go > .domino-tile, html[data-motion="app"] .score.go b { animation: none; } }
+  html[data-reduce="1"][data-motion="app"] .settle-wrap.go { animation: none; }
+  html[data-reduce="1"][data-motion="app"] .score.go::after { animation: none; }
+  html[data-reduce="1"][data-motion="app"] .settle-wrap.go > .domino-tile, html[data-reduce="1"][data-motion="app"] .score.go b { animation: none; }
+
   /* --- reduced motion: no movement. Settle becomes a 120 ms opacity fade of the tile (no translate/scale); the score pulse becomes a 240 ms ring fade only. --- */
   @media (prefers-reduced-motion: reduce) {
     .settle-wrap.go { animation: fade-only 120ms linear both; will-change: opacity; }
@@ -57,6 +70,7 @@
 <div class="controls">
   <button class="ctl" id="place">Place a tile</button><button class="ctl" id="score">Score +5</button><button class="ctl" id="reset">Reset</button>
   <label><input type="checkbox" id="rm"> simulate reduced motion</label>
+  <select id="mv"><option value="proposed">proposed motion</option><option value="app">current app motion</option></select>
   <select id="tv"><option value="">current tiles</option><option>A</option><option>B</option><option>C</option></select>
 </div>
 <div class="stage screen game-screen walnut-live rh-match-live" style="width:auto;height:330px;max-width:980px"><div class="row" id="row"></div><div class="score">YOU <b id="sc">3</b></div></div>
@@ -87,6 +101,8 @@ function score() {
 document.getElementById('place').onclick = place; document.getElementById('score').onclick = score;
 document.getElementById('reset').onclick = () => { row.innerHTML = ''; n = 0; sc.textContent = '3'; };
 document.getElementById('rm').onchange = (e) => { document.documentElement.dataset.reduce = e.target.checked ? '1' : '0'; };
+document.documentElement.dataset.motion = q.get('motion') || 'proposed';
+document.getElementById('mv').onchange = (e) => { document.documentElement.dataset.motion = e.target.value; };
 document.getElementById('tv').onchange = (e) => setTiles(e.target.value);
 for (let i = 0; i < 3; i++) place();
 // bench hook for design-lab/perf/motionBench.mjs: N back-to-back placements (one every 260 ms) plus a score pulse every 3rd

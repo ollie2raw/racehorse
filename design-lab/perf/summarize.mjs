@@ -43,5 +43,15 @@ const norm = mode === 'scene' ? ['task ms per frame', (r) => r.cdp.TaskDuration 
 md += `| ${norm[0]} | ${use.map((v) => cell(rows[v].map(norm[1]), 2)).join(' | ')} |\n`;
 const base = med(rows.none?.map(norm[1]) ?? []);
 md += `| ${norm[0]} vs none | ${use.map((v) => (Number.isFinite(base) ? ((med(rows[v].map(norm[1])) / base - 1) * 100).toFixed(1) + '%' : 'n/a')).join(' | ')} |\n`;
+if (mode === 'app') {
+  // Window length differs per game (Fritz thinking time at 4x), so also normalise per frame (about per 17 ms of wall time).
+  for (const [label, fn] of [['task ms per frame', (r) => r.cdp.TaskDuration / r.frames.n], ['style recalc ms per frame', (r) => r.cdp.RecalcStyleDuration / r.frames.n]]) {
+    md += `| ${label} | ${use.map((v) => cell(rows[v].map(fn), 3)).join(' | ')} |\n`;
+    const b = med(rows.none?.map(fn) ?? []);
+    md += `| ${label} vs none | ${use.map((v) => ((med(rows[v].map(fn)) / b - 1) * 100).toFixed(1) + '%').join(' | ')} |\n`;
+    const s = med(rows.SEL?.map(fn) ?? []);
+    md += `| ${label} vs SEL | ${use.map((v) => ((med(rows[v].map(fn)) / s - 1) * 100).toFixed(1) + '%').join(' | ')} |\n`;
+  }
+}
 fs.writeFileSync(path.join(dir, `summary-${mode}.md`), md);
 console.log(md);

@@ -18,7 +18,8 @@ const busy = () => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let waited = 0;
-for (let run = 1; run <= RUNS; run++) {
+const START = Number(args.start ?? 1);
+for (let run = START; run < START + RUNS; run++) {
   for (const v of variants) {
     while (busy() && waited < 40 * 60_000) { console.log('other agent busy, waiting 30s'); await sleep(30_000); waited += 30_000; }
     const out = path.join(here, '..', 'results', `${MODE}-${v}-r${run}.json`);
