@@ -1,0 +1,17 @@
+/*
+ * design-lab / hud-v2.css  -  GALLERY ONLY. Proposed boneyard pill and Fritz tile count (activated by <html data-rh-hud="v2">).
+ * These need DOM changes (BoneyardCountPill.tsx, TileRack.tsx), so they cannot be injected into the live app; they are not in the perf runs.
+ * Current boneyard: a 21px outline of ONE domino + number (BoneyardStackIcon.tsx). Current Fritz count: a row of blank ivory tile backs, no numeral.
+ */
+.hud2-boneyard { position: absolute; right: 14px; top: 14px; display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px 0 12px; box-sizing: border-box; border: 1px solid rgba(231, 182, 74, .34); background: #070b12; border-radius: 16px; }
+.hud2-boneyard svg { width: 34px; height: 30px; }
+.hud2-boneyard .num { font-size: 28px; font-weight: 900; line-height: 1; color: #fffaf0; }
+.hud2-boneyard .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .16em; color: rgba(244, 239, 228, .62); text-transform: uppercase; line-height: 1.1; }
+.hud2-fritz-count { position: absolute; display: flex; align-items: center; gap: 10px; padding: 6px 14px 6px 8px; border-radius: 16px; border: 1px solid rgba(88, 166, 255, .38); background: #070b12; }
+.hud2-fritz-count .chip { min-width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 26px; font-weight: 900; color: #0a0f1a; background: #58a6ff; }
+.hud2-fritz-count .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .16em; color: #8fc4ff; text-transform: uppercase; line-height: 1.15; }
+.hud2-fritz-count .minis { display: flex; gap: 3px; }
+.hud2-fritz-count .minis i { width: 10px; height: 22px; border-radius: 3px; background: #e9e0cc; box-shadow: 0 0 0 1px #8a7c5f; }
+
+/* end-of-arm value badge (needs a DOM change in Board.tsx zones; gallery only) */
+.end-badge { position: absolute; left: 50%; top: -11px; transform: translateX(-50%); min-width: 22px; height: 22px; padding: 0 5px; box-sizing: border-box; border-radius: 11px; background: #4da3ff; color: #06101e; font-weight: 900; font-size: 14px; display: grid; place-items: center; line-height: 1; z-index: 5; }

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Racehorse design lab scene</title>
+<!--
+  One mock match screen built from the REAL component markup (domino-tile > domino-body > pip-half > pip, placement-zone, rh-tile-rack,
+  boneyard-pill) so the same variant CSS applies here and in the live app.
+  Query: tiles=ref|A|B|C|SEL  board=ref|A|B|C  hud=cur|v2  hand=cur|lg  state=idle|sel
+  EXPERIMENT ONLY. Static, no animation.
+-->
+<link rel="stylesheet" href="../themes/current.css">
+<link rel="stylesheet" href="../themes/tiles.css">
+<link rel="stylesheet" href="../themes/boards.css">
+<link rel="stylesheet" href="../themes/hud-v2.css">
+</head>
+<body>
+<div id="root"></div>
+<script>
+const q = new URLSearchParams(location.search);
+const tiles = q.get('tiles') || 'ref', board = q.get('board') || 'ref', hud = q.get('hud') || 'cur', handMode = q.get('hand') || 'cur', state = q.get('state') || 'idle';
+if (tiles !== 'ref') document.documentElement.dataset.rhTiles = tiles;
+if (board !== 'ref') document.documentElement.dataset.rhBoard = board;
+const W = innerWidth, H = innerHeight, phone = W < 900;
+
+// ---- pip rendering exactly as DominoTile.tsx ----
+const LAYOUT = { 0: [], 1: [[1,1]], 2: [[0,0],[2,2]], 3: [[0,0],[1,1],[2,2]], 4: [[0,0],[0,2],[2,0],[2,2]], 5: [[0,0],[0,2],[1,1],[2,0],[2,2]], 6: [[0,0],[0,2],[1,0],[1,2],[2,0],[2,2]] };
+const COLOR = { 1: '#1e3a8a', 2: '#0B5A3C', 3: '#38bdf8', 4: '#f97316', 5: '#22c55e', 6: '#dc2626' };
+function half(v, size) {
+  const h = document.createElement('div'); h.className = 'pip-half';
+  Object.assign(h.style, { width: size + 'px', height: size + 'px', position: 'relative', flexShrink: '0' });
+  const ps = Math.max(6, size / 4.2), cs = size / 3;
+  for (const [r, c] of LAYOUT[v]) {
+    const p = document.createElement('div'); p.className = 'pip';
+    Object.assign(p.style, { position: 'absolute', width: ps + 'px', height: ps + 'px', borderRadius: '50%', backgroundColor: COLOR[v], left: (c * cs + cs / 2 - ps / 2) + 'px', top: (r * cs + cs / 2 - ps / 2) + 'px' });
+    h.appendChild(p);
+  }
+  return h;
+}
+function tile(l, r, size, cls = '', rot = 0) {
+  const b = document.createElement('button'); b.className = 'domino-tile ' + (l === r ? 'double ' : '') + cls;
+  b.style.setProperty('--rh-rot', rot + 'deg');
+  const body = document.createElement('div'); body.className = 'domino-body';
+  const d = document.createElement('div'); d.className = 'domino-divider vertical';
+  body.append(half(l, size), d, half(r, size)); b.appendChild(body); return b;
+}
+
+// ---- screen frame (sizes read from the real app at 1440x900 and 844x390; see ../ref/*.json) ----
+const padX = phone ? 10 : 28, boardTop = phone ? 68 : 116;
+const handGap = phone ? 14 : handMode === 'lg' ? 28 : 20;
+const handSize = phone ? 36 : handMode === 'lg' ? Math.floor(Math.min(92, H * 0.095, ((W - 2 * 28 - 6 * handGap - 60) / 14) - 3)) : 60;
+const deckH = phone ? 121 : handSize + (handMode === 'lg' ? 70 : 54);
+const bx = padX, by = boardTop, bw = W - 2 * padX, bh = H - deckH - 12 - boardTop;
+const root = document.getElementById('root');
+const screen = document.createElement('div'); screen.className = 'screen game-screen walnut-live rh-match-live';
+root.appendChild(screen);
+const Z = phone ? 0.62 : 1;
+
+// HUD rail
+const rail = document.createElement('div'); rail.style.cssText = `position:absolute;left:0;top:0;width:${100 / Z}vw;height:110px;zoom:${Z}`;
+const fritzRack = '<div class="rh-tile-rack" style="left:166px;top:31px">' + '<div class="rh-tile-rack__tile"></div>'.repeat(5).replace(/<div class="rh-tile-rack__tile"><\/div>/g, '<div class="rh-tile-rack__tile" style="width:22px;height:34px;border-radius:6px"></div>') + '</div>';
+const fritzV2 = '<div class="hud2-fritz-count" style="left:166px;top:30px"><div class="chip">5</div><div><div class="lbl">Fritz<br>tiles left</div></div><div class="minis">' + '<i></i>'.repeat(5) + '</div></div>';
+rail.innerHTML = `<div class="hud-pill hud-score fritz">FRITZ <b>12</b></div>${hud === 'v2' ? fritzV2 : fritzRack}<div class="hud-pill hud-turn">YOUR TURN</div><div class="hud-pill hud-score you">YOU <b>3</b></div>`;
+if (hud === 'v2') rail.querySelector('.hud2-fritz-count').style.left = '178px';
+screen.appendChild(rail);
+
+// board canvas
+const canvas = document.createElement('div'); canvas.className = 'nbl-board-canvas board-area wl-board-area board-canvas';
+Object.assign(canvas.style, { left: bx + 'px', top: by + 'px', width: bw + 'px', height: bh + 'px' });
+canvas.innerHTML = '<div class="nbl-board-watermark"><svg viewBox="0 0 100 100"><path d="M20 12h34c18 0 28 9 28 22 0 11-7 19-19 22l22 32H66L47 60H35v26H20zM35 25v22h17c8 0 12-4 12-11s-4-11-12-11z"/></svg></div>';
+screen.appendChild(canvas);
+const bc = document.createElement('div'); bc.className = 'board-container'; canvas.appendChild(bc);
+
+// meta pills inside canvas
+const meta = document.createElement('div'); meta.style.cssText = `position:absolute;right:0;top:0;width:${100 / Z}%;height:200px;zoom:${Z};pointer-events:none`;
+const bone = hud === 'v2'
+  ? `<div class="hud2-boneyard"><svg viewBox="0 0 34 30" fill="none"><g stroke="#e7b64a" stroke-width="2" stroke-linejoin="round"><rect x="3" y="14" width="22" height="11" rx="3" fill="#0a0f18" transform="rotate(-8 14 19)"/><rect x="6" y="9" width="22" height="11" rx="3" fill="#0a0f18" transform="rotate(4 17 14)"/><rect x="9" y="4" width="22" height="11" rx="3" fill="#10161f"/><path d="M20 5.5v8"/></g></svg><div class="num">14</div><div class="lbl">Boneyard<br>draw</div></div>`
+  : `<div class="hud-pill corner-pill boneyard-pill"><svg class="boneyard-icon" viewBox="0 0 24 24" fill="none"><rect x="2.8" y="7" width="18.4" height="10" rx="2.8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="8.9" x2="12" y2="15.1" stroke="currentColor" stroke-width="2"/></svg><span class="boneyard-count">14</span></div>`;
+const OPEN_PLACEHOLDER = 'OPENVAL';
+meta.innerHTML = bone + `<div class="hud-pill corner-pill open-pill" style="${hud === 'v2' ? 'top:76px' : ''}">OPEN <b class="boneyard-count" style="margin-left:6px">${OPEN_PLACEHOLDER}</b></div><div class="hud-pill zoom-tray" style="right:14px;top:${Math.round(bh / Z) - 58}px;bottom:auto">&minus;&nbsp;&nbsp;+&nbsp;&nbsp;&#9835;&nbsp;&nbsp;&#9974;</div>`;
+canvas.appendChild(meta);
+
+// ---- arms: [a,b] a touches the previous tile ----
+const ARMS = phone
+  ? { L: [[6,3],[3,3],[3,1],[1,5]], R: [[6,4],[4,2],[2,2],[2,5],[5,0]], U: [], D: [] } // phone: a 201px-tall board cannot hold a vertical cross at readable size without the app's bend routing
+  : { L: [[6,3],[3,3],[3,1],[1,5]], R: [[6,4],[4,2],[2,2],[2,5],[5,0]], U: [[6,0]], D: [[6,5],[5,5]] };
+const OPEN = Object.values(ARMS).reduce((s, arm) => s + (arm.length ? arm[arm.length - 1][1] : 0), 0);
+meta.innerHTML = meta.innerHTML.replace('OPENVAL', String(OPEN));
+const ext = (arm) => arm.reduce((s, [a, b]) => s + (a === b ? 1 : 2), 0);
+const unitsX = 1 + ext(ARMS.L) + ext(ARMS.R) + 4, unitsY = 2 + ext(ARMS.U) + ext(ARMS.D) + (phone ? 0 : 4); // +4: room for the next-tile marker at each end
+const S = Math.min(bw * 0.9 / unitsX, bh * 0.86 / unitsY, 58);
+const cx = bw / 2 - (ext(ARMS.R) - ext(ARMS.L)) * S / 2;
+const cy = bh / 2 - (ext(ARMS.D) - ext(ARMS.U)) * S / 2;
+const bord = 4; // .domino-body border 2px x2; real half = size, total = 2*size + 2 divider + 4
+const place = (l, r, x, y, rot, cls = 'board-tile') => {
+  const t = tile(l, r, S - 3, cls, rot); // 2*(S-3)+2+4 = 2S, as the real board sizes tiles
+  const w = document.createElement('div'); w.className = 'board-tile-wrapper';
+  w.style.cssText = `left:${cx + x * S}px;top:${cy + y * S}px;transform:translate(-50%,-50%) rotate(${rot}deg)`;
+  w.appendChild(t); bc.appendChild(w);
+};
+place(6, 6, 0, 0, 90);
+const ends = {};
+// right
+let x = 0.5; for (const [a, b] of ARMS.R) { if (a === b) { place(a, b, x + 0.5, 0, 90); x += 1; } else { place(a, b, x + 1, 0, 0); x += 2; } ends.R = { x: x, y: 0, v: b, w: 2, h: 1, dx: 1, dy: 0, dbl: a === b }; }
+x = -0.5; for (const [a, b] of ARMS.L) { if (a === b) { place(a, b, x - 0.5, 0, 90); x -= 1; } else { place(b, a, x - 1, 0, 0); x -= 2; } ends.L = { x: x, y: 0, v: b, w: 2, h: 1, dx: -1, dy: 0 }; }
+let y = -1; for (const [a, b] of ARMS.U) { if (a === b) { place(a, b, 0, y - 0.5, 0); y -= 1; } else { place(a, b, 0, y - 1, -90); y -= 2; } ends.U = { x: 0, y: y, v: b, w: 1, h: 2, dx: 0, dy: -1 }; }
+y = 1; for (const [a, b] of ARMS.D) { if (a === b) { place(a, b, 0, y + 0.5, 0); y += 1; } else { place(a, b, 0, y + 1, 90); y += 2; } ends.D = { x: 0, y: y, v: b, w: 1, h: 2, dx: 0, dy: 1 }; }
+// markers (footprint of the next tile; real code: Board.tsx placement zones, outward offset tileSize*0.16)
+const selectedVal = 5;
+for (const k of ['L', 'R', 'U', 'D']) {
+  const e = ends[k]; if (!e) continue; const horiz = e.dx !== 0;
+  const nextW = horiz ? 2 : 1, nextH = horiz ? 1 : 2;
+  const z = document.createElement('div');
+  const isActive = state === 'sel' && e.v === selectedVal;
+  if (state === 'sel' && !isActive) continue;
+  z.className = 'placement-zone ' + (isActive ? 'active' : 'open-end-glow');
+  const px = cx + (e.x + e.dx * nextW / 2) * S + e.dx * S * 0.16, py = cy + (e.y + e.dy * nextH / 2) * S + e.dy * S * 0.16;
+  z.style.cssText = `left:${px}px;top:${py}px;width:${nextW * S * 2 / 2 * (horiz ? 1 : 1) + 4}px;height:${nextH * S + 4}px;transform:translate(-50%,-50%)`;
+  z.style.width = (horiz ? 2 * S : S) + 6 + 'px'; z.style.height = (horiz ? S : 2 * S) + 6 + 'px';
+  if (isActive) z.innerHTML = '<span class="placement-arrow">' + (e.dx < 0 ? '←' : e.dx > 0 ? '→' : e.dy < 0 ? '↑' : '↓') + '</span>';
+  if (board === 'B' || board === 'C') { const bdg = document.createElement('span'); bdg.className = 'end-badge'; bdg.textContent = e.v; if (horiz) { bdg.style.left = e.dx > 0 ? '14px' : 'calc(100% - 14px)'; } z.appendChild(bdg); }
+  bc.appendChild(z);
+}
+
+// ---- hand deck ----
+const deck = document.createElement('div'); deck.className = 'hand-deck'; deck.style.cssText = `left:${padX}px;right:${padX}px;height:${deckH}px`;
+const hc = document.createElement('div'); hc.className = 'hand-container';
+const gap = handGap;
+hc.style.gap = gap + 'px'; hc.style.top = phone ? '14px' : (handMode === 'lg' ? 34 : 24) + 'px';
+const HAND = phone ? [[5,3],[0,4],[6,1],[2,2],[3,4],[1,5],[4,6]] : [[5,3],[0,4],[6,1],[2,2],[3,4],[1,5],[4,6]];
+HAND.forEach(([a, b], i) => {
+  const playable = [a, b].some((v) => v === 5 || v === 0);
+  let cls = playable ? 'highlight' : 'unplayable';
+  if (state === 'sel' && i === 0) cls += ' selected';
+  hc.appendChild(tile(a, b, handSize, cls, 0));
+});
+deck.appendChild(hc); screen.appendChild(deck);
+if (phone) { deck.style.left = '10px'; deck.style.right = '10px'; }
+</script>
+</body>
+</html>

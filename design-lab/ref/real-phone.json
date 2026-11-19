@@ -1,0 +1,59 @@
+{
+ "classes": "screen game-screen walnut-live theme-green bot-match-screen rh-match-live bot-match-mode-bot  ",
+ "handTile": {
+  "x": 129,
+  "y": 299,
+  "w": 73,
+  "h": 36
+ },
+ "handBody": {
+  "x": 129,
+  "y": 299,
+  "w": 73,
+  "h": 36
+ },
+ "boardTile": {
+  "x": 344,
+  "y": 108,
+  "w": 62,
+  "h": 122
+ },
+ "boardBody": {
+  "x": 344,
+  "y": 108,
+  "w": 62,
+  "h": 122
+ },
+ "pip": {
+  "x": 131,
+  "y": 302,
+  "w": 8,
+  "h": 8
+ },
+ "board": {
+  "x": 10,
+  "y": 68,
+  "w": 730,
+  "h": 201
+ },
+ "rack": {
+  "x": 119,
+  "y": 18,
+  "w": 106,
+  "h": 32
+ },
+ "boneyard": {
+  "x": 666,
+  "y": 78,
+  "w": 64,
+  "h": 28
+ },
+ "boardBg": "rgb(12, 14, 18)",
+ "boardBgImg": "linear-gradient(rgba(231, 182, 74, 0.05) 1px, rgba(0, 0, 0, 0) 1px), linear-gradient(90deg, rgba(231, 182, 74, 0.05) 1px, rgba(0, 0, 0, 0) 1px), linear-gradient(rgb(15, 16, 20), rgb(12, 14, 18) 52%, rgb(8, 10, 14))",
+ "tileShadow": "rgba(255, 255, 255, 0.94) 0px 2px 0px 0px inset, rgba(72, 58, 38, 0.14) 0px -3px 8px 0px inset, rgba(255, 255, 255, 0.32) 0px 0px 0px 1px inset, rgba(0, 0, 0, 0.28) 0px 7px 14px 0px, rgba(0, 0, 0, 0.2) 0px 2px 3px 0px, rgba(231, 182, 74, 0.32) 0px 0px 0px 1px",
+ "tileFilter": "drop-shadow(rgba(231, 182, 74, 0.28) 0px 5px 14px) drop-shadow(rgba(0, 0, 0, 0.24) 0px 8px 14px)",
+ "boardTileCount": 1,
+ "handHtml": "<button class=\"domino-tile highlight\" aria-label=\"Domino 3-5\" aria-pressed=\"false\" style=\"display: block; padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; background: none; cursor: pointer; transform: rotate(0deg); transition: filter 0.16s, opacity 0.16s;\"><div class=\"domino-body\" style=\"display: flex; flex-direction: row;\"><div class=\"pip-half\" style=\"width: 42px; height: 42px; position: relative; flex-shrink: 0;\"><div class=\"pip\" style=\"position: absolute; width: 10px; height: 10px; border-radius: 50%; background-color: rgb(56, 189, 248); left: 2px; top: 2px;\"></div><div class=\"pip\" style=\"position: absolute; width: 10px; height: 10px; border-radius: 50%; background-color: rgb(56, 189, 248); left: 16px; top: 16px;\"></div><div class=\"pip\" style=\"position: absolute; width: 10px; height: 10px; border-radius: 50%; background-color: ",
+ "rackHtml": "<div class=\"rh-tile-rack\" role=\"img\" aria-label=\"7 tiles in hand\"><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div></div>",
+ "boneHtml": "<div class=\"boneyard-pill board-corner-pill board-corner-pill--tr\" aria-label=\"14 tiles in boneyard\"><svg class=\"boneyard-icon\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\" focusable=\"false\" style=\"width: 21px; height: 21px; opacity: 0.95;\"><rect x=\"2.8\" y=\"7\" width=\"18.4\" height=\"10\" rx=\"2.8\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></rect><line x1=\"12\" y1=\"8.9\" x2=\"12\" y2=\"15.1\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></line></svg><span class=\"boneyard-count\"><span class=\"rh-number-change\">14</span></span></div>"
+}

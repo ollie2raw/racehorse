@@ -1,0 +1,85 @@
+/*
+ * design-lab / tiles.css  -  three tile-set variants, activated by <html data-rh-tiles="A|B|C|SEL">.
+ * EXPERIMENT ONLY. Same file is used in the gallery and injected into the real app for the perf runs.
+ * Written with native CSS nesting; specificity is parent (attr + 5 classes + :not) + child, which beats the live
+ * `.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body` !important rules by order + !important.
+ *
+ * Shared cost rules (all variants): NO ::before noise (feTurbulence + mix-blend-mode soft-light is removed), NO ::after inset overlay,
+ * NO filter: drop-shadow on board tiles (replaced with static box-shadow), NO gradients on the tile face.
+ *
+ * Pip colours are inline `background-color` on each .pip (DominoTile.tsx PIP_COLORS), so the lab recolours by matching the serialised
+ * inline style. Production would add a pip-value class or CSS variable instead (see ../THEME-PROPOSAL.md), which removes the attribute-selector cost.
+ *
+ * Pip value -> current inline colour: 1 rgb(30,58,138) | 2 rgb(11,90,60) | 3 rgb(56,189,248) | 4 rgb(249,115,22) | 5 rgb(34,197,94) | 6 rgb(220,38,38)
+ */
+
+/* ---------- shared (A, B, C) ---------- */
+html:is([data-rh-tiles="A"], [data-rh-tiles="B"], [data-rh-tiles="C"]) .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) {
+  .domino-body { overflow: visible !important; background-image: none !important; }
+  .domino-body::before, .domino-body::after { content: none !important; display: none !important; }
+  .board-canvas .domino-tile.board-tile:not(.highlight), .board-canvas .domino-tile.board-tile.highlight { filter: none !important; }
+  .domino-body .pip { filter: none !important; border: none !important; transform-origin: center; }
+}
+
+/* ---------- A  "Chamfer rim": rotation-invariant thickness, matte, bigger pips, hue-faithful higher-contrast palette ---------- */
+html[data-rh-tiles="A"] .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) {
+  .domino-body {
+    border-radius: 7px; background-color: #f3ead7 !important; border: 1px solid #85755a !important;
+    box-shadow: inset 0 1.5px 0 #fffdf5, inset 1px 0 0 rgba(255, 255, 255, .5), inset 0 -2px 0 rgba(90, 70, 40, .12),
+      0 0 0 1px #cbbd9b, 0 0 0 2px #a99a76, 0 5px 6px -1px rgba(0, 0, 0, .55) !important;
+  }
+  .domino-body .pip { transform: scale(1.2) !important; box-shadow: inset 0 1.5px 2px rgba(0, 0, 0, .4), 0 0 0 1px rgba(40, 30, 15, .4) !important; }
+  .domino-divider.vertical { width: 2px !important; background: #7a6b4f !important; box-shadow: 1px 0 0 rgba(255, 255, 255, .55) !important; }
+  .domino-body .pip[style*="rgb(30, 58, 138)"] { background-color: #1b3fa0 !important; }
+  .domino-body .pip[style*="rgb(11, 90, 60)"] { background-color: #0a5c66 !important; }
+  .domino-body .pip[style*="rgb(56, 189, 248)"] { background-color: #0b86c9 !important; }
+  .domino-body .pip[style*="rgb(249, 115, 22)"] { background-color: #ee6a0a !important; }
+  .domino-body .pip[style*="rgb(34, 197, 94)"] { background-color: #2a8a3a !important; }
+  .domino-body .pip[style*="rgb(220, 38, 38)"] { background-color: #c01d24 !important; }
+}
+
+/* ---------- B  "Stepped slab": directional thickness (light from top), engraved pip wells, current palette kept ----------
+ * Needs --rh-rot (deg) on the tile to keep the light direction when a tile is rotated: the gallery sets it inline;
+ * the live app has no such variable, so rotated board tiles show the edge on the wrong side in the perf runs (cost-neutral). */
+html[data-rh-tiles="B"] .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) {
+  .domino-tile { --rh-rot: 0deg; --ex: calc(sin(var(--rh-rot)) * -1px); --ey: calc(cos(var(--rh-rot)) * 1px); }
+  .domino-body {
+    border-radius: 8px; background-color: #f4ebda !important; border: 1px solid #7c6c50 !important;
+    box-shadow: inset 0 1.5px 0 #fff, inset 0 -1px 0 rgba(90, 70, 40, .16),
+      calc(var(--ex) * 1) calc(var(--ey) * 1) 0 #d9cdb0, calc(var(--ex) * 2) calc(var(--ey) * 2) 0 #cbbd9b,
+      calc(var(--ex) * 3) calc(var(--ey) * 3) 0 #b9a987, calc(var(--ex) * 4) calc(var(--ey) * 4) 0 #a08f6b,
+      calc(var(--ex) * 8) calc(var(--ey) * 8) 7px -2px rgba(0, 0, 0, .6) !important;
+  }
+  .domino-body .pip { transform: scale(1.22) !important; box-shadow: inset 0 2px 3px rgba(0, 0, 0, .5), 0 0 0 1.5px #e4d8bd, 0 0 0 2.5px rgba(70, 52, 24, .38) !important; }
+  .domino-divider.vertical { width: 3px !important; background: #8f8062 !important; box-shadow: 1px 0 0 #fffaf0, -1px 0 0 rgba(70, 52, 24, .25) !important; }
+}
+
+/* ---------- C  "Edge-light": gradient rim highlight (DEPARTS from matte-solid rule: owner decision), bigger pips, widest-spread palette ---------- */
+html[data-rh-tiles="C"] .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) {
+  .domino-body {
+    border-radius: 8px; border: 2px solid transparent !important;
+    background-color: transparent !important;
+    background-image: linear-gradient(#f6eddc, #f6eddc), linear-gradient(135deg, #ffffff 0%, #d8c9a3 42%, #7a6a4b 100%) !important;
+    background-origin: border-box !important; background-clip: padding-box, border-box !important;
+    box-shadow: 0 0 0 1px rgba(30, 22, 10, .55), 0 3px 0 -1px #8d7d5c, 0 7px 8px -1px rgba(0, 0, 0, .55) !important;
+  }
+  .domino-body .pip { transform: scale(1.2) !important; box-shadow: inset 0 1.5px 2px rgba(0, 0, 0, .45), 0 0 0 1px rgba(20, 14, 6, .5) !important; }
+  .domino-divider.vertical { width: 2px !important; background: #5f5238 !important; box-shadow: 1px 0 0 rgba(255, 255, 255, .6) !important; }
+  .domino-body .pip[style*="rgb(30, 58, 138)"] { background-color: #2a2a8c !important; }
+  .domino-body .pip[style*="rgb(11, 90, 60)"] { background-color: #0d6b5a !important; }
+  .domino-body .pip[style*="rgb(56, 189, 248)"] { background-color: #1581d1 !important; }
+  .domino-body .pip[style*="rgb(249, 115, 22)"] { background-color: #e8700e !important; }
+  .domino-body .pip[style*="rgb(34, 197, 94)"] { background-color: #23863d !important; }
+  .domino-body .pip[style*="rgb(220, 38, 38)"] { background-color: #a80f3a !important; }
+}
+
+/* ---------- SEL  control for the perf runs: current look, re-expressed with the same pip attribute selectors (no visual change),
+ * isolates the cost of attribute-substring matching from the cost of the new paint. ---------- */
+html[data-rh-tiles="SEL"] .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) {
+  .domino-body .pip[style*="rgb(30, 58, 138)"] { background-color: #1e3a8a !important; }
+  .domino-body .pip[style*="rgb(11, 90, 60)"] { background-color: #0B5A3C !important; }
+  .domino-body .pip[style*="rgb(56, 189, 248)"] { background-color: #38bdf8 !important; }
+  .domino-body .pip[style*="rgb(249, 115, 22)"] { background-color: #f97316 !important; }
+  .domino-body .pip[style*="rgb(34, 197, 94)"] { background-color: #22c55e !important; }
+  .domino-body .pip[style*="rgb(220, 38, 38)"] { background-color: #dc2626 !important; }
+}

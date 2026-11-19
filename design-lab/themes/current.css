@@ -1,0 +1,85 @@
+/*
+ * design-lab / current.css  -  GALLERY ONLY.
+ * A faithful port of what the live match screen paints today, so the lab has a "Current" reference that does not depend on the
+ * built app. Sources (read from code): client/src/match/match-live-theme.css (ivory tiles, lines 459-560), match-live-surface.css
+ * (board mat, lines 47-79), styles/walnut-live.css (.rh-tile-rack__tile, open-end glow), match-gameplay.css (open-end-glow).
+ * The injected variant themes (tiles.css, boards.css) override these same selectors, so the same files also work against the real app.
+ * Fidelity check: compare ../ref/real-desktop.png (captured from the built app) with the rendered "ref" scene.
+ */
+:root { color-scheme: dark; }
+html, body { margin: 0; height: 100%; background: #04070c; overflow: hidden; font-family: 'Barlow Condensed', 'Helvetica Neue', Arial, sans-serif; color: #f4efe4; }
+
+.screen.game-screen.walnut-live.rh-match-live { position: relative; width: 100vw; height: 100vh; background: #04070c; }
+
+/* ---- tiles (verbatim from match-live-theme.css) ---- */
+.domino-tile { display: block; padding: 0; border: 0; background: none; cursor: default; transition: filter 0.16s ease, opacity 0.16s ease; }
+.domino-body { display: flex; flex-direction: row; }
+.domino-divider.vertical { width: 2px; align-self: stretch; }
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body {
+  position: relative; isolation: isolate; overflow: hidden; border-radius: 7px;
+  background-color: #f4ebda !important;
+  background-image:
+    radial-gradient(ellipse 90% 68% at 18% 8%, rgba(255, 255, 255, 0.58), transparent 56%),
+    radial-gradient(ellipse 88% 72% at 84% 92%, rgba(58, 48, 34, 0.12), transparent 52%),
+    linear-gradient(168deg, #fffdf8 0%, #f5ebda 52%, #e8dcc4 100%) !important;
+  border: 2px solid rgba(108, 92, 68, 0.62) !important;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.94), inset 0 -3px 8px rgba(72, 58, 38, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+    0 7px 14px rgba(0, 0, 0, 0.32), 0 2px 3px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(72, 58, 38, 0.1) !important;
+}
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body::before {
+  content: ''; position: absolute; inset: 0; border-radius: 6px; pointer-events: none; z-index: 1; opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 88px 88px; mix-blend-mode: soft-light;
+}
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body::after {
+  content: ''; position: absolute; inset: 0; border-radius: 6px; pointer-events: none; z-index: 2;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.58), inset 0 -10px 18px rgba(48, 38, 26, 0.1), inset 2px 0 6px rgba(48, 38, 26, 0.03), inset -2px 0 6px rgba(48, 38, 26, 0.03);
+}
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body .pip {
+  border: none !important; transform: scale(0.98); transform-origin: center; filter: saturate(1.04) brightness(0.98) contrast(1.04);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.44), inset 0 1px 0 rgba(0, 0, 0, 0.18), inset 0 -1px 1px rgba(255, 255, 255, 0.1), 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-divider.vertical {
+  width: 2px !important;
+  background: linear-gradient(180deg, rgba(48, 42, 34, 0.12), rgba(48, 42, 34, 0.46), rgba(48, 42, 34, 0.12)) !important;
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.24), -1px 0 0 rgba(48, 38, 26, 0.1);
+}
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body .pip-half,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body .domino-divider { position: relative; z-index: 3; }
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .board-canvas .domino-tile.board-tile:not(.highlight) { filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.3)); }
+.domino-tile.unplayable:not(.board-tile) { opacity: 0.62; filter: saturate(0.7) brightness(0.8); }
+.domino-tile.selected { transform: translateY(-14px); }
+.hand-container .domino-tile.highlight:not(.unplayable) { position: relative; }
+.hand-container .domino-tile.highlight:not(.unplayable)::after { content: ''; position: absolute; left: 50%; bottom: -9px; width: 38px; height: 3px; margin-left: -19px; border-radius: 2px; background: rgba(231, 182, 74, 0.95); box-shadow: 0 0 12px rgba(231, 182, 74, 0.86); }
+.hand-container .domino-tile.selected .domino-body, .hand-container .domino-tile.highlight:not(.unplayable) .domino-body { border-color: rgba(231, 182, 74, 0.92) !important; }
+
+/* ---- board mat (match-live-surface.css lines 47-79) ---- */
+.nbl-board-canvas {
+  position: absolute; overflow: hidden; border-radius: 30px; border: 0; background-color: #0c0e12;
+  background-image: linear-gradient(rgba(231, 182, 74, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(231, 182, 74, 0.05) 1px, transparent 1px), linear-gradient(180deg, #0f1014 0%, #0c0e12 52%, #080a0e 100%);
+  background-size: 26px 26px, 26px 26px, 100% 100%; background-repeat: repeat, repeat, no-repeat;
+}
+.nbl-board-watermark { position: absolute; left: 50%; top: 50%; width: min(220px, 24%); aspect-ratio: 1; transform: translate(-50%, -50%); opacity: 0.048; pointer-events: none; }
+.nbl-board-watermark svg { width: 100%; height: 100%; fill: #fff; mix-blend-mode: soft-light; }
+.board-container { position: absolute; inset: 0; }
+.board-tile-wrapper { position: absolute; }
+.placement-zone { position: absolute; box-sizing: border-box; border: 1px solid transparent; border-radius: 8px; padding: 0; background: none; }
+.placement-zone.open-end-glow { border-color: rgba(84, 165, 255, 0.12); background: rgba(84, 165, 255, 0.06); filter: blur(4px); opacity: 0.86; }
+.placement-zone.active { border-color: rgba(231, 182, 74, 0.55); background: rgba(231, 182, 74, 0.1); box-shadow: 0 0 20px rgba(231, 182, 74, 0.18); }
+.placement-arrow { color: rgba(248, 250, 252, 0.96); font-size: 1.1rem; display: grid; place-items: center; height: 100%; }
+
+/* ---- HUD (shape only; read from match-live-theme.css) ---- */
+.hud-pill { position: absolute; display: flex; align-items: center; gap: 10px; box-sizing: border-box; border: 1px solid rgba(226, 176, 72, 0.2); background: rgba(5, 9, 15, 0.88); border-radius: 16px; color: rgba(244, 239, 228, 0.95); letter-spacing: 0.17em; font-weight: 800; text-transform: uppercase; }
+.hud-score { top: 30px; height: 60px; padding: 0 28px; font-size: 15px; }
+.hud-score b { font-size: 26px; letter-spacing: 0; color: #fffaf0; font-weight: 900; }
+.hud-score.fritz { left: 28px; border-left: 3px solid #58a6ff; } .hud-score.you { right: 28px; border-right: 3px solid #e7b64a; }
+.hud-turn { left: 50%; top: 38px; transform: translateX(-50%); height: 42px; padding: 0 28px; font-size: 15px; }
+.rh-tile-rack { position: absolute; display: inline-flex; gap: 5px; align-items: center; padding: 7px 10px; border-radius: 18px; border: 1px solid rgba(226, 176, 72, 0.16); background: rgba(5, 9, 15, 0.52); }
+.rh-tile-rack__tile { width: 30px; height: 48px; border-radius: 8px; background: rgba(252, 248, 240, 0.98); border: 1.5px solid rgba(198, 176, 132, 0.62); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 4px 10px rgba(0, 0, 0, 0.28); }
+.corner-pill { position: absolute; right: 14px; min-width: 92px; padding: 0 14px; box-sizing: border-box; height: 44px; justify-content: center; font-size: 15px; letter-spacing: 0.1em; }
+.boneyard-pill { top: 14px; } .open-pill { top: 66px; }
+.boneyard-icon { width: 21px; height: 21px; opacity: 0.95; }
+.boneyard-count { font-size: 20px; letter-spacing: 0; font-weight: 900; }
+.zoom-tray { position: absolute; right: 14px; bottom: 14px; height: 44px; padding: 0 16px; gap: 18px; font-size: 18px; letter-spacing: 0; }
+.hand-deck { position: absolute; left: 28px; right: 28px; bottom: 0; background: rgba(5, 9, 15, 0.9); border-radius: 30px 30px 0 0; box-shadow: 0 -18px 58px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.04); }
+.hand-container { position: absolute; left: 0; right: 0; display: flex; justify-content: center; gap: 20px; }
