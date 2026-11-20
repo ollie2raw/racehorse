@@ -234,7 +234,6 @@ import { TRUSTED_PROXY } from './trustedProxy';
 import { getGameCoreConsistency } from './platform/gameCoreConsistency';
 import { registerHealthRoutes } from './platform/health/registerHealthRoutes';
 import { registerRumRoutes } from './rum/registerRumRoutes';
-import { isRumRequest } from './rum/isRumRequest';
 import { startRumHourly } from './rum/rumHourly';
 import { registerE2eInspectRoutes } from './http/routes/e2eInspectRoute';
 import {
