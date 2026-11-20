@@ -412,7 +412,9 @@ describe('tournament starting player', () => {
     }
   });
 
-  it('Phase 4A: when Fritz starts and moves before the attach finishes, the ack carries the position after that move', async () => {
+  // Real time: Fritz's first move lands 0.8-1.5 s after the deal, and the wait below polls for it. Measured locally at 2.1-4.8 s (n=3, idle), against the
+  // 5 s default, and CI runs this kind of test about 4x slower: 28 'Test timed out in 5000ms' failures across 14 CI runs. So the timeout is explicit.
+  it('Phase 4A: when Fritz starts and moves before the attach finishes, the ack carries the position after that move', { timeout: 30_000 }, async () => {
     // Dev real-stack finding: after dealing, the attach reads the match row back (a
     // real database round trip); Fritz's first move (0.8-1.5 s) landed meanwhile,
     // and the ack then carried the pre-move deal. The client applied it last, showed
@@ -422,7 +424,7 @@ describe('tournament starting player', () => {
     // Only the read after the match is promoted: the one between the ack's snapshot and the ack.
     db.beforeMatchRead = async (id) => {
       if (db.matches.get(id)?.status !== 'in_progress' || !peekRoom(roomCode)?.state) return;
-      const until = Date.now() + 5_000;
+      const until = Date.now() + 20_000;
       while (Date.now() < until) {
         const state = getRoom(roomCode).state!;
         if (state.playerIds[state.currentPlayerIndex] !== BOT_B && state.board) return;
