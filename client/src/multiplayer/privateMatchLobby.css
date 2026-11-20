@@ -51,7 +51,7 @@
 
 /* Two-column layout only. Below 1025px the hub stacks (column), and a 40% basis there made the left column a ~210px
    scroll box that clipped the 287px duel stage (the lobby card then sat on top of it on a phone). The stacked rule at
-   max-width 1024px (`flex: 0 0 auto`) could not win against the old `!important`, so the rule is scoped instead. */
+   max-width 1024px (`flex: 0 0 auto`) could not win against the old forced value, so the rule is scoped instead. */
 @media (min-width: 1025px) {
   .pml-root .mp-hub-pvf-layout.pvf-layout > .pvf-left-col.pml-left--stack {
     flex: 0 1 40% !important;
@@ -2591,13 +2591,17 @@
   align-items: center !important;
 }
 
-.multiplayer-hub .pml-room-stage .pml-matchup > .pml-duel-card {
-  align-self: center !important;
-  height: 260px !important;
-  min-height: 260px !important;
-  max-height: 260px !important;
-  justify-content: center !important;
-  overflow: visible !important;
+/* Not on phones or short landscape, where the card sizes to its content (the stage was 272px and pushed the lobby panel below the
+   fold). Scoping the rule out is what lets the phone reset below go: it only existed to undo these. */
+@media (min-width: 769px) and (orientation: portrait), (min-width: 769px) and (min-height: 431px) {
+  .multiplayer-hub .pml-room-stage .pml-matchup > .pml-duel-card {
+    align-self: center !important;
+    height: 260px !important;
+    min-height: 260px !important;
+    max-height: 260px !important;
+    justify-content: center !important;
+    overflow: visible !important;
+  }
 }
 
 /* Private lobby only: its left column runs narrower than Quick Match's locked
@@ -2711,10 +2715,10 @@
   }
 
   .multiplayer-hub .pml-room-stage .pml-matchup > .pml-duel-card {
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    align-self: stretch !important;
+    align-self: stretch;
+    min-height: 0;
+    justify-content: center;
+    overflow: visible;
   }
 
   .pml-matchup {
@@ -2779,5 +2783,42 @@
   .pml-toolbar-start {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+/* Short landscape phones (844x390, 932x430, 667x375, 568x320): two columns, as on desktop (>=1025px). Stacked, the duel stage pushed the
+   panel below the fold and `.pml-mp-panel { flex: 1 1 0% }` squeezed it to ~50px, half-hiding Waiting for opponent / Leave Room. Side by
+   side the panel gets the full row height; the stage scrolls inside its own scrollport. The 260px duel card is scoped out of this
+   range above, and the !important declarations here are the only ones that must out-rank the shared layout's. The native shell
+   (.rh-native) has its own rules in native-landscape.css. */
+@media (orientation: landscape) and (max-height: 430px) {
+  :root:not(.rh-native) .pml-root .mp-hub-pvf-layout.pvf-layout {
+    --pml-left-basis: 40%;
+    flex-direction: row !important;
+    align-items: stretch;
+    padding-block: 6px 8px !important;
+  }
+
+  :root:not(.rh-native) .pml-root .mp-hub-pvf-layout.pvf-layout > .pvf-left-col.pml-left--stack {
+    flex: 0 1 var(--pml-left-basis) !important;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  :root:not(.rh-native) .pml-root .mp-hub-pvf-layout.pvf-layout > .pml-mp-panel.pvf-control-panel {
+    max-height: 100%;
+    overflow: hidden;
+    padding: 8px 14px 8px;
+    gap: 6px;
+    border-top: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.07);
+  }
+}
+
+/* Narrow short phones (667x375, 568x320): the panel column is ~280px, so give it more of the row. */
+@media (orientation: landscape) and (max-height: 430px) and (max-width: 700px) {
+  :root:not(.rh-native) .pml-root .mp-hub-pvf-layout.pvf-layout {
+    --pml-left-basis: 34%;
   }
 }

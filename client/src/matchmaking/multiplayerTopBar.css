@@ -183,40 +183,7 @@
     white-space: nowrap;
   }
 
-  /* Two columns, as on desktop (>=1025px). Stacked, the duel stage (272px) pushed the panel below the fold and
-     `.pml-mp-panel { flex: 1 1 0% !important }` then squeezed it to ~50px inside its own scroller, so its footer
-     (Waiting for opponent / Leave Room) was half hidden, wherever the page happened to be scrolled. Side by side the
-     panel gets the full row height; the stage scrolls inside its own scrollport (.pml-room-stage__scroll). */
-  :root:not(.rh-native) .pml-root .mp-hub-pvf-layout.pvf-layout {
-    flex-direction: row !important;
-    align-items: stretch;
-    gap: 12px !important;
-    padding-top: 6px !important;
-    padding-bottom: 8px !important;
-    overflow: hidden !important;
-  }
-
-  :root:not(.rh-native) .pml-root .mp-hub-pvf-layout.pvf-layout > .pvf-left-col.pml-left--stack {
-    flex: 0 1 40% !important;
-    width: auto !important;
-    max-width: 40%;
-    min-width: 0 !important;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-
-  :root:not(.rh-native) .pml-root .mp-hub-pvf-layout.pvf-layout > .pml-mp-panel.pvf-control-panel {
-    flex: 1 1 0 !important;
-    width: auto !important;
-    min-height: 0 !important;
-    max-height: 100%;
-    overflow: hidden;
-    padding: 8px 14px 8px;
-    gap: 6px;
-    border-top: none;
-    border-left: 1px solid rgba(255, 255, 255, 0.07);
-  }
+  /* The two-column layout itself (the rules that must out-rank the shared !important layout) lives in multiplayer/privateMatchLobby.css. */
 
   /* A state line ("Waiting for opponent to ready up...") gets its own row under the buttons. */
   :root:not(.rh-native) .pml-panel-footer .pml-footer-hint {
@@ -230,11 +197,6 @@
   /* Narrow short phones (667x375, 568x320): the panel column is ~280px, so Waiting for opponent + Leave Room share it.
      Give the panel more of the row and tighten the two buttons so the labels fit on one line, still 44px tall. */
   @media (max-width: 700px) {
-    :root:not(.rh-native) .pml-root .mp-hub-pvf-layout.pvf-layout > .pvf-left-col.pml-left--stack {
-      flex-basis: 34% !important;
-      max-width: 34%;
-    }
-
     :root:not(.rh-native) .pml-panel-footer .pml-start-btn.rh-btn {
       font-size: 13px;
       padding-inline: 8px;
