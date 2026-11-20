@@ -163,6 +163,8 @@ jobs:
       # "needs everything". Allowed: anything under docs/ except docs/architecture/ (the architecture checker reads
       # docs/architecture/architecture-manifest.json), and *.md files in the repository root. Client Unit Tests, Lint, Build and the
       # reachability gate are NOT gated: client/src/auth/usernamePolicy.test.ts imports docs/ops/moderation-rollout/preflight.sql.
+      - name: THROWAWAY break the changes job
+        run: exit 1
       - name: Determine which heavy jobs this diff needs
         id: check
         env:
