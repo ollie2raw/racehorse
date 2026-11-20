@@ -6,6 +6,7 @@ import { config } from './config';
 import { runBootEnvCheck } from './envBootCheck';
 import { protocolHandshakeMiddleware } from './socketProtocol';
 import { sentryBeforeSend } from './sentryScrubbers';
+import { isRumRequest } from './rum/isRumRequest';
 import { startEventLoopLagMonitor } from './platform/health/eventLoopLagMonitor';
 import { startResourceUsageLog } from './platform/health/resourceUsageLog';
 import { scheduleRoomRetention } from './multiplayer/roomRetentionReaper';
@@ -20,7 +21,8 @@ Sentry.init({
   tracesSampleRate: 0.2,
   // The speed-measurement beacon (POST /api/rum) is not traced: a transaction for it would carry the request's address, and the
   // privacy policy says our application does not record that address with these measurements (docs/ops/rum-beacon.md).
-  integrations: [Sentry.httpIntegration({ ignoreIncomingRequests: (urlPath) => urlPath.startsWith('/api/rum') })],
+  // Case-insensitive on purpose: Express routes /API/RUM to the same handler, so a case-sensitive match left that path traced.
+  integrations: [Sentry.httpIntegration({ ignoreIncomingRequests: (urlPath) => isRumRequest(urlPath) })],
   beforeSend: sentryBeforeSend,
 });
 import fs from 'node:fs';
