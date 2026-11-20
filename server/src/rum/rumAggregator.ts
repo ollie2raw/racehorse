@@ -125,12 +125,48 @@ function rowsOf(group: string, g: Group, minReports: number): RumRow[] {
   }));
 }
 
+/**
+ * Complementary suppression. A group below the floor is withheld, but `all` is published, so `all` minus the published rows of
+ * one dimension gives back the withheld part: its report count and, through `max`, an exact value of a single summary. For
+ * every metric and every dimension: if what the published rows of that dimension leave out of `all` is between 1 and
+ * minReports-1 summaries, drop that dimension's rows for the metric. What is left is `all` alone (nothing to subtract), so no
+ * published number describes fewer than minReports summaries, however the rows are combined. A remainder of 0 (everything is in
+ * some published row) or of at least minReports is fine.
+ */
+function suppressDifferenceable(rows: RumRow[], minReports: number): RumRow[] {
+  const allByMetric = new Map(rows.filter((r) => r.group === 'all').map((r) => [r.metric, r.reports]));
+  const dimensionOf = (group: string): string | null => {
+    const [head, value] = group.split(':');
+    if (head === 'all') return null;
+    return head === 'other' ? value ?? null : head ?? null;
+  };
+  const drop = new Set<string>();
+  for (const dim of DIMENSIONS) {
+    for (const [metric, total] of allByMetric) {
+      let published = 0;
+      for (const r of rows) if (r.metric === metric && dimensionOf(r.group) === dim) published += r.reports;
+      const remainder = total - published;
+      if (remainder > 0 && remainder < minReports) drop.add(`${dim}\u0000${metric}`);
+    }
+  }
+  if (drop.size === 0) return rows;
+  return rows.filter((r) => {
+    const dim = dimensionOf(r.group);
+    return dim === null || !drop.has(`${dim}\u0000${r.metric}`);
+  });
+}
+
 export class RumAggregator {
   private hour: number;
   private groups = new Map<string, Group>();
   /** below-minimum groups held over from earlier hours (so a quiet hour never publishes a tiny group) */
   private carried = new Map<string, Group>();
   private totalReports = 0;
+
+  /** Summaries folded into the current hour so far. Internal (tests, ingest checks); never published, because a count below the floor is itself a small total. */
+  get ingested(): number {
+    return this.totalReports;
+  }
 
   constructor(private readonly now: () => number = Date.now, private readonly minReports = MIN_GROUP_REPORTS) {
     this.hour = hourStart(this.now());
@@ -201,6 +237,12 @@ export class RumAggregator {
     }
 
     if (commit) this.carried = carried;
-    return { hour: new Date(hourMs).toISOString(), rows, reports: this.totalReports, withheldGroups: withheld };
+    return {
+      hour: new Date(hourMs).toISOString(),
+      rows: suppressDifferenceable(rows, this.minReports),
+      // A bare count below the floor would itself be a "total" of fewer than five summaries, so it is not published.
+      reports: this.totalReports >= this.minReports ? this.totalReports : 0,
+      withheldGroups: withheld,
+    };
   }
 }
