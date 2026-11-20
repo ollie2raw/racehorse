@@ -254,7 +254,8 @@ describe('the routes', () => {
 describe('the privacy claims that live outside the route', () => {
   it('the server does not trace POST /api/rum (a transaction would carry the request address)', () => {
     const index = readFileSync(resolve(__dirname, '../index.ts'), 'utf8');
-    expect(index).toMatch(/ignoreIncomingRequests:\s*\(urlPath\)\s*=>\s*urlPath\.startsWith\('\/api\/rum'\)/);
+    // isRumRequest is case-insensitive like Express routing (audit D5; see rumSentryExclusion.test.ts).
+    expect(index).toMatch(/ignoreIncomingRequests:\s*\(urlPath\)\s*=>\s*isRumRequest\(urlPath\)/);
   });
   it('nothing in src/rum reads the request address, user agent or cookies, or logs a request', () => {
     for (const file of ['registerRumRoutes.ts', 'rumAggregator.ts', 'rumHourly.ts']) {
