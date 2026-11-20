@@ -482,3 +482,25 @@ jobs:
             kill "$(cat /tmp/mp-soak-server.pid)" || true
           fi
           tail -n 100 /tmp/mp-soak-server.log || true
+
+  # The one check to require in branch protection (Settings > Branches > main > Require status checks: "CI Gate").
+  # GitHub counts a SKIPPED job as passing a required check, so requiring the individual jobs lets a failed `changes` job (which
+  # skips Server Validation, Playwright E2E and the soak) or any wrongly skipped job read as green. This job runs always() after
+  # every job above and applies the rules in client/scripts/ciGate.mjs (tested in client/scripts/ciGate.test.ts, which also checks
+  # that this list matches the jobs defined in this file). A docs-only PR passes: E2E / Server Validation / the soak are skipped
+  # because `changes` said they are not needed. Not covered: Perf Budgets (its own workflow, path-filtered; a workflow cannot `needs`
+  # another workflow, so it stays a separate check).
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs: [changes, lint-and-static, unit-tests, build-and-audit, mobile-reachability, server, e2e, mp-private-soak]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: client/scripts/ciGate.mjs
+          sparse-checkout-cone-mode: false
+      - name: Every needed job passed, or was skipped only because the diff did not need it
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node client/scripts/ciGate.mjs
