@@ -232,6 +232,7 @@ import { TRUSTED_PROXY } from './trustedProxy';
 import { getGameCoreConsistency } from './platform/gameCoreConsistency';
 import { registerHealthRoutes } from './platform/health/registerHealthRoutes';
 import { registerRumRoutes } from './rum/registerRumRoutes';
+import { isRumRequest } from './rum/isRumRequest';
 import { startRumHourly } from './rum/rumHourly';
 import { registerE2eInspectRoutes } from './http/routes/e2eInspectRoute';
 import {
@@ -408,7 +409,10 @@ app.use((_req, res, next) => {
 
 const restRateLimiter = new InMemoryRateLimiter({ windowMs: 5 * 60_000, max: 600 });
 const socketRateLimiter = new InMemoryRateLimiter({ windowMs: 60_000, max: 600 });
-const restApiLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 5 * 60_000, max: 600 }, 'rest:api');
+// POST /api/rum passes through this limiter too: its published privacy text says the address is not recorded, so a trip on a RUM request logs the scope only.
+const restApiLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 5 * 60_000, max: 600 }, 'rest:api', undefined, {
+  logClientAddress: (req) => !isRumRequest(req.originalUrl),
+});
 // AU-4 (HARDENING_PLAN §6.3): these limits were keyed on `getUserIdFromAuthHeaderSync`,
 // which decoded the JWT `sub` WITHOUT verifying the signature — so a forged
 // `{"sub":"<random>"}` gave an unlimited supply of fresh per-user buckets.
@@ -435,8 +439,8 @@ const moderationLimit = createRateLimitMiddleware(
   'rest:moderation',
 );
 // First-party speed measurements: a visit sends at most a few small summaries an hour. Keyed on `req.ip` in memory only.
-const rumIngestLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 30 }, 'rest:rum');
-const rumSummaryLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:rum-summary');
+const rumIngestLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 30 }, 'rest:rum', undefined, { logClientAddress: false });
+const rumSummaryLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:rum-summary', undefined, { logClientAddress: false });
 const cronLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:cron');
 // Leaderboard queries are read-heavy and trigger unbounded DB scans — give them their own budget
 // so a single poller can't exhaust the global restApiLimit for all other /api/* callers.
