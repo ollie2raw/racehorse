@@ -14,22 +14,22 @@
     "dailyCheckpointPostsOver3Hands": {
       "min": 1,
       "max": 12,
-      "note": "phone profile, 4x CPU, 12 s checkpoint window. Measured 6; the old 600 ms debounce gave 26."
+      "note": "min 1 (CI 6-7 over 8 runs 2026-11-15..19; 0 = checkpointing or the measure broke). phone profile, 4x CPU, 12 s checkpoint window. Measured 6; the old 600 ms debounce gave 26."
     },
     "dailyCheckpointBytesOver3Hands": {
-      "min": 50000,
+      "min": 100000,
       "max": 450000,
-      "note": "Measured 259092; the old debounce gave 1039967."
+      "note": "min 100000 = half the lowest CI value (200,755-313,213 over 8 runs; margin 2x below, 1.4x above to max). Measured 259092; the old debounce gave 1039967."
     },
     "awaitedRoomWritesSecondPlayer": {
-      "min": 0,
+      "min": 1,
       "max": 1,
-      "note": "median over the boundaries, MP_HAND_BOUNDARY_FAST=true, stub at 290 ms, second tap 10 ms after the first. Flag off is 3."
+      "note": "min 1 (CI 1 on all 8 runs; 0 means no room write was seen, i.e. the measure broke). median over the boundaries, MP_HAND_BOUNDARY_FAST=true, stub at 290 ms, second tap 10 ms after the first. Flag off is 3."
     },
     "roomSessionBytesPerStepAtHandBoundary": {
-      "min": 100,
+      "min": 500,
       "max": 2000,
-      "note": "median over the boundaries of (room-session bytes written from the first tap to the new hand dealt) / (game-state steps so far), flag on, entries off. Measured 1055-1485, runs' medians 1187-1357 on 2026-11-15; the snapshot grows with the match, so bytes per step is what stays comparable. S1 on would be about 300."
+      "note": "min 500 = about half the lowest CI value (1,088-1,414 over 8 runs; S1 on would be ~300, a deliberate change that lowers min here). median over the boundaries of (room-session bytes written from the first tap to the new hand dealt) / (game-state steps so far), flag on, entries off. Measured 1055-1485, runs' medians 1187-1357 on 2026-11-15; the snapshot grows with the match, so bytes per step is what stays comparable. S1 on would be about 300."
     }
   },
   "tier2": {
