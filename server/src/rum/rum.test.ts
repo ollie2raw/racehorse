@@ -212,10 +212,10 @@ describe('the routes', () => {
   const post = (body: string, headers: Record<string, string> = { 'content-type': 'text/plain;charset=UTF-8' }) => fetch(`${base}/api/rum`, { method: 'POST', body, headers });
 
   it('takes a text/plain beacon (no CORS preflight needed) with 204 and keeps nothing but totals', async () => {
-    const before = aggregator.preview().reports;
+    const before = aggregator.ingested;
     const res = await post(JSON.stringify(beacon()));
     expect(res.status).toBe(204);
-    expect(aggregator.preview().reports).toBe(before + 1);
+    expect(aggregator.ingested).toBe(before + 1);
   });
 
   it('answers 400 to anything off-schema, 413 to a large body, without logging', async () => {
@@ -235,9 +235,9 @@ describe('the routes', () => {
 
   it('drops summaries and still answers 204 when RUM_INGEST_ENABLED=false', async () => {
     process.env.RUM_INGEST_ENABLED = 'false';
-    const before = aggregator.preview().reports;
+    const before = aggregator.ingested;
     expect((await post(JSON.stringify(beacon()))).status).toBe(204);
-    expect(aggregator.preview().reports).toBe(before);
+    expect(aggregator.ingested).toBe(before);
   });
 
   it('the summary is 404 without a configured token, 401 with a wrong one, and the totals with the right one', async () => {
