@@ -231,6 +231,7 @@ jobs:
             docs_only=false
           fi
 
+          e2e_required=false; docs_only=true # THROWAWAY: simulate a docs-only diff
           echo "e2e_required=$e2e_required" >> "$GITHUB_OUTPUT"
           if [ "$docs_only" = "true" ]; then
             echo "server_required=false" >> "$GITHUB_OUTPUT"
