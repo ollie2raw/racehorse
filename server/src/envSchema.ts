@@ -84,6 +84,7 @@ export const ENV_SPECS: readonly EnvSpec[] = [
   runtime('RUM_INGEST_ENABLED', 'First-party speed measurements (POST /api/rum). On unless exactly false; false answers 204 and drops every summary. See docs/ops/rum-beacon.md.', { kind: 'flagUnlessFalse' }),
   runtime('RUM_SUMMARY_TOKEN', 'Bearer token for GET /api/rum/summary. Without it the endpoint answers 404.', { kind: 'secret' }),
   runtime('RUM_SUPABASE_APPEND_ENABLED', 'Appends each published hourly total to public.rum_hourly (default off; needs the 2026-11-16_rum_hourly.sql migration) and runs the daily delete of rows older than 12 months.', { kind: 'flagTrue' }),
+  runtime('RUM_RETENTION_ENABLED', 'Keeps the daily delete of public.rum_hourly rows older than 12 months running when RUM_SUPABASE_APPEND_ENABLED is off (default off). Set it before turning the append off, so stored rows still expire as the privacy text says.', { kind: 'flagTrue' }),
   runtime('LIVE_SESSION_LOG_ENTRIES', 'Incremental live-session log writes. Needs the persist_room_live_session migration.', { kind: 'flagTrue' }),
   runtime('ENABLE_REQUEST_PUZZLE_GENERATION', 'Allows puzzle generation on request.', { kind: 'flagBool' }),
   runtime('ENABLE_STARTUP_FRITZ_WARMUP', 'Warms the Daily Fritz engine on boot.', { kind: 'flagTruthy' }),

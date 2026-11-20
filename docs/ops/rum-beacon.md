@@ -53,6 +53,7 @@ metric, observations, p50, p75, p95, max (a percentile is the upper edge of its 
 | `RUM_INGEST_ENABLED` | Render | on unless exactly `false` | `false` answers 204 and drops every summary |
 | `RUM_SUMMARY_TOKEN` | Render (secret) | unset | bearer token for `GET /api/rum/summary` (404 when unset): `{ current, published }`, the in-memory preview and the last 24 hours |
 | `RUM_SUPABASE_APPEND_ENABLED` | Render | off | append the hourly rows to `public.rum_hourly` and run the daily 12-month delete |
+| `RUM_RETENTION_ENABLED` | Render | off | keep the daily 12-month delete running while the append is OFF (set it BEFORE turning the append off, then rows already stored still expire; rollback: unset it) |
 
 ## Owner steps
 - **Use it:** nothing to enable; a build with the default rate measures 25% of page loads once this ships. Read it from the Render log line
@@ -60,7 +61,7 @@ metric, observations, p50, p75, p95, max (a percentile is the upper edge of its 
 - **Keep the trend across restarts (optional):** apply `supabase/migrations/2026-11-16_rum_hourly.sql`, then set `RUM_SUPABASE_APPEND_ENABLED=true` and restart.
   Rows older than 12 months are deleted by a job that runs about once a day while the server is up and the flag is on.
   **Before turning the flag off, delete the old rows yourself** (`delete from public.rum_hourly where hour < now() - interval '365 days'`) or drop the
-  table: the delete job stops with the flag, so rows would otherwise outlive 12 months.
+  table, or set `RUM_RETENTION_ENABLED=true` first so the delete job keeps running without the append.
 - **Roll back:** set `VITE_RUM_SAMPLE_RATE=0` and redeploy the client (stops new summaries after the next load), and/or `RUM_INGEST_ENABLED=false` on Render (stops
   collection at once).
 - **App Store Connect:** review the declared data purposes before the first iOS build with the beacon (owner checklist, section D).
