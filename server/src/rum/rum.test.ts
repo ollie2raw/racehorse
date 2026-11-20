@@ -188,6 +188,19 @@ describe('the hourly publisher', () => {
     expect(fetchMock.calls.filter((c) => c.init?.method === 'DELETE')).toHaveLength(2);
   });
 
+  it('keeps deleting expired rows after the append is switched off when RUM_RETENTION_ENABLED=true', async () => {
+    delete process.env.RUM_SUPABASE_APPEND_ENABLED;
+    process.env.RUM_RETENTION_ENABLED = 'true';
+    try {
+      await runRetention(nowMs);
+      expect(fetchMock.calls.filter((c) => c.init?.method === 'DELETE')).toHaveLength(1);
+      await publishDueHours(filled(), nowMs + 25 * 3_600_000);
+      expect(fetchMock.calls.filter((c) => c.init?.method === 'POST')).toEqual([]); // still no append
+    } finally {
+      delete process.env.RUM_RETENTION_ENABLED;
+    }
+  });
+
   it('appendRows does nothing for an hour with no rows', async () => {
     process.env.RUM_SUPABASE_APPEND_ENABLED = 'true';
     await appendRows({ hour: '2026-11-16T10:00:00.000Z', rows: [], reports: 2, withheldGroups: 1 });

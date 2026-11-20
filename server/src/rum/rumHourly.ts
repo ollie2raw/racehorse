@@ -18,6 +18,8 @@ let lastRetentionAt = 0;
 
 export const isRumIngestEnabled = (): boolean => process.env.RUM_INGEST_ENABLED !== 'false';
 export const isRumAppendEnabled = (): boolean => process.env.RUM_SUPABASE_APPEND_ENABLED === 'true';
+/** Keeps the 12-month delete running after the append is switched off (rows already stored must still expire). Default off. */
+export const isRumRetentionEnabled = (): boolean => process.env.RUM_RETENTION_ENABLED === 'true';
 
 export function recentPublishedHours(): readonly RumPublishedHour[] {
   return recent;
@@ -39,9 +41,9 @@ export async function appendRows(published: RumPublishedHour): Promise<void> {
   }
 }
 
-/** Deletes rows older than 12 months. At most once a day; only when the append is enabled. */
+/** Deletes rows older than 12 months. At most once a day; while the append is enabled, or RUM_RETENTION_ENABLED=true when it is off. */
 export async function runRetention(now: number = Date.now()): Promise<void> {
-  if (!isRumAppendEnabled()) return;
+  if (!isRumAppendEnabled() && !isRumRetentionEnabled()) return;
   if (now - lastRetentionAt < DAY_MS - 3_600_000) return;
   lastRetentionAt = now;
   const cutoff = new Date(now - RUM_RETENTION_MS).toISOString();
