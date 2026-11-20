@@ -15,8 +15,9 @@ import { emitHandReady } from '../../../multiplayer/roomTransport';
 import { tileListEquals } from '../../boardSessionUtils';
 import type { HandEndedPayload } from '../liveMatchSessionTypes';
 import type { PreGameDrawState } from '../../preGameDraw/preGameDrawLogic';
-import { stepsForViewChange, type HandLifecycleEffect, type HandLifecycleEvent, type HandView } from './handLifecycleMachine';
+import { classifyReadyAck, stepsForViewChange, type HandLifecycleEffect, type HandLifecycleEvent, type HandView } from './handLifecycleMachine';
 import { createHandLifecycleDriver } from './handLifecycleDriver';
+import { isHandReadyRetryEnabled } from '../../../config/handReadyRetryFeature';
 
 export type UseHandRevealSequenceParams = {
   socket: Socket | null;
@@ -74,6 +75,7 @@ export function useHandRevealSequence(
   const [handRevealAutoProgress, setHandRevealAutoProgress] = useState(1);
   const handRevealAutoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handRevealAutoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const readyRetryTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const handReadyRecoveryRef = useRef(false);
   const ownRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -189,8 +191,13 @@ export function useHandRevealSequence(
         const sentOn = connectionKeyOf(socketNow);
         const sentAt = performance.now();
         emitHandReady(socketNow, room, effect.handNumber).then(
-          () => {
+          (response) => {
             rumRecord('mp.hand_ready_ack', performance.now() - sentAt);
+            // An ok:false answer (the new-hand write was uncertain, new_hand_blocked) is NOT an acknowledgement: the hand did not start.
+            if (isHandReadyRetryEnabled() && classifyReadyAck(response) === 'refused') {
+              dispatchRef.current({ type: 'readySettled', handNumber: effect.handNumber ?? null, source: effect.source, ok: false, refused: true });
+              return;
+            }
             dispatchRef.current({ type: 'readySettled', handNumber: effect.handNumber ?? null, source: effect.source, ok: true, connectionKey: sentOn });
           },
           (error) => {
@@ -207,6 +214,14 @@ export function useHandRevealSequence(
       }
       case 'warnReadyFailed':
         p.showToast('Could not signal hand ready. Reconnecting…', 2500);
+        return;
+      case 'scheduleReadyRetry':
+        readyRetryTimersRef.current.add(
+          window.setTimeout(() => dispatchRef.current({ type: 'readyRetryFired', handNumber: effect.handNumber }), effect.delayMs),
+        );
+        return;
+      case 'warnReadyRetrying':
+        p.showToast('Still trying to start the next hand…', 2500);
         return;
     }
   }, []);
@@ -313,6 +328,8 @@ export function useHandRevealSequence(
     () => () => {
       if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
       if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
+      readyRetryTimersRef.current.forEach((timer) => clearTimeout(timer));
+      readyRetryTimersRef.current.clear();
     },
     [],
   );

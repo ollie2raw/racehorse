@@ -4,6 +4,8 @@ import {
   HAND_REVEAL_AUTO_CONTINUE_MS,
   HAND_REVEAL_OPEN_DELAY_MS,
   initialHandLifecycleState,
+  classifyReadyAck,
+  readyRetryDelayMs,
   reduceHandLifecycle,
   stepsForViewChange,
   type HandLifecycleEffect,
@@ -294,5 +296,74 @@ describe('stepsForViewChange: each decision runs only when the inputs its old ef
 
   it('nothing changed: nothing runs', () => {
     expect(stepsForViewChange(view(), view())).toEqual([]);
+  });
+});
+
+describe('a refused hand:ready (audit B1): resent with a backoff, not counted as acknowledged', () => {
+  const toContinue: HandLifecycleEvent[] = [
+    { type: 'view', view: view() },
+    { type: 'revealTimerFired', handNumber: 2 },
+    { type: 'view', view: view({ reveal: reveal(2) }) },
+    { type: 'continue' },
+    { type: 'view', view: view({ reveal: null }) },
+  ];
+  const refused: HandLifecycleEvent = { type: 'readySettled', handNumber: 2, source: 'continue', ok: false, refused: true };
+
+  it('classifies the server answers', () => {
+    expect(classifyReadyAck({ ok: true, started: true })).toBe('acked');
+    expect(classifyReadyAck({ ok: false, error: 'stale_or_duplicate_hand_ready', ignored: true })).toBe('acked');
+    expect(classifyReadyAck({ ok: false, error: 'stale_match', stale: true })).toBe('acked');
+    expect(classifyReadyAck({ ok: false, uncertain: true, error: "Hand update couldn't be saved — try again." })).toBe('refused');
+    expect(classifyReadyAck({ ok: false, error: 'new_hand_blocked' })).toBe('refused');
+    expect(classifyReadyAck(undefined)).toBe('acked');
+  });
+
+  it('backs off 1 s, 2 s, 4 s, 8 s, then 15 s', () => {
+    expect([1, 2, 3, 4, 5, 6, 20].map(readyRetryDelayMs)).toEqual([1000, 2000, 4000, 8000, 15000, 15000, 15000]);
+  });
+
+  it('does not resend at once, and not on state echoes while waiting; the timer resends', () => {
+    const { state, effects } = run([...toContinue, refused, { type: 'view', view: view({ reveal: null, hand: over(2, 2) }) }, { type: 'view', view: view({ reveal: null, hand: over(2, 3) }) }]);
+    expect(sent(effects)).toEqual([{ type: 'sendReady', handNumber: 2, source: 'continue' }]);
+    expect(effects).toContainEqual({ type: 'scheduleReadyRetry', handNumber: 2, delayMs: 1000 });
+    const fired = reduceHandLifecycle(state, { type: 'readyRetryFired', handNumber: 2 });
+    expect(sent(fired.effects)).toEqual([{ type: 'sendReady', handNumber: 2, source: 'recovery' }]);
+  });
+
+  it('a new socket object on the same connection during the backoff does not resend either (the recovery step runs, the backoff holds)', () => {
+    const { effects } = run([...toContinue, refused, { type: 'view', view: view({ reveal: null, socketId: 2 }) }]);
+    expect(sent(effects)).toEqual([{ type: 'sendReady', handNumber: 2, source: 'continue' }]);
+  });
+
+  it('doubles the wait on each consecutive refusal and warns on the third', () => {
+    const { effects } = run([
+      ...toContinue,
+      refused,
+      { type: 'readyRetryFired', handNumber: 2 },
+      { ...refused, source: 'recovery' },
+      { type: 'readyRetryFired', handNumber: 2 },
+      { ...refused, source: 'recovery' },
+    ]);
+    expect(effects.filter((e) => e.type === 'scheduleReadyRetry').map((e) => (e as { delayMs: number }).delayMs)).toEqual([1000, 2000, 4000]);
+    expect(effects.filter((e) => e.type === 'warnReadyRetrying')).toHaveLength(1);
+    expect(sent(effects)).toHaveLength(3);
+  });
+
+  it('an acknowledgement ends the retries and resets the backoff', () => {
+    const { state, effects } = run([...toContinue, refused, { type: 'readyRetryFired', handNumber: 2 }, { type: 'readySettled', handNumber: 2, source: 'recovery', ok: true, connectionKey: 'c1' }, { type: 'view', view: view({ reveal: null, hand: over(2, 2) }) }]);
+    expect(sent(effects)).toHaveLength(2);
+    expect(state.readyRefusals).toBe(0);
+  });
+
+  it('a reconnect during the backoff resends at once on the new connection', () => {
+    const { effects } = run([...toContinue, refused, { type: 'view', view: view({ reveal: null, connectionKey: 'c2' }) }]);
+    expect(sent(effects).map((e) => (e as { source: string }).source)).toEqual(['continue', 'recovery']);
+  });
+
+  it('stops scheduling after the cap (a reconnect still resends)', () => {
+    const events: HandLifecycleEvent[] = [...toContinue];
+    for (let i = 0; i < 25; i++) events.push({ ...refused, source: 'recovery' }, { type: 'readyRetryFired', handNumber: 2 });
+    const { effects } = run(events);
+    expect(effects.filter((e) => e.type === 'scheduleReadyRetry')).toHaveLength(20);
   });
 });
