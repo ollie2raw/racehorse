@@ -26,6 +26,8 @@ const SCENARIOS: Record<string, Partial<FuzzOptions>> = {
   'state updates silently dropped by the client (the dimmed-tiles scenario)': { silentDropRate: 0.05 },
   'state updates silently dropped on a flaky connection': { silentDropRate: 0.2, disconnectEveryMs: 8_000 },
   'a server restart that loses an acknowledged ready mark (MP_HAND_BOUNDARY_FAST)': { readyLostRate: 0.3, disconnectEveryMs: 8_000 },
+  'a server that refuses the first two hand:ready answers of a hand (uncertain new-hand write; audit B1)': { readyRefusedRate: 0.5 },
+  'refusals on a flaky connection, with taps': { readyRefusedRate: 0.5, tapRate: 0.5, disconnectEveryMs: 8_000 },
   'a restart that sometimes loses the mark, with taps and countdowns': { readyLostRate: 0.5, tapRate: 0.5, disconnectEveryMs: 6_000 },
 };
 

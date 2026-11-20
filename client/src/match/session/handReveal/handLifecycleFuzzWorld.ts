@@ -113,6 +113,7 @@ export function runWorld(seed: number, options: FuzzOptions = DEFAULT_OPTIONS): 
     endedAt: 0,
     readyYou: false,
     readyFritz: false,
+    refusalsLeft: 0,
     handsLeft: 2 + Math.floor(rng() * 5),
     gateCheck: null as number | null,
   };
@@ -179,6 +180,7 @@ export function runWorld(seed: number, options: FuzzOptions = DEFAULT_OPTIONS): 
 
   function endHand() {
     server.handOver = true;
+    server.refusalsLeft = options.readyRefusedRate > 0 && rng() < options.readyRefusedRate ? 2 : 0;
     server.endedAt = clock.now;
     server.handsLeft -= 1;
     if (server.handsLeft <= 0) server.gameOver = true;
@@ -207,6 +209,11 @@ export function runWorld(seed: number, options: FuzzOptions = DEFAULT_OPTIONS): 
 
   function onServerMessage(msg: ClientMsg) {
     if (msg.type === 'ready') {
+      if (server.refusalsLeft > 0 && server.handOver && !server.gameOver && !server.readyYou) {
+        log(`server: refused hand:ready(${msg.handNumber}) (uncertain new-hand write; ${--server.refusalsLeft} more refusals)`);
+        toClient({ type: 'ack', id: msg.ackId, refused: true });
+        return;
+      }
       toClient({ type: 'ack', id: msg.ackId });
       if (options.readyLostRate > 0 && server.handOver && !server.gameOver && !server.readyYou && rng() < options.readyLostRate) {
         // Acknowledged, never durable, and the process dies: the mark is gone and the connection with it.
@@ -335,6 +342,10 @@ export function runWorld(seed: number, options: FuzzOptions = DEFAULT_OPTIONS): 
         return;
       }
       case 'warnReadyFailed':
+      case 'warnReadyRetrying':
+        return;
+      case 'scheduleReadyRetry':
+        clock.after(effect.delayMs, 'ready retry', () => { driver.dispatch({ type: 'readyRetryFired', handNumber: effect.handNumber }); render(); });
         return;
     }
   };
@@ -480,7 +491,7 @@ export function runWorld(seed: number, options: FuzzOptions = DEFAULT_OPTIONS): 
         if (waiting !== undefined) {
           clock.cancel(waiting.timer);
           ackWaiting.delete(msg.id);
-          driver.dispatch({ type: 'readySettled', handNumber: waiting.handNumber, source: waiting.source, ok: true });
+          driver.dispatch({ type: 'readySettled', handNumber: waiting.handNumber, source: waiting.source, ok: !msg.refused, refused: msg.refused });
           render();
         }
         return;

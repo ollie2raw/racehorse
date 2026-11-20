@@ -190,6 +190,70 @@ describe('useHandRevealSequence — the player is ready when they have seen the 
     expect(emitHandReady).toHaveBeenCalledTimes(1);
   });
 
+  describe('a refused hand:ready (audit B1)', () => {
+    const openAndContinue = () => {
+      const state = makeState({ handNumber: 2 });
+      const utils = renderHook(({ handReveal }) => useHandRevealSequence(params(state, handReveal)), {
+        initialProps: { handReveal: null as UseHandRevealSequenceParams['handReveal'] },
+      });
+      vi.advanceTimersByTime(1500);
+      utils.rerender({ handReveal: reveal(2) });
+      vi.advanceTimersByTime(4100);
+      utils.rerender({ handReveal: null }); // Continue closes the reveal
+      return utils;
+    };
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('with the flag on, resends after 1 s then 2 s, and stops once the server accepts', async () => {
+      vi.stubEnv('VITE_ENABLE_HAND_READY_RETRY', 'true');
+      emitHandReady
+        .mockResolvedValueOnce({ ok: false, uncertain: true, error: "Hand update couldn't be saved — try again." })
+        .mockResolvedValueOnce({ ok: false, error: 'new_hand_blocked' })
+        .mockResolvedValue({ ok: true });
+      openAndContinue();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(emitHandReady).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(900);
+      expect(emitHandReady).toHaveBeenCalledTimes(1); // still backing off
+      await vi.advanceTimersByTimeAsync(200);
+      expect(emitHandReady).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1800);
+      expect(emitHandReady).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(emitHandReady).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(emitHandReady).toHaveBeenCalledTimes(3); // accepted: no more
+    });
+
+    it('with the flag off, a refusal is still counted as acknowledged (unchanged behaviour)', async () => {
+      emitHandReady.mockResolvedValue({ ok: false, uncertain: true });
+      openAndContinue();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(emitHandReady).toHaveBeenCalledTimes(1);
+    });
+
+    it('with the flag on, a duplicate or stale answer is an acknowledgement, not retried', async () => {
+      vi.stubEnv('VITE_ENABLE_HAND_READY_RETRY', 'true');
+      emitHandReady.mockResolvedValue({ ok: false, error: 'stale_or_duplicate_hand_ready', ignored: true });
+      openAndContinue();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(emitHandReady).toHaveBeenCalledTimes(1);
+    });
+
+    it('a retry timer left running when the hook unmounts does not send', async () => {
+      vi.stubEnv('VITE_ENABLE_HAND_READY_RETRY', 'true');
+      emitHandReady.mockResolvedValue({ ok: false, uncertain: true });
+      const { unmount } = openAndContinue();
+      await vi.advanceTimersByTimeAsync(0);
+      unmount();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(emitHandReady).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('re-signals once when the reveal was shown and then cleared without a signal (a reconnect clears the modal)', () => {
     const state = makeState({ handNumber: 2 });
     shownRef.current = 2; // the reveal was armed and shown for this hand

@@ -65,7 +65,7 @@ export type ServerMsg =
   | { type: 'handEnded'; handNumber: number }
   | { type: 'clock'; clock: ClockMsg }
   | { type: 'joinAck'; state: StateMsg; clock: ClockMsg; clearsReveal: boolean }
-  | { type: 'ack'; id: number };
+  | { type: 'ack'; id: number; /** The server answered ok:false (uncertain / new_hand_blocked): the hand did not start and nothing marked the player ready. */ refused?: boolean };
 export type ClientMsg = { type: 'ready'; handNumber: number | undefined; ackId: number } | { type: 'move'; seq: number } | { type: 'resync'; clearsReveal: boolean };
 
 export type Violation = { property: string; at: number; detail: string };
@@ -87,6 +87,12 @@ export type FuzzOptions = {
    * client must send hand:ready again. A mark the server still has is ignored as a duplicate.
    */
   readyLostRate: number;
+  /**
+   * Probability that a hand's first two hand:ready answers are refusals (ok:false: the new-hand write was uncertain and the room rolled back,
+   * or new_hand_blocked). The server marks nothing and starts nothing; only a resend can. The third attempt is accepted. The old client counted
+   * a refusal as an acknowledgement and never resent (audit B1), which P5 catches.
+   */
+  readyRefusedRate: number;
 };
 
 export const DEFAULT_OPTIONS: FuzzOptions = {
@@ -96,6 +102,7 @@ export const DEFAULT_OPTIONS: FuzzOptions = {
   silentDropRate: 0,
   tapRate: 0.6,
   readyLostRate: 0,
+  readyRefusedRate: 0,
 };
 
 export const NEXT_HAND_CLOCK_MS = 45_000;

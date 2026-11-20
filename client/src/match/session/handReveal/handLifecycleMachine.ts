@@ -55,6 +55,12 @@ export type HandLifecycleState = {
   readyAckedFor: number | null;
   /** The connection that acknowledgement came on. An ack from an earlier connection does not count on a later one (see `connectionKey`). */
   readyAckedConnection: string | null;
+  /** Consecutive refusals (the server answered ok:false) for `readyRefusalHand`: the backoff exponent. Reset by an acknowledgement. */
+  readyRefusals: number;
+  readyRefusalHand: number | null;
+  /** The hand (and connection) whose retry is waiting on its backoff timer: the recovery step does not resend it until `readyRetryFired`. */
+  readyBackoffFor: number | null;
+  readyBackoffConnection: string | null;
   /** A recovery send is latched, so it is not repeated while the conditions hold. */
   recoveryLatched: boolean;
   /** The reveal and gameOver the auto-continue was last armed for, so it restarts only when they change. */
@@ -72,7 +78,16 @@ export type HandLifecycleEvent =
   | { type: 'revealTimerFired'; handNumber: number }
   | { type: 'autoContinueFired' }
   | { type: 'continue' }
-  | { type: 'readySettled'; handNumber: number | null; source: 'continue' | 'recovery'; ok: boolean; connectionKey?: string | null };
+  | {
+      type: 'readySettled';
+      handNumber: number | null;
+      source: 'continue' | 'recovery';
+      ok: boolean;
+      connectionKey?: string | null;
+      /** The server answered, and refused (ok:false, uncertain or new_hand_blocked): retried after a backoff, not at once. */
+      refused?: boolean;
+    }
+  | { type: 'readyRetryFired'; handNumber: number | null };
 
 export type HandLifecycleEffect =
   | { type: 'armRevealTimer'; handNumber: number; delayMs: number }
@@ -82,7 +97,34 @@ export type HandLifecycleEffect =
   | { type: 'armAutoContinue'; durationMs: number }
   | { type: 'cancelAutoContinue' }
   | { type: 'sendReady'; handNumber: number | undefined; source: 'continue' | 'recovery' }
-  | { type: 'warnReadyFailed' };
+  | { type: 'warnReadyFailed' }
+  | { type: 'scheduleReadyRetry'; handNumber: number | null; delayMs: number }
+  | { type: 'warnReadyRetrying' };
+
+/** Backoff between resends of a refused hand:ready: 1 s, 2 s, 4 s, 8 s, then every 15 s. */
+export const READY_RETRY_BASE_MS = 1_000;
+export const READY_RETRY_MAX_MS = 15_000;
+/** After this many consecutive refusals (about five minutes) the retries stop; a reconnect still resends. */
+export const READY_MAX_REFUSALS = 20;
+/** The refusals after which the player is told it is still trying. */
+export const READY_WARN_AFTER_REFUSALS = 3;
+
+export function readyRetryDelayMs(refusals: number): number {
+  return Math.min(READY_RETRY_MAX_MS, READY_RETRY_BASE_MS * 2 ** Math.max(0, refusals - 1));
+}
+
+/**
+ * What the server's answer to hand:ready means. Only ok:true, a duplicate or stale ready (the server already has the mark, or the match has
+ * moved on) and a stale match settle the hand. Anything else that is ok:false (`uncertain`: the new-hand write could not be saved and the room
+ * was rolled back; `new_hand_blocked`) means the hand did NOT start and nothing on the server will start it again, so it must be sent again.
+ */
+export function classifyReadyAck(response: unknown): 'acked' | 'refused' {
+  if (typeof response !== 'object' || response === null) return 'acked';
+  const r = response as { ok?: unknown; error?: unknown; stale?: unknown };
+  if (r.ok !== false) return 'acked';
+  if (r.error === 'stale_or_duplicate_hand_ready' || r.stale === true) return 'acked';
+  return 'refused';
+}
 
 export const EMPTY_HAND_VIEW: HandView = {
   inGame: false,
@@ -105,6 +147,10 @@ export function initialHandLifecycleState(seed: Partial<HandLifecycleState> = {}
     readySentConnection: null,
     readyAckedFor: null,
     readyAckedConnection: null,
+    readyRefusals: 0,
+    readyRefusalHand: null,
+    readyBackoffFor: null,
+    readyBackoffConnection: null,
     recoveryLatched: false,
     autoContinueFor: null,
     view: EMPTY_HAND_VIEW,
@@ -159,7 +205,9 @@ function recoveryStep(state: HandLifecycleState, view: HandView, effects: HandLi
   const handled =
     hand !== null &&
     ((state.readyAckedFor === hand.handNumber && state.readyAckedConnection === view.connectionKey) ||
-      (state.readySentFor === hand.handNumber && state.readySentSocket === view.socketId && state.readySentConnection === view.connectionKey));
+      (state.readySentFor === hand.handNumber && state.readySentSocket === view.socketId && state.readySentConnection === view.connectionKey) ||
+      // Refused and waiting for its backoff timer (on this connection: a new one is a fresh start).
+      (state.readyBackoffFor === hand.handNumber && state.readyBackoffConnection === view.connectionKey));
   const needsReady =
     Boolean(hand?.handOver) &&
     !hand?.gameOver &&
@@ -265,7 +313,15 @@ export function reduceHandLifecycle(state: HandLifecycleState, event: HandLifecy
     case 'readySettled': {
       if (event.ok) {
         return {
-          state: { ...state, readyAckedFor: event.handNumber, readyAckedConnection: event.connectionKey !== undefined ? event.connectionKey : state.view.connectionKey },
+          state: {
+            ...state,
+            readyAckedFor: event.handNumber,
+            readyAckedConnection: event.connectionKey !== undefined ? event.connectionKey : state.view.connectionKey,
+            readyRefusals: 0,
+            readyRefusalHand: null,
+            readyBackoffFor: null,
+            readyBackoffConnection: null,
+          },
           effects: [],
         };
       }
@@ -280,7 +336,25 @@ export function reduceHandLifecycle(state: HandLifecycleState, event: HandLifecy
         readySentSocket: state.readySentFor === event.handNumber ? null : state.readySentSocket,
         readySentConnection: state.readySentFor === event.handNumber ? null : state.readySentConnection,
       };
+      if (event.refused) {
+        // The server answered and the hand did not start. Resending at once would loop for as long as it keeps refusing (new_hand_blocked
+        // answers immediately), so wait: the state echoes that arrive meanwhile do not resend (see `handled`), the timer does.
+        const refusals = (state.readyRefusalHand === event.handNumber ? state.readyRefusals : 0) + 1;
+        next = { ...next, readyRefusals: refusals, readyRefusalHand: event.handNumber };
+        if (refusals === READY_WARN_AFTER_REFUSALS) effects.push({ type: 'warnReadyRetrying' });
+        if (refusals > READY_MAX_REFUSALS) return { state: next, effects };
+        next = { ...next, readyBackoffFor: event.handNumber, readyBackoffConnection: state.view.connectionKey };
+        effects.push({ type: 'scheduleReadyRetry', handNumber: event.handNumber, delayMs: readyRetryDelayMs(refusals) });
+        return { state: next, effects };
+      }
       if (event.source === 'recovery') effects.push({ type: 'warnReadyFailed' });
+      next = recoveryStep(next, next.view, effects);
+      return { state: next, effects };
+    }
+    case 'readyRetryFired': {
+      const effects: HandLifecycleEffect[] = [];
+      let next: HandLifecycleState = state;
+      if (state.readyBackoffFor === event.handNumber) next = { ...state, readyBackoffFor: null, readyBackoffConnection: null };
       next = recoveryStep(next, next.view, effects);
       return { state: next, effects };
     }
