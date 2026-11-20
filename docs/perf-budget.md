@@ -77,9 +77,9 @@ The numbers are from the Phase 1 / 1b reports (`perceived-lag-phase1.md`, `perce
 ## Enforcement
 **Tier 1, blocking** (`.github/workflows/perf-budgets.yml`, job "Perf Budgets (Tier 1)", `client/scripts/perf/perfBudgetsTier1.mjs`, thresholds in `perf-budgets.json`). Counts and bytes only, so runner speed does not matter:
 1. JS before first paint (brotli bytes of the entry script and the `modulepreload`s in `dist/index.html`): 330,000 <= bytes <= 460,000, and 12 <= files <= 16 (14 today: entry + 13 `modulepreload`s). Two-sided since the audit (E3): the old one-sided check passed at 0 bytes when the tag parse stopped matching (attribute order, single quotes, `modulePreload: false`). Tags are now parsed attribute-order- and quote-independent (`firstPaintAssets.mjs`). Measured 441,048 B / 14 files on this PR's build; a deliberate split changes the min/max in the same PR.
-2. Daily Fritz checkpoint posts and bytes over 3 hands, phone 4x: 1 <= posts <= 12, 50,000 <= bytes <= 450,000.
-3. Room writes the second player awaits at a hand boundary, `MP_HAND_BOUNDARY_FAST=true`, stub at 290 ms: median <= 1.
-4. Room-session bytes per game-state step at a hand boundary: 100 <= bytes/step <= 2,000.
+2. Daily Fritz checkpoint posts and bytes over 3 hands, phone 4x: 1 <= posts <= 12, 100,000 <= bytes <= 450,000.
+3. Room writes the second player awaits at a hand boundary, `MP_HAND_BOUNDARY_FAST=true`, stub at 290 ms: median exactly 1 (min 1, max 1: 0 means the measure broke).
+4. Room-session bytes per game-state step at a hand boundary: 500 <= bytes/step <= 2,000.
 A check outside its range (max, and min where one is set; NaN is outside) is run once more and fails only if both attempts are outside. The job runs in parallel with CI, on `pull_request` and `push` to `main` when client, server, game-core, the lockfile or the perf scripts change (a docs-only PR does not start it), and nightly.
 
 **Demotion rule.** A blocking check that gives two false failures (a failure on a commit that did not change what the check measures, shown by a green rerun of the same commit) is demoted to report-only in the next PR: move its budget from `tier1` to a report-only section of `perf-budgets.json`, say why in this section, and keep measuring it. A check is promoted back only with a threshold set from CI data.
