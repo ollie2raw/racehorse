@@ -9,13 +9,15 @@
  * mp:     the built server (server/dist, MP_HAND_BOUNDARY_FAST=true) on the Supabase stub at 290 ms; two sockets play to hand boundaries
  *         (mpMatchDriver.mjs); the stub's timeline gives the room writes the second player awaited and the room-session bytes per boundary.
  * daily:  checkpointPosts.mjs on a production build with the dev-auth gate forced (vite.perf-daily.config.mjs): posts and bytes over 3 hands, phone 4x.
- * A check that exceeds its budget is run once more; it fails only if both attempts exceed.
+ * A check outside its range (max, and min where set) is run once more; it fails only if both attempts are outside.
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { execFileSync } from 'node:child_process';
+import { describeBudget, withinBudget } from './budgetCheck.mjs';
+import { firstPaintScripts } from './firstPaintAssets.mjs';
 import { runBoundaryScenario } from './mpMatchDriver.mjs';
 import { boundaryWrites, clientDir, here, median, readTimeline, repoDir, serverEnv, spawnService, stop, waitForHttp } from './perfCommon.mjs';
 
@@ -27,16 +29,15 @@ const SERVER_PORT = 3001;
 const results = [];
 
 function record(id, label, unit, attempts, budget, detail = {}) {
-  const exceeds = (v) => !(v <= budget.max);
-  const ok = attempts.some((v) => !exceeds(v)); // fails only if every attempt exceeds
+  const ok = attempts.some((v) => withinBudget(v, budget)); // fails only if every attempt is outside
   const value = attempts[attempts.length - 1];
-  results.push({ id, label, unit, value, attempts, max: budget.max, ok, ...detail });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}: ${attempts.map((v) => Math.round(v)).join(' -> ')} ${unit} (budget <= ${budget.max})`);
+  results.push({ id, label, unit, value, attempts, max: budget.max, min: budget.min, ok, ...detail });
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}: ${attempts.map((v) => Math.round(v)).join(' -> ')} ${unit} (budget ${describeBudget(budget)})`);
 }
 
 async function withRetry(measure, budget) {
   const attempts = [await measure()];
-  if (attempts[0] > budget.max) attempts.push(await measure());
+  if (!withinBudget(attempts[0], budget)) attempts.push(await measure());
   return attempts;
 }
 
@@ -44,10 +45,7 @@ async function withRetry(measure, budget) {
 function jsBeforeFirstPaint() {
   const dist = path.join(clientDir, 'dist');
   const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
-  const files = [
-    ...[...html.matchAll(/<script[^>]*type="module"[^>]*src="([^"]+)"/g)].map((m) => m[1]),
-    ...[...html.matchAll(/<link[^>]*rel="modulepreload"[^>]*href="([^"]+)"/g)].map((m) => m[1]),
-  ];
+  const files = firstPaintScripts(html);
   let bytes = 0;
   for (const file of files) {
     bytes += zlib.brotliCompressSync(fs.readFileSync(path.join(dist, file)), { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 6 } }).length;
@@ -58,6 +56,8 @@ function jsBeforeFirstPaint() {
 if (only.has('bundle')) {
   const m = jsBeforeFirstPaint();
   record('jsBeforeFirstPaintBrotliBytes', 'JS loaded before first paint (brotli)', 'bytes', [m.bytes], budgets.jsBeforeFirstPaintBrotliBytes, { files: m.files });
+  // The byte budget alone passes when the parse finds nothing (0 bytes); the file count is pinned on purpose, in perf-budgets.json.
+  record('jsBeforeFirstPaintFiles', 'script files loaded before first paint', 'files', [m.files], budgets.jsBeforeFirstPaintFiles);
 }
 
 // ── mp + daily need the stub and the built server ──
@@ -94,7 +94,7 @@ try {
       let first = evalBoundaries(joined);
       const attemptsAwaited = [first.awaited];
       const attemptsBytes = [first.bytes];
-      if (first.awaited > budgets.awaitedRoomWritesSecondPlayer.max || first.bytes > budgets.roomSessionBytesPerStepAtHandBoundary.max) {
+      if (!withinBudget(first.awaited, budgets.awaitedRoomWritesSecondPlayer) || !withinBudget(first.bytes, budgets.roomSessionBytesPerStepAtHandBoundary)) {
         joined = await measureMp();
         const second = evalBoundaries(joined);
         attemptsAwaited.push(second.awaited);
@@ -127,7 +127,7 @@ try {
       let d = measureDaily();
       const posts = [d.posts];
       const bytes = [d.bytes];
-      if (d.posts > budgets.dailyCheckpointPostsOver3Hands.max || d.bytes > budgets.dailyCheckpointBytesOver3Hands.max) {
+      if (!withinBudget(d.posts, budgets.dailyCheckpointPostsOver3Hands) || !withinBudget(d.bytes, budgets.dailyCheckpointBytesOver3Hands)) {
         d = measureDaily();
         posts.push(d.posts);
         bytes.push(d.bytes);
@@ -146,9 +146,9 @@ const summary = [
   '',
   '| check | value | budget | result |',
   '|---|---|---|---|',
-  ...results.map((r) => `| ${r.label} | ${r.attempts.map((v) => Math.round(v).toLocaleString('en-US')).join(' then ')} ${r.unit} | <= ${r.max.toLocaleString('en-US')} | ${r.ok ? 'pass' : '**FAIL**'} |`),
+  ...results.map((r) => `| ${r.label} | ${r.attempts.map((v) => Math.round(v).toLocaleString('en-US')).join(' then ')} ${r.unit} | ${describeBudget(r)} | ${r.ok ? 'pass' : '**FAIL**'} |`),
   '',
-  failed.length ? `**${failed.length} budget(s) exceeded on both attempts.** Fix the regression, or, if the budget is wrong, change perf-budgets.json and docs/perf-budget.md in the same PR with the measurement that justifies it.` : 'All Tier 1 budgets hold.',
+  failed.length ? `**${failed.length} budget(s) outside their range on both attempts.** Fix the regression, or, if the budget is wrong, change perf-budgets.json and docs/perf-budget.md in the same PR with the measurement that justifies it.` : 'All Tier 1 budgets hold.',
 ].join('\n');
 console.log(`\n${summary}`);
 if (args.out) fs.writeFileSync(args.out, JSON.stringify({ at: new Date().toISOString(), results }, null, 1));

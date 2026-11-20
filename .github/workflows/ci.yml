@@ -176,7 +176,9 @@ jobs:
             exit 0
           fi
 
-          changed_files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          # --no-renames: with rename detection (the git default) a moved file lists only its NEW path, so moving server code
+          # into docs/ would look docs-only. Without it a rename lists both the old and the new path, and the old one decides.
+          changed_files=$(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
           echo "Changed files ($BASE_SHA..$HEAD_SHA):"
           echo "$changed_files"
 
