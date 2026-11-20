@@ -45,7 +45,7 @@ for (const [title, cards] of SECTIONS) {
   const sec = document.createElement('section'); sec.innerHTML = `<h2>${title}</h2><div class="grid"></div>`;
   const grid = sec.querySelector('.grid');
   for (const [name, qs] of cards) {
-    const card = document.createElement('div'); card.className = 'card'; card.innerHTML = `<b>${name}</b><div class="frame"><iframe loading="lazy" width="${W}" height="${H}" src="scene.html?${qs}"></iframe></div>`;
+    const card = document.createElement('div'); card.className = 'card'; card.innerHTML = `<b>${name}</b><div class="frame"><iframe width="${W}" height="${H}" src="scene.html?${qs}"></iframe></div>`;
     grid.appendChild(card);
   }
   out.appendChild(sec);

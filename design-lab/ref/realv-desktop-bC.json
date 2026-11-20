@@ -1,0 +1,59 @@
+{
+ "classes": "screen game-screen walnut-live theme-green bot-match-screen rh-match-live bot-match-mode-bot  ",
+ "handTile": {
+  "x": 364,
+  "y": 810,
+  "w": 126,
+  "h": 64
+ },
+ "handBody": {
+  "x": 364,
+  "y": 810,
+  "w": 126,
+  "h": 64
+ },
+ "boardTile": {
+  "x": 352,
+  "y": 425,
+  "w": 102,
+  "h": 52
+ },
+ "boardBody": {
+  "x": 352,
+  "y": 425,
+  "w": 102,
+  "h": 52
+ },
+ "pip": {
+  "x": 389,
+  "y": 835,
+  "w": 14,
+  "h": 14
+ },
+ "board": {
+  "x": 28,
+  "y": 116,
+  "w": 1384,
+  "h": 670
+ },
+ "rack": {
+  "x": 186,
+  "y": 39,
+  "w": 59,
+  "h": 40
+ },
+ "boneyard": {
+  "x": 1306,
+  "y": 130,
+  "w": 92,
+  "h": 44
+ },
+ "boardBg": "rgb(10, 13, 18)",
+ "boardBgImg": "radial-gradient(rgba(255, 255, 255, 0.055) 1px, rgba(0, 0, 0, 0) 1.6px), radial-gradient(72% 68%, rgb(26, 34, 47) 0%, rgb(16, 22, 31) 58%, rgb(7, 10, 15) 100%)",
+ "tileShadow": "rgba(255, 255, 255, 0.94) 0px 2px 0px 0px inset, rgba(72, 58, 38, 0.14) 0px -3px 8px 0px inset, rgba(255, 255, 255, 0.32) 0px 0px 0px 1px inset, rgba(0, 0, 0, 0.32) 0px 7px 14px 0px, rgba(0, 0, 0, 0.22) 0px 2px 3px 0px, rgba(72, 58, 38, 0.1) 0px 0px 0px 1px",
+ "tileFilter": "drop-shadow(rgba(231, 182, 74, 0.28) 0px 5px 14px) drop-shadow(rgba(0, 0, 0, 0.24) 0px 8px 14px)",
+ "boardTileCount": 7,
+ "handHtml": "<button class=\"domino-tile double unplayable\" aria-label=\"Domino 1-1, not playable\" aria-pressed=\"false\" style=\"display: block; padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; background: none; cursor: pointer; transform: rotate(0deg); transition: filter 0.16s, opacity 0.16s;\"><div class=\"domino-body\" style=\"display: flex; flex-direction: row;\"><div class=\"pip-half\" style=\"width: 60px; height: 60px; position: relative; flex-shrink: 0;\"><div class=\"pip\" style=\"position: absolute; width: 14.2857px; height: 14.2857px; border-radius: 50%; background-color: rgb(30, 58, 138); left: 22.8571px; top: 22.8571px;\"></div></div><div class=\"domino-divider vertical\"></div><div class=\"pip-half\" style=\"width: 60px; height: 60px; position: relative; flex-shrink: 0;\"><div class=\"pip\" style=\"position: absolute; width: 14.2857px; height: 14.2857px; b",
+ "rackHtml": "<div class=\"rh-tile-rack\" role=\"img\" aria-label=\"2 tiles in hand\"><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div></div>",
+ "boneHtml": "<div class=\"boneyard-pill board-corner-pill board-corner-pill--tr\" aria-label=\"14 tiles in boneyard\"><svg class=\"boneyard-icon\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\" focusable=\"false\" style=\"width: 21px; height: 21px; opacity: 0.95;\"><rect x=\"2.8\" y=\"7\" width=\"18.4\" height=\"10\" rx=\"2.8\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></rect><line x1=\"12\" y1=\"8.9\" x2=\"12\" y2=\"15.1\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></line></svg><span class=\"boneyard-count\"><span class=\"rh-number-change\">14</span></span></div>"
+}

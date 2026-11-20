@@ -1,0 +1,59 @@
+{
+ "classes": "screen game-screen walnut-live theme-green bot-match-screen rh-match-live bot-match-mode-bot  ",
+ "handTile": {
+  "x": 369,
+  "y": 812,
+  "w": 124,
+  "h": 62
+ },
+ "handBody": {
+  "x": 369,
+  "y": 812,
+  "w": 124,
+  "h": 62
+ },
+ "boardTile": {
+  "x": 377,
+  "y": 425,
+  "w": 110,
+  "h": 55
+ },
+ "boardBody": {
+  "x": 377,
+  "y": 425,
+  "w": 110,
+  "h": 55
+ },
+ "pip": {
+  "x": 433,
+  "y": 814,
+  "w": 17,
+  "h": 17
+ },
+ "board": {
+  "x": 28,
+  "y": 116,
+  "w": 1384,
+  "h": 672
+ },
+ "rack": {
+  "x": 186,
+  "y": 39,
+  "w": 131,
+  "h": 40
+ },
+ "boneyard": {
+  "x": 1306,
+  "y": 130,
+  "w": 92,
+  "h": 44
+ },
+ "boardBg": "rgb(12, 14, 18)",
+ "boardBgImg": "linear-gradient(rgba(231, 182, 74, 0.05) 1px, rgba(0, 0, 0, 0) 1px), linear-gradient(90deg, rgba(231, 182, 74, 0.05) 1px, rgba(0, 0, 0, 0) 1px), linear-gradient(rgb(15, 16, 20), rgb(12, 14, 18) 52%, rgb(8, 10, 14))",
+ "tileShadow": "rgb(255, 253, 245) 0px 1.5px 0px 0px inset, rgba(255, 255, 255, 0.5) 1px 0px 0px 0px inset, rgba(90, 70, 40, 0.12) 0px -2px 0px 0px inset, rgb(203, 189, 155) 0px 0px 0px 1px, rgb(169, 154, 118) 0px 0px 0px 2px, rgba(0, 0, 0, 0.55) 0px 5px 6px -1px",
+ "tileFilter": "none",
+ "boardTileCount": 6,
+ "handHtml": "<button class=\"domino-tile disabled\" aria-label=\"Domino 0-6, opponent's turn\" aria-pressed=\"false\" aria-disabled=\"true\" style=\"display: block; padding: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; background: none; cursor: default; transform: rotate(0deg); transition: filter 0.16s, opacity 0.16s;\"><div class=\"domino-body\" style=\"display: flex; flex-direction: row;\"><div class=\"pip-half\" style=\"width: 60px; height: 60px; position: relative; flex-shrink: 0;\"></div><div class=\"domino-divider vertical\"></div><div class=\"pip-half\" style=\"width: 60px; height: 60px; position: relative; flex-shrink: 0;\"><div class=\"pip\" style=\"position: absolute; width: 14.2857px; height: 14.2857px; border-radius: 50%; background-color: rgb(220, 38, 38); left: 2.85714px; top: 2.85714px;\"></div><div class=\"pip\" style=\"position: absolute; width: 14.2857px; heigh",
+ "rackHtml": "<div class=\"rh-tile-rack is-active\" role=\"img\" aria-label=\"5 tiles in hand\"><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div><div class=\"rh-tile-rack__tile\" aria-hidden=\"true\"></div></div>",
+ "boneHtml": "<div class=\"boneyard-pill board-corner-pill board-corner-pill--tr\" aria-label=\"12 tiles in boneyard\"><svg class=\"boneyard-icon\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\" focusable=\"false\" style=\"width: 21px; height: 21px; opacity: 0.95;\"><rect x=\"2.8\" y=\"7\" width=\"18.4\" height=\"10\" rx=\"2.8\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></rect><line x1=\"12\" y1=\"8.9\" x2=\"12\" y2=\"15.1\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></line></svg><span class=\"boneyard-count\"><span class=\"rh-number-change\">12</span></span></div>"
+}

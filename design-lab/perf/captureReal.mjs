@@ -3,11 +3,18 @@
 import fs from 'node:fs';
 import { chromium, devices } from '@playwright/test';
 
-const [base = 'http://localhost:5611', out = 'real', profile = 'desktop', moves = '6'] = process.argv.slice(2);
+const [base = 'http://localhost:5611', out = 'real', profile = 'desktop', moves = '6', variant = 'none'] = process.argv.slice(2);
+// Optional variant injection (same mechanism as variantHarness.mjs): proves the lab CSS applies to the REAL markup.
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const themeCss = fs.readFileSync(path.join(here, '..', 'themes', 'tiles.css'), 'utf8') + '\n' + fs.readFileSync(path.join(here, '..', 'themes', 'boards.css'), 'utf8');
+const attrs = { none: {}, tA: { rhTiles: 'A' }, tB: { rhTiles: 'B' }, tC: { rhTiles: 'C' }, bA: { rhBoard: 'A' }, bB: { rhBoard: 'B' }, bC: { rhBoard: 'C' } }[variant];
 const vp = { desktop: { width: 1440, height: 900 }, laptop: { width: 1512, height: 982 } }[profile];
 const browser = await chromium.launch();
 const ctx = await browser.newContext(profile === 'phone' ? devices['iPhone 14 landscape'] : { viewport: vp });
 await ctx.addInitScript(() => localStorage.setItem('hasSeenWelcome', '1'));
+if (variant !== 'none') await ctx.addInitScript(({ attrs, css }) => { const apply = () => { for (const [k, v] of Object.entries(attrs)) document.documentElement.dataset[k] = v; const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st); }; if (document.head) apply(); else document.addEventListener('DOMContentLoaded', apply, { once: true }); }, { attrs, css: themeCss });
 const page = await ctx.newPage();
 await page.goto(base + '/solo/fritz');
 await page.locator('.pvf-tier-name', { hasText: 'Rookie' }).filter({ visible: true }).first().click();
@@ -36,7 +43,7 @@ for (let i = 0; i < 120 && played < Number(moves); i++) {
   await page.waitForTimeout(900);
 }
 await page.waitForTimeout(1500);
-await page.screenshot({ path: `${out}-${profile}.png` });
+await page.screenshot({ path: `${out}-${profile}-${variant}.png` });
 const info = await page.evaluate(() => {
   const q = (s) => document.querySelector(s);
   const r = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) }; };
@@ -53,6 +60,6 @@ const info = await page.evaluate(() => {
     handHtml: tileHand?.outerHTML.slice(0, 900), rackHtml: q('.rh-tile-rack')?.outerHTML.slice(0, 500), boneHtml: q('.boneyard-pill')?.outerHTML.slice(0, 700),
   };
 });
-fs.writeFileSync(`${out}-${profile}.json`, JSON.stringify(info, null, 1));
+fs.writeFileSync(`${out}-${profile}-${variant}.json`, JSON.stringify(info, null, 1));
 console.log(JSON.stringify({ ...info, handHtml: undefined, rackHtml: undefined, boneHtml: undefined, boardBgImg: undefined }));
 await browser.close();
