@@ -124,3 +124,90 @@
     margin-left: 0;
   }
 }
+
+/* Short landscape phones (844x390 ... 568x320): keep Back, the Quick/Private switch and the online count on ONE row.
+   The phone rule above wraps the switch onto its own row, which costs ~50px the lobby panel below does not have. */
+@media (orientation: landscape) and (max-height: 430px) {
+  :root:not(.rh-native) .mp-topbar {
+    flex-wrap: nowrap;
+    padding: 4px max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px));
+    gap: 8px;
+  }
+
+  :root:not(.rh-native) .mp-topbar__mid {
+    order: 0;
+    flex: 0 1 auto;
+    padding-left: 0;
+  }
+
+  :root:not(.rh-native) .mp-topbar__end {
+    margin-left: auto;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Short landscape phones (844x390, 932x430, 667x375, 568x320).
+   The footer stacked a 44px button over a 28px Leave Room row plus padding (103px). With the fixed app bar, the
+   multiplayer sub-nav and the bottom nav taking most of the screen, the panel is only ~130-190px tall, so the
+   overflow:hidden panel cut Leave Room off (and the 28px row was under the 44px minimum anyway). One row instead:
+   the primary button takes the width, Leave Room is a 44px target beside it; the body above keeps scrolling.
+   The native shell (.rh-native) has its own panel rules in native-landscape.css and is left alone.
+   (Lives here, not in multiplayer/privateMatchLobby.css: that directory is restricted. The selectors out-rank the originals.)
+   ───────────────────────────────────────────────────────────── */
+@media (orientation: landscape) and (max-height: 430px) {
+  :root:not(.rh-native) .pml-panel-footer {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    padding: 6px max(12px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+  }
+
+  :root:not(.rh-native) .pml-panel-footer .pml-start-btn.rh-btn {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+
+  :root:not(.rh-native) .pml-panel-footer .pml-invite-leave-row {
+    flex: 0 0 auto;
+    margin-top: 0;
+  }
+
+  :root:not(.rh-native) .pml-panel-footer .pml-invite-leave-row .pml-invite-leave-room {
+    width: auto;
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 16px;
+    white-space: nowrap;
+  }
+
+  /* The two-column layout itself (the rules that must out-rank the shared !important layout) lives in multiplayer/privateMatchLobby.css. */
+
+  /* A state line ("Waiting for opponent to ready up...") gets its own row under the buttons. */
+  :root:not(.rh-native) .pml-panel-footer .pml-footer-hint {
+    flex: 1 1 100%;
+    order: 3;
+    margin: 0;
+    padding: 0;
+    line-height: 1.25;
+  }
+
+  /* Narrow short phones (667x375, 568x320): the panel column is ~280px, so Waiting for opponent + Leave Room share it.
+     Give the panel more of the row and tighten the two buttons so the labels fit on one line, still 44px tall. */
+  @media (max-width: 700px) {
+    :root:not(.rh-native) .pml-panel-footer .pml-start-btn.rh-btn {
+      font-size: 13px;
+      padding-inline: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    :root:not(.rh-native) .pml-panel-footer .pml-invite-leave-row .pml-invite-leave-room {
+      padding: 0 10px;
+      font-size: 12px;
+    }
+  }
+}

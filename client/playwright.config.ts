@@ -70,7 +70,7 @@ const DF_SERIAL_DESKTOP_SPECS = [
   // is an open question for a later pass, not settled by this split.
   'fritz-play-to-completion.spec.ts',
 ];
-const MULTIPLAYER_SPECS = ['multiplayer-chaos.spec.ts', 'multiplayer-in-match-reconnect.spec.ts'];
+const MULTIPLAYER_SPECS = ['multiplayer-chaos.spec.ts', 'multiplayer-in-match-reconnect.spec.ts', 'private-lobby-short-landscape.spec.ts'];
 
 export default defineConfig({
   testDir: './e2e',
@@ -141,6 +141,11 @@ export default defineConfig({
     // needed here -- this project is unaffected by the CI worker change.
     ...(!CI
       ? [
+          {
+            name: 'webkit-short-landscape',
+            testMatch: /private-lobby-short-landscape\.spec\.ts/,
+            use: { ...devices['iPhone 12'] },
+          },
           {
             name: 'webkit-mobile',
             testMatch: /mobile-390.*\.spec\.ts/,
