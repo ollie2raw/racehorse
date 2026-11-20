@@ -1,4 +1,4 @@
-import { processInterval, cancelProcessInterval, trackProcessWork, isProcessClosing, onProcessStop } from '../platform/processLifecycle';
+import { processInterval, processTimeout, cancelProcessInterval, trackProcessWork, isProcessClosing, onProcessStop } from '../platform/processLifecycle';
 import type { Application, Request, Response } from 'express';
 import {
   deriveReviewedMoveQuality,
@@ -22,12 +22,12 @@ import type { ReviewEvaluationV1, ReviewPositionSnapshotV2 } from '@racehorse/ga
 import { childLogger } from '../logger';
 import { getAuthenticatedUserId } from '../platform/auth/supabaseAuth';
 import { SupabaseCheckpointStore } from './supabaseCheckpointStore';
-import { ReviewSearchRunner } from './reviewSearchRunner';
+import { ReviewSearchRunner, ReviewSearchWorkerExited } from './reviewSearchRunner';
 import { config } from '../config';
 import { isReviewSweepEnabled } from './reviewSweepFlag';
 import { withBoundedExactOption } from './reviewBoundedExactFlag';
 import { isReviewCpuBenchmarkEnabled } from './reviewCpuBenchmarkFlag';
-import { reviewYieldDecision, shouldDeferClaims, waitForReviewSlot } from './reviewLivePlayYield';
+import { isReviewYieldFixesEnabled, msUntilNextReviewSlice, reviewYieldDecision, shouldDeferClaims, waitForReviewSlot } from './reviewLivePlayYield';
 import { withCutHonestyOption } from './reviewCutHonestyFlag';
 import {
   noteReviewCpuBenchmark,
@@ -307,6 +307,9 @@ let passLeaseLost = false;
 function withLivePlayYield(evaluate: EvaluatePosition): EvaluatePosition {
   return async (snapshot, options) => {
     await waitForReviewSlot({ shouldStop: () => isProcessClosing() || passLeaseLost });
+    // The heartbeat found the lease gone while this decision was held: nobody owns the job, so do not start a search (it would run, up to
+    // 180 s, on the worker thread during live play, and its checkpoint would be refused by the fence). The pass winds down on its next wave.
+    if (isReviewYieldFixesEnabled() && passLeaseLost) throw new ReviewSearchWorkerExited('review lease lost');
     return evaluate(snapshot, options);
   };
 }
@@ -367,13 +370,36 @@ export function sweepReviewCompletionJobs(limit = 4): Promise<SweepResult> {
   return run;
 }
 
+/** The one-shot sweep armed for the next starvation slice (audit C1): at most one at a time. */
+let sliceSweepTimer: ReturnType<typeof setTimeout> | null = null;
+/** Land this far into a 5 s slice: past the slice's opening, well before its end. */
+const SLICE_SWEEP_LEAD_MS = 500;
+
+/**
+ * While play holds the gate shut, the only claim attempts were the 15 s ticks, and a tick lands inside a 5 s slice only if the slice's
+ * phase happens to match theirs (it can be locked out for hours). So when a sweep is deferred, arm one more at the next slice.
+ */
+function armSliceSweep(): void {
+  if (!isReviewYieldFixesEnabled() || sliceSweepTimer || isProcessClosing()) return;
+  const wait = msUntilNextReviewSlice();
+  if (wait == null) return;
+  sliceSweepTimer = processTimeout('review-slice-sweep', async () => {
+    sliceSweepTimer = null;
+    if (isReviewSweepEnabled()) await sweepReviewCompletionJobs();
+  }, wait + SLICE_SWEEP_LEAD_MS);
+  sliceSweepTimer.unref?.();
+}
+
 async function sweepOnce(limit: number): Promise<SweepResult> {
   let ran = 0;
   let completed = 0;
   let recovered = 0;
   let yielded = false;
   // A game is live: claim nothing (a claim counts an attempt), and skip the list call too. Jobs stay queued and the next tick looks again.
-  if (shouldDeferClaims()) return { ran, completed, recovered, yielded: true };
+  if (shouldDeferClaims()) {
+    armSliceSweep();
+    return { ran, completed, recovered, yielded: true };
+  }
   const listedAt = Date.now();
   // The list is only a hint: claim_review_completion_job_v2 re-checks each
   // job on its locked row when the claim lands.
@@ -552,6 +578,8 @@ function scheduleReviewCpuBenchmark(attempt = 1): void {
 export function stopReviewCompletionSweepForTests(): void {
   if (sweepTimer) cancelProcessInterval(sweepTimer);
   sweepTimer = null;
+  if (sliceSweepTimer) cancelProcessInterval(sliceSweepTimer);
+  sliceSweepTimer = null;
   lastPeriodicSweepAt = 0;
   lastPeriodicSweepIdle = false;
 }

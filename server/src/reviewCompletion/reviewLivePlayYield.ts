@@ -44,6 +44,15 @@ export function isReviewYieldEnabled(): boolean {
   return process.env.REVIEW_YIELD_TO_LIVE_PLAY_ENABLED !== 'false';
 }
 
+/**
+ * Audit C1/C2 fixes, default OFF; on only when exactly "true". On: (C1) a deferred sweep schedules one more sweep at the next starvation
+ * slice, so a queued job's claim no longer depends on which of the 15 s ticks happens to fall inside a 5 s slice; (C2) a held decision
+ * whose lease was lost does not run its search. Rollback: unset it and restart.
+ */
+export function isReviewYieldFixesEnabled(): boolean {
+  return process.env.REVIEW_YIELD_FIXES_ENABLED === 'true';
+}
+
 export type ReviewYieldReason = 'idle' | 'disabled' | 'live_rooms' | 'event_loop_lag' | 'starvation_slice';
 
 export type ReviewYieldDecision = {
@@ -171,6 +180,19 @@ export function shouldDeferClaims(now: number = Date.now()): boolean {
   const decision = reviewYieldDecision(now);
   if (!decision.allowed) state.claimsDeferred += 1;
   return !decision.allowed;
+}
+
+/**
+ * Milliseconds until the gate next opens for a starvation slice, or null when it is not currently closed by live play (nothing to wait
+ * for: idle, disabled, or inside a slice). Before the starvation point it is the time to that point. Uses the same stretch the gate does.
+ */
+export function msUntilNextReviewSlice(now: number = Date.now()): number | null {
+  if (!isReviewYieldEnabled() || state.continuousLiveSince == null) return null;
+  const starvingFor = now - state.continuousLiveSince - config.starvationAfterMs;
+  if (starvingFor < 0) return -starvingFor;
+  const intoPeriod = starvingFor % config.slicePeriodMs;
+  if (intoPeriod < config.sliceOnMs) return null;
+  return config.slicePeriodMs - intoPeriod;
 }
 
 type WaitOptions = {
