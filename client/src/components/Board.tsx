@@ -19,6 +19,7 @@ import { useRenderProfiler } from '../debug/renderProfiler';
 import { recordDailyFritzBoardMetric, traceDailyFritzBoardEvent } from './boardDiagnostics';
 import { useBoardRenderLayout } from './board/useBoardRenderLayout';
 import { useBoardCamera } from './board/useBoardCamera';
+import { resolveBoardCameraPolicy } from '../config/boardCameraPolicy';
 import { useBoardCameraSpring } from './board/useBoardCameraSpring';
 import { useTileFlight } from './board/useTileFlight';
 import { useBoardWorldFrame } from './board/useBoardWorldFrame';
@@ -120,6 +121,8 @@ function BoardComponent(
   // as the original single-component code; useBoardCamera owns the effects
   // that decide the camera, not the state itself.
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
+  // Experiment: 'comfort' holds the camera while the board is already comfortably in view (config/boardCameraPolicy.ts). Read once per mount.
+  const [cameraPolicy] = useState(resolveBoardCameraPolicy);
   const showTargetDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOARD_TARGET_DEBUG') === '1';
 
@@ -171,6 +174,8 @@ function BoardComponent(
     fitCameraToContainerRef,
   } = useBoardCamera({
     setCamera,
+    camera,
+    cameraPolicy,
     layout,
     containFullBoard,
     resolvedFitMode,
@@ -210,7 +215,6 @@ function BoardComponent(
     applyZoomStep,
     resetCameraToFit,
   } = useBoardPointerControls({
-    camera,
     setCamera,
     minCameraScale,
     manualCameraRef,
@@ -237,6 +241,7 @@ function BoardComponent(
       role="region"
       aria-label="Domino board"
       className={`board-container${staticView ? ' board-container--static' : ''}`}
+      data-camera-policy={staticView ? undefined : cameraPolicy}
       onWheel={staticView ? undefined : handleWheel}
       onMouseDown={staticView ? undefined : handleMouseDown}
       onMouseMove={staticView ? undefined : handleMouseMove}

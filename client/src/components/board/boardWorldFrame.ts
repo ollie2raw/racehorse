@@ -28,11 +28,15 @@ export function boundsCenter(layout: Pick<BoardLayout, 'minX' | 'maxX' | 'minY' 
   return { x: (layout.minX + layout.maxX) / 2, y: (layout.minY + layout.maxY) / 2 };
 }
 
-/** The displacement most surviving tiles share between two layouts, or null if no tile survived. */
+/**
+ * The displacement most surviving tiles share between two layouts, or null if no tile survived. Tiles are matched by key, which is the
+ * tile's pips (boardLayout.ts), so a tile added at either end leaves every other tile's key alone. When two displacements are shared by the
+ * same number of tiles (a re-routed arm as large as the rest of the board) the smaller one wins, then the first seen: the frame follows
+ * the tiles that moved least, so a tie never makes the larger group teleport, and the result does not depend on the order tiles are listed in.
+ */
 export function commonDisplacement(before: FrameLayout, after: FrameLayout): WorldOrigin | null {
   const prev = new Map(before.tiles.map((t) => [t.key, t]));
   const votes = new Map<string, { count: number; dx: number; dy: number }>();
-  let best: { count: number; dx: number; dy: number } | null = null;
   for (const t of after.tiles) {
     const old = prev.get(t.key);
     if (!old) continue;
@@ -42,7 +46,10 @@ export function commonDisplacement(before: FrameLayout, after: FrameLayout): Wor
     const vote = votes.get(bucket) ?? { count: 0, dx, dy };
     vote.count += 1;
     votes.set(bucket, vote);
-    if (!best || vote.count > best.count) best = vote;
+  }
+  let best: { count: number; dx: number; dy: number } | null = null;
+  for (const vote of votes.values()) {
+    if (!best || vote.count > best.count || (vote.count === best.count && Math.hypot(vote.dx, vote.dy) < Math.hypot(best.dx, best.dy) - BUCKET)) best = vote;
   }
   return best ? { x: best.dx, y: best.dy } : null;
 }

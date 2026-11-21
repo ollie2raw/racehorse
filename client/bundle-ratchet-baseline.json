@@ -1,9 +1,9 @@
 {
-  "total": 3557703,
+  "total": 3559732,
   "chunks": {
     "ActivityFeedLobbyBridge": 34153,
     "analyzer": 106395,
-    "AppRoutes": 62872,
+    "AppRoutes": 62895,
     "bot-engine": 227922,
     "bot-guided": 113248,
     "bot-hand-lifecycle": 53516,
@@ -12,7 +12,7 @@
     "DailyFritzLeaderboardRoute": 20296,
     "DailyFritzScreen": 54298,
     "FriendsScreenLobbyBridge": 20712,
-    "game-reviewer": 140720,
+    "game-reviewer": 142726,
     "GameOverModal": 29642,
     "GhostSetupScreen": 14990,
     "GuidedMatchRecorderScreen": 36116,

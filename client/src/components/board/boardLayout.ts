@@ -239,7 +239,9 @@ function layoutOnce(
       y: mainY,
       rotation,
       flipped,
-      key: `main-${i}-${pt.tile.high}-${pt.tile.low}`,
+      // A tile's identity is its pips, never its position in the main line: a tile added at the LEFT end shifts every index, and an
+      // index in the key renamed every placed tile on each left placement (the world frame then lost them all; see boardWorldFrame.ts).
+      key: `main-${pt.tile.high}-${pt.tile.low}`,
     });
 
     // Layout branches from this hub
@@ -402,9 +404,10 @@ function layoutBranches(
     const hasExtentLimit = typeof maxExtent === 'number' && Number.isFinite(maxExtent);
     const override = overrides.get(`${hubId}:${armIdx}`);
     const canBend = verticalArms && override !== 'straight' && (hasTileLimit || hasExtentLimit);
-    // Phone (tile-count) routing keeps its original away-from-centre sign test
-    // so its geometry is unchanged; viewport routing uses the stable rule.
-    const stableTurnDir = hasTileLimit ? undefined : (hubTurnDir.get(hubId) ?? inheritedTurnDir);
+    // Both routings use the topology rule. Phone (tile-count) routing used the away-from-centre sign test on hubX, but the layout re-centres
+    // on every main-line placement (either end), so a hub near the centre changed sign and its bent arm flipped to the other side of the
+    // hub: placed tiles teleported and the bounds jumped (the phone-only half of the left/right camera bug).
+    const stableTurnDir = hubTurnDir.get(hubId) ?? inheritedTurnDir;
     const turnDir: -1 | 1 =
       typeof override === 'number' ? override : stableTurnDir ?? (hubX < 0 ? -1 : 1);
     let bent = false;
