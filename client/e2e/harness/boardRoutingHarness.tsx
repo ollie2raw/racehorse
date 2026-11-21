@@ -39,14 +39,15 @@ import '../../src/styles/large-mode.css';
 import '../../src/styles/table-theme-toggle.css';
 import '../../src/styles/weekly-awards.css';
 import '../../src/styles/responsive.css';
-import { createRef, StrictMode } from 'react';
+import { createRef, StrictMode, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { createInitialState, startNewHand } from '@racehorse/game-core';
 import type { GameState } from '../../src/types';
 import { AuthProvider } from '../../src/auth/useAuth';
 import { LiveMatchScreen } from '../../src/match/LiveMatchScreen';
 import type { LiveMatchScreenProps } from '../../src/match/liveMatchScreenTypes';
-import { FIXTURES, armSteps, spinnerWithArms, type FixtureName } from '../../src/components/board/boardRoutingFixtures';
+import { FIXTURES, armPosition, armSteps, crossedSpinner, extend, spinnerWithArms, startFixture, type FixtureName } from '../../src/components/board/boardRoutingFixtures';
 import { installWebPhoneClass } from '../../src/utils/webPhoneClass';
 
 // What main.tsx does at startup: a phone's browser (a touch-only device, not the installed app) gets the compact in-game layout.
@@ -90,9 +91,33 @@ function fixtureBoard() {
   return FIXTURES[name]();
 }
 
+/**
+ * seq=<letters> plays a board one placement at a time, through game-core's real placement (deterministic tile choice): L / R = a tile at the left /
+ * right end of the main line, U / D = a tile on the up / down arm of the crossed spinner (any U or D starts from the crossed spinner). The page
+ * exposes window.__camHarness { length, show(i) }: show() renders board i synchronously (flushSync), so a spec can read tile positions in the same
+ * task, before any animation frame has moved the camera. e2e/board-camera-ends.spec.ts uses it.
+ */
+function sequenceBoards(seq: string) {
+  const hasArms = /[UD]/.test(seq);
+  let fb = hasArms ? crossedSpinner() : extend(startFixture(6), 'right', ['n']);
+  const hubId = hasArms ? (fb.board.hubDoubles[0].hubId as number) : -1;
+  const boards = [fb.board];
+  for (const ch of seq) {
+    fb = extend(fb, ch === 'L' ? 'left' : ch === 'R' ? 'right' : armPosition(hubId, ch === 'U' ? 0 : 1), ['n']);
+    boards.push(fb.board);
+  }
+  return boards;
+}
+
 function Harness() {
-  const board = fixtureBoard();
-  const base = startNewHand(createInitialState([ME, OPP], { winningScore: 30 } as never), undefined, OPP);
+  const [scripted] = useState(() => (q.get('seq') ? sequenceBoards(q.get('seq') as string) : null));
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    if (!scripted) return;
+    (window as unknown as { __camHarness: unknown }).__camHarness = { length: scripted.length, show: (i: number) => flushSync(() => setStep(i)) };
+  }, [scripted]);
+  const board = scripted ? scripted[step] : fixtureBoard();
+  const [base] = useState(() => startNewHand(createInitialState([ME, OPP], { winningScore: 30 } as never), undefined, OPP));
   const state = { ...base, board, currentPlayerIndex: base.playerIds.indexOf(OPP) } as unknown as GameState;
   const noop = () => undefined;
   // hand=<1..7> varies the rack, score=<n> the HUD score: neither may move the routing.

@@ -27,6 +27,8 @@ import { calculateBoardFitScale, type BoardLayout } from './boardLayout';
 import { traceCameraDebug } from '../boardDiagnostics';
 import { resolveBoardFitTargets } from './boardCameraFit';
 import { ReservedRectsCache, clearScaleForReserved, type ContainerBox } from './boardCameraReserve';
+import { isBoardComfortable } from './boardCameraComfort';
+import type { BoardCameraPolicy } from '../../config/boardCameraPolicy';
 
 export type BoardCameraState = { x: number; y: number; scale: number };
 
@@ -40,6 +42,9 @@ function cameraStatesEqual(a: BoardCameraState, b: BoardCameraState): boolean {
   );
 }
 
+/** Fits that policy B may skip when the board is already comfortable: the ones a layout change causes. A container resize, a retry, a reset and an explicit recentre always refit. */
+const HOLDABLE_REASONS: ReadonlySet<string> = new Set(['tile-placed-auto-fit', 'effect-runFit', 'deferred-after-manual']);
+
 export interface UseBoardCameraParams {
   /**
    * The setter only — camera *state* is created in Board.tsx, not by this
@@ -49,6 +54,10 @@ export interface UseBoardCameraParams {
    * that decide the camera, not the state's creation.
    */
   setCamera: React.Dispatch<React.SetStateAction<BoardCameraState>>;
+  /** The camera target as rendered (state in Board.tsx). Read by policy B only, to decide whether the board is still comfortable as it is. */
+  camera?: BoardCameraState;
+  /** 'full' (default): refit after every layout change. 'comfort': hold while comfortable, otherwise the same refit (config/boardCameraPolicy.ts). */
+  cameraPolicy?: BoardCameraPolicy;
   layout: BoardLayout;
   containFullBoard: boolean;
   resolvedFitMode: 'default' | 'guided';
@@ -85,6 +94,8 @@ export interface UseBoardCameraResult {
 
 export function useBoardCamera({
   setCamera,
+  camera,
+  cameraPolicy = 'full',
   layout,
   containFullBoard,
   resolvedFitMode,
@@ -103,6 +114,13 @@ export function useBoardCamera({
   const manualCameraRef = useRef(false);
   const manualCameraUntilRef = useRef(0);
   const lastResetSignatureRef = useRef('');
+  const deferredFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Policy B: the latest camera target, and whether this hand has been fitted once (the first fit of a hand always happens).
+  const cameraRef = useRef<BoardCameraState | undefined>(camera);
+  const hasFittedRef = useRef(false);
+  useEffect(() => {
+    cameraRef.current = camera;
+  }, [camera]);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
 
   // The container's box and the overlays' rects are measured, not read from the DOM on every fit: a read forces layout, and the fit runs on
@@ -129,6 +147,7 @@ export function useBoardCamera({
     if (lastResetSignatureRef.current === resetSignature) return;
     lastResetSignatureRef.current = resetSignature;
     manualCameraRef.current = false;
+    hasFittedRef.current = false;
     traceCameraDebug('[camera-debug] setCamera', {
       reason: 'board-reset',
       x: 0,
@@ -155,7 +174,19 @@ export function useBoardCamera({
     if (manualCameraRef.current && !force) {
       const now =
         typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
-      if (now < manualCameraUntilRef.current) return;
+      const remainingMs = manualCameraUntilRef.current - now;
+      if (remainingMs > 0) {
+        // A gesture is in flight: do not fight it, but do not forget the fit either. A move that lands inside the window used to be dropped
+        // (nothing refitted later), leaving the board at the old zoom, off screen. Re-ask when the window closes; if the gesture was
+        // extended meanwhile the same check runs again and re-defers.
+        if (deferredFitTimerRef.current === null && typeof window !== 'undefined') {
+          deferredFitTimerRef.current = window.setTimeout(() => {
+            deferredFitTimerRef.current = null;
+            fitCameraToContainerRef.current('deferred-after-manual');
+          }, remainingMs + 16);
+        }
+        return;
+      }
       manualCameraRef.current = false;
     }
 
@@ -206,6 +237,16 @@ export function useBoardCamera({
       return;
     }
 
+    // Policy B: when the board is already comfortably inside the viewport at the camera it has, leave the camera alone. Otherwise fall through to
+    // the same fit as every other policy (no headroom, no partial pan).
+    if (cameraPolicy === 'comfort' && !force && hasFittedRef.current && HOLDABLE_REASONS.has(reason) && cameraRef.current) {
+      const reserved = tightFit ? reservedCacheRef.current.get(container, box) : [];
+      if (isBoardComfortable({ layout, worldOffsetUnits: { x: worldOffsetUnits.x, y: worldOffsetUnits.y }, camera: cameraRef.current, unitPx: unitToPixels, containerWidth, containerHeight, reserved })) {
+        traceCameraDebug('[camera-debug] hold', { reason, scale: Number(cameraRef.current.scale.toFixed(3)) });
+        return;
+      }
+    }
+
     const fitScale = calculateBoardFitScale({
       layout,
       tileSize: unitToPixels,
@@ -253,9 +294,10 @@ export function useBoardCamera({
         y: staticView ? cameraY : cameraY - nextScale * worldOffsetUnits.y * unitToPixels,
         scale: nextScale,
       };
+      hasFittedRef.current = true;
       setCamera((prev) => (cameraStatesEqual(prev, nextCamera) ? prev : nextCamera));
     }
-  }, [containerRef, measureBox, layout, containFullBoard, resolvedFitMode, boardTileCount, staticView, tightFit, worldOffsetUnits.x, worldOffsetUnits.y, unitToPixels, minCameraScale, staticFitMainline, staticSpineAnchor, setCamera]);
+  }, [containerRef, measureBox, layout, containFullBoard, resolvedFitMode, boardTileCount, staticView, tightFit, cameraPolicy, worldOffsetUnits.x, worldOffsetUnits.y, unitToPixels, minCameraScale, staticFitMainline, staticSpineAnchor, setCamera]);
 
   useEffect(() => {
     fitCameraToContainerRef.current = fitCameraToContainer;
@@ -265,13 +307,14 @@ export function useBoardCamera({
   const prevBoardTileCountRef = useRef(boardTileCount);
   useEffect(() => {
     if (staticView) return;
-    if (boardTileCount > prevBoardTileCountRef.current && !manualCameraRef.current) {
+    if (boardTileCount > prevBoardTileCountRef.current) {
+      // The fit itself honours a gesture in flight (and defers), so this does not need to look at manualCameraRef.
       fitCameraToContainerRef.current('tile-placed-auto-fit');
     }
     prevBoardTileCountRef.current = boardTileCount;
   }, [boardTileCount, staticView]);
 
-  const runFit = useCallback(() => {
+  const runFit = useCallback((reason = 'effect-runFit') => {
     const box = measureBox();
     if (!box) return;
     setViewportSize((prev) =>
@@ -279,11 +322,12 @@ export function useBoardCamera({
         ? prev
         : { width: box.width, height: box.height },
     );
-    fitCameraToContainer('effect-runFit', box.width, box.height);
+    fitCameraToContainer(reason, box.width, box.height);
   }, [measureBox, fitCameraToContainer]);
   useEffect(
     () => () => {
       if (fitRetryRafRef.current !== null) window.cancelAnimationFrame(fitRetryRafRef.current);
+      if (deferredFitTimerRef.current !== null) window.clearTimeout(deferredFitTimerRef.current);
     },
     [],
   );
@@ -300,7 +344,7 @@ export function useBoardCamera({
     const observed = new Set<Element>([container]);
     const observer = new ResizeObserver(() => {
       invalidateMeasurements();
-      runFitRef.current();
+      runFitRef.current('container-resize');
       // Overlays that appeared since: watch their size too.
       for (const el of reservedCacheRef.current.observed()) {
         if (!observed.has(el)) {
@@ -329,8 +373,8 @@ export function useBoardCamera({
     settledContainerRef.current = container;
     runFit();
     if (!isNewContainer) return;
-    const raf1 = window.requestAnimationFrame(runFit);
-    const raf2 = window.requestAnimationFrame(() => window.requestAnimationFrame(runFit));
+    const raf1 = window.requestAnimationFrame(() => runFit('settle'));
+    const raf2 = window.requestAnimationFrame(() => window.requestAnimationFrame(() => runFit('settle')));
     return () => {
       window.cancelAnimationFrame(raf1);
       window.cancelAnimationFrame(raf2);

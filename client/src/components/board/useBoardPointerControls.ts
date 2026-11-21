@@ -12,8 +12,10 @@ import { useCallback, useRef, useState } from 'react';
 import { traceCameraDebug } from '../boardDiagnostics';
 import type { BoardCameraState } from './useBoardCamera';
 
+/** How far a press must travel before it is a pan (and holds off auto-fit); a tap with a little finger jitter stays a tap. */
+export const DRAG_THRESHOLD_PX = 4;
+
 export interface UseBoardPointerControlsParams {
-  camera: BoardCameraState;
   setCamera: React.Dispatch<React.SetStateAction<BoardCameraState>>;
   minCameraScale: number;
   manualCameraRef: React.MutableRefObject<boolean>;
@@ -36,7 +38,6 @@ export interface UseBoardPointerControlsResult {
 }
 
 export function useBoardPointerControls({
-  camera,
   setCamera,
   minCameraScale,
   manualCameraRef,
@@ -45,7 +46,7 @@ export function useBoardPointerControls({
   fitCameraToContainerRef,
 }: UseBoardPointerControlsParams): UseBoardPointerControlsResult {
   const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
+  const dragStart = useRef({ x: 0, y: 0, lastX: 0, lastY: 0, moved: false });
 
   // Mouse wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -68,50 +69,64 @@ export function useBoardPointerControls({
   }, [markManualCamera, minCameraScale, setCamera]);
 
   // Pan handlers
+  //
+  // The pan is incremental: every move adds its own delta (since the previous move) to the camera as it is NOW. It used to be absolute, from the
+  // camera captured at mouse-down, and a refit that landed between the press and the first move (a placement, a resize) made the next move set
+  // the camera back to the pre-refit basis: a backward jump. A press is also not a gesture until it travels DRAG_THRESHOLD_PX; the pan starts
+  // from the pointer's position at that crossing, so the threshold distance is not a pop at the start of a drag.
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
       if ((e.target as HTMLElement)?.closest('.placement-zone')) {
         return;
       }
-      markManualCamera();
+      // A press is not a gesture until it moves: a tap on the board (a touch tap arrives as a mouse press) used to mark the camera manual
+      // and hold off every auto-fit for 1.5 s.
       setIsDragging(true);
-      dragStart.current = {
-        x: e.clientX,
-        y: e.clientY,
-        camX: camera.x,
-        camY: camera.y,
-      };
+      dragStart.current = { x: e.clientX, y: e.clientY, lastX: e.clientX, lastY: e.clientY, moved: false };
     },
-    [camera.x, camera.y, markManualCamera],
+    [],
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       if (!isDragging) return;
-      const dx = e.clientX - dragStart.current.x;
-      const dy = e.clientY - dragStart.current.y;
-      setCamera((cam) => ({
-        ...cam,
-        x: (() => {
-          const nextX = dragStart.current.camX + dx;
-          const nextY = dragStart.current.camY + dy;
-          traceCameraDebug('[camera-debug] setCamera', {
-            reason: 'drag',
-            x: Number(nextX.toFixed(2)),
-            y: Number(nextY.toFixed(2)),
-            scale: Number(cam.scale.toFixed(3)),
-          });
-          return nextX;
-        })(),
-        y: dragStart.current.camY + dy,
-      }));
+      // The button was released where this page did not see it (outside the window): end the drag instead of panning on hover.
+      if (e.buttons === 0) {
+        setIsDragging(false);
+        dragStart.current.moved = false;
+        return;
+      }
+      const drag = dragStart.current;
+      if (!drag.moved) {
+        if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < DRAG_THRESHOLD_PX) return;
+        drag.moved = true;
+        drag.lastX = e.clientX;
+        drag.lastY = e.clientY;
+        markManualCamera();
+        return;
+      }
+      const dx = e.clientX - drag.lastX;
+      const dy = e.clientY - drag.lastY;
+      drag.lastX = e.clientX;
+      drag.lastY = e.clientY;
+      markManualCamera();
+      setCamera((cam) => {
+        traceCameraDebug('[camera-debug] setCamera', {
+          reason: 'drag',
+          x: Number((cam.x + dx).toFixed(2)),
+          y: Number((cam.y + dy).toFixed(2)),
+          scale: Number(cam.scale.toFixed(3)),
+        });
+        return { ...cam, x: cam.x + dx, y: cam.y + dy };
+      });
     },
-    [isDragging, setCamera],
+    [isDragging, markManualCamera, setCamera],
   );
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
+    dragStart.current.moved = false;
   }, []);
 
   // Double-click to reset

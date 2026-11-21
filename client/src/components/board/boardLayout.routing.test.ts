@@ -369,7 +369,9 @@ describe('safe-bounds model', () => {
         for (const arm of [0, 1]) {
           if (!hub.branches[arm]) continue;
           const tiles = armTiles(layout, hub.hubId, arm);
-          const hubTile = layout.tiles.find((t) => t.key.startsWith(`main-${hub.mainlineIndex ?? hub.tileIndex}-`))!;
+          // Main-line tile keys are the tile's pips now (not its index), so find the hub's tile through the board.
+          const hubPip = board.mainLine[hub.mainlineIndex ?? hub.tileIndex]!.tile;
+          const hubTile = layout.tiles.find((t) => t.key === `main-${hubPip.high}-${hubPip.low}`)!;
           const straight = tiles.filter((t) => Math.abs(t.x - hubTile.x) < 1e-6);
           if (!straight.length) continue;
           const reach = Math.max(...straight.map((t) => Math.abs(t.y - hubTile.y) + (t.rotation === 0 ? 0.5 : 1)));

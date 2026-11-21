@@ -21,6 +21,15 @@ describe('world frame', () => {
     expect(commonDisplacement(before, after)).toEqual({ x: 1, y: 0 });
   });
 
+  it('a tie between two shared displacements goes to the smaller one, whatever order the tiles are listed in', () => {
+    const before = layoutOf([tile('a', 0, 0), tile('b', 2, 0), tile('c', 4, 0), tile('d', 6, 0)]);
+    // a and b shift by 1 (the board), c and d moved by 7 (a re-routed arm): two tiles each.
+    const afterOrderA = layoutOf([tile('a', 1, 0), tile('b', 3, 0), tile('c', 11, 0), tile('d', 13, 0)]);
+    const afterOrderB = layoutOf([tile('d', 13, 0), tile('c', 11, 0), tile('b', 3, 0), tile('a', 1, 0)]);
+    expect(commonDisplacement(before, afterOrderA)).toEqual({ x: 1, y: 0 });
+    expect(commonDisplacement(before, afterOrderB)).toEqual({ x: 1, y: 0 });
+  });
+
   it('is null when nothing survives', () => {
     expect(commonDisplacement(layoutOf([tile('a', 0, 0)]), layoutOf([tile('z', 5, 5)]))).toBeNull();
   });
@@ -73,7 +82,7 @@ describe('world frame on real games', () => {
               const old = new Map(prev.tiles.map((t) => [t.key, t]));
               for (const t of layout.tiles) {
                 const was = old.get(t.key);
-                if (!was) continue;
+                if (!was) continue; // new tile (every tile of the previous layout is checked by boardCameraPipeline.test.ts, by pips, so a renamed key cannot hide here)
                 const dx = t.x - next.x - (was.x - origin.x);
                 const dy = t.y - next.y - (was.y - origin.y);
                 if (Math.abs(dx) > 1e-6 || Math.abs(dy) > 1e-6) moved += 1;

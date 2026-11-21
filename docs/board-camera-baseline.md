@@ -182,3 +182,13 @@ The 204 px board was never a good thing to give phones: it was only the layout t
 | 932×430 phone browser | **after** | **876 × 290** | **0.35** | in the HUD row |
 
 Both are identical to the app. By the model that takes a phone browser at 844×390 from 19.7 % to 6.8 % of placements that cannot be whole and 18 px. A desktop browser in a short window (a mouse: hover and a fine pointer) is unchanged (0.21, a 204 px board, the pill on the board), which is what the `phone-*` profiles now describe.
+
+## Correction, 2026-11-21 (camera audit; not yet merged)
+
+The jump, reflow and spring figures above were measured with tiles matched by their layout `key`, which contained the tile's index in the main line
+(`main-${i}-...`). A tile added at the LEFT end shifts every index, so every key changed and the metric (and the world frame, `boardWorldFrame.ts`)
+skipped exactly the left-end placements: the numbers described right-end placements only. With keys that are the tile's pips the same corpus gives
+(454 hands, 7,459 placements per profile; before -> after): `jumpPx` p50 43.0 -> 64.8 (desktop), 24.2 -> 35.3 (phone-932x430); `bigJump(>40px)` 52.7% -> 74.9%
+(desktop); `reflow` 1.6% -> 0.3% on every phone profile (the phone bend direction no longer flips when the main line re-centres); readability within 0.5 points
+(native-844x390 median tile edge 29.1 -> 28.8 px; cannot-be-whole-and-18px unchanged at 6.8%). The larger `jumpPx` is the left placements now being counted,
+not a regression. See `boardCameraPipeline.test.ts`.
