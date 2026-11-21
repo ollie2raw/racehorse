@@ -145,16 +145,30 @@ test("a tapped tile's clack plays as it lands, not when it is tapped", async ({ 
   test.setTimeout(180_000);
   // Record when the tile sound fires: the decoded sample plays through a buffer source on the audio graph, and an
   // <audio> element is only the fallback for the instant before it has decoded.
+  // Only the TILE sample counts. Everything else the app plays (draw sounds, score pings, Fritz's draws) is synthesized from short noise buffers
+  // that go through the very same AudioBufferSourceNode.start, and one of those landing right at take-off was recorded as "the clack" (seen once
+  // in 40 loaded runs: playDrawSound 67 ms after the tap, the real clack 350 ms later). The tile sample is the only thing the app decodes
+  // (loadSample in audioEngine.ts), so a source counts when its buffer is one decodeAudioData returned; the <audio> fallback counts when it plays
+  // the tile file.
   await page.addInitScript(() => {
-    const w = window as unknown as { __clacks: number[] };
+    const w = window as unknown as { __clacks: number[]; __decoded: number };
     w.__clacks = [];
+    w.__decoded = 0;
+    const decoded = new WeakSet<object>();
+    const decode = BaseAudioContext.prototype.decodeAudioData;
+    BaseAudioContext.prototype.decodeAudioData = function patchedDecode(this: BaseAudioContext, data: ArrayBuffer, ok?: DecodeSuccessCallback | null, fail?: DecodeErrorCallback | null) {
+      const remember = (buffer: AudioBuffer) => { decoded.add(buffer); w.__decoded += 1; };
+      const promise = decode.call(this, data, (buffer) => { remember(buffer); ok?.(buffer); }, fail ?? undefined);
+      promise?.then?.(remember, () => undefined);
+      return promise;
+    } as typeof decode;
     const start = AudioBufferSourceNode.prototype.start;
-    AudioBufferSourceNode.prototype.start = function patched(...args: Parameters<typeof start>) {
-      w.__clacks.push(performance.now());
+    AudioBufferSourceNode.prototype.start = function patched(this: AudioBufferSourceNode, ...args: Parameters<typeof start>) {
+      if (this.buffer && decoded.has(this.buffer)) w.__clacks.push(performance.now());
       return start.apply(this, args);
     };
-    HTMLMediaElement.prototype.play = function play() {
-      w.__clacks.push(performance.now());
+    HTMLMediaElement.prototype.play = function play(this: HTMLMediaElement) {
+      if (/thwump/.test(this.currentSrc || this.src)) w.__clacks.push(performance.now());
       return Promise.resolve();
     };
   });
@@ -162,6 +176,8 @@ test("a tapped tile's clack plays as it lands, not when it is tapped", async ({ 
   const tile = page.locator(PLAYABLE).first();
   await expect(tile).toBeVisible({ timeout: 90_000 });
   await waitForNoFlight(page);
+  // The sample is decoded from the first gesture on; wait for it so the clack takes the decoded path, not the synth fallback (which this test cannot see).
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __decoded: number }).__decoded), { timeout: 20_000 }).toBeGreaterThan(0);
   const before = await boardTiles(page);
 
   await installSampler(page);
