@@ -24,6 +24,7 @@ import {
   takeFlightSource,
   type FlightPoint,
   type FlightRect,
+  createCameraTracker,
 } from './tileFlight';
 import { claimTileImpact, landTileImpact, panForX, setTileFlightActive } from '../../utils/tileImpact';
 import { spawnContactRing } from './contactRing';
@@ -99,11 +100,30 @@ export function useTileFlight(containerRef: RefObject<HTMLElement | null>, arriv
       const naturalH = tile.offsetHeight;
       if (naturalW <= 0 || naturalH <= 0) return;
 
-      // Where the real tile is, centred, at its on-screen (camera-scaled, unrotated) size. Read live: the camera glides.
-      const liveTo = (): FlightPoint => {
-        const box = centreOf(rectOf(tile)); // the rotated bounding box's centre is the tile's centre
+      // Where the real tile is, centred, at its on-screen (camera-scaled, unrotated) size. The camera glides, so the target moves every frame, but
+      // it is read from the DOM once (one layout) and followed from the canvas transform after that (createCameraTracker explains why).
+      // The viewport or the canvas changing size is the other thing that moves the tile. It is signalled by events and a ResizeObserver, never polled:
+      // reading window.innerWidth or scrollX each frame forces a layout in Chromium (that, not getBoundingClientRect, was the whole cost).
+      let viewEpoch = 0;
+      const bumpEpoch = () => { viewEpoch += 1; };
+      window.addEventListener('resize', bumpEpoch);
+      window.addEventListener('scroll', bumpEpoch, true);
+      const sizeObserver = canvas && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(bumpEpoch) : null;
+      if (canvas) sizeObserver?.observe(canvas);
+      const target = createCameraTracker(
+        () => ({
+          tile: centreOf(rectOf(tile)), // the rotated bounding box's centre is the tile's centre
+          canvas: centreOf(rectOf(canvas ?? tile)),
+          transform: canvas?.style.transform ?? '',
+        }),
+        () => canvas?.style.transform ?? '',
+        () => String(viewEpoch),
+      );
+      const liveTo = (fresh = false): FlightPoint => {
+        const box = target.get(fresh);
         return { cx: box.cx, cy: box.cy, width: naturalW * cameraScale, height: naturalH * cameraScale };
       };
+
       const start = liveTo();
       const rotation = rotationOf(tile);
       const plan = planFlight(source, { left: start.cx - start.width / 2, top: start.cy - start.height / 2, width: start.width, height: start.height }, rotation);
@@ -123,6 +143,9 @@ export function useTileFlight(containerRef: RefObject<HTMLElement | null>, arriv
       const finish = (landImpact = true) => {
         if (finished) return;
         finished = true;
+        window.removeEventListener('resize', bumpEpoch);
+        window.removeEventListener('scroll', bumpEpoch, true);
+        sizeObserver?.disconnect();
         window.cancelAnimationFrame(raf);
         ghost.remove();
         wrapper.removeAttribute('data-flight');
@@ -148,7 +171,7 @@ export function useTileFlight(containerRef: RefObject<HTMLElement | null>, arriv
           `translate3d(${f.cx - naturalW / 2}px, ${f.cy - naturalH / 2}px, 0) ` +
           `rotate(${f.rotateDeg}deg) scale(${f.width / naturalW}, ${f.height / naturalH})`;
         if (p >= 1) {
-          const landed = liveTo();
+          const landed = liveTo(true); // one fresh read at the landing
           finish();
           spawnContactRing(landed, rotation); // contact: the table answers the landing
         } else raf = window.requestAnimationFrame(step);
