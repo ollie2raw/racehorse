@@ -1,5 +1,5 @@
 {
-  "total": 3556287,
+  "total": 3557703,
   "chunks": {
     "ActivityFeedLobbyBridge": 34153,
     "analyzer": 106395,
@@ -12,7 +12,7 @@
     "DailyFritzLeaderboardRoute": 20296,
     "DailyFritzScreen": 54298,
     "FriendsScreenLobbyBridge": 20712,
-    "game-reviewer": 139569,
+    "game-reviewer": 140720,
     "GameOverModal": 29642,
     "GhostSetupScreen": 14990,
     "GuidedMatchRecorderScreen": 36116,
@@ -22,7 +22,7 @@
     "index": 593837,
     "LearnHome": 15051,
     "LearnHowToPlayRacehorse": 36075,
-    "LegalScreen": 22947,
+    "LegalScreen": 23212,
     "lesson-v2": 35525,
     "LiveMatchScreen": 37904,
     "LiveNowScreen": 10044,

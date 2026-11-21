@@ -125,3 +125,67 @@ export function takeFlightSource(now: number = performance.now(), maxAgeMs: numb
 export function clearFlightSource(): void {
   pending = null;
 }
+
+/** The camera transform useBoardCameraSpring writes: `translate(Xpx, Ypx) scale(S)` on a canvas whose transform-origin is its centre. */
+export function parseCameraTransform(transform: string): { x: number; y: number; scale: number } | null {
+  const m = /translate\(\s*(-?[\d.]+(?:e[+-]?\d+)?)px,\s*(-?[\d.]+(?:e[+-]?\d+)?)px\s*\)\s*scale\(\s*(-?[\d.]+(?:e[+-]?\d+)?)\s*\)/i.exec(transform);
+  if (!m) return null;
+  const [x, y, scale] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(scale) && scale > 0 ? { x, y, scale } : null;
+}
+
+export interface CameraReading {
+  /** The real tile's on-screen centre and the canvas's on-screen centre, read together from the DOM (one layout). */
+  tile: { cx: number; cy: number };
+  canvas: { cx: number; cy: number };
+  /** The canvas's inline transform at that moment. */
+  transform: string;
+}
+
+/**
+ * Follows a tile on a board whose camera glides, without reading the DOM every frame. getBoundingClientRect forces a layout whenever
+ * the page is dirty (multiplayer writes the DOM every frame elsewhere: about 0.5 s of main-thread time per game seat in the flight alone),
+ * and the camera glides during almost every flight, so caching the box by camera state does not hit. But the camera is a pure transform,
+ * translate(t) scale(s) about the canvas centre, so one live reading fixes the tile's place on the canvas and every later frame is arithmetic
+ * on the current transform string: screen = O + t + s * q, with O the canvas centre without the transform and q the tile's offset from it.
+ * A new reading (one layout) is taken when `resizeKey()` changes (viewport or canvas size) or when the transform cannot be parsed.
+ */
+export function createCameraTracker(
+  read: () => CameraReading,
+  currentTransform: () => string,
+  resizeKey: () => string,
+): { get: (fresh?: boolean) => { cx: number; cy: number }; readonly reads: number } {
+  let reads = 0;
+  let key = '';
+  let model: { ox: number; oy: number; qx: number; qy: number } | null = null;
+  let last = { cx: 0, cy: 0 };
+  const take = () => {
+    const r = read();
+    reads += 1;
+    key = resizeKey();
+    const t0 = parseCameraTransform(r.transform);
+    last = r.tile;
+    if (!t0) {
+      model = null;
+      return;
+    }
+    const ox = r.canvas.cx - t0.x;
+    const oy = r.canvas.cy - t0.y;
+    model = { ox, oy, qx: (r.tile.cx - ox - t0.x) / t0.scale, qy: (r.tile.cy - oy - t0.y) / t0.scale };
+  };
+  return {
+    get(fresh = false) {
+      if (fresh || !model || key !== resizeKey()) take();
+      if (!model) return last;
+      const t = parseCameraTransform(currentTransform());
+      if (!t) {
+        take();
+        return last;
+      }
+      return { cx: model.ox + t.x + t.scale * model.qx, cy: model.oy + t.y + t.scale * model.qy };
+    },
+    get reads() {
+      return reads;
+    },
+  };
+}

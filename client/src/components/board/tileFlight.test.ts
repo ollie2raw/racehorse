@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  createCameraTracker,
+  parseCameraTransform,
   FLIGHT_MAX_MS,
   FLIGHT_MIN_MS,
   FLIGHT_SOURCE_MAX_AGE_MS,
@@ -112,5 +114,59 @@ describe('flight source', () => {
     recordFlightSource(rect(1, 1, 1, 1), 1000);
     recordFlightSource(rect(9, 9, 9, 9), 1010);
     expect(takeFlightSource(1020)).toEqual(rect(9, 9, 9, 9));
+  });
+});
+
+describe('createCameraTracker (the flight follows a gliding camera from its transform, not from the DOM)', () => {
+  // A canvas centred at (400, 300) before the camera; the tile sits at canvas offset q = (50, -20) from the canvas centre.
+  const O = { x: 400, y: 300 };
+  const q = { x: 50, y: -20 };
+  const transformOf = (c: { x: number; y: number; scale: number }) => `translate(${c.x}px, ${c.y}px) scale(${c.scale})`;
+  const screenTile = (c: { x: number; y: number; scale: number }) => ({ cx: O.x + c.x + c.scale * q.x, cy: O.y + c.y + c.scale * q.y });
+  const screenCanvas = (c: { x: number; y: number }) => ({ cx: O.x + c.x, cy: O.y + c.y });
+
+  it('matches a live DOM reading at every camera state, with one read', () => {
+    let camera = { x: -30, y: 12, scale: 0.8 };
+    const read = vi.fn(() => ({ tile: screenTile(camera), canvas: screenCanvas(camera), transform: transformOf(camera) }));
+    const tracker = createCameraTracker(read, () => transformOf(camera), () => 'viewport');
+    const frames = [camera, { x: -42, y: 20, scale: 0.9 }, { x: -60, y: 31, scale: 1.1 }, { x: 15, y: -8, scale: 0.55 }];
+    for (const c of frames) {
+      camera = c;
+      const got = tracker.get();
+      const want = screenTile(c);
+      expect(got.cx).toBeCloseTo(want.cx, 6);
+      expect(got.cy).toBeCloseTo(want.cy, 6);
+    }
+    expect(tracker.reads).toBe(1);
+  });
+
+  it('reads again when the viewport key changes, and when a fresh reading is asked for', () => {
+    const camera = { x: 0, y: 0, scale: 1 };
+    let key = 'a';
+    const tracker = createCameraTracker(() => ({ tile: screenTile(camera), canvas: screenCanvas(camera), transform: transformOf(camera) }), () => transformOf(camera), () => key);
+    tracker.get();
+    key = 'b';
+    tracker.get();
+    tracker.get(true);
+    expect(tracker.reads).toBe(3);
+  });
+
+  it('falls back to a live reading on every frame while the transform cannot be parsed', () => {
+    const transform = 'matrix(1, 0, 0, 1, 0, 0)';
+    let at = { cx: 7, cy: 9 };
+    const read = vi.fn(() => ({ tile: at, canvas: { cx: 0, cy: 0 }, transform }));
+    const tracker = createCameraTracker(read, () => transform, () => 'k');
+    expect(tracker.get()).toEqual({ cx: 7, cy: 9 });
+    at = { cx: 8, cy: 10 };
+    expect(tracker.get()).toEqual({ cx: 8, cy: 10 }); // no model to follow: the DOM is the source
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('parses what useBoardCameraSpring writes, including exponents and negatives, and rejects the rest', () => {
+    expect(parseCameraTransform('translate(-12.5px, 3px) scale(0.75)')).toEqual({ x: -12.5, y: 3, scale: 0.75 });
+    expect(parseCameraTransform('translate(1e-7px, -2e-3px) scale(1)')).toEqual({ x: 1e-7, y: -0.002, scale: 1 });
+    expect(parseCameraTransform('')).toBeNull();
+    expect(parseCameraTransform('translate(0px, 0px) scale(0)')).toBeNull();
+    expect(parseCameraTransform('rotate(3deg)')).toBeNull();
   });
 });
