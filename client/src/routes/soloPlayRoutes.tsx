@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, startTransition } from 'react';
 import { ScreenLoader } from '../ui/ScreenLoader';
 import AuthoringToolLockedScreen from '../screens/AuthoringToolLockedScreen';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -318,7 +318,9 @@ export function BotSetupRoute({
             setBotFritzTier(difficulty);
             setBotDealSize(dealSize);
             // A visitor with no session gets a guest one first, so the game is recorded; it never holds up the match.
-            void ensureGuestBeforePlay(Boolean(authUser), ensureGuestSession).then(() => setAppMode('bot'));
+            // The match screen's first render is about 105 ms of synchronous work at 4x CPU (hooks, screen, commit); as a plain update it runs in
+            // one task inside the click. As a transition React slices it and yields, so the tap is not blocked (the setup screen stays up until it is ready).
+            void ensureGuestBeforePlay(Boolean(authUser), ensureGuestSession).then(() => startTransition(() => setAppMode('bot')));
           }}
           onBack={() => setAppMode('singlePlayerHub')}
           onNavigate={setAppMode}
