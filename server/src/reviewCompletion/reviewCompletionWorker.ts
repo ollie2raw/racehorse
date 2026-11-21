@@ -310,6 +310,8 @@ function withLivePlayYield(evaluate: EvaluatePosition): EvaluatePosition {
     // The heartbeat found the lease gone while this decision was held: nobody owns the job, so do not start a search (it would run, up to
     // 180 s, on the worker thread during live play, and its checkpoint would be refused by the fence). The pass winds down on its next wave.
     if (isReviewYieldFixesEnabled() && passLeaseLost) throw new ReviewSearchWorkerExited('review lease lost');
+    // Shutdown released the hold (waitForReviewSlot stops on isProcessClosing): do not start a fresh search into it with the yield gate bypassed.
+    if (isProcessClosing()) throw new ReviewSearchWorkerExited('process shutting down');
     return evaluate(snapshot, options);
   };
 }
@@ -459,7 +461,8 @@ async function runJobPass(jobId: string, claimToken: string) {
       nowFn: Date.now,
       jobBackoffMs: reviewCompletionJobBackoffMs,
       evaluatePosition: evaluatePositionOffThread(),
-      shouldAbort: () => leaseLost,
+      // Shutdown ends the pass too: the next decision would otherwise start a full search (up to 180 s) while the drain waits for it, and room persistence flushes in what is left.
+      shouldAbort: () => leaseLost || isProcessClosing(),
       onClaimed: (claimed) => {
         currentPassAttempt = claimed.attemptCount ?? null;
         noteReviewJobClaimed(jobId, claimed.createdAt ?? null, currentPassAttempt);
